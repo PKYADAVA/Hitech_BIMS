@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.utils.timezone import now
 
 
@@ -26,7 +28,14 @@ class ItemCategory(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.code = self.next_code()
+            return mint_with_retry(
+                lambda: super(ItemCategory, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code()),
+                label="code")
         super().save(*args, **kwargs)
     
 
@@ -54,7 +63,24 @@ class Sector(models.Model):
                 suffix += 1
                 code = f"{base}_{suffix}"
             self.code = code
+            # The loop above asks whether the code is free; between the answer
+            # and the insert another sector can take it. Same treatment as the
+            # counters: let the database decide, then walk on to the next free
+            # suffix.
+            return mint_with_retry(
+                lambda: super(Sector, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self._next_free_code()),
+                label="sector code")
         super().save(*args, **kwargs)
+
+    def _next_free_code(self):
+        """The next unused SECTOR_n, starting from the one already held."""
+        base = re.sub(r"[^A-Za-z0-9]+", "_", self.name).strip("_").upper() or "SECTOR"
+        suffix, code = 1, base
+        while Sector.objects.filter(code=code).exists():
+            suffix += 1
+            code = f"{base}_{suffix}"
+        return code
 
 
 class UnitOfMeasurement(models.Model):
@@ -95,7 +121,14 @@ class Warehouse(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.code = self.next_code()
+            return mint_with_retry(
+                lambda: super(Warehouse, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code()),
+                label="code")
         super().save(*args, **kwargs)
 
 
@@ -208,7 +241,14 @@ class Item(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.item_code:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.item_code = self.next_code()
+            return mint_with_retry(
+                lambda: super(Item, self).save(*args, **kwargs),
+                lambda: setattr(self, "item_code", self.next_code()),
+                label="item code")
         super().save(*args, **kwargs)
 
 
@@ -399,7 +439,14 @@ class StockTransfer(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trnum:
             self.trnum = self._next_trnum(self.date)
-            super().save(update_fields=["trnum"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(StockTransfer, self).save(update_fields=["trnum"]),
+                lambda: setattr(self, "trnum", self._next_trnum(self.date)),
+                label="transaction number")
 
     @classmethod
     def _next_trnum(cls, on_date=None):
@@ -521,7 +568,14 @@ class MedicineTransfer(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trnum:
             self.trnum = self._next_trnum(self.date)
-            super().save(update_fields=["trnum"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(MedicineTransfer, self).save(update_fields=["trnum"]),
+                lambda: setattr(self, "trnum", self._next_trnum(self.date)),
+                label="transaction number")
 
     @classmethod
     def _next_trnum(cls, on_date=None):
@@ -633,7 +687,14 @@ class InventoryAdjustment(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trnum:
             self.trnum = self._next_trnum(self.date)
-            super().save(update_fields=["trnum"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(InventoryAdjustment, self).save(update_fields=["trnum"]),
+                lambda: setattr(self, "trnum", self._next_trnum(self.date)),
+                label="transaction number")
 
     @classmethod
     def _next_trnum(cls, on_date=None):
@@ -736,7 +797,14 @@ class StockIssue(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trnum:
             self.trnum = self._next_trnum(self.date)
-            super().save(update_fields=["trnum"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(StockIssue, self).save(update_fields=["trnum"]),
+                lambda: setattr(self, "trnum", self._next_trnum(self.date)),
+                label="transaction number")
 
     @classmethod
     def _next_trnum(cls, on_date=None):
@@ -827,7 +895,14 @@ class StockReceive(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trnum:
             self.trnum = self._next_trnum(self.date)
-            super().save(update_fields=["trnum"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(StockReceive, self).save(update_fields=["trnum"]),
+                lambda: setattr(self, "trnum", self._next_trnum(self.date)),
+                label="transaction number")
 
     @classmethod
     def _next_trnum(cls, on_date=None):

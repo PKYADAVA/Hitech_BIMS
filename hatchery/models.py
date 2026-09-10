@@ -338,7 +338,14 @@ class EggPurchase(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.transaction_no:
             self.transaction_no = self._next_transaction_no()
-            super().save(update_fields=['transaction_no'])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(EggPurchase, self).save(update_fields=["transaction_no"]),
+                lambda: setattr(self, "transaction_no", self._next_transaction_no()),
+                label="transaction number")
 
     @classmethod
     def _next_transaction_no(cls):
@@ -467,7 +474,14 @@ class EggGrading(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.transaction_no:
             self.transaction_no = self._next_transaction_no()
-            super().save(update_fields=['transaction_no'])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(EggGrading, self).save(update_fields=["transaction_no"]),
+                lambda: setattr(self, "transaction_no", self._next_transaction_no()),
+                label="transaction number")
 
     @classmethod
     def _next_transaction_no(cls):
@@ -569,7 +583,14 @@ class DeliveryChallan(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.challan_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.challan_no = self.next_challan_no(self.date)
+            return mint_with_retry(
+                lambda: super(DeliveryChallan, self).save(*args, **kwargs),
+                lambda: setattr(self, "challan_no", self.next_challan_no(self.date)),
+                label="challan number")
         super().save(*args, **kwargs)
 
     def total_quantity(self):
@@ -647,7 +668,14 @@ class TraySetting(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.setting_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.setting_no = self.next_setting_no()
+            return mint_with_retry(
+                lambda: super(TraySetting, self).save(*args, **kwargs),
+                lambda: setattr(self, "setting_no", self.next_setting_no()),
+                label="setting number")
         super().save(*args, **kwargs)
 
     def total_eggs_set(self):
@@ -731,7 +759,14 @@ class HatchEntry(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.transaction_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.transaction_no = self.next_transaction_no()
+            return mint_with_retry(
+                lambda: super(HatchEntry, self).save(*args, **kwargs),
+                lambda: setattr(self, "transaction_no", self.next_transaction_no()),
+                label="transaction number")
         super().save(*args, **kwargs)
 
     def apply_purchase_snapshot(self):
@@ -852,7 +887,14 @@ class ChickSale(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.bill_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.bill_no = self.next_bill_no()
+            return mint_with_retry(
+                lambda: super(ChickSale, self).save(*args, **kwargs),
+                lambda: setattr(self, "bill_no", self.next_bill_no()),
+                label="bill number")
         super().save(*args, **kwargs)
 
     def total_birds(self):
@@ -964,7 +1006,14 @@ class ChickSaleReceipt(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.receipt_no:
             self.receipt_no = self._next_receipt_no(self.date)
-            super().save(update_fields=["receipt_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(ChickSaleReceipt, self).save(update_fields=["receipt_no"]),
+                lambda: setattr(self, "receipt_no", self._next_receipt_no(self.date)),
+                label="receipt number")
 
     @classmethod
     def _next_receipt_no(cls, on_date=None):

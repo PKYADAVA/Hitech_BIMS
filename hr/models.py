@@ -6,6 +6,8 @@ import random
 from calendar import monthrange
 from datetime import date, timedelta
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.contrib.auth.models import User
 from inventory.models import Warehouse
 
@@ -211,7 +213,14 @@ class Employee(models.Model):
     def save(self, *args, **kwargs):
         """Override the save method to assign a unique employee ID if not set."""
         if not self.employee_id:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.employee_id = self.generate_unique_employee_id()
+            return mint_with_retry(
+                lambda: super(Employee, self).save(*args, **kwargs),
+                lambda: setattr(self, "employee_id", self.generate_unique_employee_id()),
+                label="employee id")
         super().save(*args, **kwargs)
 
     @property
@@ -575,7 +584,14 @@ class SupervisorTrip(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.trip_no:
             self.trip_no = self._next_no(self.date)
-            super().save(update_fields=["trip_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(SupervisorTrip, self).save(update_fields=["trip_no"]),
+                lambda: setattr(self, "trip_no", self._next_no(self.date)),
+                label="trip number")
 
     @classmethod
     def _next_no(cls, on_date=None):

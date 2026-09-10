@@ -271,7 +271,14 @@ class SalesInvoice(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.invoice_no:
             self.invoice_no = self._next_no(self.date)
-            super().save(update_fields=["invoice_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(SalesInvoice, self).save(update_fields=["invoice_no"]),
+                lambda: setattr(self, "invoice_no", self._next_no(self.date)),
+                label="invoice number")
 
     @classmethod
     def _next_no(cls, on_date=None):
@@ -373,7 +380,14 @@ class SalesReceipt(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.receipt_no:
             self.receipt_no = self._next_no(self.date)
-            super().save(update_fields=["receipt_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(SalesReceipt, self).save(update_fields=["receipt_no"]),
+                lambda: setattr(self, "receipt_no", self._next_no(self.date)),
+                label="receipt number")
 
     @classmethod
     def _next_no(cls, on_date=None):
@@ -445,7 +459,14 @@ class CustomerNoteBase(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.note_no:
             self.note_no = self._next_no(self.date)
-            super().save(update_fields=["note_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(CustomerNoteBase, self).save(update_fields=["note_no"]),
+                lambda: setattr(self, "note_no", self._next_no(self.date)),
+                label="note number")
 
     @classmethod
     def _next_no(cls, on_date=None):

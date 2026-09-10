@@ -307,7 +307,14 @@ class GeneralPurchase(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.purchase_no:
             self.purchase_no = self._next_purchase_no(self.date)
-            super().save(update_fields=["purchase_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(GeneralPurchase, self).save(update_fields=["purchase_no"]),
+                lambda: setattr(self, "purchase_no", self._next_purchase_no(self.date)),
+                label="purchase number")
 
     @classmethod
     def _next_purchase_no(cls, on_date=None):
@@ -579,7 +586,14 @@ class ChicksPurchase(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.purchase_no:
             self.purchase_no = self._next_purchase_no(self.date)
-            super().save(update_fields=["purchase_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(ChicksPurchase, self).save(update_fields=["purchase_no"]),
+                lambda: setattr(self, "purchase_no", self._next_purchase_no(self.date)),
+                label="purchase number")
 
     @classmethod
     def _next_purchase_no(cls, on_date=None):
@@ -735,7 +749,14 @@ class SupplierPayment(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.payment_no:
             self.payment_no = self._next_payment_no(self.date)
-            super().save(update_fields=["payment_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(SupplierPayment, self).save(update_fields=["payment_no"]),
+                lambda: setattr(self, "payment_no", self._next_payment_no(self.date)),
+                label="payment number")
 
     @classmethod
     def _next_payment_no(cls, on_date=None):
@@ -847,7 +868,14 @@ class SupplierNoteBase(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.note_no:
             self.note_no = self._next_no(self.date)
-            super().save(update_fields=["note_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(SupplierNoteBase, self).save(update_fields=["note_no"]),
+                lambda: setattr(self, "note_no", self._next_no(self.date)),
+                label="note number")
 
     @classmethod
     def _next_no(cls, on_date=None):

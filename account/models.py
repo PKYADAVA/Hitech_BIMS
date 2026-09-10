@@ -4,6 +4,8 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -154,7 +156,14 @@ class CoACategory(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.code:
             self.code = self._next_code()
-            super().save(update_fields=['code'])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(CoACategory, self).save(update_fields=["code"]),
+                lambda: setattr(self, "code", self._next_code()),
+                label="code")
 
     @classmethod
     def _next_code(cls):
@@ -558,7 +567,14 @@ class BankCashMaster(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.code = self.next_code(self.is_cash)
+            return mint_with_retry(
+                lambda: super(BankCashMaster, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code(self.is_cash)),
+                label="code")
         super().save(*args, **kwargs)
 
 
@@ -610,7 +626,14 @@ class PaymentMode(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.code = self.next_code()
+            return mint_with_retry(
+                lambda: super(PaymentMode, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code()),
+                label="code")
         super().save(*args, **kwargs)
 
 

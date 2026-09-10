@@ -767,7 +767,13 @@ class BroilerFarm(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.farm_code and self.branch_id:
+            # Issued off the highest on this branch, so another farm added in
+            # the same moment can take it. Reissued and tried again.
             self.farm_code = self.next_farm_code(self.branch)
+            return mint_with_retry(
+                lambda: super(BroilerFarm, self).save(*args, **kwargs),
+                lambda: setattr(self, "farm_code", self.next_farm_code(self.branch)),
+                label="farm code")
         super().save(*args, **kwargs)
 
 
@@ -1176,7 +1182,14 @@ class DailyEntry(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.entry_no:
             self.entry_no = self._next_entry_no(self.date)
-            super().save(update_fields=["entry_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(DailyEntry, self).save(update_fields=["entry_no"]),
+                lambda: setattr(self, "entry_no", self._next_entry_no(self.date)),
+                label="entry number")
 
     @classmethod
     def _next_entry_no(cls, on_date=None):
@@ -1398,7 +1411,14 @@ class MedicineVaccineEntry(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.entry_no:
             self.entry_no = self._next_entry_no(self.date)
-            super().save(update_fields=["entry_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(MedicineVaccineEntry, self).save(update_fields=["entry_no"]),
+                lambda: setattr(self, "entry_no", self._next_entry_no(self.date)),
+                label="entry number")
 
     @classmethod
     def _next_entry_no(cls, on_date=None):
@@ -1530,7 +1550,14 @@ class BirdSale(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.sale_no:
             self.sale_no = self._next_sale_no(self.date)
-            super().save(update_fields=["sale_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(BirdSale, self).save(update_fields=["sale_no"]),
+                lambda: setattr(self, "sale_no", self._next_sale_no(self.date)),
+                label="sale number")
 
     @classmethod
     def _next_sale_no(cls, on_date=None):
@@ -1663,7 +1690,14 @@ class BirdSaleReceipt(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.receipt_no:
             self.receipt_no = self._next_receipt_no(self.date)
-            super().save(update_fields=["receipt_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(BirdSaleReceipt, self).save(update_fields=["receipt_no"]),
+                lambda: setattr(self, "receipt_no", self._next_receipt_no(self.date)),
+                label="receipt number")
 
     @classmethod
     def _next_receipt_no(cls, on_date=None):
@@ -2209,7 +2243,14 @@ class FarmLocationCapture(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.capture_no:
             self.capture_no = self._next_no(self.date)
-            super().save(update_fields=["capture_no"])
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. The database says so, and
+            # the next number is issued — which is what would have happened
+            # had the two saves arrived one after the other.
+            mint_with_retry(
+                lambda: super(FarmLocationCapture, self).save(update_fields=["capture_no"]),
+                lambda: setattr(self, "capture_no", self._next_no(self.date)),
+                label="capture number")
         self.sync_farm()
 
     def delete(self, *args, **kwargs):
@@ -2560,7 +2601,14 @@ class FarmerFarmSetupRequest(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.request_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.request_no = self.next_request_no()
+            return mint_with_retry(
+                lambda: super(FarmerFarmSetupRequest, self).save(*args, **kwargs),
+                lambda: setattr(self, "request_no", self.next_request_no()),
+                label="request number")
         super().save(*args, **kwargs)
 
     #: (field, label) pairs the mockup marks with a red asterisk — enforced
@@ -2913,7 +2961,14 @@ class FarmRoute(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.route_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.route_no = self._next_route_no()
+            return mint_with_retry(
+                lambda: super(FarmRoute, self).save(*args, **kwargs),
+                lambda: setattr(self, "route_no", self._next_route_no()),
+                label="route number")
         super().save(*args, **kwargs)
 
     def _next_route_no(self):
@@ -3054,7 +3109,14 @@ class FarmerGCPayment(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.payment_no:
+            # Issued off the current highest, so another save can take
+            # it between that read and this write. Reissued and tried
+            # again rather than refused.
             self.payment_no = self._next_payment_no(self.date)
+            return mint_with_retry(
+                lambda: super(FarmerGCPayment, self).save(*args, **kwargs),
+                lambda: setattr(self, "payment_no", self._next_payment_no(self.date)),
+                label="payment number")
         super().save(*args, **kwargs)
 
     @classmethod
