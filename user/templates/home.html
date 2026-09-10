@@ -316,8 +316,8 @@
   .dw-act-user span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.74rem; line-height:1.15; }
 
   /* Self-contained: named like the search panel's category colours, but not
-     the same classes — those live in _global_search.html, which the sidebar
-     layout's topbar does not include, so this card cannot depend on them. */
+     the same classes. Those live in _global_search.html, which this page no
+     longer includes at all, so the card has to carry its own. */
   .dw-act-icon.dw-c-blue  {background:#e8f0ff;color:#2563eb}
   .dw-act-icon.dw-c-green {background:#e6f7f3;color:#078b75}
   .dw-act-icon.dw-c-orange{background:#fff1df;color:#d97706}
@@ -467,10 +467,11 @@
         </div>
 
         {% comment %}
-          Sidebar layout puts the search in the top bar, where every page has
-          it. Including it here as well would put two on the dashboard.
+          No search here any more. Both layouts now carry it in their own bar —
+          the sidebar always did, and the top navbar gained one when the modules
+          moved to a tier of their own and freed the room. The guard that used to
+          hide this copy only for the sidebar left two of them on this page.
         {% endcomment %}
-        {% if not ds_shell %}{% include '_global_search.html' %}{% endif %}
       </div>
     </div>
 

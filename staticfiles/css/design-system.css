@@ -643,6 +643,39 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
 .ds-user-menu .dropdown-item.text-danger,
 .ds-user-menu .dropdown-item.text-danger i { color: var(--danger, #dc2626); }
 
+/* Sign out: the same red disc the top navbar carries, so the control does not
+   change appearance when someone switches layout. */
+.ds-power-btn {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ds-danger, #dc2626);
+  color: #fff;
+  font-size: .92rem;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, .18);
+  transition: background .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.ds-power-btn:hover,
+.ds-power-btn:focus-visible {
+  background: #b91c1c;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(16, 24, 40, .24);
+}
+.ds-power-btn:active { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ds-power-btn { transition: none; }
+  .ds-power-btn:hover { transform: none; }
+}
+
 /* Off-canvas handle. Desktop has the sidebar pinned, so there is nothing to
    pull open and the button would only be a button that does nothing. */
 .ds-topbar-burger {

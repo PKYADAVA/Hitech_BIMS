@@ -702,8 +702,12 @@ def user_profile(request):
     last_name = request.POST.get("last_name", "").strip()
     email = request.POST.get("email", "").strip()
 
-    if not first_name or not email:
-        return JsonResponse({"error": "First name and email are required."}, status=400)
+    # Email is optional: branch logins often have no mailbox behind them, and
+    # requiring one stopped those users saving a name change. Note that an
+    # account without an email cannot be sent a password reset — the field is
+    # worth filling, it is simply not worth blocking a save over.
+    if not first_name:
+        return JsonResponse({"error": "First name is required."}, status=400)
 
     user = request.user
     user.first_name = first_name

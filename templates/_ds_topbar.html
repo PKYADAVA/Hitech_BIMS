@@ -1,3 +1,4 @@
+{% load user_extras %}
 {% comment %}
 Slim top bar — the sidebar layout's header.
 
@@ -21,15 +22,26 @@ its own light-ground styling for the same components.
 
     {% include "_alerthub_bell.html" %}
 
+    {% comment %}
+    The same sign-out button the top navbar carries. It arrives here in the
+    same change that takes Logout out of the menu below: removing the entry
+    without this would leave the sidebar layout with no way out at all.
+    {% endcomment %}
+    <button type="button" class="ds-power-btn" title="Sign out"
+            aria-label="Sign out" data-bs-toggle="modal"
+            data-bs-target="#logoutConfirmModal"><i class="fa-solid fa-power-off"></i></button>
+
     <div class="dropdown">
       <button class="ds-user-btn btn dropdown-toggle" type="button"
               id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static">
         {% comment %}
-          Initial rather than a generic person glyph: on a bar where every
-          other control is an outline icon, a filled letter is the one thing
-          that says whose session this is.
+          Initials rather than a generic person glyph: on a bar where every
+          other control is an outline icon, filled letters are the one thing
+          that says whose session this is. Through the same filter the top
+          navbar uses, so a person is not "A" on one layout and "AJ" on the
+          other.
         {% endcomment %}
-        <span class="ds-user-avatar">{{ request.user.get_full_name|default:request.user.username|first|upper }}</span>
+        <span class="ds-user-avatar">{{ request.user|initials }}</span>
         <span class="ds-user-meta">
           <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
           <small>{{ user_role_label }}</small>
@@ -56,9 +68,6 @@ its own light-ground styling for the same components.
         </li>
         <li><a class="dropdown-item" href="{% url 'update_password' %}">
           <i class="fas fa-key"></i>Change Password
-        </a></li>
-        <li><a class="dropdown-item text-danger" href="/logout/">
-          <i class="fas fa-sign-out-alt"></i>Logout
         </a></li>
       </ul>
     </div>

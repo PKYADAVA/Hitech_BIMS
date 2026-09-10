@@ -72,7 +72,11 @@
 
   --transition:     all 0.18s ease;
 
-  --navbar-height:  60px;
+  /* 60px when the modules shared this bar and needed the room. They have their
+     own tier now, so the identity bar carries only a wordmark, a search box and
+     three controls — none of which wanted 60px. Six sticky offsets read this,
+     so it is the one number to change. */
+  --navbar-height:  50px;
 }
 
 /* ---------- Reset & Base ---------- */
@@ -262,38 +266,220 @@ footer { margin-top: auto; }
 
 .bims-navbar .dropdown-submenu:hover > .dropdown-menu { display: block; }
 
-/* User dropdown */
-.bims-navbar .user-btn {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: #ffffff;
-  border-radius: var(--radius-full);
-  padding: 5px 14px 5px 5px;
-  font-size: 0.83rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* The three controls at the end of the bar are one set, so they are built to
+   one spec: a 34px disc, a glyph at .95rem, the same lift on hover. Before
+   this the bell was a bare 38px hit area, sign-out a 35px filled disc and the
+   account a bordered pill — three sizes and three treatments for three things
+   that sit shoulder to shoulder.
+
+   Only sign-out is coloured. It is the one that ends something. */
+/* Two of the three are Bootstrap buttons, and a plain `height` does not survive
+   the site-wide button rules further down this file and in design-system.css:
+   `.ds .btn` sets 44px at the same specificity (winning on load order alone),
+   `.btn { min-height: 38px }` outranks any height, and `.btn { padding: 8px
+   16px !important }` re-inflates whatever the height leaves. So each of these
+   selectors carries `.btn` for the weight, `min-height` to release the floor,
+   and `!important` on padding to answer the one already there. The third
+   control is a bare <button>, which is why only two came out wrong.
+
+   None of those three global rules is touched: they size every other button in
+   the ERP, and this cluster is opting out, not changing them. */
+.bims-navbar .ah-bell-btn.btn {
+  width: 34px; height: 34px; min-height: 0; padding: 0 !important;
+  border-radius: 50%;                  /* a disc, like sign-out beside it */
+  font-size: .95rem;
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #fff;
   transition: var(--transition);
 }
+.bims-navbar .ah-bell-btn.btn:hover,
+.bims-navbar .ah-bell-btn.btn:focus-visible {
+  background: rgba(255, 255, 255, .22);
+  border-color: rgba(255, 255, 255, .3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+/* The count, sitting on the bell's top-right corner.
 
-.bims-navbar .user-btn:hover {
-  background: rgba(255,255,255,0.14);
-  color: #ffffff;
-  border-color: rgba(255,255,255,0.22);
+   `position` is set here because Bootstrap's `.btn .badge { position: relative }`
+   outranks alerthub's `absolute` — so the count has been flowing inline beside
+   the glyph all along, padding the button out sideways. That went unnoticed
+   while the button was free to grow; at a fixed 34px it would spill.
+
+   The fill is restated for the same kind of reason: the badge palette further
+   down this file turns `.bg-danger` into a soft pink chip, which is right for a
+   status pill in a table and wrong for a count that has to carry across a dark
+   bar. That rule is `.badge.bg-danger`, so this selector needs the third class
+   to outweigh it rather than to tie and lose on order. */
+.bims-navbar .ah-bell-badge.badge {
+  position: absolute;
+  top: -3px; right: -4px;
+  font-size: .58rem; padding: .16em .38em;
+  background: var(--danger) !important;
+  color: #fff !important;
+  border: 1.5px solid #123524;         /* cut out of the bar it sits on */
 }
 
+/* Sign out: a red disc with a white glyph, the one coloured control on the bar.
+   Red because it is the only thing up there that ends what you were doing, and
+   because the confirm it opens is red too — the same colour saying the same
+   thing twice is how a person learns which button is which.
+
+   Flat, not the bevelled and gloss-lit disc of the reference: every other
+   control in this ERP is flat, and one lone 3D button would read as pasted in
+   from another program rather than as emphasis. */
+.bims-navbar .nav-power-btn {
+  border: 0;
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--danger);
+  color: #fff;
+  font-size: .95rem;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+  transition: var(--transition);
+}
+.bims-navbar .nav-power-btn:hover,
+.bims-navbar .nav-power-btn:focus-visible {
+  background: var(--danger-text);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .34);
+}
+.bims-navbar .nav-power-btn:active { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bims-navbar .nav-power-btn { transition: none; }
+  .bims-navbar .nav-power-btn:hover { transform: none; }
+}
+
+/* The account pill: a menu handle and the person's initials, nothing else.
+   No dropdown caret — the bars already say it opens something, and a caret
+   beside them is the same word twice. */
+.bims-navbar .user-btn.btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #ffffff;
+  border-radius: var(--radius-full);
+  padding: 3px 4px 3px 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px; min-height: 0;         /* the same disc height, drawn long */
+  transition: var(--transition);
+}
+.bims-navbar .user-btn::after { display: none; }   /* Bootstrap's caret */
+
+.bims-navbar .user-btn.btn:hover,
+.bims-navbar .user-btn.btn:focus-visible {
+  background: rgba(255,255,255,0.22);
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.30);
+  transform: translateY(-1px);
+}
+
+.bims-navbar .user-btn-bars { font-size: .95rem; line-height: 1; opacity: .85; }
+.bims-navbar .user-btn:hover .user-btn-bars { opacity: 1; }
+
+/* White disc, navy letters: the one light thing on a dark bar, which is what
+   makes it findable without a label beside it. */
 .bims-navbar .user-avatar {
   width: 28px;
   height: 28px;
-  background: var(--primary);
+  background: #ffffff;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size:.75rem;
+  font-size: .78rem;
   font-weight: 700;
-  color: #fff;
+  letter-spacing: .02em;
+  color: #123524;                                  /* the navbar's own green */
+}
+
+/* Global search in the identity bar.
+   .gs-wrap carries no width of its own — it was written to sit in a filter
+   toolbar and take the column's width. Dropped into the bar it shrank to the
+   input's intrinsic size and cut its own placeholder off mid-word. The bar has
+   the room now that the modules have their own tier, so the box is given a
+   generous share of it and stops growing before it starts crowding the bell. */
+.bims-navbar .gs-wrap { width: clamp(300px, 32vw, 560px); }
+.bims-navbar .gs-box {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .18);
+  min-height: 34px;
+}
+.bims-navbar .gs-box > i { color: #9DBBA9; }
+.bims-navbar .gs-input { color: #fff; }
+.bims-navbar .gs-input::placeholder { color: #A9C4B5; }
+.bims-navbar .gs-kbd {
+  background: rgba(255, 255, 255, .10);
+  border-color: rgba(255, 255, 255, .22);
+  color: #C9DBD1;
+}
+/* Focus has to read against a dark ground, where the pale blue ring vanishes. */
+.bims-navbar .gs-wrap.is-open .gs-box,
+.bims-navbar .gs-box:focus-within {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .45);
+  box-shadow: 0 0 0 .18rem rgba(255, 255, 255, .12);
+}
+
+/* ---------- Module bar (tier two) ---------- */
+/* The modules moved off the identity bar because eleven of them plus the
+   account cluster no longer fitted on one line. This tier is a shade lighter
+   than the bar above it: same family, clearly a second surface, so the two do
+   not read as one tall confused block.
+
+   It carries .bims-navbar as well as this class, deliberately. A hundred and
+   twenty-four rules hang off that name — the dropdown panels, their items and
+   icons, the submenu that opens on hover — and the modules need every one of
+   them. Re-scoping all of those to a second name would have been a hundred and
+   twenty-four chances to miss one; taking the class and overriding the six
+   properties that differ is the same result with one place to look. */
+.bims-modulebar {
+  background: #1B4B33;
+  padding: 0 24px;
+  height: 38px;                        /* deliberate, not inherited: leaving it
+                                          auto let Bootstrap's own navbar
+                                          padding decide it, and that came out
+                                          taller than the row needs */
+  min-height: 38px;
+  top: var(--navbar-height);           /* sits under it, not over it */
+  z-index: 1029;
+  border-bottom: 0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .18);
+}
+.bims-modulebar .navbar-nav { flex-wrap: nowrap; }
+.bims-modulebar .nav-link {
+  color: #C9DBD1;
+  font-size: .8rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.bims-modulebar .nav-link:hover,
+.bims-modulebar .nav-link:focus-visible { background: rgba(255,255,255,.10); color: #fff; }
+.bims-modulebar .nav-link.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+.bims-modulebar .dropdown-menu { margin-top: 4px; }
+
+/* On a phone the two tiers are one stack: the toggler in the bar above opens
+   this one, so it needs to be able to grow rather than hold a 40px line. */
+@media (max-width: 1199.98px) {
+  .bims-modulebar {
+    position: static;
+    padding: 0 16px;
+    height: auto;
+    min-height: 0;
+  }
+  .bims-modulebar .navbar-nav { flex-wrap: wrap; }
+  .bims-modulebar .collapse:not(.show) { display: none; }
 }
 
 /* ---------- Sub Navbar (Module Tabs) ---------- */

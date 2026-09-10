@@ -1,4 +1,5 @@
 {% load static %}
+{% load user_extras %}
 {% comment %}
 Two layouts, one include.
 
@@ -19,15 +20,93 @@ layouts open it from the account menu.
   </a>
 
   <!-- Mobile Toggle -->
-  <button class="navbar-toggler border-0 ms-auto me-2" type="button"
+  <button class="navbar-toggler border-0 ms-auto me-2 d-xl-none" type="button"
           data-bs-toggle="collapse" data-bs-target="#mainNavCollapse"
           style="color:#fff;">
     <i class="fas fa-bars"></i>
   </button>
 
-  <!-- Nav Links -->
-  <div class="collapse navbar-collapse" id="mainNavCollapse">
-    <ul class="navbar-nav me-auto align-items-xl-center gap-1 mt-3 mt-xl-0">
+
+
+    {% comment %}
+    Search, which had nowhere to sit while the modules filled this row. The
+    sidebar layout has carried it for a while; the two share the one partial.
+    {% endcomment %}
+    <div class="ms-auto d-none d-xl-flex me-3">{% include "_global_search.html" %}</div>
+
+    <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
+    {% include "_alerthub_bell.html" %}
+
+    {% comment %}
+    Sign out, on the bar rather than two clicks inside the menu, and only
+    here — carrying it in both places gave the same action two homes and made
+    the menu longer for nothing. It asks first: one icon on a crowded bar is
+    easy to catch with a stray click, and losing a half-filled form to one is
+    a poor trade for the click it saves.
+    {% endcomment %}
+    <div class="ms-xl-1 mt-3 mt-xl-0 mb-3 mb-xl-0">
+      <button type="button" class="nav-power-btn" title="Sign out"
+              aria-label="Sign out" data-bs-toggle="modal"
+              data-bs-target="#logoutConfirmModal"><i class="fa-solid fa-power-off"></i></button>
+    </div>
+
+    {% comment %}
+    The account: a menu handle and the person's initials. The username used to
+    be spelled out beside it, which on a navy bar this full was the widest
+    thing on it and told the reader something they already knew — whose screen
+    they are looking at. The initials keep the identity and give the row back.
+    The full name is on the tooltip and heads the menu, so nothing is lost.
+    {% endcomment %}
+    <div class="ms-xl-2 mt-3 mt-xl-0 mb-3 mb-xl-0">
+      <div class="dropdown">
+        <button class="user-btn btn" type="button"
+                id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static"
+                title="{{ request.user|display_name }}"
+                aria-label="Account menu for {{ request.user|display_name }}">
+          <i class="fa-solid fa-bars user-btn-bars" aria-hidden="true"></i>
+          <span class="user-avatar">{{ request.user|initials }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
+          <li><h6 class="dropdown-header">{{ request.user|display_name|default:"My Account" }}</h6></li>
+          {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
+            <i class="fas fa-tools"></i>Django Admin
+          </a></li>{% endif %}
+          <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
+            <i class="fas fa-id-card"></i>View Profile
+          </a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form method="post" action="{% url 'toggle_nav_layout' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" class="dropdown-item">
+                <i class="fa-solid fa-table-columns"></i>Switch to Sidebar Navigation
+              </button>
+            </form>
+          </li>
+          <li><a class="dropdown-item" href="{% url 'update_password' %}">
+            <i class="fas fa-key"></i>Change Password
+          </a></li>
+        </ul>
+      </div>
+    </div>
+
+  {% comment %}
+  Tier two: the modules, on a line of their own.
+
+  Eleven of them plus the account cluster had run the single bar out of room —
+  "SMS Management" had already been shortened to "SMS" to make it fit, which is
+  a bar saying it is full. Splitting the row gives the names back and leaves
+  space for the twelfth module without another rebuild.
+
+  The collapse stays keyed to #mainNavCollapse so the toggler in the bar above
+  still opens it on a phone, where the two tiers become one stack.
+  {% endcomment %}
+  </nav>
+  <nav class="bims-navbar bims-modulebar navbar navbar-expand-xl" id="moduleBar">
+    <div class="collapse navbar-collapse" id="mainNavCollapse">
+      <ul class="navbar-nav align-items-xl-center gap-1 mt-2 mt-xl-0">
+
 
       <!-- Home -->
       <li class="nav-item">
@@ -50,8 +129,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-egg me-1"></i>Broiler
         </a>
         <ul class="dropdown-menu" aria-labelledby="broilerDd">
-          <li><h6 class="dropdown-header">Broiler</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'broiler_master' in allowed_sections %}
@@ -252,8 +329,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-kiwi-bird me-1"></i>Hatchery
         </a>
         <ul class="dropdown-menu" aria-labelledby="hatcheryDd">
-          <li><h6 class="dropdown-header">Hatchery</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'hatchery_master' in allowed_sections %}
@@ -382,8 +457,6 @@ layouts open it from the account menu.
           <i class="fa fa-shopping-cart me-1"></i>Purchase
         </a>
         <ul class="dropdown-menu" aria-labelledby="purchaseDd">
-          <li><h6 class="dropdown-header">Purchase</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'purchase_master' in allowed_sections %}
@@ -463,8 +536,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-indian-rupee-sign me-1"></i>Sales
         </a>
         <ul class="dropdown-menu" aria-labelledby="salesDd">
-          <li><h6 class="dropdown-header">Sales</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'sales_master' in allowed_sections %}
@@ -539,8 +610,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-file-invoice me-1"></i>Account
         </a>
         <ul class="dropdown-menu" aria-labelledby="accountDd">
-          <li><h6 class="dropdown-header">Accounts</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'account_master' in allowed_sections %}
@@ -631,8 +700,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-warehouse me-1"></i>Inventory
         </a>
         <ul class="dropdown-menu" aria-labelledby="inventoryDd">
-          <li><h6 class="dropdown-header">Inventory</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'inventory_master' in allowed_sections %}
@@ -741,8 +808,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-users me-1"></i>HR
         </a>
         <ul class="dropdown-menu" aria-labelledby="hrDd">
-          <li><h6 class="dropdown-header">Human Resource</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Employee Submenu -->
           {% if 'hr_employee_management' in allowed_sections %}
@@ -864,8 +929,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-bell me-1"></i>SMS Management
         </a>
         <ul class="dropdown-menu" aria-labelledby="notificationsDd">
-          <li><h6 class="dropdown-header">SMS Management</h6></li>
-          <li><hr class="dropdown-divider"></li>
 
           <!-- Master Submenu -->
           {% if 'notifications_master' in allowed_sections %}
@@ -923,7 +986,6 @@ layouts open it from the account menu.
           <i class="fa-solid fa-bell-concierge me-1"></i>Alerts
         </a>
         <ul class="dropdown-menu" aria-labelledby="alertsDd">
-          <li><h6 class="dropdown-header">Alerts &amp; Notifications</h6></li>
           <li><a class="dropdown-item" href="{% url 'alerthub:notification_center' %}">
             <i class="fas fa-bell"></i>Notification Centre
           </a></li>
@@ -951,51 +1013,32 @@ layouts open it from the account menu.
       </li>
       {% endif %}
 
-    </ul>
+      </ul>
+    </div>
+  </nav>
+{% endif %}
 
-
-    <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
-    {% include "_alerthub_bell.html" %}
-
-    <!-- User Profile -->
-    <div class="ms-xl-3 mt-3 mt-xl-0 mb-3 mb-xl-0">
-      <div class="dropdown">
-        <button class="user-btn btn dropdown-toggle" type="button"
-                id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static">
-          <div class="user-avatar">
-            <i class="fas fa-user" style="font-size:0.7rem;"></i>
-          </div>
-          <span>{{ request.user.username|default:"Admin" }}</span>
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
-          <li><h6 class="dropdown-header">My Account</h6></li>
-          {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
-            <i class="fas fa-tools"></i>Django Admin
-          </a></li>{% endif %}
-          <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
-            <i class="fas fa-id-card"></i>View Profile
-          </a></li>
-          <li><hr class="dropdown-divider"></li>
-          <li>
-            <form method="post" action="{% url 'toggle_nav_layout' %}">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.path }}">
-              <button type="submit" class="dropdown-item">
-                <i class="fa-solid fa-table-columns"></i>Switch to Sidebar Navigation
-              </button>
-            </form>
-          </li>
-          <li><a class="dropdown-item" href="{% url 'update_password' %}">
-            <i class="fas fa-key"></i>Change Password
-          </a></li>
-          <li><a class="dropdown-item text-danger" href="/logout/">
-            <i class="fas fa-sign-out-alt" style="color:var(--danger)"></i>Logout
-          </a></li>
-        </ul>
+{% if request.user.is_authenticated %}
+<!-- Sign out, asked rather than assumed. Sits outside the layout branch above,
+     like the profile modal, because both layouts open it from the same button. -->
+<div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-power-off me-2"></i>Sign out</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Sign out of BIMS? Anything you have typed and not saved will be lost.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Stay signed in</button>
+        <a href="/logout/" class="btn btn-danger" id="logoutConfirmBtn">
+          <i class="fa-solid fa-power-off me-1"></i>Sign out</a>
       </div>
     </div>
   </div>
-</nav>
+</div>
 {% endif %}
 
 {% if request.user.is_authenticated %}
@@ -1022,9 +1065,15 @@ layouts open it from the account menu.
                    value="{{ request.user.last_name }}" placeholder="Enter last name">
           </div>
           <div class="mb-0">
-            <label for="up-email" class="form-label">Email <span class="text-danger">*</span></label>
+            <label for="up-email" class="form-label">Email</label>
+            {% comment %}
+            Optional. Many of these accounts are branch logins with no mailbox
+            behind them, and a field they cannot fill blocked them from saving
+            a name change. type=email still checks the shape of whatever is
+            typed, which is the part worth keeping.
+            {% endcomment %}
             <input type="email" id="up-email" class="form-control"
-                   value="{{ request.user.email }}" placeholder="Enter email" required>
+                   value="{{ request.user.email }}" placeholder="Enter email">
           </div>
         </div>
         <div class="modal-footer">

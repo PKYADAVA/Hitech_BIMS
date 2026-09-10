@@ -64,6 +64,10 @@ img, svg, video { height: auto; }
   .bims-navbar .navbar-collapse > :not(.navbar-nav) { flex-shrink: 0; }
 }
 
+/* These squeezes were written when eleven modules and the account cluster
+   shared one line. The modules have their own tier now, so the identity bar no
+   longer needs tightening — but the module tier still does at the narrow end,
+   which is why the rules stay and are simply aimed at the bar that needs them. */
 @media (min-width: 1200px) and (max-width: 1920px) {
   .bims-navbar { padding: 0 14px; }
   .bims-navbar .navbar-nav { gap: 0 !important; }
@@ -87,7 +91,12 @@ img, svg, video { height: auto; }
 /* The bar is only expanded where all the menus fit, so it is always a single
    row — below 1200px it collapses into the hamburger instead of wrapping. */
 @media (min-width: 1200px) {
-  .bims-navbar { height: var(--navbar-height); flex-wrap: nowrap; }
+  /* :not(.bims-modulebar) — the module tier wears .bims-navbar too, to inherit
+     its menu styling, but it is the shorter of the two bars and sets its own
+     height. Without this it was dragged back to the full 60px from here, which
+     loads a stylesheet later than the one that decided otherwise. */
+  .bims-navbar:not(.bims-modulebar) { height: var(--navbar-height); }
+  .bims-navbar { flex-wrap: nowrap; }
   .bims-navbar .navbar-collapse,
   .bims-navbar .navbar-nav { flex-wrap: nowrap; }
 }
