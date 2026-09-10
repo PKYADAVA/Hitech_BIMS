@@ -15,6 +15,12 @@ jest.mock("@/api/client", () => ({
   },
 }));
 
+// Anything that imports the catalog reaches the theme, which remembers the
+// light/dark choice in AsyncStorage — native, and so unavailable here. The
+// package ships its own mock for exactly this.
+jest.mock("@react-native-async-storage/async-storage", () =>
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"));
+
 jest.mock("expo-secure-store", () => ({
   getItemAsync: jest.fn(async () => null),
   setItemAsync: jest.fn(async () => undefined),

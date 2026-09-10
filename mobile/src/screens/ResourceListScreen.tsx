@@ -24,7 +24,7 @@ import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
-import { isEmpty } from "@/utils/format";
+import { formatDate, isEmpty } from "@/utils/format";
 import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "List">;
@@ -71,6 +71,19 @@ function ListKpiStrip({ resourceKey, accent }: { resourceKey: string; accent: st
       })}
     </View>
   );
+}
+
+/**
+ * How to say the range being asked about, including when only one end is set.
+ *
+ * "between  and 10 Sep" is what a naive join produces once someone clears the
+ * From box, and a message that reads as broken undermines the very thing it
+ * is there to explain.
+ */
+function rangeLabel(from: string, to: string): string {
+  if (from && to) return `between ${formatDate(from)} and ${formatDate(to)}`;
+  if (from) return `on or after ${formatDate(from)}`;
+  return `on or before ${formatDate(to)}`;
 }
 
 /** Generic, config-driven list screen: search + infinite scroll + modern cards. */
@@ -268,6 +281,12 @@ export function ResourceListScreen({ route, navigation }: Props) {
     });
   }, [list.items, query, from, to, config.searchKeys, config.dateField]);
 
+  // Told apart so the empty state can be honest: nothing filed at all, or
+  // nothing inside the dates being asked about. Only the second is worth
+  // offering a way out of.
+  const outOfRange = Boolean(config.dateField) && Boolean(from || to)
+    && list.items.length > 0 && data.length === 0;
+
   /**
    * Rows folded into their groups, newest group first and each group's own
    * days oldest-first — the order the web list uses, so a flock reads top to
@@ -354,6 +373,19 @@ export function ResourceListScreen({ route, navigation }: Props) {
         ListEmptyComponent={
           query ? (
             <EmptyOrError icon="🔍" title="No matches" message="No results for your search." />
+          ) : outOfRange ? (
+            // Rows were loaded and the range filtered every one of them out.
+            // Saying "none yet" here would be untrue, and a register that
+            // opens on its last seven days says it most often to whoever has
+            // not filed anything this week — exactly the person who then goes
+            // looking for records that are sitting right there.
+            <EmptyOrError
+              icon="📅"
+              accent={config.accent}
+              title="Nothing in these dates"
+              message={`No ${config.title.toLowerCase()} ${rangeLabel(from, to)}. `
+                     + "Widen the range, or clear it to see everything."}
+            />
           ) : (
             <EmptyOrError
               icon={config.icon}

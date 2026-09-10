@@ -1171,10 +1171,17 @@ const inventoryResources: ResourceConfig[] = [
     icon: "swap-horizontal",
     accent: I,
     emptyMessage: "No stock transfers yet.",
+    // Looked up by when, like the other transaction registers: opens on its
+    // last seven days with a From/To above the search.
+    dateField: "date",
     searchKeys: ["trnum", "dc_no", "vehicle_no", "driver_name"],
     card: (r) => ({
       title: pick(r, ["trnum"], `Transfer #${r.id}`),
-      subtitle: joinParts([pick(r, ["item_label"]), formatDate(r.date), pick(r, ["dc_no"])]),
+      // Date and DC lead, the item label trails. The subtitle is one line and
+      // clipped, and the item label is the long part — behind it the DC number
+      // fell off the end of the card and was never seen. Labelled "DC" too: on
+      // its own a value like "2345" says nothing about what it is.
+      subtitle: joinParts([formatDate(r.date), dcNo(r), pick(r, ["item_label"])]),
       trailing: !isBlank(r.quantity) ? { value: formatNumber(r.quantity), caption: "qty" } : undefined,
     }),
   },
@@ -2332,6 +2339,18 @@ export function moduleResources(module: ModuleKey): ResourceConfig[] {
 
 function isBlank(v: unknown): boolean {
   return v === null || v === undefined || v === "";
+}
+
+/**
+ * A delivery-challan number, said as one.
+ *
+ * The bare value is often just digits, which on a card of other digits reads
+ * as a quantity or a code rather than as the DC someone is looking for.
+ * Returns "" when there is none, so joinParts drops it rather than leaving a
+ * label with nothing after it.
+ */
+function dcNo(r: Row): string {
+  return isBlank(r.dc_no) ? "" : `DC ${r.dc_no}`;
 }
 
 /** Standard Active/Inactive badge for masters that carry `is_active`. */
