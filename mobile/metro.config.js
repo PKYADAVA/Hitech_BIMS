@@ -53,13 +53,16 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 const UPSTREAM = new URL(
   process.env.EXPO_PUBLIC_API_BASE_URL || appJson.expo.extra.apiBaseUrl
 );
-const PROXY_PREFIX = UPSTREAM.pathname.replace(/\/$/, "");
+// The versioned API, plus alerthub, which sits outside it (`/api/alerthub`)
+// and is called with the browser's own origin — without it here those calls
+// reach Metro instead of the backend and come back 404.
+const PROXY_PREFIXES = [UPSTREAM.pathname.replace(/\/$/, ""), "/api/alerthub"];
 const transport = UPSTREAM.protocol === "https:" ? require("https") : require("http");
 
 config.server = {
   ...config.server,
   enhanceMiddleware: (metroMiddleware) => (req, res, next) => {
-    if (!req.url || !req.url.startsWith(`${PROXY_PREFIX}/`)) {
+    if (!req.url || !PROXY_PREFIXES.some((p) => req.url.startsWith(`${p}/`))) {
       return metroMiddleware(req, res, next);
     }
 

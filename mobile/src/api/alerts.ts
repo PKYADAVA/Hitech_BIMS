@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Platform } from "react-native";
 
 import { http } from "./client";
 import { API_BASE_URL } from "@/config";
@@ -21,8 +22,20 @@ import { API_BASE_URL } from "@/config";
  *    envelope, so nothing here unwraps `.data.data`.
  */
 
-/** `https://host/api/alerthub` — derived so a LAN build talks to the LAN server. */
-const ALERTS_BASE = `${API_BASE_URL.replace(/\/api\/v1\/?$/, "")}/api/alerthub`;
+/**
+ * `https://host/api/alerthub` — derived so a LAN build talks to the LAN server.
+ *
+ * It has to come out absolute, because everything below relies on axios
+ * ignoring `baseURL`. On web `API_BASE_URL` is deliberately the path-only
+ * `/api/v1` (so Metro can proxy it same-origin), and stripping that leaves a
+ * root-relative `/api/alerthub` — which axios treats as relative and prefixes,
+ * asking for `/api/v1/api/alerthub/...` and getting a 404. The browser's own
+ * origin is the same host Metro serves, so it is both absolute and same-origin.
+ */
+const ALERTS_BASE =
+  Platform.OS === "web"
+    ? `${window.location.origin}/api/alerthub`
+    : `${API_BASE_URL.replace(/\/api\/v1\/?$/, "")}/api/alerthub`;
 
 export interface AlertNotification {
   id: number;
