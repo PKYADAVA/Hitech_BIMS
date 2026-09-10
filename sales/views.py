@@ -10,7 +10,7 @@ from user.services.scoping import (customers_for, scope_any,
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -97,6 +97,12 @@ def create_customer(request):
             return redirect("customer")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+        except IntegrityError:
+            # A unique column the form never showed the user. Rare now that
+            # the phone mirror steps aside, but two people saving at once can
+            # still race it, and a 500 tells whoever hit it nothing at all.
+            messages.error(request, "Those details clash with an existing "
+                                    "party — check the mobile number.")
 
     return render(request, "customer_form.html", _customer_form_context())
 
@@ -161,6 +167,12 @@ def edit_customer(request, id):
             return redirect("customer")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+        except IntegrityError:
+            # A unique column the form never showed the user. Rare now that
+            # the phone mirror steps aside, but two people saving at once can
+            # still race it, and a 500 tells whoever hit it nothing at all.
+            messages.error(request, "Those details clash with an existing "
+                                    "party — check the mobile number.")
 
     return render(request, "customer_form.html", _customer_form_context(instance))
 

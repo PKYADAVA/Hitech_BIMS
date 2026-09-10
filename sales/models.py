@@ -133,11 +133,37 @@ class Customer(models.Model):
                 serials.append(int(match.group(1)))
         return f"{prefix}{max(serials, default=0) + 1:04d}"
 
+    def _mirrorable_phone(self):
+        """`mobile` copied into `phone`, unless another party already holds it.
+
+        `phone` is unique, is not on any form, and exists only as a mirror of
+        `mobile` — nobody types it. That combination is a trap: the mirror is
+        assigned here, in save(), which runs *after* full_clean(), so the
+        uniqueness of what is being written was never validated. Postgres then
+        refused the insert and the page returned a 500 with nothing to act on.
+
+        It surfaced with a placeholder mobile — "-" — because a placeholder is
+        exactly the value that gets typed twice. Any party whose `phone` was
+        set independently of its `mobile`, which imports and older edits both
+        leave behind, claims that value for good.
+
+        Leaving the mirror empty is the right answer rather than a lesser evil:
+        the number is in `mobile`, which is what every screen and every message
+        reads, and `phone` is nullable precisely because it may have nothing in
+        it.
+        """
+        if not self.mobile:
+            return self.phone
+        clash = type(self).objects.filter(phone=self.mobile)
+        if self.pk:
+            clash = clash.exclude(pk=self.pk)
+        return None if clash.exists() else self.mobile
+
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
             self.code = self.next_code()
         if not self.phone:
-            self.phone = self.mobile
+            self.phone = self._mirrorable_phone()
         super().save(*args, **kwargs)
 
     def __str__(self):
