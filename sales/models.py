@@ -1,6 +1,8 @@
 import re
 
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from purchase.models import VendorGroup, CreditTerm
 from inventory.models import Item, ItemCategory
 from Hitech_BIMS.storage_backends import private_media_storage
@@ -70,7 +72,8 @@ class Customer(models.Model):
         TO_PAY = "To Pay", "To Pay"
         TO_RECEIVE = "To Receive", "To Receive"
 
-    code = models.CharField(max_length=50, blank=True, null=True, help_text="Short customer code")
+    code = models.CharField(max_length=50, blank=True, null=True,
+                            help_text="Short customer code")
     name = models.CharField(max_length=255, help_text="Full name of the contact")
     address = models.TextField(help_text="Billing address of the contact")
     place = models.CharField(max_length=255, blank=True, null=True, help_text="Place information")
@@ -129,6 +132,21 @@ class Customer(models.Model):
     agreement_copy = models.FileField(upload_to="customer_documents/agreements/", storage=private_media_storage, blank=True, null=True)
     other_documents = models.FileField(upload_to="customer_documents/other/", storage=private_media_storage, blank=True, null=True)
 
+    class Meta:
+        constraints = [
+            # Partial, not a plain unique index: the code may legitimately be
+            # blank, and Postgres treats '' as a value — a plain index would
+            # let the first blank through and refuse every one after it. NULLs
+            # never collide, so only the empty string needs excluding.
+            #
+            # The code is minted by next_code() and never taken from the form,
+            # so a repeat can only mean two saves read the same maximum in the
+            # same moment. A code identifying two partys identifies neither.
+            models.UniqueConstraint(
+                fields=["code"], condition=~models.Q(code=""),
+                name="unique_customer_code"),
+        ]
+
     @classmethod
     def next_code(cls):
         prefix = "CUST-"
@@ -141,7 +159,17 @@ class Customer(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Minted, so it can be taken between reading the highest and
+            # writing the row. mint_with_retry lets the database settle the
+            # race rather than trying to out-guess it.
             self.code = self.next_code()
+            return mint_with_retry(
+                lambda: self._save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code()),
+                label="customer code")
+        return self._save(*args, **kwargs)
+
+    def _save(self, *args, **kwargs):
         # Plain again now that `phone` carries no unique index: the mirror can
         # always be taken, so every record shows the number where the older
         # screens and the Customer List report look for it. While the index

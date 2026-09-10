@@ -3,6 +3,8 @@ import re
 from decimal import Decimal
 
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 
@@ -101,6 +103,16 @@ class HatchSetting(models.Model):
         verbose_name = _("Hatch Setting")
         verbose_name_plural = _("Hatch Settings")
         ordering = ['-setting_date', '-id']
+        constraints = [
+            # Partial: this column is written empty by the first save and
+            # filled by the second, so for a moment every new setting holds ''.
+            # Postgres treats '' as a value, so a plain unique index would let
+            # one row through and refuse every setting created alongside it —
+            # breaking the ordinary case to guard against the rare one.
+            models.UniqueConstraint(
+                fields=["batch_flock_no"], condition=~models.Q(batch_flock_no=""),
+                name="unique_hatch_setting_batch_flock_no"),
+        ]
 
     def __str__(self):
         return f"Setting {self.setting_no} ({self.supplier_name})"
@@ -109,8 +121,17 @@ class HatchSetting(models.Model):
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new and not self.batch_flock_no:
+            # Issued off today's highest, so a setting filed in the same moment
+            # can have taken it between the reading and this write. The number
+            # goes on in a second save because the first has to happen before
+            # there is a row to number, which means the clash surfaces here.
             self.batch_flock_no = self._next_batch_flock_no()
-            super().save(update_fields=['batch_flock_no'])
+            mint_with_retry(
+                lambda: super(HatchSetting, self).save(
+                    update_fields=['batch_flock_no']),
+                lambda: setattr(self, "batch_flock_no",
+                                self._next_batch_flock_no()),
+                label="batch/flock number")
 
     @classmethod
     def _next_batch_flock_no(cls, on_date=None):

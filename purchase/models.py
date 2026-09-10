@@ -2,6 +2,8 @@ import re
 from decimal import Decimal
 
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.utils.timezone import now
 from inventory.models import ItemCategory, Item
 from Hitech_BIMS.storage_backends import private_media_storage
@@ -40,7 +42,8 @@ class Supplier(models.Model):
         TO_PAY = "To Pay", "To Pay"
         TO_RECEIVE = "To Receive", "To Receive"
 
-    code = models.CharField(max_length=50, null=True, blank=True, help_text="Short supplier code")
+    code = models.CharField(max_length=50, null=True, blank=True,
+                            help_text="Short supplier code")
     name = models.CharField(max_length=255, null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     place = models.CharField(max_length=100, null=True, blank=True)
@@ -78,6 +81,21 @@ class Supplier(models.Model):
     agreement_copy = models.FileField(upload_to="supplier_documents/agreements/", storage=private_media_storage, blank=True, null=True)
     other_documents = models.FileField(upload_to="supplier_documents/other/", storage=private_media_storage, blank=True, null=True)
 
+    class Meta:
+        constraints = [
+            # Partial, not a plain unique index: the code may legitimately be
+            # blank, and Postgres treats '' as a value — a plain index would
+            # let the first blank through and refuse every one after it. NULLs
+            # never collide, so only the empty string needs excluding.
+            #
+            # The code is minted by next_code() and never taken from the form,
+            # so a repeat can only mean two saves read the same maximum in the
+            # same moment. A code identifying two partys identifies neither.
+            models.UniqueConstraint(
+                fields=["code"], condition=~models.Q(code=""),
+                name="unique_supplier_code"),
+        ]
+
     @classmethod
     def next_code(cls):
         prefix = "SUP-"
@@ -90,7 +108,13 @@ class Supplier(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
+            # Minted, so it can be taken between reading the highest and
+            # writing the row; the database settles the race.
             self.code = self.next_code()
+            return mint_with_retry(
+                lambda: super(Supplier, self).save(*args, **kwargs),
+                lambda: setattr(self, "code", self.next_code()),
+                label="supplier code")
         super().save(*args, **kwargs)
 
     def __str__(self):

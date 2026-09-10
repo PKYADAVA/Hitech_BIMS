@@ -2,6 +2,8 @@ import re
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import models
+
+from Hitech_BIMS.minting import mint_with_retry
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils.timezone import now
@@ -857,6 +859,19 @@ class BroilerFarmShed(models.Model):
         verbose_name = _("Broiler Farm Shed")
         verbose_name_plural = _("Broiler Farm Sheds")
         ordering = ['farm__farm_code', 'unit_no', 'shed_no']
+        constraints = [
+            # Per farm, not global: Shed 1 exists on every farm and should.
+            # save() assigns "the highest on this farm, plus one", so two sheds
+            # added at the same moment would otherwise both become Shed 2 —
+            # and shed_name is built from the number, so they would share that
+            # too.
+            # Excluding 0, the field's default: a shed that reached the table
+            # without going through save() carries an unassigned number, and
+            # several unassigned sheds are not a clash.
+            models.UniqueConstraint(fields=['farm', 'unit_no'],
+                                    condition=~models.Q(unit_no=0),
+                                    name='unique_shed_unit_no_per_farm'),
+        ]
 
     def __str__(self):
         return f"{self.shed_code or self.shed_name or self.shed_no} ({self.farm.farm_name})"
@@ -873,7 +888,20 @@ class BroilerFarmShed(models.Model):
                 max_num = max(max_num, int(m.group(1)))
         return f"{prefix}{max_num + 1:04d}"
 
+    def _mint_numbers(self):
+        """A shed code, and the running unit number within its farm.
+
+        Both are "read the highest, add one", so both can be taken between the
+        reading and the write. Reissued together on a retry: whichever of them
+        lost the race, the other has to stay consistent with it.
+        """
+        self.shed_code = self._next_shed_code()
+        existing = (BroilerFarmShed.objects.filter(farm=self.farm)
+                    .exclude(pk=self.pk).aggregate(m=models.Max("unit_no"))["m"] or 0)
+        self.unit_no = existing + 1
+
     def save(self, *args, **kwargs):
+        minting = not self.shed_code or not self.unit_no
         if not self.shed_code:
             self.shed_code = self._next_shed_code()
         if not self.unit_no:
@@ -903,6 +931,13 @@ class BroilerFarmShed(models.Model):
             area = (Decimal(str(self.length)) * Decimal(str(self.width)))
             self.sq_feet = _fmt(area)
             self.dimensions = f"{_fmt(self.length)} x {_fmt(self.width)} ft"
+        if minting:
+            # Both numbers were just issued off the current highest, so either
+            # can have been taken by a shed saved in the same moment. Let the
+            # database say so, reissue, and try again.
+            return mint_with_retry(
+                lambda: super(BroilerFarmShed, self).save(*args, **kwargs),
+                self._mint_numbers, label="shed number")
         super().save(*args, **kwargs)
 
 
