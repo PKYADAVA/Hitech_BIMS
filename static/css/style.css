@@ -290,14 +290,21 @@ footer { margin-top: auto; }
   font-size: .95rem;
   background: rgba(255, 255, 255, .12);
   border: 1px solid rgba(255, 255, 255, .16);
-  color: #fff;
+  /* Amber, the colour this system already uses for "needs a look". It is the
+     brighter amber-400 rather than the --warning token, which is mixed for
+     dark text on a light chip and goes muddy on a dark green ground.
+
+     The three controls share a size and a shape, not a colour: sign-out is red
+     because it ends something, the bell is amber because it is asking for
+     attention, and the account is plain because it is neither. */
+  color: #fbbf24;
   transition: var(--transition);
 }
 .bims-navbar .ah-bell-btn.btn:hover,
 .bims-navbar .ah-bell-btn.btn:focus-visible {
   background: rgba(255, 255, 255, .22);
   border-color: rgba(255, 255, 255, .3);
-  color: #fff;
+  color: #fcd34d;                      /* a shade up, not a change of colour */
   transform: translateY(-1px);
 }
 /* The count, sitting on the bell's top-right corner.

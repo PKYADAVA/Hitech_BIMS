@@ -603,8 +603,11 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
 .ds-topbar #ahBellWrap,
 .ds-topbar .dropdown { margin: 0 !important; }
 /* On white, the bell's own white-on-green colouring disappears. */
-.ds-topbar .ah-bell-btn { color: var(--text-secondary, #475569); }
-.ds-topbar .ah-bell-btn:hover { color: var(--text, #0f172a); background: var(--surface-hover, #f8fafc); }
+/* Amber here too, so the bell means the same thing in both layouts — the
+   deeper --warning rather than the navbar's amber-400, because this bar is
+   white and the bright one washes out on it. */
+.ds-topbar .ah-bell-btn { color: var(--warning, #d97706); }
+.ds-topbar .ah-bell-btn:hover { color: #b45309; background: var(--surface-hover, #f8fafc); }
 
 /* Account button: avatar, name over role, caret. */
 .ds-user-btn {
