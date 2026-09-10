@@ -88,12 +88,26 @@ class ApiMatrixPermissionTests(TestCase):
     def test_an_unmapped_resource_is_recorded_not_refused(self):
         """Same policy as the middleware: filling the map in blind would break
         the mobile client for endpoints nobody has claimed."""
-        from api.permissions import MODEL_TABS
+        from rest_framework.test import APIRequestFactory
+
+        from api.permissions import MatrixPermission
         from user.models import WebAccessAudit
 
-        self.assertNotIn("hatchery.Hatchery", MODEL_TABS)
-        response = self.client.get("/api/v1/hatchery/hatcheries/")
-        self.assertEqual(response.status_code, 200)
+        # Asked against a stand-in rather than a real endpoint. This used to
+        # call the hatcheries URL, and stopped testing anything the day that
+        # model was mapped to its tab; every routed resource is now either
+        # mapped or deliberately ungated, so a real example no longer exists.
+        # The policy is what matters, and it applies to the next resource
+        # someone adds without a tab — which is exactly what this stands for.
+        class UnclaimedViewSet:
+            queryset = None
+            serializer_class = None
+
+        request = APIRequestFactory().get("/api/v1/unclaimed/")
+        request.user = self.clerk
+
+        self.assertTrue(
+            MatrixPermission().has_permission(request, UnclaimedViewSet()))
         self.assertTrue(WebAccessAudit.objects.filter(
             verdict="unmapped", url_name__startswith="api:").exists())
 

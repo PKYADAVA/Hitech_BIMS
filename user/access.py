@@ -684,6 +684,67 @@ MASTER_REFERENCE_URLS = {
     for _u in _extra
 }
 
+#: Parties and ledgers a transaction reads to fill its own pickers.
+#:
+#: A second, narrower rule for the masters the set above deliberately excludes.
+#: The difference is who it opens them to: MASTER_REFERENCE_TABS opens a read to
+#: *anyone with a login*, which is why parties are not in it and must not be
+#: added — they carry contact details, credit terms and, for employees, salary
+#: and bank accounts. This opens the read only to a user who holds one of the
+#: transaction tabs that actually asks for the picker, and only to the identity
+#: columns (``api.serializers.PICKER_FIELDS``); the rows are still data-scoped.
+#:
+#: It exists because the phone asks a master endpoint for what the web hands
+#: its own form through view context. The web page is already right: a user
+#: with Bird Sale and not the Customer master sees the customers they are
+#: scoped to, because holding the transaction is what entitles them. This is
+#: that same entitlement, spelled out for the API gate.
+#:
+#: master tab -> the transaction tabs that need it as a picker. Listed one by
+#: one, for the same reason the set above is: a permission rule has to be
+#: readable to be reviewed. Add a pair when a real form is found to need it.
+PICKER_MASTERS = {
+    "customer": {
+        "bird_sale_list", "sales_invoice_list", "sales_receipt_list",
+    },
+    "supplier": {
+        "egg_purchase_list", "general_purchase_list", "chicks_purchase_list",
+        "payment_list",
+    },
+    # Bird Sale's Lifting Supervisor is any active employee, not the broiler
+    # Supervisor master; the trip sheet names a driver the same way.
+    "employee_list": {
+        "bird_sale_list", "supervisor_trip_report",
+    },
+    "coa": {
+        "egg_purchase_list", "general_purchase_list",
+    },
+    # Not sensitive, but it belongs to the Growing Charges master and a batch
+    # cannot be recorded without naming one.
+    "breed": {
+        "broiler_batch", "breed_standard",
+    },
+}
+
+
+def picker_read_allowed(user, tab, entitles=None) -> bool:
+    """True when *tab* is a master this user may read to fill a picker.
+
+    Read-only, and only ever consulted after the user's own rights on the tab
+    have already said no.
+
+    ``entitles`` is an extra test the entitling transaction must also pass. The
+    phone passes its Mobile Access check there: the read is granted *because*
+    the user holds a transaction that asks for it, so a transaction they cannot
+    open on the phone must not be what unlocks the master on the phone.
+    """
+    needed_by = PICKER_MASTERS.get(tab)
+    if not needed_by:
+        return False
+    return any(user_can(user, code, "view")
+               and (entitles is None or entitles(code))
+               for code in needed_by)
+
 
 # ---------------------------------------------------------------------------
 # Action (create / edit / delete) url-name resolution

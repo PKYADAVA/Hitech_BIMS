@@ -97,3 +97,42 @@ def serializer_factory(
                 namespace[f"get_{label}"] = _make_m2m_label_getter(f.name)
 
     return type(f"{model.__name__}Serializer", (serializers.ModelSerializer,), namespace)
+
+
+# ---------------------------------------------------------------------------
+# Picker serializers — identity only
+# ---------------------------------------------------------------------------
+#: What a picker is allowed to see of a master the user has no rights to.
+#:
+#: A dropdown needs an id and something to read on the row, and nothing else.
+#: The full ``hr.Employee`` record carries salary, bank account, IFSC, Aadhaar
+#: and date of birth; ``sales.Customer`` and ``purchase.Supplier`` carry contact
+#: details and credit terms. Opening the endpoint without narrowing the row
+#: would hand all of that to anyone holding a transaction tab, so the two go
+#: together: :data:`user.access.PICKER_MASTERS` says who may read, this says
+#: how much of the row they get.
+#:
+#: Keyed by ``app_label.Model``. A master reachable this way and missing here
+#: is a bug, not a default — ``picker_serializer`` refuses rather than guessing
+#: a field set, because guessing wrong leaks.
+PICKER_FIELDS = {
+    "sales.Customer": ["id", "code", "name"],
+    "purchase.Supplier": ["id", "code", "name"],
+    "hr.Employee": ["id", "employee_id", "full_name"],
+    "account.ChartOfAccount": ["id", "code", "description"],
+    "broiler.Breed": ["id", "code", "description"],
+}
+
+_picker_cache: dict[str, type[serializers.ModelSerializer]] = {}
+
+
+def picker_serializer(model) -> Optional[type[serializers.ModelSerializer]]:
+    """The identity-only serializer for *model*, or None if it has no entry."""
+    label = f"{model._meta.app_label}.{model.__name__}"
+    if label not in PICKER_FIELDS:
+        return None
+    if label not in _picker_cache:
+        _picker_cache[label] = serializer_factory(
+            model, fields=list(PICKER_FIELDS[label])
+        )
+    return _picker_cache[label]

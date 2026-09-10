@@ -66,6 +66,14 @@ MODEL_TABS = {
     "broiler.Breed": "breed",
     "broiler.BreedStandard": "breed_standard",
     "broiler.FarmLocationCapture": "farm_location_capture_list",
+    "broiler.MedicineVaccineEntry": "medicine_entry_list",
+    "broiler.GrowingChargeScheme": "growing_charge",
+    "broiler.GrowingChargeSettlement": "gc_settlement",
+    "broiler.FarmerFarmSetupRequest": "farmer_farm_setup_request_list",
+    # Photos belong to the entry they are attached to — same tab, so a user who
+    # may see the record may see its pictures and no one else can.
+    "broiler.BirdSalePhoto": "bird_sale_list",
+    "broiler.DailyEntryPhoto": "daily_entry_list",
     # Inventory
     "inventory.Item": "items",
     "inventory.ItemCategory": "item_category",
@@ -75,6 +83,9 @@ MODEL_TABS = {
     "inventory.StockReceive": "stock_receive_list",
     "inventory.InventoryAdjustment": "inventory_adjustment_list",
     "inventory.MedicineTransfer": "medicine_transfer_list",
+    "inventory.Sector": "sector",
+    "inventory.UnitOfMeasurement": "unit_of_measurement",
+    "inventory.ItemPriceList": "item_price_list",
     # Purchase
     "purchase.Supplier": "supplier",
     "purchase.VendorGroup": "vendor_groups",
@@ -82,22 +93,90 @@ MODEL_TABS = {
     "purchase.ChicksPurchase": "chicks_purchase_list",
     "purchase.DebitNote": "debit_note_list",
     "purchase.CreditNote": "credit_note_list",
+    "purchase.SupplierPayment": "payment_list",
+    "purchase.TaxMaster": "tax_master",
+    # Line items carry the tab of the document they belong to.
+    "purchase.GeneralPurchaseItem": "general_purchase_list",
+    "purchase.ChicksPurchaseItem": "chicks_purchase_list",
+    "purchase.SupplierPaymentLine": "payment_list",
     # Sales
     "sales.Customer": "customer",
     "sales.CustomerGroup": "customer_groups",
     "sales.SalesInvoice": "sales_invoice_list",
+    "sales.SalesInvoiceItem": "sales_invoice_list",
+    "sales.SalesReceipt": "sales_receipt_list",
+    "sales.SalesPriceMaster": "sales_price_master",
     # Hatchery
     "hatchery.EggPurchase": "egg_purchase_list",
     "hatchery.ChickSale": "chick_sale_list",
     "hatchery.DeliveryChallan": "delivery_challan_list",
+    "hatchery.EggGrading": "egg_grading_list",
+    "hatchery.HatchSetting": "hatchery_list",
+    "hatchery.TraySetting": "tray_set_list",
+    "hatchery.HatchEntry": "hatch_entry_list",
+    "hatchery.ChangeRequest": "change_requests",
+    "hatchery_master.ExpenseType": "expense_type_list",
+    "hatchery_master.HatcheryExpense": "hatchery_expense_list",
+    "hatchery.EggPurchaseItem": "egg_purchase_list",
+    "hatchery.ChickSaleItem": "chick_sale_list",
+    "hatchery.DeliveryChallanItem": "delivery_challan_list",
     # Account
     "account.ChartOfAccount": "coa",
     "account.Voucher": "vouchers",
     "account.FinancialYear": "fin_year",
     "account.BankCashMaster": "bank_cash",
+    "account.OrganizationCentre": "organization_centre",
+    "account.CompanyProfile": "company_profile",
+    "account.TermsConditions": "terms",
     # HR
     "hr.Employee": "employee_list",
     "hr.Designation": "designation",
+    "hr.Attendance": "employee_attendance",
+    "hr.EmployeeLeave": "leave_employee",
+    "hr.LeaveSelectedDate": "employee_leave_details",
+    "hr.Payroll": "payroll",
+    "hr.Group": "employee_group",
+    # SMS
+    "notification.SmsTemplate": "sms_templates",
+    "notification.SmsMessage": "sms_history",
+    "notification.SmsSettings": "sms_settings",
+    # Hatchery equipment. MASTER_REFERENCE_TABS already names these three, but
+    # a tab there does nothing until the model resolves to it — unmapped, they
+    # were reaching the picker through the unmapped-is-allowed fallback, which
+    # the WEB_ACCESS_ENFORCE rollout removes. The Hatch Setting form's hatchery
+    # picker would have gone blank on the day that flag was turned on.
+    "hatchery_master.Hatchery": "hatchery_master_list",
+    "hatchery_master.Hatcher": "hatcher_list",
+    "hatchery_master.Setter": "setter_list",
+}
+
+
+#: Resources with no tab because no web page owns them.
+#:
+#: These pass today only because an unmapped resource is allowed, which is the
+#: audit's fallback and goes away the day ``WEB_ACCESS_ENFORCE`` is turned on —
+#: at which point every one of these screens would start refusing everybody.
+#: Naming them converts an accidental pass into a decided one, so the flag can
+#: be flipped without taking them down.
+#:
+#: The reasons are ``mobile_access.UNGATED_SCREENS``', already reviewed there:
+#: no web page exists, so there is no permission to inherit, and a driver's own
+#: vehicles are their reference data — the API narrows each of these to the
+#: caller rather than leaving them wide.
+UNGATED_MODELS = {
+    "hr.Department",
+    "hr.Shift",
+    "hr.EmployeeVehicle",
+    # Trips and their visits are narrowed to the caller by the viewset
+    # itself ("the list shows their trips and no one else's"), so the
+    # Home screen's own-round widget must not need the trip *report*
+    # right to ask. Mapping them to that tab took a supervisor's own
+    # day away from them, which is how this was found.
+    "hr.SupervisorTrip",
+    "hr.SupervisorTripVisit",
+    "purchase.CreditTerm",
+    "purchase.SupplierShippingAddress",
+    "sales.CustomerShippingAddress",
 }
 
 
@@ -161,6 +240,21 @@ class MatrixPermission(BasePermission):
         if action == "view" and tab in MASTER_REFERENCE_TABS:
             return True
 
+        # Parties and ledgers are not in that set and must not be — they carry
+        # contact, credit and payroll columns, and it opens a read to everyone
+        # with a login. They get the narrower rule instead: the transaction the
+        # picker belongs to is what entitles the read, exactly as it does on the
+        # web, where the form is handed its customers through view context and
+        # never asks the master. `picker_only` narrows the row to identity.
+        from user.access import picker_read_allowed
+        from user.services.mobile_access import mobile_can
+
+        if (action == "view" and not user_can(user, tab, action)
+                and picker_read_allowed(
+                    user, tab, entitles=lambda code: mobile_can(user, code, "view"))):
+            request.picker_only = True
+            return True
+
         if not user_can(user, tab, action):
             self._record(request, view, user, "denied", tab, action)
             return False
@@ -176,6 +270,11 @@ class MatrixPermission(BasePermission):
         return True
 
     def _unmapped(self, request, view, user) -> bool:
+        model = model_for_view(view)
+        if model is not None and (
+                f"{model._meta.app_label}.{model.__name__}" in UNGATED_MODELS):
+            return True             # decided, not merely unmapped
+
         self._record(request, view, user, "unmapped", "", "")
         if not getattr(settings, "WEB_ACCESS_ENFORCE", False):
             return True             # audit only — the API behaves as before

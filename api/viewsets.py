@@ -26,7 +26,7 @@ from .envelope import EnvelopeJSONRenderer
 from .permissions import MatrixPermission
 from .exceptions import api_exception_handler
 from .pagination import CursorPagination, StandardPagination
-from .serializers import serializer_factory
+from .serializers import picker_serializer, serializer_factory
 
 
 class V1ViewMixin:
@@ -36,6 +36,24 @@ class V1ViewMixin:
 
     def get_exception_handler(self):
         return api_exception_handler
+
+    def get_serializer_class(self):
+        """Identity only, when the read was granted to fill a picker.
+
+        ``MatrixPermission`` sets ``picker_only`` when a user reached a master
+        through a transaction they hold rather than rights on the master
+        itself (see ``user.access.PICKER_MASTERS``). Narrowing belongs here
+        rather than in the permission: the gate decides *whether*, the
+        serializer decides *how much*, and every resource goes through this
+        one. A master with no entry in ``PICKER_FIELDS`` falls through to its
+        normal serializer, which is safe because the gate never opens one.
+        """
+        if getattr(self.request, "picker_only", False):
+            model = getattr(getattr(self, "queryset", None), "model", None)
+            narrowed = picker_serializer(model) if model is not None else None
+            if narrowed is not None:
+                return narrowed
+        return super().get_serializer_class()
 
 
 # Query params the base layer interprets itself — never treated as filters.
