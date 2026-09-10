@@ -547,3 +547,119 @@ window.loadOptions = function (select, url, data, options) {
     if ($select.hasClass('select2-hidden-accessible')) $select.trigger('change.select2');
   });
 };
+
+/* ------------------------------------------------------------------ *
+ * One save per press
+ *
+ * On a slow link a save looks like nothing happening, so the button gets
+ * pressed again — and the second press files the record a second time. The
+ * two copies carry the same details and either the same document number or
+ * the next one, depending on whether the two requests read the counter in the
+ * same instant or one after the other.
+ *
+ * Twenty-three of the forty forms already disabled their own button; the rest
+ * did not, and none of them agreed on how. This does it once, for every form
+ * on the site, the same way the searchable selects are applied globally rather
+ * than page by page.
+ *
+ * It holds the button that started a write until that write comes back, then
+ * releases it so a failed save can be retried. It does not make the save
+ * idempotent — two presses that both reach the server are still two saves —
+ * which is why it is a guard and not the whole answer.
+ * ------------------------------------------------------------------ */
+(function () {
+  const WRITE = /^(POST|PUT|PATCH|DELETE)$/i;
+  const inFlight = new WeakMap();
+  let lastPressed = null;
+
+  // Capture, so the button is known before any handler runs and calls the
+  // request that we are about to tie to it.
+  document.addEventListener('click', function (event) {
+    const el = event.target.closest
+      ? event.target.closest('button, input[type="submit"], input[type="button"]')
+      : null;
+    lastPressed = el && !el.disabled ? el : null;
+  }, true);
+
+  function hold(el) {
+    if (!el || el.disabled) return null;
+    el.disabled = true;
+    el.setAttribute('aria-busy', 'true');
+    // A cursor rather than a spinner: it needs no markup of its own, so it
+    // cannot disturb a layout on four hundred pages.
+    el.dataset.bimsCursor = el.style.cursor || '';
+    el.style.cursor = 'progress';
+    return el;
+  }
+
+  function release(el) {
+    if (!el) return;
+    el.disabled = false;
+    el.removeAttribute('aria-busy');
+    el.style.cursor = el.dataset.bimsCursor || '';
+    delete el.dataset.bimsCursor;
+  }
+
+  // Enter in a text box submits the form without anyone clicking anything, so
+  // there would be no button to hold and the guard would quietly not apply.
+  // `submitter` names the button the browser attributed the submit to; failing
+  // that, the form's own submit control is the one to hold. Capture phase, so
+  // this lands before the page's handler fires the request.
+  document.addEventListener('submit', function (event) {
+    const form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    lastPressed = event.submitter || form.querySelector(
+      'button[type="submit"], button:not([type]), input[type="submit"]') || lastPressed;
+  }, true);
+
+  // jQuery's AJAX, which is how most of the transaction forms save.
+  if (window.jQuery) {
+    jQuery(document).ajaxSend(function (event, xhr, settings) {
+      if (!WRITE.test(settings.type || settings.method || 'GET')) return;
+      const held = hold(lastPressed);
+      if (held) inFlight.set(xhr, held);
+    });
+    jQuery(document).ajaxComplete(function (event, xhr) {
+      release(inFlight.get(xhr));
+      inFlight.delete(xhr);
+    });
+  }
+
+  // fetch(), which the newer forms use.
+  const nativeFetch = window.fetch;
+  if (typeof nativeFetch === 'function') {
+    window.fetch = function (input, init) {
+      let method = (init && init.method)
+        || (input && typeof input === 'object' && input.method)
+        || 'GET';
+      const held = WRITE.test(method) ? hold(lastPressed) : null;
+      let result;
+      try {
+        result = nativeFetch.apply(this, arguments);
+      } catch (e) {
+        release(held);
+        throw e;
+      }
+      return held ? result.then(
+        function (r) { release(held); return r; },
+        function (e) { release(held); throw e; }
+      ) : result;
+    };
+  }
+
+  // A form that posts the ordinary way, with no script behind it. Bubble
+  // phase and defaultPrevented: a form whose handler called preventDefault is
+  // saving over AJAX, and the hooks above already have it. The timeout lets
+  // the browser finish serialising the form first — a button disabled any
+  // earlier would drop its own name and value from the request.
+  document.addEventListener('submit', function (event) {
+    if (event.defaultPrevented) return;
+    const form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    setTimeout(function () {
+      form.querySelectorAll(
+        'button[type="submit"], button:not([type]), input[type="submit"]'
+      ).forEach(hold);
+    }, 0);
+  });
+})();
