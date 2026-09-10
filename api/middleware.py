@@ -61,6 +61,33 @@ def _requesting_user(request):
     return user if (user and user.is_authenticated) else None
 
 
+def _is_web_write(request):
+    """A write from the ERP's own pages, made by a signed-in browser.
+
+    Only the scripted saves carry a key — main.js puts it on jQuery's AJAX and
+    on fetch, and cannot put a header on a plain form post. Those are the saves
+    that answer in JSON, which is what makes replaying one of them safe.
+    """
+    user = getattr(request, "user", None)
+    return bool(user and user.is_authenticated)
+
+
+def _content_type_of(body):
+    """What a stored response should be replayed as.
+
+    Read back off the body rather than recorded, so this needed no new column
+    on a table that is written on every queued write. Everything keyed today
+    answers in JSON; guessing from the body means a caller that one day does
+    not is replayed as what it was rather than as JSON it never sent.
+    """
+    text = (body or "").lstrip()
+    if text.startswith("{") or text.startswith("["):
+        return "application/json"
+    if text.startswith("<"):
+        return "text/html; charset=utf-8"
+    return "text/plain; charset=utf-8"
+
+
 class IdempotencyMiddleware:
     """Performs a keyed write once, however many times the phone sends it.
 
@@ -84,8 +111,14 @@ class IdempotencyMiddleware:
 
     def __call__(self, request):
         key = request.META.get(HEADER, "").strip()
-        if (not key or request.method not in UNSAFE
-                or not request.path.startswith(API_PREFIX)):
+        if not key or request.method not in UNSAFE:
+            return self.get_response(request)
+        # The ERP's own forms send a key too now, on the same header. They are
+        # not under /api/, so the prefix alone would exclude the client this
+        # was extended for. Anything else carrying a key is left alone: a path
+        # nobody has thought about is not somewhere to start replaying
+        # responses from.
+        if not (request.path.startswith(API_PREFIX) or _is_web_write(request)):
             return self.get_response(request)
 
         user = _requesting_user(request)
@@ -128,7 +161,7 @@ class IdempotencyMiddleware:
             return self._in_progress()
 
         replay = HttpResponse(record.response or "", status=record.status_code,
-                              content_type="application/json")
+                              content_type=_content_type_of(record.response))
         # Says the write was not performed again, so a reader of the logs is
         # not left thinking the phone posted twice and got away with it.
         replay["Idempotent-Replay"] = "true"

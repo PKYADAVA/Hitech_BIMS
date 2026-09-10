@@ -572,6 +572,59 @@ window.loadOptions = function (select, url, data, options) {
   const inFlight = new WeakMap();
   let lastPressed = null;
 
+  /* --- one save per form, not merely one per press -------------------
+   *
+   * Holding the button stops the second press. It does nothing about the
+   * presses that never reach the button: a refresh and "resend", a second
+   * tab, or a save that timed out on this side after the server had already
+   * filed it. Those all arrive as a second, genuine request.
+   *
+   * So each form also carries a key, sent as a header — the same header the
+   * phone's outbox uses, answered by the same middleware, so there is one
+   * mechanism to understand rather than two. The server performs the first
+   * request bearing a key and replays its answer to any other, which is what
+   * makes a duplicate harmless rather than merely unlikely.
+   *
+   * The key belongs to the form, so every copy of one attempt shares it, and
+   * is retired as soon as that attempt is answered — the next press is a new
+   * intention, not a replay of the last one.
+   */
+  const keys = new WeakMap();
+
+  function newKey() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'k-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+  }
+
+  function holderFor(el) {
+    // Saves that sit outside a form — a row's delete button, say — share the
+    // page's key. They are one-shot actions, and the key is retired as soon
+    // as one of them succeeds.
+    return (el && el.closest && el.closest('form')) || document.body;
+  }
+
+  function keyFor(el) {
+    const holder = holderFor(el);
+    let key = keys.get(holder);
+    if (!key) { key = newKey(); keys.set(holder, key); }
+    return { key: key, holder: holder };
+  }
+
+  function settle(entry) {
+    release(entry && entry.el);
+    // Retired as soon as the request settles, whatever it answered. A key is
+    // only ever meant to cover one attempt and the copies of it that may
+    // already be on the wire; once the answer is here, the next press is a
+    // new intention. Holding a key past a rejection would be worse than
+    // useless — the person fixes the field, presses save, and is handed the
+    // stored complaint about what they just corrected.
+    //
+    // The case this still catches is the one that matters and needs no help
+    // from here: a browser resending a POST after a refresh sends the
+    // original header along with it, so the server recognises it.
+    if (entry && entry.holder) keys.delete(entry.holder);
+  }
+
   // Capture, so the button is known before any handler runs and calls the
   // request that we are about to tie to it.
   document.addEventListener('click', function (event) {
@@ -616,11 +669,13 @@ window.loadOptions = function (select, url, data, options) {
   if (window.jQuery) {
     jQuery(document).ajaxSend(function (event, xhr, settings) {
       if (!WRITE.test(settings.type || settings.method || 'GET')) return;
-      const held = hold(lastPressed);
-      if (held) inFlight.set(xhr, held);
+      const pressed = lastPressed;
+      const k = keyFor(pressed);
+      xhr.setRequestHeader('Idempotency-Key', k.key);
+      inFlight.set(xhr, { el: hold(pressed), holder: k.holder });
     });
     jQuery(document).ajaxComplete(function (event, xhr) {
-      release(inFlight.get(xhr));
+      settle(inFlight.get(xhr));
       inFlight.delete(xhr);
     });
   }
@@ -632,18 +687,35 @@ window.loadOptions = function (select, url, data, options) {
       let method = (init && init.method)
         || (input && typeof input === 'object' && input.method)
         || 'GET';
-      const held = WRITE.test(method) ? hold(lastPressed) : null;
+      if (!WRITE.test(method)) return nativeFetch.apply(this, arguments);
+
+      const k = keyFor(lastPressed);
+      // Headers may arrive as a Headers object, an array of pairs or a plain
+      // object; normalising is the only way to add to all three. A caller
+      // that set the header itself keeps it.
+      const opts = Object.assign({}, init);
+      const headers = new Headers((init && init.headers)
+        || (typeof input === 'object' && input && input.headers) || {});
+      if (!headers.has('Idempotency-Key')) headers.set('Idempotency-Key', k.key);
+      opts.headers = headers;
+      if (init === undefined && typeof input === 'object' && input && input.method) {
+        // fetch(new Request(...)) with no init: carry the request's own method
+        // through, or the copy would be sent as a GET.
+        opts.method = input.method;
+      }
+
+      const entry = { el: hold(lastPressed), holder: k.holder };
       let result;
       try {
-        result = nativeFetch.apply(this, arguments);
+        result = nativeFetch.call(this, input, opts);
       } catch (e) {
-        release(held);
+        settle(entry);
         throw e;
       }
-      return held ? result.then(
-        function (r) { release(held); return r; },
-        function (e) { release(held); throw e; }
-      ) : result;
+      return result.then(
+        function (r) { settle(entry); return r; },
+        function (e) { settle(entry); throw e; }
+      );
     };
   }
 
