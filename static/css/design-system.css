@@ -602,6 +602,22 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
    both out of it. */
 .ds-topbar #ahBellWrap,
 .ds-topbar .dropdown { margin: 0 !important; }
+
+/* And they have to fit the bar's height, which is the one the top-nav layout
+   sets. These came out 44px — taller than the 42px row holding them, and a
+   size and a half larger than the same two controls in the other layout,
+   where they are 34px.
+   The !important is not decoration: style.css carries `.btn { padding: 8px
+   !important }`, which one class or ten cannot outrank without it. */
+.ds-topbar .ah-bell-btn.btn,
+.ds-topbar .ds-user-btn.btn {
+  /* `.ds .btn` gives every button in the system a fixed 44px (--ds-button-h),
+     which is a touch target for a form, not a bar control — no amount of
+     padding can come out under it, so the height is what has to be said. */
+  height: 34px;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+}
 /* On white, the bell's own white-on-green colouring disappears. */
 /* Amber here too, so the bell means the same thing in both layouts — the
    deeper --warning rather than the navbar's amber-400, because this bar is
@@ -619,7 +635,9 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
 .ds-user-btn.show { background: var(--surface-hover, #f8fafc); border-color: var(--border, #e5e7eb); }
 .ds-user-btn::after { display: none; }   /* Bootstrap's caret; there is a real one */
 .ds-user-avatar {
-  width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%;
+  /* The tallest thing in the button, so it is what the bar's height comes
+     down to. */
+  width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%;
   display: grid; place-items: center;
   background: #123524; color: #fff; font-size: 13px; font-weight: 600;
 }

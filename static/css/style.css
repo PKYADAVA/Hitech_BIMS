@@ -75,8 +75,10 @@
   /* 60px when the modules shared this bar and needed the room. They have their
      own tier now, so the identity bar carries only a wordmark, a search box and
      three controls — none of which wanted 60px. Six sticky offsets read this,
-     so it is the one number to change. */
-  --navbar-height:  50px;
+     so it is the one number to change. 50px still spent more of the screen on
+     chrome than the row needs; the brand block was the thing holding it up, so
+     that came down with it. */
+  --navbar-height:  42px;
 }
 
 /* ---------- Reset & Base ---------- */
@@ -146,25 +148,26 @@ footer { margin-top: auto; }
 }
 
 .bims-navbar .brand-logo {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius);
   object-fit: contain;
   background: rgba(255,255,255,0.10);
-  padding: 3px;
+  padding: 2px;
 }
 
 .bims-navbar .brand-text {
-  font-size: 1.05rem;
+  font-size: .95rem;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.01em;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .bims-navbar .brand-text span {
   display: block;
-  font-size:.75rem;
+  font-size:.62rem;
+  line-height: 1.15;
   font-weight: 500;
   color: rgba(255,255,255,0.45);
   letter-spacing: 1px;
@@ -453,11 +456,11 @@ footer { margin-top: auto; }
 .bims-modulebar {
   background: #1B4B33;
   padding: 0 24px;
-  height: 38px;                        /* deliberate, not inherited: leaving it
+  height: 32px;                        /* deliberate, not inherited: leaving it
                                           auto let Bootstrap's own navbar
                                           padding decide it, and that came out
                                           taller than the row needs */
-  min-height: 38px;
+  min-height: 32px;
   top: var(--navbar-height);           /* sits under it, not over it */
   z-index: 1029;
   border-bottom: 0;
@@ -466,11 +469,21 @@ footer { margin-top: auto; }
 .bims-modulebar .navbar-nav { flex-wrap: nowrap; }
 .bims-modulebar .nav-link {
   color: #C9DBD1;
-  font-size: .8rem;
-  padding: 4px 10px;
+  font-size: .78rem;
+  padding: 2px 10px;
   border-radius: 6px;
   white-space: nowrap;
 }
+/* The identity bar's link rule matches this tier too — both carry
+   .bims-navbar — and it sets `padding: 7px 12px !important`, which outranked
+   the rule above and kept these links 33px tall inside a 32px bar. A tier's
+   own height has to be settable from the tier, so it is set here, at a
+   specificity that actually reaches. Colour is left to the rule above. */
+.bims-navbar.bims-modulebar .navbar-nav .nav-link {
+  padding: 3px 10px !important;
+  font-size: .78rem;
+}
+
 .bims-modulebar .nav-link:hover,
 .bims-modulebar .nav-link:focus-visible { background: rgba(255,255,255,.10); color: #fff; }
 .bims-modulebar .nav-link.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
