@@ -89,10 +89,14 @@ def create_customer(request):
     if request.method == "POST":
         instance = Customer()
         try:
-            _apply_posted_customer_fields(instance, request)
-            instance.full_clean()
-            instance.save()
-            _create_posted_shipping_addresses(instance, request)
+            # One unit: the customer and the addresses that came with it. Half
+            # a customer, saved because a later row failed, is worse than none
+            # — the retry then trips over the mobile number it just took.
+            with transaction.atomic():
+                _apply_posted_customer_fields(instance, request)
+                instance.full_clean()
+                instance.save()
+                _create_posted_shipping_addresses(instance, request)
             messages.success(request, "Customer added successfully.")
             return redirect("customer")
         except ValidationError as e:
@@ -115,11 +119,19 @@ def _create_posted_shipping_addresses(instance, request):
     if not addresses and instance.address:
         addresses = [{"label": instance.address[:100], "address": instance.address, "is_default": True}]
     default_assigned = False
+    # (customer, label) is unique. These rows are built from a JSON blob the
+    # page assembles, never validated as a formset, so a repeated label reached
+    # the database as an IntegrityError and took the whole save down with it.
+    # Skipped rather than rejected, which is how this loop already treats a row
+    # it cannot use: the first address under a label is the one meant, and a
+    # save is not worth losing over a duplicated heading.
+    seen_labels = set()
     for entry in addresses:
         label = (entry.get("label") or "").strip()
         address_text = (entry.get("address") or "").strip()
-        if not label or not address_text:
+        if not label or not address_text or label.casefold() in seen_labels:
             continue
+        seen_labels.add(label.casefold())
         is_default = bool(entry.get("is_default")) and not default_assigned
         default_assigned = default_assigned or is_default
         CustomerShippingAddress.objects.create(
@@ -159,10 +171,11 @@ def edit_customer(request, id):
     if request.method == "POST":
         previous_address = instance.address
         try:
-            _apply_posted_customer_fields(instance, request)
-            instance.full_clean()
-            instance.save()
-            _sync_default_shipping_address(instance, previous_address)
+            with transaction.atomic():
+                _apply_posted_customer_fields(instance, request)
+                instance.full_clean()
+                instance.save()
+                _sync_default_shipping_address(instance, previous_address)
             messages.success(request, "Customer updated successfully.")
             return redirect("customer")
         except ValidationError as e:

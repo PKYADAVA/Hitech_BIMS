@@ -16,9 +16,13 @@ worth keeping, and `mobile` carries the uniqueness that means something. These
 tests describe what is left — a mirror that simply works, and a duplicate
 mobile that is still refused on the form.
 """
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+
+from django.db import transaction
 
 from sales.models import Customer
 
@@ -117,3 +121,74 @@ class AddCustomerPageTests(TestCase):
         response = self.post(mobile="9998887777", address="Akbarpur")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Customer.objects.get(name="New Party").phone, "9998887777")
+
+
+class ShippingAddressRowTests(TestCase):
+    """The other unique rule on this page, and the one nothing validated.
+
+    Shipping rows arrive as a JSON blob the page assembles, not as a formset,
+    so they are written straight to the database with no full_clean between.
+    (customer, label) is unique, so two rows sharing a heading — easily done
+    when a second address is added by copying the first — reached Postgres as
+    an IntegrityError and took the whole save down. Same shape as the phone
+    mirror: a unique rule that nothing checks before the insert.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="ship_admin", password="x", email="sh@example.com")
+        self.client.force_login(self.user)
+
+    def post(self, rows, **fields):
+        from django.urls import reverse
+        data = {"name": "Ship Test", "address": "Main Road", "mobile": "9111222333",
+                "contact_type": "Supplier & Customer",
+                "shipping_addresses_json": json.dumps(rows)}
+        data.update(fields)
+        return self.client.post(reverse("customer_add"), data)
+
+    def test_two_rows_under_one_label_no_longer_break_the_save(self):
+        response = self.post([
+            {"label": "Godown", "address": "A road", "is_default": True},
+            {"label": "Godown", "address": "B road"},
+        ])
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Customer.objects.filter(name="Ship Test").exists())
+
+    def test_the_first_address_under_a_label_is_the_one_kept(self):
+        """Skipping the later row is only defensible if the kept one is the
+        one the person meant."""
+        self.post([
+            {"label": "Godown", "address": "A road", "is_default": True},
+            {"label": "Godown", "address": "B road"},
+        ])
+        addresses = Customer.objects.get(name="Ship Test").shipping_addresses.all()
+        self.assertEqual([a.address for a in addresses], ["A road"])
+
+    def test_labels_differing_only_in_case_count_as_the_same_heading(self):
+        """The database compares them exactly, so "Godown" and "godown" would
+        both insert — but to a reader they are one heading twice."""
+        self.post([
+            {"label": "Godown", "address": "A road"},
+            {"label": "godown", "address": "B road"},
+        ])
+        self.assertEqual(
+            Customer.objects.get(name="Ship Test").shipping_addresses.count(), 1)
+
+    def test_genuinely_different_labels_are_all_kept(self):
+        self.post([
+            {"label": "Godown", "address": "A road"},
+            {"label": "Shop", "address": "B road"},
+        ])
+        self.assertEqual(
+            Customer.objects.get(name="Ship Test").shipping_addresses.count(), 2)
+
+    def test_a_customer_is_never_left_half_saved(self):
+        """The customer and its addresses go in as one unit. A customer saved
+        alone would take its mobile number with it, and the retry would be
+        refused for a duplicate the person cannot see."""
+        with self.assertRaises(Exception):
+            with transaction.atomic():
+                self.post([{"label": "Godown", "address": "A road"}])
+                raise RuntimeError("something after the save fails")
+        self.assertFalse(Customer.objects.filter(name="Ship Test").exists())
