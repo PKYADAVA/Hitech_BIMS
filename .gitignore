@@ -20,6 +20,12 @@ db.sqlite3*
 # Environment files for sensitive keys
 *.env
 .env
+# .env.* as well as *.env: the two patterns catch opposite ends. A tool that
+# rewrites .env tends to save the old one beside it, and .env.bak slipped
+# through every rule here — a file holding the live SECRET_KEY, database and
+# gateway credentials, one `git add -A` away from a repo whose main branch
+# deploys to production.
+.env.*
 # keep the template tracked
 !.env.example
 
