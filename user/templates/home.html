@@ -263,9 +263,15 @@
   .dash-alert-row:has(> #dash-activity-slot:empty) > :first-child {
     flex:0 0 100%; max-width:100%; }
   .dash-alert-row > #dash-activity-slot:empty { display:none; }
-  /* Both halves of that row are one card tall, so neither stretches to the
-     other and the taller one scrolls instead. */
-  .dash-alert-row > * > .dw-card { height:100%; }
+  /* The two halves are different components — alerts is an .ah-card from the
+     server, activity a .dw-card from the script — and left to themselves each
+     took its own height, so the row's two bottoms did not line up. Each column
+     stretches to the row (Bootstrap's default) and the card inside fills it. */
+  .dash-alert-row > [class*="col-"] { display:flex; }
+  /* The !important is Bootstrap's: the alerts card carries .mb-3, whose own
+     !important left it sitting a margin above the row's floor while the card
+     beside it reached the bottom. */
+  .dash-alert-row > [class*="col-"] > * { flex:1 1 auto; width:100%; margin-bottom:0 !important; }
   .dw-col-liftings .dw-stats,
   .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
@@ -301,7 +307,13 @@
   .dw-act-tab:hover { border-color:#cfe6d8; }
   .dw-act-tab.is-active { background:#e6f7ee; border-color:#bfe8d3; color:#0f8a52; }
 
-  .dw-act-list { overflow-x:auto; }
+  /* This card is three parts — the filter tabs, the list, the totals — so
+     scrolling the card itself carried the tabs and the totals away with the
+     rows and cut the top row in half against the header. The list is the only
+     part that should move, and it keeps the sideways scroll it already had. */
+  .dw-act-list { overflow:auto; max-height:var(--dw-act-list-max, 250px); }
+  .dw-col-broiler_activity .dw-card,
+  #dash-activity-slot .dw-card { max-height:none; overflow:visible; }
   .dw-act-row { display:grid; align-items:center; gap:10px; min-width:800px;
                 grid-template-columns:66px 6px 20px 1.3fr 1.05fr .95fr 84px 1.1fr;
                 padding:2px; border-bottom:1px solid #f0f3f8; font-size:.76rem; line-height:1.15; }
