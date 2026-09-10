@@ -156,8 +156,17 @@
   .dw-ignored { display:block; font-size:.75rem; color:#b45309; margin-top:9px; }
   .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
              border:1px solid #eaeff6; border-radius:16px; padding:17px 18px;
-             box-shadow:0 1px 2px rgba(22,42,79,.04); }
-  .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+             box-shadow:0 1px 2px rgba(22,42,79,.04);
+             /* A card with a long list used to run to whatever length its
+                rows wanted, pushing everything under it down the page and
+                stretching the cards beside it to match. It keeps its own
+                height now and scrolls inside, so a row stays a row. */
+             max-height:var(--dw-card-max, 420px); overflow-y:auto; }
+  /* The title stays put while the list moves under it — a scrolled card with
+     its heading gone reads as an unlabelled block of numbers. */
+  .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px;
+             position:sticky; top:-17px; z-index:1; background:#fff;
+             padding-top:17px; margin-top:-17px; }
   .dw-head-icon { width:32px; height:32px; flex:0 0 32px; border-radius:10px; display:grid;
                   place-items:center; font-size:.78rem; }
   .dw-title { font-size:.87rem; font-weight:700; margin:0; }
@@ -245,9 +254,18 @@
        row still needs more than a third of the card to lay out in full, so
        its list scrolls sideways inside its own card (.dw-act-list) rather
        than the row breaking the column. */
-    .dw-col-liftings, .dw-col-sale_overview,
-    .dw-col-broiler_activity { flex:0 0 33.3333%; max-width:33.3333%; }
+    /* Recent Activity has moved up to sit beside Alerts, so these two have
+       the row to themselves. */
+    .dw-col-liftings, .dw-col-sale_overview { flex:0 0 50%; max-width:50%; }
   }
+  /* Alerts takes the whole row when Recent Activity is not there to share it —
+     switched off for this group, or not yet arrived from the endpoint. */
+  .dash-alert-row:has(> #dash-activity-slot:empty) > :first-child {
+    flex:0 0 100%; max-width:100%; }
+  .dash-alert-row > #dash-activity-slot:empty { display:none; }
+  /* Both halves of that row are one card tall, so neither stretches to the
+     other and the taller one scrolls instead. */
+  .dash-alert-row > * > .dw-card { height:100%; }
   .dw-col-liftings .dw-stats,
   .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
@@ -539,9 +557,18 @@
 
     {% if 'alerts_widget' in dash_panels %}
     <!-- Alerts & Notifications: priority split, named tiles and the newest few.
-         Hydrated from /api/alerthub/ so it can never disagree with the bell. -->
-    <div style="order:{{ dash_panels.alerts_widget }};">
-      {% include "_alerthub_widget.html" %}
+         Hydrated from /api/alerthub/ so it can never disagree with the bell.
+
+         It shares its row with Recent Activity — what needs attention beside
+         what just happened. Activity is a data card and arrives with the rest
+         of them, so the slot beside this one is filled after they render (see
+         placeActivity); until then, and whenever that widget is not on this
+         user's dashboard, the empty slot collapses and alerts takes the row. -->
+    <div class="row g-3 mb-4 dash-alert-row" style="order:{{ dash_panels.alerts_widget }};">
+      <div class="col-12 col-xl-6">
+        {% include "_alerthub_widget.html" %}
+      </div>
+      <div class="col-12 col-xl-6" id="dash-activity-slot"></div>
     </div>
     {% endif %}
 
@@ -968,6 +995,28 @@
            + '</div>' + body + '</div></div>';
     }
 
+    /**
+     * Lift Recent Activity out of the widget grid and into the slot beside
+     * Alerts, so the two read as one row: what needs attention, and what just
+     * happened.
+     *
+     * Done after rendering rather than by rendering it there, because the grid
+     * is replaced wholesale on every filter reload — anything put in it by the
+     * server would be thrown away on the first refresh. Only the card moves;
+     * its column wrapper stays behind and is removed, since a Bootstrap column
+     * nested in another column no longer carries a width.
+     */
+    function placeActivity() {
+      var slot = document.getElementById('dash-activity-slot');
+      if (!slot) return;                       // alerts panel is switched off
+      slot.innerHTML = '';
+      var col = grid.querySelector('.dw-col-broiler_activity');
+      if (!col) return;                        // not on this user's dashboard
+      var card = col.querySelector('.dw-card');
+      if (card) slot.appendChild(card);
+      col.remove();
+    }
+
     var bar = document.getElementById('dash-filter');
     var fields = ['date', 'branch', 'line', 'supervisor', 'farm'];
     var token = 0;
@@ -1011,8 +1060,9 @@
           // No widgets is a legitimate answer: a user may have access to none
           // of the four reports these are drawn from.
           grid.innerHTML = (data.widgets || []).map(card).join('');
+          placeActivity();
         })
-        .catch(function () { if (mine === token) grid.innerHTML = ''; })
+        .catch(function () { if (mine === token) { grid.innerHTML = ''; placeActivity(); } })
         .then(function () { if (bar) bar.classList.remove('is-busy'); });
     }
 

@@ -1232,9 +1232,10 @@ WIDGETS = [
      "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
     ("sale_overview", "Sale Overview", ("bird_sale_list",),
      "bird_sale_list", "fa-solid fa-receipt", "gs-green", _sale_overview),
-    # Sits with Lifting and Sale Overview, which is where DEFAULT_PANEL_ORDER
-    # puts it and where the three share a row — this list is read as the
-    # running order too, so the two have to agree.
+    # Rendered with the other cards, then lifted into the row beside Alerts —
+    # what needs attention next to what just happened. home.html does the
+    # moving (placeActivity), so this entry's position no longer decides where
+    # the card lands, only that it is built with the rest.
     #
     # Gated on any of the five transaction lists it draws from — the same
     # "any of these" shape as Farm Route Today — and opens the full Recent
