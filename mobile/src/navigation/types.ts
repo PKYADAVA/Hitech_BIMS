@@ -12,6 +12,12 @@ export type ModuleStackParams = {
     resourceKey: string;
     mode: "create" | "edit";
     row?: Row;
+  /**
+   * Fill the form to say what the record *should* say, and queue that for
+   * approval rather than writing it. Set when the signed-in user has no edit
+   * right on the module but the web offers "Request modification" on it.
+   */
+  propose?: boolean;
     /** Values merged into the payload (e.g. a parent FK for line items). */
     preset?: Record<string, string>;
     /** Return to the previous screen after save/delete instead of the List. */
@@ -32,11 +38,11 @@ export type ModuleStackParams = {
   FarmRoute: undefined;
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
-  BirdSaleForm: { mode: "create" | "edit"; row?: Row };
+  BirdSaleForm: { mode: "create" | "edit"; row?: Row; propose?: boolean };
   /** Add photo evidence to a lifting that is already filed — adds only. */
   BirdSalePhotos: { row: Row };
   /** Bespoke Bird Receipt form (customer/farmer toggle). */
-  BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row };
+  BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row; propose?: boolean };
   /**
    * Daily Entry. Without params it is the multi-farm round — several farms,
    * one save (web grid form). With `row` it edits that one saved entry, on the
@@ -47,7 +53,7 @@ export type ModuleStackParams = {
   MedicineEntryForm: undefined;
   /** Batch Creation. `row` corrects a saved batch; the farm is fixed then. */
   BatchForm: { row?: Row } | undefined;
-  FarmCaptureForm: { row?: Row } | undefined;
+  FarmCaptureForm: { row?: Row; propose?: boolean } | undefined;
   /** Fill only what a capture is still missing — the register's "+". */
   FarmCaptureFill: { row: Row };
   /** `row` reopens a saved request — a draft stays editable, anything past
@@ -57,20 +63,20 @@ export type ModuleStackParams = {
   SupervisorTripForm: { row?: Row; ending?: boolean } | undefined;
   /** `row` corrects a saved egg purchase, loaded fresh (its list row is only
    *  a summary — item_names, not the full item rows this form edits). */
-  EggPurchaseForm: { row?: Row } | undefined;
+  EggPurchaseForm: { row?: Row; propose?: boolean } | undefined;
   /** `row` corrects a saved general purchase, loaded fresh — same reason as
    *  EggPurchaseForm, plus the destination toggle and TDS/bag fields the
    *  list's summary row doesn't carry. */
-  GeneralPurchaseForm: { row?: Row } | undefined;
+  GeneralPurchaseForm: { row?: Row; propose?: boolean } | undefined;
   /** `row` corrects a saved hatch setting, loaded fresh — its list row is only
    *  a summary, not the full egg-intake/hatcher-output/sales-line rows this
    *  form edits. `completing` opens the same form with every already-filled
    *  field/row locked read-only — the register's "+", for the pending data
    *  (transfer/hatch date, candling, environment, sales) that lands on a
    *  later visit than the one that set the batch up. */
-  HatchSettingForm: { row?: Row; completing?: boolean } | undefined;
+  HatchSettingForm: { row?: Row; completing?: boolean; propose?: boolean } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
-  DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
+  DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row; propose?: boolean };
 };
 
 export type TabParams = {

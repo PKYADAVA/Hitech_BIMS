@@ -9,6 +9,7 @@ import { toISODate } from "@/components/DatePicker";
 import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
 import { localDay } from "@/utils/format";
@@ -158,6 +159,7 @@ export function HatchSettingFormScreen({ navigation, route }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const editing = route.params?.row ?? null;
+  const propose = route.params?.propose ?? false;
   // Only means anything against a saved record — a fresh batch has nothing
   // to lock yet, so this is the full form regardless of how it was reached.
   const completing = !!(route.params?.completing && editing);
@@ -346,6 +348,12 @@ export function HatchSettingFormScreen({ navigation, route }: Props) {
             delivery_notes: r.delivery_notes,
           })),
       };
+      // The payload here is already the shape the web save replays, so a
+      // proposal sends it unchanged.
+      if (propose && editing) {
+        if (await submitEditProposal("hatchery-hatch-settings", editing, payload)) navigation.goBack();
+        return;
+      }
       if (editing) {
         await http.put(`/hatchery/hatch-settings/save/${editing.id}`, payload);
       } else {
@@ -611,7 +619,10 @@ export function HatchSettingFormScreen({ navigation, route }: Props) {
         <Pressable style={[styles.submit, { backgroundColor: colors.hatchery }, saving && { opacity: 0.6 }]}
                    onPress={submit} disabled={saving}>
           <AppIcon name="check" size={16} color="#fff" />
-          <Text style={styles.submitText}>{saving ? "Saving…" : "Save Hatch Register"}</Text>
+          <Text style={styles.submitText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Save Hatch Register"}
+          </Text>
         </Pressable>
       </View>
     </View>

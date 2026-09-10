@@ -4,9 +4,8 @@ import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { loadDocument } from "@/api/documents";
-import { writeThrough } from "@/net/writeThrough";
 import { farmBatches } from "@/api/lookups";
-import { ApiError } from "@/api/types";
+import { ApiError, Row } from "@/api/types";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
@@ -22,6 +21,8 @@ import {
 } from "@/config/documents";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
+import { writeThrough } from "@/net/writeThrough";
 import { queryClient } from "@/query/queryClient";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
@@ -366,7 +367,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { resourceKey, mode, row } = route.params;
+  const { resourceKey, mode, row, propose } = route.params;
   const doc = DOCUMENTS[resourceKey];
   const config = RESOURCES[resourceKey];
   const editId = mode === "edit" ? (row?.id as number | undefined) : undefined;
@@ -535,6 +536,16 @@ export function DocumentFormScreen({ route, navigation }: Props) {
 
     setSaving(true);
     try {
+      // The payload above is exactly what the module's own save replays when
+      // a reviewer approves, so a proposal sends it as it stands — the
+      // `{fields: …}` wrapper below belongs to the write endpoint, not to the
+      // change request.
+      if (propose) {
+        if (await submitEditProposal(resourceKey, row as Row, payload)) {
+          navigation.navigate("List", { resourceKey });
+        }
+        return;
+      }
       const written = await writeThrough(
         editId != null
           ? { label: doc.title, method: "PUT",
@@ -581,13 +592,18 @@ export function DocumentFormScreen({ route, navigation }: Props) {
       <KeyboardAwareScrollView contentContainerStyle={styles.content}>
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
-      {/* Header */}
-      {doc.headerTitle ? (
-        <Text style={styles.groupHeading}>{doc.headerTitle.toUpperCase()}</Text>
+      {/* Header. A document whose fields all live on the row has none, and an
+          empty card above the items reads as something that failed to load. */}
+      {doc.header.length ? (
+        <>
+          {doc.headerTitle ? (
+            <Text style={styles.groupHeading}>{doc.headerTitle.toUpperCase()}</Text>
+          ) : null}
+          <Card style={styles.section}>
+            <FieldRows fields={doc.header} values={header} set={setHeaderKey} />
+          </Card>
+        </>
       ) : null}
-      <Card style={styles.section}>
-        <FieldRows fields={doc.header} values={header} set={setHeaderKey} />
-      </Card>
 
       {/* Line items. Row-based docs edit a single record, so no add/remove there. */}
       <View style={styles.itemsHeader}>
@@ -683,7 +699,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
       {/* Delete stays in the sheet rather than the footer: it destroys the
           record, and a destructive button pinned beside Submit is one it will
           eventually be hit instead of. */}
-      {editId != null ? (
+      {editId != null && !propose ? (
         <View style={{ marginTop: spacing.sm }}>
           <Button title="Delete" variant="danger" onPress={onDelete} />
         </View>
@@ -711,7 +727,9 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         >
           <AppIcon name="check" size={18} color="#fff" />
           <Text style={styles.submitText}>
-            {saving ? "Saving…" : editId != null ? "Save changes" : "Submit"}
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval"
+                    : editId != null ? "Save changes" : "Submit"}
           </Text>
         </Pressable>
       </View>

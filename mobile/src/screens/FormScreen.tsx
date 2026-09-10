@@ -15,6 +15,7 @@ import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, makeStyles, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { writeThrough, WriteBody } from "@/net/writeThrough";
 import { confirm, notify } from "@/ui/confirm";
 
@@ -36,7 +37,7 @@ function groupFields(fields: FormField[]): FormField[][] {
 }
 
 export function FormScreen({ route, navigation }: Props) {
-  const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
+  const { resourceKey, mode, row, preset, onDoneGoBack, propose } = route.params;
   const config = RESOURCES[resourceKey];
   const canDelete = usePermissionsStore((s) => s.canResource)(config.key, config.module, "delete");
   const schema = FORMS[resourceKey];
@@ -208,6 +209,17 @@ export function FormScreen({ route, navigation }: Props) {
     }
     setSaving(true);
     try {
+      // Proposing rather than saving: the same body, queued for approval
+      // instead of written. Returns before the invalidate below because
+      // nothing about the record has changed yet — refetching the list would
+      // only redraw the values the user just proposed to replace.
+      if (propose) {
+        // `.fields` alone: the wrapper around it belongs to the write path,
+        // and any just-captured files with it attach to the saved record —
+        // which is precisely what this user has no right to write to.
+        if (await submitEditProposal(resourceKey, row as Row, buildBody().fields)) finish();
+        return;
+      }
       const written = await writeThrough(
         mode === "create"
           ? { label: config.singular, method: "POST", path: config.path, body: buildBody() }
@@ -301,11 +313,12 @@ export function FormScreen({ route, navigation }: Props) {
         ) : null}
 
         <Button
-          title={mode === "create" ? "Create" : "Save changes"}
+          title={propose ? "Send for approval"
+                         : mode === "create" ? "Create" : "Save changes"}
           onPress={onSave}
           loading={saving}
         />
-        {mode === "edit" && canDelete ? (
+        {mode === "edit" && canDelete && !propose ? (
           <View style={{ marginTop: spacing.sm }}>
             <Button title="Delete" variant="danger" onPress={onDelete} />
           </View>

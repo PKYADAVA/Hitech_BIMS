@@ -10,6 +10,7 @@ import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { writeThrough } from "@/net/writeThrough";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
@@ -192,6 +193,7 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   /** The saved purchase being corrected, or null when recording a new one. */
   const editing = route.params?.row ?? null;
+  const propose = route.params?.propose ?? false;
 
   const [head, setHead] = useState<Record<string, string>>({
     purchase_no: (editing as { purchase_no?: string })?.purchase_no ?? "",
@@ -368,6 +370,14 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
         .map((slot, i) => ({ field: slot.key, uri: refDocs[i] }))
         .filter((f) => isLocalUri(f.uri));
 
+      // Reference-document scans are left out of a proposal — they attach to
+      // the saved purchase, which this user cannot write to.
+      if (propose && editing) {
+        if (await submitEditProposal("purchase-general-purchases", editing, fields)) {
+          navigation.goBack();
+        }
+        return;
+      }
       const url = editing
         ? `/purchase/general-purchases/save/${editing.id}`
         : "/purchase/general-purchases/save";
@@ -683,7 +693,10 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
         <Pressable style={[styles.submit, { backgroundColor: colors.warning }, saving && { opacity: 0.6 }]}
                    onPress={submit} disabled={saving}>
           <AppIcon name="check" size={16} color="#fff" />
-          <Text style={styles.submitText}>{saving ? "Saving…" : "Save Purchase"}</Text>
+          <Text style={styles.submitText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Save Purchase"}
+          </Text>
         </Pressable>
       </View>
     </View>

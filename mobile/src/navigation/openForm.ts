@@ -1,4 +1,5 @@
 import { Row } from "@/api/types";
+import { editRequestModule } from "@/config/changeRequestModules";
 import { isDocumentForm } from "@/config/documents";
 import { isEditable, isRecordEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
@@ -103,23 +104,42 @@ export function openRecordForm(
   resourceKey: string,
   mode: "create" | "edit",
   row?: Row,
+  opts?: { propose?: boolean },
 ) {
+  const propose = opts?.propose || undefined;
   const rowForm = mode === "edit" && CREATE_ONLY.has(resourceKey)
     ? undefined
     : ROW_FORM_SCREEN[resourceKey];
   const custom = CUSTOM_FORM_SCREEN[resourceKey];
   if (rowForm) {
     // Create carries no row; edit carries the one being corrected.
-    const params: ModuleStackParams["DailyEntryGrid"] = mode === "edit" ? { row } : undefined;
+    // Not annotated as one screen's params: this branch covers every
+    // ROW_FORM_SCREEN, and only some of them take `propose` — the ones whose
+    // module the web offers "Request modification" on. The others never
+    // receive it, because canProposeEdit refuses them first.
+    const params: { row?: Row; propose?: boolean } | undefined =
+      mode === "edit" ? { row, propose } : undefined;
     navigation.navigate(rowForm, params);
   } else if (custom) {
-    const params: ModuleStackParams["BirdSaleForm"] = { mode, row };
+    const params: ModuleStackParams["BirdSaleForm"] = { mode, row, propose };
     navigation.navigate(custom, params);
   } else if (isDocumentForm(resourceKey)) {
-    const params: ModuleStackParams["DocumentForm"] = { resourceKey, mode, row };
+    const params: ModuleStackParams["DocumentForm"] = { resourceKey, mode, row, propose };
     navigation.navigate("DocumentForm", params);
   } else {
-    const params: ModuleStackParams["Form"] = { resourceKey, mode, row };
+    const params: ModuleStackParams["Form"] = { resourceKey, mode, row, propose };
     navigation.navigate("Form", params);
   }
+}
+
+/**
+ * Whether a correction to this resource can be *proposed* from the phone.
+ *
+ * Two conditions, and both matter. The module has to take edit requests at all
+ * (mirroring the web register, see REQUEST_EDIT_MODULES), and there has to be
+ * a form to fill in — a proposal is a payload, so a resource with no edit form
+ * has nothing to propose and would offer a button that opens nothing.
+ */
+export function canProposeEdit(resourceKey: string): boolean {
+  return editRequestModule(resourceKey) !== undefined && hasEditForm(resourceKey);
 }

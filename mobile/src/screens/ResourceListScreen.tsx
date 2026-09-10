@@ -18,7 +18,7 @@ import { EmptyOrError, SearchBar } from "@/components/ui";
 import { FormControl } from "@/components/form";
 import { RESOURCES } from "@/config/catalog";
 import { extraRowActions } from "@/config/rowActions";
-import { hasCreateForm, hasEditForm, openRecordForm } from "@/navigation/openForm";
+import { canProposeEdit, hasCreateForm, hasEditForm, openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
@@ -112,6 +112,17 @@ export function ResourceListScreen({ route, navigation }: Props) {
       actions.push({
         key: "edit", label: "Edit", icon: "pencil-outline",
         onPress: () => openRecordForm(navigation, config.key, "edit", row),
+      });
+    } else if (canProposeEdit(config.key)) {
+      // No edit right, but the web register offers "Request modification" on
+      // this module — so the phone does too. It opens the same form; the
+      // difference is only what happens on save. Without this, a restricted
+      // user saw Request Deletion and no way to propose a correction, which
+      // reads as "the only thing wrong with a record can be its existence".
+      actions.push({
+        key: "request-edit", label: "Request Edit", icon: "pencil-plus-outline",
+        onPress: () => openRecordForm(navigation, config.key, "edit", row,
+                                      { propose: true }),
       });
     }
     if (canDelete) {

@@ -20,6 +20,7 @@ import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
 import { isEmpty, localDay } from "@/utils/format";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { writeThrough } from "@/net/writeThrough";
 import { confirm } from "@/ui/confirm";
 
@@ -159,7 +160,7 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { mode, row } = route.params;
+  const { mode, row, propose } = route.params;
   const editing = mode === "edit";
 
   const [saleType, setSaleType] = useState<SaleType>(
@@ -561,6 +562,17 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
     setSaving(true);
     const photoProblems: string[] = [];
     try {
+      // Proposing a correction: one block, one payload, queued for approval.
+      // The photographs are left out on purpose — they are uploaded against
+      // the saved sale, which this user has no right to write to, and a
+      // proposal that silently dropped them would be worse than one that
+      // never offered.
+      if (propose) {
+        if (await submitEditProposal(RESOURCE_KEY, row as Row, payloadFor(blocks[0]))) {
+          navigation.navigate("List", { resourceKey: RESOURCE_KEY });
+        }
+        return;
+      }
       for (const b of blocks) {
         const saved = editing
           ? await updateResource<Row>(PATH, (row as Row).id, payloadFor(b))
@@ -647,7 +659,7 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
           </Pressable>
         ) : null}
 
-        {editing ? (
+        {editing && !propose ? (
           <View style={styles.deleteWrap}>
             <Button title="Delete this sale" variant="danger" onPress={onDelete} />
           </View>
@@ -672,7 +684,10 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
           accessibilityRole="button"
         >
           <AppIcon name="check" size={18} color="#fff" />
-          <Text style={styles.submitText}>{saving ? "Saving…" : "Submit"}</Text>
+          <Text style={styles.submitText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Submit"}
+          </Text>
         </Pressable>
       </View>
     </View>

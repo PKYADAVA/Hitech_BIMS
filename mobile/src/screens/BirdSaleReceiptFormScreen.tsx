@@ -8,6 +8,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { localDay } from "@/utils/format";
@@ -88,6 +89,7 @@ export function BirdSaleReceiptFormScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const mode = route.params?.mode ?? "create";
   const existing = route.params?.row ?? null;
+  const propose = route.params?.propose ?? false;
 
   const [head, setHead] = useState<Record<string, string>>({
     date: today(), location: "", sale_type: "customer",
@@ -239,6 +241,13 @@ export function BirdSaleReceiptFormScreen({ navigation, route }: Props) {
       }));
       // Editing touches one saved receipt, so it posts that row flat; a new
       // receipt posts the whole document. Same shape the web form uses.
+      // A proposal carries the same flat row an edit would have written.
+      if (propose && existing?.id) {
+        if (await submitEditProposal("broiler-sale-receipts", existing, rows[0])) {
+          navigation.goBack();
+        }
+        return;
+      }
       if (existing?.id) {
         await http.put(`/broiler/bird-sale-receipts/save/${existing.id}`, rows[0]);
       } else {
@@ -394,7 +403,10 @@ export function BirdSaleReceiptFormScreen({ navigation, route }: Props) {
                            saving && { opacity: 0.6 }]}
                    onPress={submit} disabled={saving}>
           <AppIcon name="check" size={18} color={colors.onDark} />
-          <Text style={styles.submitText}>{saving ? "Saving…" : "Submit"}</Text>
+          <Text style={styles.submitText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Submit"}
+          </Text>
         </Pressable>
       </View>
     </View>

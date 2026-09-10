@@ -12,6 +12,7 @@ import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { writeThrough } from "@/net/writeThrough";
 import { notify } from "@/ui/confirm";
 import { queryClient } from "@/query/queryClient";
@@ -116,6 +117,7 @@ const today = () => localDay();
 export function FarmCaptureFormScreen({ navigation, route }: Props) {
   /** The saved capture being corrected, or null when recording a new visit. */
   const editing = route.params?.row ?? null;
+  const propose = route.params?.propose ?? false;
   const styles = useStyles();
   const { colors } = useTheme();
 
@@ -319,6 +321,15 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
       // Files are only ever *added* by a save: the ERP's _save_capture attaches
       // whatever came with the request and leaves the existing ones alone, so
       // re-sending nothing does not clear what is already on the record.
+      // Proposing a correction to a filed capture. The photographs and scans
+      // are left out for the same reason as the sale form's: they attach to
+      // the saved record, which this user cannot write to.
+      if (propose && editing) {
+        if (await submitEditProposal("broiler-farm-location-capture", editing, fields)) {
+          navigation.goBack();
+        }
+        return;
+      }
       const url = editing
         ? `/broiler/location-captures/save/${editing.id}`
         : "/broiler/location-captures/save";
@@ -540,7 +551,10 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
         </Pressable>
         <Pressable style={[styles.save, { backgroundColor: colors.tint }, saving && { opacity: 0.6 }]}
                    onPress={submit} disabled={saving}>
-          <Text style={styles.saveText}>{saving ? "Saving…" : "Save"}</Text>
+          <Text style={styles.saveText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Save"}
+          </Text>
         </Pressable>
       </View>
     </View>

@@ -8,6 +8,7 @@ import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { submitEditProposal } from "@/net/proposeEdit";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
 import { localDay } from "@/utils/format";
@@ -113,6 +114,7 @@ export function EggPurchaseFormScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   /** The saved purchase being corrected, or null when recording a new one. */
   const editing = route.params?.row ?? null;
+  const propose = route.params?.propose ?? false;
 
   const [head, setHead] = useState<Record<string, string>>({
     transaction_no: (editing as { transaction_no?: string })?.transaction_no ?? "",
@@ -204,6 +206,12 @@ export function EggPurchaseFormScreen({ navigation, route }: Props) {
           discount_amount: row.discount_amount || "0",
         })),
       };
+      // The payload here is already the shape the web save replays, so a
+      // proposal sends it unchanged.
+      if (propose && editing) {
+        if (await submitEditProposal("hatchery-egg-purchases", editing, payload)) navigation.goBack();
+        return;
+      }
       if (editing) {
         await http.put(`/hatchery/egg-purchases/save/${editing.id}`, payload);
       } else {
@@ -383,7 +391,10 @@ export function EggPurchaseFormScreen({ navigation, route }: Props) {
         <Pressable style={[styles.submit, { backgroundColor: colors.warning }, saving && { opacity: 0.6 }]}
                    onPress={submit} disabled={saving}>
           <AppIcon name="check" size={16} color="#fff" />
-          <Text style={styles.submitText}>{saving ? "Saving…" : "Save Purchase"}</Text>
+          <Text style={styles.submitText}>
+            {saving ? (propose ? "Sending…" : "Saving…")
+                    : propose ? "Send for approval" : "Save Purchase"}
+          </Text>
         </Pressable>
       </View>
     </View>
