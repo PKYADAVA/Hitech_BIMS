@@ -9,6 +9,7 @@ from django.conf.urls.static import static
 
 from .admin_import_template import admin_import_template
 from .app_download import app_download
+from api.tasks import purge_idempotency
 
 # Define URL patterns
 urlpatterns = [
@@ -18,6 +19,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # Public: the address staff are given to install the Android app.
     path("app/", app_download, name="app_download"),
+    # Routine cleanup an outside clock calls, beside /tasks/alert-scan/ and
+    # guarded by the same token. See api/tasks.py.
+    path("tasks/purge-idempotency/", purge_idempotency, name="purge_idempotency"),
     path("", include("user.urls")),
     path("", include("broiler.urls")),
     path("", include("hatchery.urls")),

@@ -1,0 +1,67 @@
+# The clock behind the idempotency cleanup.
+#
+# Every keyed write leaves a row behind so a duplicate can be answered without
+# doing the work twice. They stop being useful once nothing could still be
+# retrying — a week is far longer than the phone's outbox persists — and
+# nothing ever removed them. That was tolerable while only the phone's queued
+# writes left rows; the ERP's own saves carry a key now, so the table grows
+# with everyday use.
+#
+# It lives here rather than on the server for the same reason the alert scan
+# does: App Platform has no cron of its own, its jobs run on deploy rather than
+# on a clock, and a worker would exist only to sleep between a few seconds of
+# work once a week.
+#
+# Setup: none, if the alert scan is already running. This uses the same
+# ALERT_SCAN_TOKEN, in the app's environment and in this repository's secrets.
+# Until both are set, this workflow fails loudly rather than passing quietly —
+# the alert scan spent weeks green and silent for exactly that reason.
+name: Purge idempotency keys
+
+on:
+  schedule:
+    # 03:20 on Sundays, UTC. Off-hours for a business running on IST, and
+    # weekly because the rows are only worth keeping for seven days anyway.
+    # GitHub runs scheduled jobs late under load; nothing here cares when in
+    # the hour it happens.
+    - cron: "20 3 * * 0"
+  # So the first run can be watched deliberately rather than arriving on its
+  # own next Sunday.
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Keep keys newer than this many days"
+        required: false
+        default: "7"
+
+concurrency:
+  group: purge-idempotency
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge keys older than the window
+        env:
+          TOKEN: ${{ secrets.ALERT_SCAN_TOKEN }}
+          DAYS: ${{ github.event.inputs.days || '7' }}
+          URL: https://hitechfarms.co.in/tasks/purge-idempotency/
+        run: |
+          # An unconfigured scheduler is a broken scheduler. Exiting 0 with a
+          # warning is how the alert scan managed to be green for weeks while
+          # sending nothing at all.
+          if [ -z "$TOKEN" ]; then
+            echo "::error::ALERT_SCAN_TOKEN is not set in this repository, so nothing was purged. Set it as a repository secret and as the app's ALERT_SCAN_TOKEN — see the header of this file."
+            exit 1
+          fi
+          code=$(curl -sS -o body.txt -w '%{http_code}' \
+                   --max-time 300 --retry 2 --retry-delay 30 \
+                   -X POST "$URL?days=$DAYS" -H "X-Alert-Scan-Token: $TOKEN")
+          echo "HTTP $code"
+          cat body.txt; echo
+          if [ "$code" = "404" ]; then
+            echo "::error::404 — the server has no ALERT_SCAN_TOKEN set, or it does not match this repository's secret."
+            exit 1
+          fi
+          [ "$code" = "200" ] || { echo "::error::purge endpoint returned $code"; exit 1; }
