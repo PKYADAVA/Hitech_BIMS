@@ -152,6 +152,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "calendar-today",
     accent: B,
     emptyMessage: "No daily entries yet.",
+    dateField: "date",
     searchKeys: ["entry_no", "remarks"],
     // Grouped by batch, falling back to the farm when a row has none — the
     // same key the web list groups on, so both read the same way.
@@ -189,6 +190,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "map-marker",
     accent: B,
     emptyMessage: "No location captures yet.",
+    dateField: "date",
     searchKeys: ["capture_no", "state", "district", "area"],
     card: (r) => ({
       title: pick(r, ["capture_no"], `Capture #${r.id}`),
@@ -233,6 +235,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "needle",
     accent: B,
     emptyMessage: "No medicine / vaccine entries yet.",
+    dateField: "date",
     searchKeys: ["entry_no", "remarks"],
     card: (r) => ({
       title: pick(r, ["entry_no"], `Entry #${r.id}`),
@@ -249,6 +252,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "truck-delivery",
     accent: B,
     emptyMessage: "No bird sales yet.",
+    dateField: "date",
     searchKeys: ["sale_no", "doc_no", "vehicle", "driver"],
     card: (r) => ({
       title: pick(r, ["sale_no"], `Sale #${r.id}`),
@@ -277,6 +281,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "bird",
     accent: B,
     emptyMessage: "No chicks placed yet.",
+    dateField: "date",
     searchKeys: ["trnum", "dc_no", "vehicle_no", "driver_name"],
     card: (r) => ({
       // The farm leads: a placement is read as "which flock got chicks", not
@@ -298,6 +303,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "receipt",
     accent: B,
     emptyMessage: "No bird receipts yet.",
+    dateField: "date",
     searchKeys: ["receipt_no", "reference_no"],
     card: (r) => ({
       title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
@@ -369,6 +375,7 @@ const broilerResources: ResourceConfig[] = [
     icon: "file-document-outline",
     accent: B,
     emptyMessage: "No settlements yet.",
+    dateField: "gc_date",
     searchKeys: ["settlement_code"],
     card: (r) => ({
       title: pick(r, ["settlement_code"], `Settlement #${r.id}`),
@@ -554,6 +561,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "basket",
     accent: H,
     emptyMessage: "No egg purchases yet.",
+    dateField: "date",
     searchKeys: ["transaction_no", "dc_no", "vehicle", "driver"],
     card: (r) => ({
       title: pick(r, ["transaction_no"], `Purchase #${r.id}`),
@@ -576,6 +584,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "layers",
     accent: H,
     emptyMessage: "No egg gradings yet.",
+    dateField: "date",
     searchKeys: ["transaction_no"],
     card: (r) => ({
       title: pick(r, ["transaction_no"], `Grading #${r.id}`),
@@ -598,6 +607,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "truck",
     accent: H,
     emptyMessage: "No delivery challans yet.",
+    dateField: "date",
     searchKeys: ["challan_no", "vehicle_no", "driver_name", "eway_bill_no"],
     card: (r) => ({
       title: pick(r, ["challan_no"], `Challan #${r.id}`),
@@ -617,6 +627,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "bird",
     accent: H,
     emptyMessage: "No hatch entries yet.",
+    dateField: "hatch_date",
     searchKeys: ["transaction_no", "remarks"],
     card: (r) => ({
       title: pick(r, ["transaction_no"], `Hatch #${r.id}`),
@@ -638,6 +649,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "cash-register",
     accent: H,
     emptyMessage: "No chick sales yet.",
+    dateField: "date",
     searchKeys: ["bill_no", "vehicle", "driver"],
     card: (r) => ({
       title: pick(r, ["bill_no"], `Bill #${r.id}`),
@@ -693,6 +705,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "grid",
     accent: H,
     emptyMessage: "No tray settings yet.",
+    dateField: "setting_date",
     searchKeys: ["setting_no", "loaded_by"],
     card: (r) => ({
       title: pick(r, ["setting_no"], `Tray #${r.id}`),
@@ -708,6 +721,7 @@ const hatcheryResources: ResourceConfig[] = [
     icon: "file-document-outline",
     accent: H,
     emptyMessage: "No expenses yet.",
+    dateField: "date",
     searchKeys: ["stage"],
     card: (r) => ({
       title: pick(r, ["expense_type_label", "stage"], `Expense #${r.id}`),
@@ -1051,6 +1065,7 @@ const accountResources: ResourceConfig[] = [
     icon: "book-open-variant",
     accent: A,
     emptyMessage: "No vouchers yet.",
+    dateField: "date",
     searchKeys: ["voucher_no", "reference"],
     card: (r) => ({
       title: pick(r, ["voucher_no"], `Voucher #${r.id}`),
@@ -1194,6 +1209,7 @@ const inventoryResources: ResourceConfig[] = [
     icon: "needle",
     accent: I,
     emptyMessage: "No medicine transfers yet.",
+    dateField: "date",
     searchKeys: ["trnum", "dc_no", "vehicle_no", "driver_name"],
     card: (r) => ({
       title: pick(r, ["trnum"], `Transfer #${r.id}`),
@@ -1209,6 +1225,7 @@ const inventoryResources: ResourceConfig[] = [
     icon: "tune",
     accent: I,
     emptyMessage: "No adjustments yet.",
+    dateField: "date",
     searchKeys: ["trnum", "bill_no"],
     card: (r) => ({
       title: pick(r, ["trnum"], `Adjustment #${r.id}`),
@@ -1224,6 +1241,7 @@ const inventoryResources: ResourceConfig[] = [
     icon: "tray-arrow-up",
     accent: I,
     emptyMessage: "No stock issues yet.",
+    dateField: "date",
     searchKeys: ["trnum"],
     card: (r) => ({
       title: pick(r, ["trnum"], `Issue #${r.id}`),
@@ -1239,6 +1257,7 @@ const inventoryResources: ResourceConfig[] = [
     icon: "tray-arrow-down",
     accent: I,
     emptyMessage: "No stock receipts yet.",
+    dateField: "date",
     searchKeys: ["trnum"],
     card: (r) => ({
       title: pick(r, ["trnum"], `Receipt #${r.id}`),
@@ -1261,6 +1280,7 @@ const salesResources: ResourceConfig[] = [
     icon: "file-document-outline",
     accent: SA,
     emptyMessage: "No invoices yet.",
+    dateField: "date",
     searchKeys: ["invoice_no", "reference_no", "vehicle_no", "gstin"],
     card: (r) => ({
       title: pick(r, ["invoice_no"], `Invoice #${r.id}`),
@@ -1283,6 +1303,7 @@ const salesResources: ResourceConfig[] = [
     icon: "receipt",
     accent: SA,
     emptyMessage: "No receipts yet.",
+    dateField: "date",
     searchKeys: ["receipt_no", "reference_no"],
     card: (r) => ({
       title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
@@ -1394,6 +1415,7 @@ const purchaseResources: ResourceConfig[] = [
     icon: "file-document",
     accent: P,
     emptyMessage: "No purchases yet.",
+    dateField: "date",
     searchKeys: ["purchase_no", "bill_no", "vehicle_no"],
     card: (r) => ({
       title: pick(r, ["purchase_no"], `Purchase #${r.id}`),
@@ -1414,6 +1436,7 @@ const purchaseResources: ResourceConfig[] = [
     icon: "bird",
     accent: P,
     emptyMessage: "No chicks purchases yet.",
+    dateField: "date",
     searchKeys: ["purchase_no", "bill_no"],
     card: (r) => ({
       title: pick(r, ["purchase_no"], `Purchase #${r.id}`),
@@ -1433,6 +1456,7 @@ const purchaseResources: ResourceConfig[] = [
     icon: "cash",
     accent: P,
     emptyMessage: "No payments yet.",
+    dateField: "date",
     searchKeys: ["payment_no"],
     card: (r) => ({
       title: pick(r, ["payment_no"], `Payment #${r.id}`),
@@ -1449,6 +1473,7 @@ const purchaseResources: ResourceConfig[] = [
     icon: "file-document",
     accent: P,
     emptyMessage: "No debit notes yet.",
+    dateField: "date",
     searchKeys: ["note_no", "against_bill"],
     card: (r) => ({
       title: pick(r, ["note_no"], `Note #${r.id}`),
@@ -1465,6 +1490,7 @@ const purchaseResources: ResourceConfig[] = [
     icon: "file-document-outline",
     accent: P,
     emptyMessage: "No credit notes yet.",
+    dateField: "date",
     searchKeys: ["note_no", "against_bill"],
     card: (r) => ({
       title: pick(r, ["note_no"], `Note #${r.id}`),
@@ -1680,6 +1706,7 @@ const hrResources: ResourceConfig[] = [
     icon: "account-check",
     accent: HR,
     emptyMessage: "No attendance records.",
+    dateField: "date",
     searchKeys: ["status"],
     card: (r) => ({
       title: pick(r, ["employee_label"], `Record #${r.id}`),
