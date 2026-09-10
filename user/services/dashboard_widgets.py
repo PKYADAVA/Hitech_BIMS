@@ -1228,6 +1228,14 @@ WIDGETS = [
      "daily_entry_list", "fa-solid fa-clipboard-check", "gs-green", _daily_entries),
     ("flock_ages", "Age wise Available Birds", ("live_flock_summary_report",),
      "live_flock_summary_report", "fa-solid fa-chart-column", "gs-purple", _flock_ages),
+    ("liftings", "Lifting Details", ("bird_sale_list",),
+     "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
+    ("sale_overview", "Sale Overview", ("bird_sale_list",),
+     "bird_sale_list", "fa-solid fa-receipt", "gs-green", _sale_overview),
+    # Sits with Lifting and Sale Overview, which is where DEFAULT_PANEL_ORDER
+    # puts it and where the three share a row — this list is read as the
+    # running order too, so the two have to agree.
+    #
     # Gated on any of the five transaction lists it draws from — the same
     # "any of these" shape as Farm Route Today — and opens the full Recent
     # Activity Log, which is the same events without the card's cut-off.
@@ -1235,10 +1243,6 @@ WIDGETS = [
      ("activity_log", "chicks_placement_list", "stock_transfer_list",
       "daily_entry_list", "medicine_entry_list", "bird_sale_list"),
      "activity_log", "fa-solid fa-clock-rotate-left", "gs-green", _broiler_activity),
-    ("liftings", "Lifting Details", ("bird_sale_list",),
-     "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
-    ("sale_overview", "Sale Overview", ("bird_sale_list",),
-     "bird_sale_list", "fa-solid fa-receipt", "gs-green", _sale_overview),
     # Gated on Route History and linking to it, not to the planner: the gate is
     # an "any of these" test, so a widget that links outside it would show a
     # card to somebody who cannot open what it points at. What this reads is
