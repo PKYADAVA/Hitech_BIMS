@@ -92,8 +92,17 @@ class AutoQuerysetMixin:
             for f in model._meta.concrete_fields
             if f.get_internal_type() not in _NON_FILTER_TYPES
         }
+        # Named filters a resource declares for itself, for questions the
+        # generic rule above cannot express — "only the chick items", where
+        # the answer is a category matched by name and so has no id to pass.
+        extra = getattr(self, "extra_filters", None) or {}
+        for key, apply_filter in extra.items():
+            value = (self.request.query_params.get(key) or "").strip()
+            if value:
+                qs = apply_filter(qs, value)
+
         for key, value in self.request.query_params.items():
-            if key in _RESERVED_PARAMS or key not in filterable:
+            if key in _RESERVED_PARAMS or key in extra or key not in filterable:
                 continue
             lookup, kind = filterable[key]
             if kind == "BooleanField":
@@ -425,6 +434,7 @@ def register_model(
     cursor: bool = False,
     permission_classes=None,
     basename: Optional[str] = None,
+    extra_filters: Optional[dict] = None,
 ) -> None:
     """Build and register a resource viewset in one call.
 
@@ -434,6 +444,8 @@ def register_model(
         serializer: a custom serializer class; defaults to the factory output.
         cursor: use cursor pagination (infinite-scroll feeds/transactions).
         search_fields/ordering: forwarded to the DRF filter backends.
+        extra_filters: ``{param: (queryset, value) -> queryset}`` for filters
+            the generic exact-match rule cannot express.
     """
     serializer_cls = serializer or serializer_factory(
         model, fields=fields, exclude=exclude
@@ -458,6 +470,8 @@ def register_model(
         attrs["pagination_class"] = pg
     if permission_classes:
         attrs["permission_classes"] = permission_classes
+    if extra_filters:
+        attrs["extra_filters"] = extra_filters
 
     viewset = type(f"{model.__name__}ViewSet", (base,), attrs)
     router.register(prefix, viewset, basename=basename or _default_basename(prefix))

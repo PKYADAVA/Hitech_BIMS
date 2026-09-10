@@ -269,7 +269,9 @@ const broilerResources: ResourceConfig[] = [
     // second table saying the same thing.
     key: "broiler-chicks-placement",
     module: "broiler",
-    path: "/inventory/stock-transfers/?to_location_type=farm",
+    // Farm-bound *and* chicks: a feed dispatch is also a stock transfer onto
+    // a farm, so the destination alone put feed rows on this tab.
+    path: "/inventory/stock-transfers/?to_location_type=farm&item_family=chicks",
     title: "Chicks Placement",
     singular: "Chicks Placement",
     icon: "bird",

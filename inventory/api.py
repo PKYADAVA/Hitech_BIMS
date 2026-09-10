@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from api.viewsets import register_model
 
+from .item_families import filter_by_item_family
+
 from .models import (
     InventoryAdjustment,
     Item,
@@ -113,8 +115,15 @@ def register(router) -> None:
                    ordering=["item_code"])
 
     # --- Transactions (read-only: line-item children + stock movement) --
+    # ?item_family=chicks|feed. A chicks placement and a feed dispatch are both
+    # a stock transfer onto a farm, so the phone's Chicks Placement tab cannot
+    # be expressed as a destination filter alone — it needs to say which items
+    # it means, and the category that answers that is matched by name, so
+    # there is no id for the generic filter to take.
     register_model(router, "inventory/stock-transfers", StockTransfer, read_only=True,
-                   search_fields=["trnum", "dc_no", "vehicle_no", "driver_name"], cursor=True)
+                   search_fields=["trnum", "dc_no", "vehicle_no", "driver_name"],
+                   cursor=True,
+                   extra_filters={"item_family": filter_by_item_family})
     register_model(router, "inventory/medicine-transfers", MedicineTransfer, read_only=True,
                    search_fields=["trnum", "dc_no", "vehicle_no", "driver_name"], cursor=True)
     register_model(router, "inventory/adjustments", InventoryAdjustment, read_only=True,

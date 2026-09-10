@@ -41,6 +41,7 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth.decorators import login_required
+from .item_families import filter_by_item_family
 from .models import (
     ItemCategory, Item, ItemPriceList, Mapping, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
     MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
@@ -1104,6 +1105,7 @@ class StockTransferAPI(View):
         from_location_id = (request.GET.get("from_location_id") or "").strip()
         to_location_type = (request.GET.get("to_location_type") or "").strip()
         to_location_id = (request.GET.get("to_location_id") or "").strip()
+        item_family = (request.GET.get("item_family") or "").strip()
         if from_date:
             qs = qs.filter(date__gte=from_date)
         if to_date:
@@ -1112,14 +1114,28 @@ class StockTransferAPI(View):
             qs = qs.filter(item__category_id=category)
         if item_id:
             qs = qs.filter(item_id=item_id)
-        if from_location_type and from_location_id:
-            qs = qs.filter(from_location_type=from_location_type, **{
+        # The type narrows on its own; the id narrows further when one is
+        # given. Requiring both meant "everything that went to a farm" was
+        # answered with every transfer there is, and this register was left
+        # discarding the rest in the browser.
+        if from_location_type:
+            qs = qs.filter(from_location_type=from_location_type)
+        if from_location_id:
+            qs = qs.filter(**{
                 ("from_farm_id" if from_location_type == "farm" else "from_warehouse_id"): from_location_id,
             })
-        if to_location_type and to_location_id:
-            qs = qs.filter(to_location_type=to_location_type, **{
+        if to_location_type:
+            qs = qs.filter(to_location_type=to_location_type)
+        if to_location_id:
+            qs = qs.filter(**{
                 ("to_farm_id" if to_location_type == "farm" else "to_warehouse_id"): to_location_id,
             })
+        # A placement is a chick-category transfer onto a farm — two
+        # conditions, not one. Farm-bound alone also catches the feed a farm
+        # is dispatched, which is what put feed rows on the phone's Chicks
+        # Placement tab.
+        if item_family:
+            qs = filter_by_item_family(qs, item_family)
         return JsonResponse([_stock_transfer_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
 
     @transaction.atomic

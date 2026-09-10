@@ -2542,25 +2542,21 @@ def _flock_counts(batch, as_of=None, losses_to=None):
 def feed_items():
     """The items a Daily Entry may record as feed.
 
-    One definition of what counts as feed, because the answer was written out
-    thirteen times and the Daily Entry form did not use any of them — its Feed
-    columns listed the whole Item master, so Day Old Chicks was offered as
-    something to feed a flock.
-
-    Matched on the category's name rather than an id: the category is created
-    by whoever sets up Inventory, so there is no fixed id to hold on to, and
-    a site running "Broiler Feed" and "Pre-Starter Feed" wants both.
+    The definition moved to inventory.item_families when Inventory needed the
+    same answer for a stock transfer — the two have to agree, or a movement is
+    a chicks placement on one screen and not on the other. Re-exported under
+    the name it has been called by here since it was written.
     """
-    from inventory.models import Item
+    from inventory.item_families import feed_items as _feed_items
 
-    return Item.objects.filter(category__name__icontains="feed").order_by("item_code")
+    return _feed_items()
 
 
 def chick_items():
     """The items a placement may move onto a farm — the same rule, for chicks."""
-    from inventory.models import Item
+    from inventory.item_families import chick_items as _chick_items
 
-    return Item.objects.filter(category__name__icontains="chick").order_by("item_code")
+    return _chick_items()
 
 
 def _placement_date(batch):
