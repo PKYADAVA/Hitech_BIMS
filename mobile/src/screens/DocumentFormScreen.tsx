@@ -11,6 +11,7 @@ import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button, Card, Loading } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
+import { AUTO_KEYS, applyDerived, forgetTyped } from "@/config/derived";
 import {
   DOCUMENTS,
   DocConfig,
@@ -75,7 +76,22 @@ function FieldRows({
   for (let i = 0; i < fields.length; i += 1) {
     const f = fields[i];
     const next = fields[i + 1];
-    if (f.half && next?.half) {
+    const third = fields[i + 2];
+    if (f.third && next?.third && third?.third) {
+      out.push(
+        <View key={f.name} style={styles.pair}>
+          {[f, next, third].map((g) => (
+            <View key={g.name} style={styles.pairHalf}>
+              <DocFieldControl field={g} values={values} set={set} setMany={setMany} dynamic={opts(g)} />
+            </View>
+          ))}
+        </View>
+      );
+      i += 2;
+      continue;
+    }
+    // A leftover pair of thirds still reads better side by side than stacked.
+    if ((f.half || f.third) && (next?.half || next?.third)) {
       out.push(
         <View key={f.name} style={styles.pair}>
           <View style={styles.pairHalf}>
@@ -430,7 +446,10 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   const setItemKeys = (idx: number, patch: Dict) => {
     setItems((prev) => prev.map((it, i) => {
       if (i !== idx) return it;
-      const next = { ...it, ...patch };
+      // Whatever the person just set is theirs from now on: it stops counting
+      // as a value we filled in, so a later lookup refreshes around it instead
+      // of over it. See AUTO_KEYS.
+      const next = { ...it, ...patch, [AUTO_KEYS]: forgetTyped(it, Object.keys(patch)) };
       // Arithmetic the row owns — placement quantity, amount — recomputed in
       // the same update that changed its inputs, so what a readonly box shows
       // and what the payload carries can never be a keystroke apart.
@@ -501,12 +520,36 @@ export function DocumentFormScreen({ route, navigation }: Props) {
     if (!Object.keys(found).length) return;
     setItems((prev) => prev.map((it, i) => {
       if (i !== idx) return it;
-      const next = { ...it, ...found };
+      // A looked-up value fills a box that is empty or one this filled in
+      // before; a figure the person typed stays as they typed it.
+      const next = applyDerived(it, found);
+      if (!next) return it;
       return doc.compute ? { ...next, ...doc.compute(next, header) } : next;
     }));
   };
 
-  const addItem = () => setItems((prev) => [...prev, initValues(itemFieldsOf(doc))]);
+  /**
+   * A new row starts on the date of the row above it, not on today.
+   *
+   * A sheet is nearly always one day's transfers, so seeding today made every
+   * row after the first wrong whenever yesterday's movements were being
+   * entered — and wrong quietly, since the box looks filled either way. The
+   * date the person actually chose is the better guess, and it stays only
+   * until they change it. Any other carried-forward field would be guessing
+   * at what the row is *about*, so only dates travel.
+   */
+  const addItem = () =>
+    setItems((prev) => {
+      const fields = itemFieldsOf(doc);
+      const seeded = initValues(fields);
+      const last = prev[prev.length - 1];
+      if (last) {
+        for (const f of fields) {
+          if (f.type === "date" && last[f.name]) seeded[f.name] = last[f.name];
+        }
+      }
+      return [...prev, seeded];
+    });
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
   const onSave = async () => {

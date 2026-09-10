@@ -44,9 +44,21 @@ def _s(v) -> str:
 # --- Edit loaders: an existing record → the mobile form's field shape -------
 
 def _load_stock_transfer(o) -> dict:
+    """Everything on the row, because that is where the form renders it.
+
+    A stock transfer's phone form carries date, DC number, both locations and
+    the logistics on the row, as the web grid does — one sheet moves different
+    items between different pairs of stores. This returned them under "header"
+    instead, so opening a transfer to edit it showed From Location and To
+    Location empty on a record that plainly had both, and saving would have
+    sent those blanks back. Nothing reads a header for this document now.
+    """
     return {
-        "header": {
+        "header": {},
+        "items": [{
             "date": _s(o.date), "dc_no": o.dc_no or "",
+            "item": _s(o.item_id), "quantity": _s(o.quantity),
+            "rate": _s(o.rate),
             "from_type": o.from_location_type or "warehouse",
             "from_id": _s(o.from_warehouse_id or o.from_farm_id),
             "from_batch": _s(o.from_batch_id),
@@ -54,10 +66,7 @@ def _load_stock_transfer(o) -> dict:
             "to_id": _s(o.to_warehouse_id or o.to_farm_id),
             "to_batch": _s(o.to_batch_id),
             "vehicle_no": o.vehicle_no or "", "driver_name": o.driver_name or "",
-        },
-        "items": [{
-            "item": _s(o.item_id), "quantity": _s(o.quantity),
-            "rate": _s(o.rate), "remarks": o.remarks or "",
+            "remarks": o.remarks or "",
         }],
     }
 

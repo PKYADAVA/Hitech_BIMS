@@ -52,14 +52,19 @@ describe("stock transfer row", () => {
     expect(stock).toHaveBeenCalledWith("farm", "1", "14", "2026-08-01");
   });
 
-  it("re-runs when the item or the source moves", () => {
+  it("re-runs when the item, the source or the date moves", () => {
+    // The date earns its place: the rate is the price effective on it and the
+    // stock is the balance as of it, so a row whose date moved and whose
+    // figures did not is showing another day's numbers.
     expect(doc.derive!.on).toEqual(
-      expect.arrayContaining(["item", "from_type", "from_id"]));
+      expect.arrayContaining(["item", "from_type", "from_id", "date"]));
   });
 
-  it("takes the date from the header, where this form keeps it", async () => {
-    // The row has none. Reading row.date meant the balance was never asked
-    // for at all, and the box sat on "auto" however the row was filled in.
+  it("prefers the row's own date, and still reads a header that has one", async () => {
+    // This form keeps a date per row now, as the web grid does. The header
+    // fallback stays for the documents that share one.
+    await doc.derive!.run({ ...ROW, date: "2026-09-09" }, HEADER);
+    expect(stock).toHaveBeenCalledWith("warehouse", "1", "14", "2026-09-09");
     await doc.derive!.run(ROW, HEADER);
     expect(stock).toHaveBeenCalledWith("warehouse", "1", "14", "2026-08-01");
   });
@@ -70,10 +75,18 @@ describe("stock transfer row", () => {
     expect(stock).not.toHaveBeenCalled();
   });
 
-  it("suggests the price master rate, and leaves a typed one alone", async () => {
+  it("offers the price master rate for the row's date, every time", async () => {
+    // It used to withhold the rate whenever the box already held one, which
+    // read as "leave a typed rate alone" but also froze the rate at whatever
+    // date the row first had. Whose value is in the box is not something this
+    // can see; applyDerived can, and decides. See derived.test.ts.
     expect((await doc.derive!.run(ROW, HEADER)).rate).toBe("42.00");
-    const typed = await doc.derive!.run({ ...ROW, rate: "50" }, HEADER);
-    expect(typed.rate).toBeUndefined();
+    expect((await doc.derive!.run({ ...ROW, rate: "50" }, HEADER)).rate).toBe("42.00");
+  });
+
+  it("offers an empty rate when the date has no price", async () => {
+    item.mockResolvedValue({ unit: "Bag", rate: "", price_missing: true, message: "none" });
+    expect((await doc.derive!.run(ROW, HEADER)).rate).toBe("");
   });
 
   it("says nothing rather than failing when a lookup is down", async () => {

@@ -35,6 +35,10 @@ export interface DocField {
   placeholder?: string;
   /** Lay this field beside the previous one instead of under it. */
   half?: boolean;
+  /** Three across, for short numeric fields that read as one line — a stock
+   *  figure, the quantity taken from it, and the rate. A run of three is laid
+   *  out together; a leftover pair falls back to half width. */
+  third?: boolean;
   /**
    * Options that depend on another field of the same row.
    *
@@ -348,23 +352,34 @@ export const DOCUMENTS: Record<string, DocConfig> = {
     resourceKey: "inventory-stock-transfers",
     title: "Stock Transfer",
     savePath: "/inventory/stock-transfers/save",
-    headerTitle: "Transaction Header",
     itemTitle: "Transfer Items",
     itemNoun: "Row",
-    header: [
-      { ...fDate(), half: true },
-      { name: "dc_no", label: "DC No.", type: "text", placeholder: "Enter DC#", half: true },
-    ],
+    // Nothing is shared: the web grid gives every row its own Date and DC
+    // number, so one sheet can carry transfers made on different days, and a
+    // single header could not express that.
+    header: [],
     itemSections: [
+      {
+        title: "Transaction",
+        tone: "source",
+        fields: [
+          { ...fDate(), half: true },
+          { name: "dc_no", label: "DC No.", type: "text", placeholder: "Enter DC#", half: true },
+        ],
+      },
       {
         title: "Item Details",
         tone: "item",
+        // Two lines, in the web row's order: what is moving and its unit, then
+        // the three figures that decide the movement — what is there, how much
+        // of it, at what rate — which read as one line because they are read
+        // together.
         fields: [
-          fItem(),
+          { ...fItem(), half: true },
           { name: "uom_label", label: "UOM", type: "readonly", placeholder: "auto", half: true },
-          { name: "stock_label", label: "Available Stock", type: "readonly", placeholder: "auto", half: true },
-          { ...fRate(), half: true },
-          { ...fQty(), half: true },
+          { name: "stock_label", label: "Available Stock", type: "readonly", placeholder: "auto", third: true },
+          { ...fQty(), third: true },
+          { ...fRate(), third: true },
         ],
       },
       {
@@ -399,18 +414,28 @@ export const DOCUMENTS: Record<string, DocConfig> = {
      * for by the location's own type rather than assuming a warehouse.
      */
     derive: {
-      on: ["item", "from_type", "from_id"],
+      // The date belongs here as much as the item does: the rate is the Item
+      // Price Master entry effective on the row's date, and the stock is what
+      // was at the source *on that date*. Without it, moving a row's date left
+      // both figures answering the date before it — and a backdated sheet
+      // showed today's price against yesterday's movement, with nothing to say
+      // so. The save re-checks the stock; it does not re-check the rate.
+      on: ["item", "from_type", "from_id", "date"],
       run: async (row, header) => {
         const out: Dict = {};
         if (!row.item) return out;
-        // The date is the document's, not the row's — this form carries one
-        // Date in its header. Reading row.date left it undefined, so the
-        // balance was never asked for and the box kept its placeholder.
+        // The row's own date, which is where this form keeps it. The header
+        // fallback is left for the documents that still share one.
         const on = row.date || header?.date || "";
         try {
           const info = await stockTransferItem(row.item, on);
           out.uom_label = info.unit || "";
-          if (!row.rate && !info.price_missing) out.rate = info.rate || "";
+          // Offered every time, including as an empty string when this date has
+          // no price. Whether it is taken is the screen's call: it refreshes a
+          // rate the form filled in and leaves a typed one alone. Deciding here
+          // on "is the box empty" was what froze a rate at the first date the
+          // row happened to have.
+          out.rate = info.price_missing ? "" : (info.rate || "");
         } catch {
           /* advisory — a missing price must not block the row */
         }
@@ -433,8 +458,8 @@ export const DOCUMENTS: Record<string, DocConfig> = {
           const from = loc(it, "from");
           const to = loc(it, "to");
           return {
-            date: h.date,
-            dc_no: h.dc_no || "",
+            date: it.date,
+            dc_no: it.dc_no || "",
             item: it.item,
             quantity: it.quantity || "0",
             rate: it.rate || "0",
@@ -460,8 +485,8 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       const from = loc(it, "from");
       const to = loc(it, "to");
       return {
-        date: h.date,
-        dc_no: h.dc_no || "",
+        date: it.date,
+        dc_no: it.dc_no || "",
         item: it.item,
         quantity: it.quantity || "0",
         rate: it.rate || "0",
