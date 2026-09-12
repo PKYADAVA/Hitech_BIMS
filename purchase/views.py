@@ -1639,9 +1639,13 @@ def supplier_ledger_report(request):
                 amt = _sl_num(obj.amount)
                 running -= amt                 # a payment lowers what we owe
                 grp["credit"] += amt
+                # `mode` is a plain name from the Payment Mode master now, so the
+                # value is the label. It had choices until recently, and
+                # get_mode_display() disappeared with them — which took both
+                # ledgers down for any party with a payment in range.
                 grp["rows"].append({
                     "date": d, "trnum": obj.payment.payment_no, "doc_no": obj.reference_no or "",
-                    "type": "Payment", "type_slug": "payment", "item": obj.get_mode_display(), "boxes_bags": "",
+                    "type": "Payment", "type_slug": "payment", "item": obj.mode or "", "boxes_bags": "",
                     "sent_qty": "", "rcv_qty": "", "free_qty": "", "rate": "", "amount": "", "freight": "", "gst": "", "tds": "",
                     "debit": "", "credit": amt.quantize(q2),
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",

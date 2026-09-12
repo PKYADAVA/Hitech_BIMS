@@ -931,7 +931,7 @@ def customer_ledger_report(request):
                 grp["rows"].append({
                     "date": d, "trnum": obj.receipt_no, "doc_no": obj.reference_no or "",
                     "type": type_label, "type_slug": "receipt",
-                    "item": obj.get_mode_display(),
+                    "item": obj.mode or "",
                     "birds": "", "quantity": "", "avg_weight": "", "free": "", "rate": "", "amount": "",
                     "debit": "", "credit": amt.quantize(q2),
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
