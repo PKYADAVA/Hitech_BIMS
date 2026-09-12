@@ -429,12 +429,17 @@ class NotificationPreference(models.Model):
     receive_whatsapp = models.BooleanField(
         default=False, verbose_name="Receive WhatsApp"
     )
+    # On by default, with in-app and push above. An alert nobody is told about
+    # is the same as no alert: these two are what make one announce itself on a
+    # screen someone is already looking at, and they were off for everyone who
+    # had not been through the settings page — which was everyone but one.
+    # Free and local to the browser, unlike the three below.
     sound_notification = models.BooleanField(
-        default=False, verbose_name="Sound Notification",
+        default=True, verbose_name="Sound Notification",
         help_text="Play a short tone when a new alert arrives.",
     )
     desktop_notification = models.BooleanField(
-        default=False, verbose_name="Desktop Notification",
+        default=True, verbose_name="Desktop Notification",
         help_text="Use the browser's notification popup. Needs permission.",
     )
     auto_mark_read = models.BooleanField(
