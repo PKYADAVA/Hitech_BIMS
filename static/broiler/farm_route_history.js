@@ -150,9 +150,9 @@ window.RouteHistory = (function () {
   function drawMap(data) {
     if (!map) {
       map = L.map("rh-map").setView([26.43, 82.53], 9);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      L.tileLayer(BIMS_MAP.url, {
+        maxZoom: BIMS_MAP.maxZoom,
+        attribution: BIMS_MAP.attribution
       }).addTo(map);
       layer = L.layerGroup().addTo(map);
     }

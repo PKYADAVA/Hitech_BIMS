@@ -159,6 +159,7 @@ TEMPLATES = [
                 "user.context_processors.web_access",
                 # `company` for the shared report letterhead / printed documents.
                 "Hitech_BIMS.context_processors.company",
+                "Hitech_BIMS.context_processors.map_tiles",
                 # `alert_prefs` so the navbar bell knows about sound/desktop
                 # popups before the session's first alert arrives.
                 "alerthub.context_processors.alert_preferences",
@@ -408,6 +409,52 @@ ROUTING = {
     # than no number.
     "ALLOW_STRAIGHT_LINE_FALLBACK": env_bool("ROUTING_ALLOW_STRAIGHT_FALLBACK", True),
 }
+
+# ---------------------------------------------------------------------------
+# Map tiles
+#
+# Every map in the ERP drew from {s}.tile.openstreetmap.org, and OpenStreetMap
+# blocked it: the tiles came back as 403s reading "App is not following the
+# tile usage policy". They were right to. Those are volunteer-run servers paid
+# for by donations, their policy asks that they not be used as the basemap of
+# a business system, and the {s} subdomains the code used were deprecated on
+# top of that.
+#
+# So the source is a setting now, in one place rather than copied into eight
+# templates and scripts, and it can be pointed anywhere without touching code.
+#
+# The default is Esri's World Street Map, which serves without a key and
+# renders clean. CARTO was tried first and rejected: its tiles return 200 and
+# arrive stamped "API KEY REQUIRED" across every one of them, which a check on
+# the status code alone would have called a success.
+#
+# It is a default, not a recommendation. A business whose maps matter should
+# pay for maps: MapTiler, Mapbox, Thunderforest and Geoapify all serve this
+# use properly for a few dollars a month, and each hands you a URL template
+# that goes straight into MAP_TILE_URL. Restrict the key to this domain in the
+# provider's own dashboard — a tile URL is fetched by the browser, so it is
+# public however carefully it is stored here.
+#
+# Note the order of the placeholders: Esri asks for {z}/{y}/{x}, where most
+# others want {z}/{x}/{y}. Swapping them silently produces a map of the wrong
+# part of the world rather than an error.
+#
+# Whatever the source, the attribution goes with it. That is a condition of
+# every one of these services, OSM's data included.
+# ---------------------------------------------------------------------------
+MAP_TILE_URL = os.getenv(
+    "MAP_TILE_URL",
+    "https://server.arcgisonline.com/ArcGIS/rest/services/"
+    "World_Street_Map/MapServer/tile/{z}/{y}/{x}")
+# Esri's full source list runs to three lines and ate the bottom of every map
+# it was put on. This is the short form they publish alongside it: the tile
+# provider named and linked, the data behind it credited, and the rest a click
+# away on Esri's own page.
+MAP_TILE_ATTRIBUTION = os.getenv(
+    "MAP_TILE_ATTRIBUTION",
+    'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, '
+    'Garmin, &copy; OpenStreetMap contributors')
+MAP_TILE_MAX_ZOOM = int(os.getenv("MAP_TILE_MAX_ZOOM", "19"))
 
 # ---------------------------------------------------------------------------
 # Error reporting

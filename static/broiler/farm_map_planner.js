@@ -675,9 +675,9 @@ window.FarmMapPlanner = (function () {
 
   function init() {
     map = L.map("fmp-map").setView([26.43, 82.53], 9);
-    baseLayers.street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    baseLayers.street = L.tileLayer(BIMS_MAP.url, {
+      maxZoom: BIMS_MAP.maxZoom,
+      attribution: BIMS_MAP.attribution
     }).addTo(map);
     // Imagery, for judging whether a pin is on the sheds or in the field next
     // to them — which a street map cannot show and a supervisor can.

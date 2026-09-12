@@ -301,6 +301,18 @@ class MedicineEntryDateTests(TestCase):
         self.assertNotIn('class="form-control bg-light date" readonly', html)
 
 
+def _is_javascript(attrs):
+    """Whether a <script>'s attributes say it holds code.
+
+    No type at all means JavaScript, as does an explicit JavaScript type.
+    Anything else — application/json, text/template — is data the page hands
+    to itself, and parsing it reports a syntax error in something that was
+    never code.
+    """
+    lowered = attrs.lower()
+    return 'type=' not in lowered or 'javascript' in lowered
+
+
 class InlineScriptSyntaxTests(TestCase):
     """The JavaScript these forms emit actually parses.
 
@@ -327,8 +339,11 @@ class InlineScriptSyntaxTests(TestCase):
             self.skipTest("node is not installed")
         html = self.client.get(reverse(url_name)).content.decode()
         # Inline blocks only: a src= tag has nothing between the tags to check.
-        blocks = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>",
-                            html, re.S)
+        # Executable blocks only — see _is_javascript above.
+        blocks = [body for attrs, body in
+                  re.findall(r"<script(?![^>]*src=)([^>]*)>(.*?)</script>",
+                             html, re.S)
+                  if _is_javascript(attrs)]
         self.assertTrue(blocks, "no inline script found on %s" % url_name)
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
                                          encoding="utf-8") as handle:

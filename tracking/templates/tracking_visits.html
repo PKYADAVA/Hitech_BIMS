@@ -153,8 +153,8 @@
   let page = 1, linkTarget = null;
 
   const map = L.map("vis-map").setView([22.9734, 78.6569], 5);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  L.tileLayer(BIMS_MAP.url, {
+    maxZoom: BIMS_MAP.maxZoom, attribution: BIMS_MAP.attribution,
   }).addTo(map);
   const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
   map.addLayer(cluster);

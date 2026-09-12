@@ -114,6 +114,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
 
   <!-- BIMS Main JS (bump ?v= when this file changes so browsers drop cached copies) -->
+  {% comment %}
+    Where the maps get their tiles, set once for every page that draws one.
+    It lived in eight copies until OpenStreetMap blocked the volunteer servers
+    they all pointed at, and eight copies is why that took eight edits.
+    Written as JSON rather than interpolated into script, so an attribution
+    string carrying a quote cannot end the statement it sits in.
+  {% endcomment %}
+  {{ MAP_TILES|json_script:"bims-map-config" }}
+  <script>
+    window.BIMS_MAP = JSON.parse(
+      document.getElementById("bims-map-config").textContent);
+  </script>
   <script src="{% static 'js/main.js' %}?v=20260912c"></script>
 
   <!-- Alerts & Notifications client: shared by the bell, the notification
