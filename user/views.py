@@ -10,6 +10,7 @@ from django.utils.timezone import localtime
 import datetime
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.models import Group, Permission
 from django.shortcuts import get_object_or_404
@@ -1060,6 +1061,7 @@ def get_assigned_groups(request):
 
 
 @login_required
+@require_POST
 def delete_group(request):
     if request.method == "POST":
         group_id = request.POST.get("group_id")

@@ -1,4 +1,4 @@
-from Hitech_BIMS.entry_dates import reject_future_date
+from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -1114,9 +1114,9 @@ class StockTransferAPI(View):
         to_location_id = (request.GET.get("to_location_id") or "").strip()
         item_family = (request.GET.get("item_family") or "").strip()
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if category:
             qs = qs.filter(item__category_id=category)
         if item_id:
@@ -1489,9 +1489,9 @@ class MedicineTransferAPI(View):
         to_location_type = (request.GET.get("to_location_type") or "").strip()
         to_location_id = (request.GET.get("to_location_id") or "").strip()
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if category:
             qs = qs.filter(items__item__category_id=category)
         if item_id:
@@ -1919,9 +1919,9 @@ class InventoryAdjustmentAPI(View):
         item_id = (request.GET.get("item") or "").strip()
         warehouse_id = (request.GET.get("warehouse") or "").strip()
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if category:
             qs = qs.filter(items__item__category_id=category)
         if item_id:
@@ -2233,9 +2233,9 @@ class StockIssueAPI(View):
         item_id = (request.GET.get("item") or "").strip()
         warehouse_id = (request.GET.get("warehouse") or "").strip()
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if category:
             qs = qs.filter(items__item__category_id=category)
         if item_id:
@@ -2496,9 +2496,9 @@ class StockReceiveAPI(View):
         item_id = (request.GET.get("item") or "").strip()
         warehouse_id = (request.GET.get("warehouse") or "").strip()
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if category:
             qs = qs.filter(items__item__category_id=category)
         if item_id:
@@ -2670,8 +2670,8 @@ def item_ledger_report(request):
     farm = (farms_for(request.user, BroilerFarm.objects.all())
             .filter(id=farm_id).first() if farm_id.isdigit() else None)
     location = farm if location_type == "farm" else warehouse
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     ledger = None
     if item and location:
@@ -2831,8 +2831,8 @@ def stock_transfer_report(request):
                    farms=["from_farm_id", "to_farm_id"],
                    branches=["from_farm__branch_id", "to_farm__branch_id"])
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     if fd:
         qs = qs.filter(date__gte=fd)
     if td:
@@ -2999,8 +2999,8 @@ def stock_report(request):
     warehouse = (warehouses_for(request.user).filter(id=warehouse_id).first()
                  if warehouse_id.isdigit() else None)
     item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     rows = []
     if warehouse:
@@ -3108,8 +3108,8 @@ def item_summary_report(request):
     if location and ":" in location:
         loc_type, loc_id = location.split(":", 1)
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     groups = item_summary(from_date=fd, to_date=td,
                           category_id=category or None, item_id=item_id or None,
@@ -3221,7 +3221,7 @@ def negative_stock_report(request):
     if location and ":" in location:
         loc_type, loc_id = location.split(":", 1)
 
-    td = parse_date(to_date) if to_date else None
+    td = date_from_query(to_date)
     rows = negative_stock(as_of_date=td, item_id=item_id or None,
                           location_type=loc_type, location_id=loc_id)
 
@@ -3239,7 +3239,7 @@ def negative_stock_report(request):
 
     # `from_date` narrows the report to breaches that started inside the window;
     # the balance itself is always the running one as of the To Date.
-    fd = parse_date(from_date) if from_date else None
+    fd = date_from_query(from_date)
     if fd:
         rows = [r for r in rows if r["since"] and r["since"] >= fd]
 
@@ -3393,8 +3393,8 @@ def _inventory_line_report(request, kind):
     qs = (model.objects.select_related(*related)
           .order_by(header + "__date", header + "__id", "id"))
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     if fd:
         qs = qs.filter(**{header + "__date__gte": fd})
     if td:

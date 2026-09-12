@@ -39,6 +39,7 @@ from hr.models import (
 )
 from hr.validation import validate_employee_data
 from inventory.models import Warehouse
+from Hitech_BIMS.entry_dates import date_from_query
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -586,8 +587,8 @@ class EmployeeLeaveDashboard(View):
                     EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
                     .filter(
                         employee__isnull=False,
-                        created_date__date__gte=from_date,
-                        created_date__date__lte=to_date,
+                        created_date__date__gte=date_from_query(from_date),
+                        created_date__date__lte=date_from_query(to_date),
                     )
                     .values(
                         "id",
@@ -603,14 +604,14 @@ class EmployeeLeaveDashboard(View):
                 # Count total pending and approved leaves within the date range
                 total_pending_leaves = EmployeeLeave.objects.filter(
                     status="Pending",
-                    created_date__date__gte=from_date,
-                    created_date__date__lte=to_date,
+                    created_date__date__gte=date_from_query(from_date),
+                    created_date__date__lte=date_from_query(to_date),
                 ).count()
 
                 total_approved_leaves = EmployeeLeave.objects.filter(
                     status="Approved",
-                    created_date__date__gte=from_date,
-                    created_date__date__lte=to_date,
+                    created_date__date__gte=date_from_query(from_date),
+                    created_date__date__lte=date_from_query(to_date),
                 ).count()
 
                 response_data = {
@@ -829,7 +830,7 @@ class EmployeeAttendance(View):
                 # Filter records between from_date and to_date
                 attendances = (
                     Attendance.objects.filter(
-                        Q(created_date__gte=from_date) & Q(created_date__lte=to_date)
+                        Q(created_date__gte=date_from_query(from_date)) & Q(created_date__lte=date_from_query(to_date))
                     )
                     .select_related("employee")
                     .order_by("-created_date", "-check_in_time")
@@ -1467,9 +1468,9 @@ def supervisor_trip_report(request):
     in_scope = qs
 
     if from_date:
-        qs = qs.filter(date__gte=parse_date(from_date))
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=parse_date(to_date))
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if employee_id.isdigit():
         qs = qs.filter(employee_id=employee_id)
     if branch_id.isdigit():

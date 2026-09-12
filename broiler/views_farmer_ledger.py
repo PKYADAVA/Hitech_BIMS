@@ -29,6 +29,8 @@ from django.utils.dateparse import parse_date
 
 from user.services.scoping import farms_for
 
+from Hitech_BIMS.entry_dates import date_from_query
+
 from .models import (BroilerFarm, Farmer, FarmerGCPaymentLine,
                      GrowingChargeSettlement, tds_on)
 
@@ -151,8 +153,8 @@ def farmer_ledger_report(request):
     to_date = (request.GET.get("to_date") or "").strip()
     export = (request.GET.get("export") or "").strip().lower()
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     # A querystring is not a permission: a farmer outside the user's scope
     # resolves to None rather than having their account printed.

@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from account.models import CompanyProfile
 from hatchery.models import ChickSale, ChickSaleReceipt, DeliveryChallan, EggGrading, EggPurchase, TraySettingLine
+from Hitech_BIMS.entry_dates import date_from_query
 
 
 # Placeholder -> short description shown in the template editor's picker.
@@ -60,10 +61,15 @@ def common_context(user=None):
 
 def _parse_date(value):
     """A YYYY-MM-DD string as a date, or None. The grid hands dates around as
-    strings, and two sources need to compare rather than filter on them."""
-    from django.utils.dateparse import parse_date
+    strings, and two sources need to compare rather than filter on them.
 
-    return parse_date(value) if value else None
+    Shares the ERP's one reading of a date out of a query string, which also
+    answers None for a string shaped like a date that cannot exist —
+    "2026-02-30" — rather than raising ValueError into a report page.
+    """
+    from Hitech_BIMS.entry_dates import date_from_query
+
+    return date_from_query(value)
 
 
 def _between(qs, from_date, to_date, field="date"):
@@ -109,9 +115,9 @@ def _base_row(*, doc_id, date, party_type, party_id, party_name, mobile,
 def _chick_sale_rows(from_date, to_date, party_id):
     qs = ChickSale.objects.select_related("customer", "warehouse").prefetch_related("items__item")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if party_id:
         qs = qs.filter(customer_id=party_id)
     rows = []
@@ -162,9 +168,9 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
 def _delivery_challan_rows(from_date, to_date, party_id):
     qs = DeliveryChallan.objects.select_related("customer").prefetch_related("items")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if party_id:
         qs = qs.filter(customer_id=party_id)
     rows = []
@@ -193,9 +199,9 @@ def _delivery_challan_rows(from_date, to_date, party_id):
 def _egg_purchase_rows(from_date, to_date, party_id):
     qs = EggPurchase.objects.select_related("supplier", "warehouse").prefetch_related("items")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if party_id:
         qs = qs.filter(supplier_id=party_id)
     rows = []

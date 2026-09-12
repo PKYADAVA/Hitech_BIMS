@@ -1,6 +1,6 @@
 #pylint: disable=no-member
 
-from Hitech_BIMS.entry_dates import reject_future_date
+from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
 from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: party lists are narrowed to the customer / supplier
@@ -578,9 +578,9 @@ def sales_invoice_api_list(request):
     qs = scope_any(request.user, SalesInvoice.objects.filter(),
                    sectors="branch_id").select_related("customer")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     return JsonResponse([_sales_invoice_list_dict(i) for i in qs.order_by("-date", "-id")], safe=False)
 
 
@@ -693,8 +693,8 @@ def customer_ledger_report(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     export = (request.GET.get("export") or "").strip().lower()
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     as_of = td or _date.today()
 
     customer = (customers_for(request.user).filter(id=customer_id).first()
@@ -1125,8 +1125,8 @@ def customer_balance_report(request):
     group = (request.GET.get("customer_group") or "").strip()
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     ref_date = td or timezone.localdate()
 
     customers = customers_for(
@@ -1215,8 +1215,8 @@ def customer_receipt_report(request):
     added_by_id = (request.GET.get("added_by") or "").strip()
     source = (request.GET.get("source") or "").strip()
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     customers = customers_for(request.user, Customer.objects.select_related("customer_group"))
     if group.isdigit():
@@ -1437,9 +1437,9 @@ class SalesReceiptAPI(View):
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             return JsonResponse([_sales_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
         except SalesReceipt.DoesNotExist:
             raise Http404("Receipt not found")
@@ -1700,9 +1700,9 @@ def _customer_note_api(request, model):
                        model.objects.select_related("customer", "account", "sector"),
                        "customer_groups", "customer__customer_group_id")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if customer_id.isdigit():
         qs = qs.filter(customer_id=customer_id)
     return JsonResponse([_customer_note_list_dict(n) for n in qs.order_by("-date", "-id")],

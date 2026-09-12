@@ -38,6 +38,7 @@ from broiler.services.route_planner import (PlannerError, farm_point, plan_route
                                             save_route, split_by_gps)
 from broiler.services.routing import RoutingError
 from user.services.scoping import branches_for, farms_for, supervisors_for
+from Hitech_BIMS.entry_dates import date_from_query
 
 
 def _visible_farms(user):
@@ -419,9 +420,9 @@ def route_history(request):
     if status:
         routes = routes.filter(status=status)
     if from_date:
-        routes = routes.filter(date__gte=from_date)
+        routes = routes.filter(date__gte=date_from_query(from_date))
     if to_date:
-        routes = routes.filter(date__lte=to_date)
+        routes = routes.filter(date__lte=date_from_query(to_date))
 
     return render(request, "farm_route_history.html", {
         "active_tab": "route_history",

@@ -26,7 +26,7 @@ from hatchery_master.models import Hatchery, Setter, Hatcher, STATES_AND_TERRITO
 from hr.models import Employee
 from sales.models import Customer, CustomerShippingAddress
 
-from Hitech_BIMS.entry_dates import reject_future_date
+from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
@@ -186,9 +186,9 @@ class HatchSettingAPI(BaseAPIView):
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
-                hatch_settings = hatch_settings.filter(setting_date__gte=from_date)
+                hatch_settings = hatch_settings.filter(setting_date__gte=date_from_query(from_date))
             if to_date:
-                hatch_settings = hatch_settings.filter(setting_date__lte=to_date)
+                hatch_settings = hatch_settings.filter(setting_date__lte=date_from_query(to_date))
             results = []
             for hs in hatch_settings:
                 results.append({
@@ -943,9 +943,9 @@ def _filter_hatch_report_queryset(request):
 
     qs = HatchSetting.objects.prefetch_related("hatcher_outputs", "sales_lines")
     if from_date:
-        qs = qs.filter(setting_date__gte=from_date)
+        qs = qs.filter(setting_date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(setting_date__lte=to_date)
+        qs = qs.filter(setting_date__lte=date_from_query(to_date))
     if supplier:
         qs = qs.filter(supplier_name=supplier)
     if payment_status:
@@ -1630,9 +1630,9 @@ class EggPurchaseReportView(View):
                        sectors="warehouse_id").select_related(
             "supplier", "warehouse").prefetch_related("items__item")
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if supplier:
             qs = qs.filter(supplier_id=supplier)
         qs = qs.order_by("date", "id")
@@ -1707,9 +1707,9 @@ class IncubationReportView(View):
         qs = TraySetting.objects.select_related(
             "hatchery", "grading__supplier", "grading__item").prefetch_related("lines", "hatch_entry__vaccines")
         if from_date:
-            qs = qs.filter(setting_date__gte=from_date)
+            qs = qs.filter(setting_date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(setting_date__lte=to_date)
+            qs = qs.filter(setting_date__lte=date_from_query(to_date))
         if hatchery:
             qs = qs.filter(hatchery_id=hatchery)
         qs = qs.order_by("setting_date", "id")
@@ -1801,9 +1801,9 @@ class DeliveryChallanReportView(View):
                        sectors="chick_sales__warehouse_id").select_related(
             "customer").prefetch_related("items__item", "chick_sales")
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if customer:
             qs = qs.filter(customer_id=customer)
         qs = qs.order_by("date", "id")
@@ -1924,9 +1924,9 @@ class ChickSaleReceiptAPI(BaseAPIView):
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             return JsonResponse([_chick_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
         except ChickSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
@@ -2009,9 +2009,9 @@ class ChickSaleReportView(View):
                        sectors="warehouse_id").select_related(
             "customer", "warehouse", "delivery_challan").prefetch_related("items__item")
         if from_date:
-            qs = qs.filter(date__gte=from_date)
+            qs = qs.filter(date__gte=date_from_query(from_date))
         if to_date:
-            qs = qs.filter(date__lte=to_date)
+            qs = qs.filter(date__lte=date_from_query(to_date))
         if customer:
             qs = qs.filter(customer_id=customer)
         qs = qs.order_by("date", "id")

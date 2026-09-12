@@ -19,6 +19,7 @@ from .constants import SMS_MODULE_CHOICES, SMS_MODULE_TRANSACTIONS, transaction_
 from .models import SmsMessage, SmsTemplate, SmsTemplateCategory
 from .services import get_sms_service
 from .services.template_service import extract_placeholders
+from Hitech_BIMS.entry_dates import date_from_query
 
 logger = logging.getLogger("notification.sms")
 
@@ -458,9 +459,9 @@ def sms_history(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     if from_date:
-        qs = qs.filter(created_at__date__gte=from_date)
+        qs = qs.filter(created_at__date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(created_at__date__lte=to_date)
+        qs = qs.filter(created_at__date__lte=date_from_query(to_date))
     for field, param in (("module", "module"), ("status", "status"),
                          ("template_id", "template"), ("mobile__icontains", "mobile")):
         value = (request.GET.get(param) or "").strip()

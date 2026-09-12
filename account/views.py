@@ -19,6 +19,7 @@ from django.db.models.deletion import ProtectedError
 from account.models import BankCashMaster, ChartOfAccount, CompanyProfile, FinancialYear, OrganizationCentre, PaymentMode, TermsConditions
 from hatchery_master.models import STATES_AND_TERRITORIES
 from inventory.models import Mapping, Sector, Warehouse
+from Hitech_BIMS.entry_dates import date_from_query
 
 # Create your views here.
 @login_required
@@ -1078,8 +1079,8 @@ def journal_voucher_report(request):
                    Voucher.objects.filter(), sectors="sector_id"
                    ).select_related("sector", "created_by")                     .prefetch_related("lines__account", "lines__cost_center")                     .order_by("-date", "-id")
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     if fd:
         qs = qs.filter(date__gte=fd)
     if td:

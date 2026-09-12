@@ -30,6 +30,7 @@ from picklist.services import validate_value
 from .models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase, GeneralPurchaseItem,
                      Supplier, SupplierPayment, SupplierPaymentLine, SupplierShippingAddress, TaxMaster)
 import json
+from Hitech_BIMS.entry_dates import date_from_query
 
 # Used only by the billing/shipping address modals (state field itself is
 # picklist-bound, see picklist.bindable_fields.BINDABLE_FIELDS).
@@ -804,9 +805,9 @@ def general_purchase_api_list(request):
                    sectors="items__farm_warehouse_id").select_related("supplier").prefetch_related(
         "items__item", "items__farm_warehouse")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if category:
         qs = qs.filter(items__item__category_id=category)
     if warehouse:
@@ -1049,9 +1050,9 @@ def chicks_purchase_api_list(request):
                    sectors="items__farm_warehouse_id").select_related("supplier", "item").prefetch_related(
         "items__farm_warehouse")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     qs = qs.order_by("-date", "-id")
     return JsonResponse([_chicks_purchase_list_dict(cp) for cp in qs], safe=False)
 
@@ -1227,9 +1228,9 @@ def payment_api_list(request):
                    sectors="location_id").prefetch_related(
         "lines__pay_account", "lines__supplier")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     qs = qs.order_by("-date", "-id")
     return JsonResponse([_payment_list_dict(p) for p in qs], safe=False)
 
@@ -1364,9 +1365,9 @@ def _note_api(request, model):
         qs = qs.filter(Q(supplier__in=suppliers_for(request.user))
                        | Q(supplier__isnull=True))
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if supplier_id.isdigit():
         qs = qs.filter(supplier_id=supplier_id)
     return JsonResponse([_note_list_dict(n) for n in qs.order_by("-date", "-id")], safe=False)
@@ -1470,8 +1471,8 @@ def supplier_ledger_report(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     export = (request.GET.get("export") or "").strip().lower()
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     # A querystring is not a permission: a supplier outside the user's group
     # scope resolves to None rather than having their ledger printed.
@@ -1886,8 +1887,8 @@ def supplier_balance_report(request):
     group = (request.GET.get("supplier_group") or "").strip()
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     ref_date = td or timezone.localdate()
 
     suppliers = suppliers_for(request.user, Supplier.objects.order_by("name"))
@@ -2017,8 +2018,8 @@ def purchase_report(request):
         from_date = (today - timedelta(days=6)).isoformat()
         to_date = today.isoformat()
 
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
     branch_of_sector = _pr_branch_by_sector()
     branch_name_wanted = ""
     if branch_id:

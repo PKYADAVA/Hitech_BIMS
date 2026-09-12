@@ -18,7 +18,7 @@ from django.http import Http404, JsonResponse
 from django.db.models import F, Max, Min, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
-from Hitech_BIMS.entry_dates import reject_future_date
+from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
 from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
@@ -2338,9 +2338,9 @@ class DailyEntryAPI(BaseAPIView):
             batch_id = (request.GET.get("batch") or "").strip()
             nobatch_farm_id = (request.GET.get("nobatch_farm") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             if farm_id:
                 qs = qs.filter(farm_id=farm_id)
             if batch_id:
@@ -3097,9 +3097,9 @@ class MedicineEntryAPI(BaseAPIView):
             batch_id = (request.GET.get("batch") or "").strip()
             nobatch_farm_id = (request.GET.get("nobatch_farm") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             if farm_id:
                 qs = qs.filter(farm_id=farm_id)
             if batch_id:
@@ -3379,9 +3379,9 @@ class BirdSaleAPI(BaseAPIView):
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             return JsonResponse([_bird_sale_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
         except BirdSale.DoesNotExist:
             raise Http404("Bird sale not found")
@@ -3545,9 +3545,9 @@ class BirdSaleReceiptAPI(BaseAPIView):
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
-                qs = qs.filter(date__gte=from_date)
+                qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
-                qs = qs.filter(date__lte=to_date)
+                qs = qs.filter(date__lte=date_from_query(to_date))
             return JsonResponse([_bird_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
         except BirdSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
@@ -4332,8 +4332,8 @@ def production_cost_report(request):
                          farms="broiler_farm_id",
                          branches="broiler_farm__branch_id")
     # Running in the window, not started in it.
-    flocks = flocks.filter(Q(start_date__isnull=True) | Q(start_date__lte=to_date))
-    flocks = flocks.filter(Q(end_date__isnull=True) | Q(end_date__gte=from_date))
+    flocks = flocks.filter(Q(start_date__isnull=True) | Q(start_date__lte=date_from_query(to_date)))
+    flocks = flocks.filter(Q(end_date__isnull=True) | Q(end_date__gte=date_from_query(from_date)))
     if branch_id.isdigit():
         flocks = flocks.filter(broiler_farm__branch_id=branch_id)
     if line:
@@ -6072,7 +6072,7 @@ def farm_detailed_daily_entry_report(request):
     to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
     from_date = parse_date(request.GET.get("from_date") or "") or (to_date - timedelta(days=30))
 
-    entries = (DailyEntry.objects.filter(date__gte=from_date, date__lte=to_date)
+    entries = (DailyEntry.objects.filter(date__gte=date_from_query(from_date), date__lte=date_from_query(to_date))
                .select_related("farm__branch", "farm__supervisor", "farm__farmer",
                                "batch__breed", "supervisor", "entry_by", "feed_1", "feed_2")
                .order_by("farm__farm_code", "batch__batch_name", "date", "id"))
@@ -6174,8 +6174,8 @@ def lifting_report(request):
     supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
     sale_type = (request.GET.get("type") or "").strip()
-    fd = parse_date(from_date) if from_date else None
-    td = parse_date(to_date) if to_date else None
+    fd = date_from_query(from_date)
+    td = date_from_query(to_date)
 
     sales = (BirdSale.objects
              .select_related("customer", "farmer", "farm__branch", "farm__supervisor",
@@ -6414,10 +6414,14 @@ def chicks_placement_report(request):
                 qs = qs.filter(source_supplier_id=source_pk)
             else:
                 qs = qs.filter(source_hatchery_id=source_pk)
-        if from_date:
-            qs = qs.filter(date__gte=from_date)
-        if to_date:
-            qs = qs.filter(date__lte=to_date)
+        # Parsed rather than handed to the ORM as typed: a string shaped like
+        # a date but impossible — "2026-02-30" — passes Django's format check
+        # and then fails its validation, which is a 500 on a report page.
+        _fd, _td = date_from_query(from_date), date_from_query(to_date)
+        if _fd:
+            qs = qs.filter(date__gte=_fd)
+        if _td:
+            qs = qs.filter(date__lte=_td)
         # Status reflects the linked Batch's own state (see batch_status below).
         if status == "active":
             qs = qs.filter(to_batch__isnull=False, to_batch__end_date__isnull=True)
@@ -7631,8 +7635,8 @@ def feed_dispatch_stock_report(request):
         tracked_item_ids = label_ids
         item_label = {iid: iid for iid in label_ids}  # event item_id -> column key (identity: 1 item = 1 column)
 
-        from_date_obj = parse_date(from_date) if from_date else None
-        to_date_obj = parse_date(to_date) if to_date else None
+        from_date_obj = date_from_query(from_date)
+        to_date_obj = date_from_query(to_date)
 
         # Scope every event query to the narrowest filter given: a specific
         # Warehouse wins outright; otherwise Branch (via Mapping) or Region
@@ -8788,9 +8792,9 @@ class GCSettlementAPI(View):
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         if from_date:
-            rows = rows.filter(gc_date__gte=from_date)
+            rows = rows.filter(gc_date__gte=date_from_query(from_date))
         if to_date:
-            rows = rows.filter(gc_date__lte=to_date)
+            rows = rows.filter(gc_date__lte=date_from_query(to_date))
         def fmt(d):
             return d.strftime("%d.%m.%Y") if d else ""
         return JsonResponse([{
@@ -9322,9 +9326,9 @@ def farm_location_capture_api(request):
     to_date = (request.GET.get("to_date") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
     if farm_id.isdigit():
         qs = qs.filter(farm_id=farm_id)
     return JsonResponse([_capture_row(c) for c in qs.order_by("-date", "-id")], safe=False)

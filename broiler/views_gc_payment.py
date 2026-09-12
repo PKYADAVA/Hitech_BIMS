@@ -29,6 +29,7 @@ from user.services.scoping import farms_for, scope_any
 from .models import (BroilerBatch, BroilerFarm, FarmerGCPayment,
                      FarmerGCPaymentLine, GrowingChargeSettlement)
 from .services import gc_posting
+from Hitech_BIMS.entry_dates import date_from_query
 
 
 def _line_dict(line):
@@ -91,9 +92,9 @@ def farmer_gc_payment_api(request):
                    farms="lines__farm_id").prefetch_related(
         "lines__farm__farmer", "lines__pay_account")
     if from_date:
-        qs = qs.filter(date__gte=from_date)
+        qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
-        qs = qs.filter(date__lte=to_date)
+        qs = qs.filter(date__lte=date_from_query(to_date))
 
     return JsonResponse({"data": [{
         "id": p.id,
