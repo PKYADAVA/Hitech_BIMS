@@ -157,3 +157,50 @@ class KeySourceTests(TestCase):
 
         request = self.client.get(ADD).wsgi_request
         self.assertEqual(_key_of(request), ("", False))
+
+
+class LaggingSchemaTests(TestCase):
+    """What happens when the code arrives before the column it needs.
+
+    Recording a save is a guard against filing it twice. A guard that stops
+    the record being filed at all is worse than the thing it prevents — and
+    that is exactly what happened: the column arrived in one migration, the
+    code that writes it in the same deploy, and for as long as the two were
+    out of step every submit answered 500.
+
+    It fails open now. Idempotency is the first thing to give way, never the
+    save.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="clerk4", password="x", email="c4@example.com")
+        self.client.force_login(self.user)
+        self._drop_location()
+
+    def _drop_location(self):
+        """Stand in for a deploy where the migration has not landed yet.
+
+        The test's own transaction rolls this back, so nothing else sees it.
+        """
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("ALTER TABLE api_idempotencyrecord DROP COLUMN location")
+
+    def save(self, key="press-1", mobile="9111000222"):
+        return self.client.post(ADD, {
+            "name": "Ravi Traders", "address": "Akbarpur", "mobile": mobile,
+            "contact_type": "Supplier & Customer", "idempotency_key": key})
+
+    def test_the_save_still_happens(self):
+        response = self.save()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Customer.objects.filter(name="Ravi Traders").exists())
+
+    def test_it_is_simply_not_recorded(self):
+        """The honest consequence: for that one deploy, a duplicate submit is
+        not recognised. A save that works without its guard beats a guard that
+        stops the save."""
+        self.save()
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)

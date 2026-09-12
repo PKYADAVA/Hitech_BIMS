@@ -1,6 +1,6 @@
 import logging
 
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -162,7 +162,18 @@ class IdempotencyMiddleware:
                     device_created_at=_parse_when(request.META.get(OFFLINE_AT_HEADER)),
                     server_received_at=timezone.now())
         except IntegrityError:
+            # The key is already held. This is the mechanism, not a fault.
             return self._already_seen(key, user)
+        except DatabaseError:
+            # Anything else the database refused — a column this code expects
+            # and the schema has not got yet, most of all. That happens for
+            # the width of one deploy whenever the migration lands after the
+            # code, and it must not take the save down with it: this is a
+            # guard against filing a record twice, and a guard that stops the
+            # record being filed at all is worse than the thing it prevents.
+            logger.exception("idempotency: could not record %s; saving anyway",
+                             request.path)
+            return self.get_response(request)
 
         try:
             response = self.get_response(request)
@@ -172,7 +183,14 @@ class IdempotencyMiddleware:
             # running" for ever, which is worse than the error itself.
             IdempotencyRecord.objects.filter(pk=record.pk).delete()
             raise
-        self._remember(record, response, from_form)
+        try:
+            self._remember(record, response, from_form)
+        except DatabaseError:
+            # Same reasoning, at the other end: the save has already happened
+            # and the person is owed its answer. Failing to write down what it
+            # was costs a replay, not the record.
+            logger.exception("idempotency: could not store the answer for %s",
+                             request.path)
         return response
 
     # -- replay ------------------------------------------------------------
