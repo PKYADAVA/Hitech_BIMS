@@ -1078,10 +1078,13 @@
         .then(function () { if (bar) bar.classList.remove('is-busy'); });
     }
 
-    // Delegated on the grid rather than bound per row: the cards are replaced
-    // wholesale on every filter reload, and a listener on the container
-    // outlives that the way one on the row itself would not.
-    grid.addEventListener('click', function (e) {
+    // Delegated rather than bound per row, because the cards are replaced
+    // wholesale on every filter reload and a listener on a card would not
+    // outlive that. On the document rather than the grid, because this card
+    // no longer lives in the grid: it is moved out to sit beside Alerts (see
+    // placeActivity), and a listener on the grid stopped hearing its tabs the
+    // moment it left — the category filters went dead with it.
+    document.addEventListener('click', function (e) {
       var tab = e.target.closest('.dw-act-tab');
       if (!tab) return;
       var tabs = tab.closest('.dw-act-tabs');
