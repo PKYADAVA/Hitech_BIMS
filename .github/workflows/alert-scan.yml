@@ -46,9 +46,14 @@ jobs:
           TOKEN: ${{ secrets.ALERT_SCAN_TOKEN }}
           URL: https://hitechfarms.co.in/tasks/alert-scan/
         run: |
+          # A missing secret used to warn and exit 0. Every run since this
+          # workflow was added has therefore been green while sending nothing,
+          # and no alert has ever been raised in production — which is the
+          # silence the rest of this file goes to such lengths to prevent. An
+          # unconfigured scheduler is a broken scheduler, so it fails.
           if [ -z "$TOKEN" ]; then
-            echo "::warning::ALERT_SCAN_TOKEN is not set in this repository — nothing to send. See the header of this file."
-            exit 0
+            echo "::error::ALERT_SCAN_TOKEN is not set in this repository, so no scan was triggered and no alert can be raised. Set it as a repository secret and as the app's ALERT_SCAN_TOKEN — see the header of this file."
+            exit 1
           fi
           # --fail-with-body so a 404 (wrong or unset token on the server) is a
           # red run rather than a green one that quietly did nothing. Silence

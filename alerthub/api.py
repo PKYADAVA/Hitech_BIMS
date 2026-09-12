@@ -171,7 +171,16 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         counts = {
             row["priority"]: row["n"]
-            for row in unread.values("priority").annotate(n=Count("id", distinct=True))
+            # .order_by() before .annotate(), and it is load-bearing. This
+            # queryset is distinct() — visible_notifications applies it,
+            # because the join to recipients duplicates rows — and a distinct()
+            # queryset carries its ordering column into the SELECT, from where
+            # it reaches the GROUP BY. Grouped by (priority, created_at) that
+            # is a row per notification, and this dict keeps whichever came
+            # last: six unread criticals were reported to the widget as one,
+            # while the bell beside it counted all nine.
+            for row in unread.values("priority").order_by()
+                             .annotate(n=Count("id", distinct=True))
         }
 
         def by_keys(*keys):

@@ -20,3 +20,10 @@ class AlertHubConfig(AppConfig):
         from . import detectors
 
         detectors.autodiscover()
+
+        # Raise the rules a saved row can decide as soon as it is saved,
+        # rather than at the next sweep. Binds signals only — the work runs
+        # after commit, and only for the handful of rules in LIVE_RULES.
+        from . import live
+
+        live.connect()
