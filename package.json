@@ -1,0 +1,16 @@
+{
+  "name": "hitech-bims-web",
+  "private": true,
+  "description": "Test harness for the browser scripts the ERP serves from static/js.",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": ["<rootDir>/static/js/__tests__/*.test.js"]
+  }
+}

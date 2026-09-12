@@ -119,3 +119,29 @@ jobs:
       - name: Test
         working-directory: mobile
         run: npm test
+
+  web-scripts:
+    name: Web scripts
+    runs-on: ubuntu-latest
+
+    # static/js/main.js is loaded by every page in the ERP and had no tests at
+    # all, while the phone app next door had two hundred and forty. That gap is
+    # how a wrong decision about the idempotency key — retiring it even when no
+    # answer came back, which is the one case it exists for — reached
+    # production and filed people's entries twice.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test

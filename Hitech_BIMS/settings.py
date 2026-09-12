@@ -409,6 +409,88 @@ ROUTING = {
     "ALLOW_STRAIGHT_LINE_FALLBACK": env_bool("ROUTING_ALLOW_STRAIGHT_FALLBACK", True),
 }
 
+# ---------------------------------------------------------------------------
+# Error reporting
+#
+# Off unless SENTRY_DSN is set, so a developer machine and a fresh checkout
+# report nothing. It exists because a production 500 used to leave no trace
+# anywhere reachable: the page said "Server Error (500)", the console logs are
+# behind the platform dashboard, and working out what happened meant
+# eliminating theories one at a time against a database we cannot see. The
+# answer, when it came, was one line of traceback.
+#
+# What this ERP stores decides how it is configured. Aadhaar and PAN numbers,
+# bank details and salaries pass through these requests, so:
+#
+#   send_default_pii   off. Sentry otherwise attaches the signed-in user's
+#                      details and the request body to every event.
+#   before_send        strips what is left: POST bodies, cookies (the session
+#                      id is a live credential), and the headers that carry
+#                      authentication.
+#   traces_sample_rate 0 by default. Performance tracing samples whole
+#                      requests, and this is about errors.
+#
+# The tradeoff is deliberate: an event says where and what, not who or with
+# which values. A stack trace and a URL are enough to find a bug — this whole
+# exercise began with one — and anything more is a copy of the business's
+# private data sitting on somebody else's server.
+# ---------------------------------------------------------------------------
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+
+SENTRY_SENSITIVE_HEADERS = {
+    "Authorization", "Cookie", "X-Csrftoken", "X-Alert-Scan-Token",
+    "Idempotency-Key",
+}
+
+
+def scrub_event(event, hint=None):
+    """Remove everything that could carry a person's data or a credential.
+
+    Runs on every event before it leaves the process. Deliberately subtractive
+    and dull: it removes named things rather than trying to recognise a PAN or
+    an Aadhaar number in free text, because a matcher that is wrong once has
+    already sent the thing it was meant to catch.
+
+    Defined whether or not reporting is switched on, so it can be tested
+    without a DSN — the part worth testing is exactly the part that only runs
+    in production.
+    """
+    request = event.get("request") or {}
+    request.pop("data", None)          # the POST body
+    request.pop("cookies", None)       # the session id is a live credential
+    headers = request.get("headers") or {}
+    for name in list(headers):
+        if name.title() in SENTRY_SENSITIVE_HEADERS:
+            headers[name] = "[stripped]"
+    # A query string can carry ids, which are harmless, but also whatever a
+    # report was filtered by. The path is what locates a bug.
+    request.pop("query_string", None)
+    event.pop("user", None)
+    return event
+
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(),
+            # Breadcrumbs from our own logging, so an event arrives with the
+            # few lines that led to it. ERROR logs do not become separate
+            # events: the exception handler already reports those, and a
+            # logger.exception beside a raise would report it twice.
+            LoggingIntegration(level=None, event_level=None),
+        ],
+        environment=os.getenv("SENTRY_ENVIRONMENT", "development" if DEBUG else "production"),
+        release=os.getenv("SENTRY_RELEASE", "") or None,
+        send_default_pii=False,
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        before_send=scrub_event,
+    )
+
 # Shared secret an outside scheduler presents to run the business-alert scan
 # (alerthub/trigger.py). Empty means the endpoint does not exist at all, which
 # is the right default: a deployment that has not been given a token has not
