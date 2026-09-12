@@ -1,7 +1,7 @@
 import logging
 
 from django.db import IntegrityError, transaction
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -61,6 +61,32 @@ def _requesting_user(request):
     return user if (user and user.is_authenticated) else None
 
 
+#: The hidden field main.js puts on a form that posts the ordinary way. A
+#: header cannot be attached to a plain form submit, and those are the forms
+#: that file most of this ERP's documents.
+FORM_FIELD = "idempotency_key"
+
+
+def _key_of(request):
+    """The idempotency key and where it came from.
+
+    A header when a script sent the request, a form field when the browser
+    did. Reading POST here is deliberate and narrow: only for an unsafe
+    request that carried no header, and only when the body is a form — Django
+    caches the parsed body, so the view that follows re-reads nothing.
+    """
+    key = request.META.get(HEADER, "").strip()
+    if key:
+        return key, False
+    if request.method not in UNSAFE:
+        return "", False
+    content_type = (request.content_type or "").lower()
+    if content_type.startswith(("application/x-www-form-urlencoded",
+                                "multipart/form-data")):
+        return (request.POST.get(FORM_FIELD) or "").strip(), True
+    return "", False
+
+
 def _is_web_write(request):
     """A write from the ERP's own pages, made by a signed-in browser.
 
@@ -110,7 +136,7 @@ class IdempotencyMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        key = request.META.get(HEADER, "").strip()
+        key, from_form = _key_of(request)
         if not key or request.method not in UNSAFE:
             return self.get_response(request)
         # The ERP's own forms send a key too now, on the same header. They are
@@ -146,7 +172,7 @@ class IdempotencyMiddleware:
             # running" for ever, which is worse than the error itself.
             IdempotencyRecord.objects.filter(pk=record.pk).delete()
             raise
-        self._remember(record, response)
+        self._remember(record, response, from_form)
         return response
 
     # -- replay ------------------------------------------------------------
@@ -160,8 +186,14 @@ class IdempotencyMiddleware:
             # twice, and the outbox will come back to it.
             return self._in_progress()
 
-        replay = HttpResponse(record.response or "", status=record.status_code,
-                              content_type=_content_type_of(record.response))
+        if record.location:
+            # A saved form answers "go and look at the list". Replaying the
+            # status without the destination would send the browser nowhere.
+            replay = HttpResponseRedirect(record.location)
+            replay.status_code = record.status_code
+        else:
+            replay = HttpResponse(record.response or "", status=record.status_code,
+                                  content_type=_content_type_of(record.response))
         # Says the write was not performed again, so a reader of the logs is
         # not left thinking the phone posted twice and got away with it.
         replay["Idempotent-Replay"] = "true"
@@ -178,7 +210,7 @@ class IdempotencyMiddleware:
     # -- recording ---------------------------------------------------------
 
     @staticmethod
-    def _remember(record, response):
+    def _remember(record, response, from_form=False):
         """Store the answer, so a replay can be given it.
 
         Only settled outcomes are kept. A 5xx may well have left nothing
@@ -186,8 +218,19 @@ class IdempotencyMiddleware:
         of letting it do the work — so the record is dropped and the key
         becomes usable again. Client errors *are* kept: a 400 is a verdict on
         the payload and will not change on a second try.
+
+        A key that arrived in a form field is narrower: only a redirect is
+        remembered. The ERP's own forms answer a rejected save by rendering
+        the page again with the message on it — a 200 — and the person then
+        corrects the field and presses save. That is a different save, and
+        replaying the stored complaint about what they have just fixed would
+        be worse than not recognising them at all. A redirect is unambiguous:
+        it is what these views do when the record was written.
         """
         if response.status_code >= 500:
+            IdempotencyRecord.objects.filter(pk=record.pk).delete()
+            return
+        if from_form and not (300 <= response.status_code < 400):
             IdempotencyRecord.objects.filter(pk=record.pk).delete()
             return
         body = ""
@@ -198,7 +241,8 @@ class IdempotencyMiddleware:
                 logger.warning("idempotency: response for %s is not text; storing empty",
                                record.key)
         IdempotencyRecord.objects.filter(pk=record.pk).update(
-            status_code=response.status_code, response=body)
+            status_code=response.status_code, response=body,
+            location=(response.get("Location") or "")[:500])
 
 
 def purge_idempotency_records(older_than_days=7):

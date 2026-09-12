@@ -745,6 +745,28 @@ window.loadOptions = function (select, url, data, options) {
     if (event.defaultPrevented) return;
     const form = event.target;
     if (!form || form.tagName !== 'FORM') return;
+
+    // No header can be put on a plain form post, so the key travels as a
+    // hidden field instead. Added here rather than at page load so it only
+    // ever reaches forms that actually post this way — an AJAX form that
+    // serialises itself would otherwise carry a field its view never asked
+    // for.
+    //
+    // The key belongs to the form and is never retired on this path, which
+    // is what makes it work: the browser resending a POST after a refresh
+    // sends the same field back, and so does a person pressing save again on
+    // a page that never got its answer. A save that succeeds redirects, and
+    // the next page is a new form with a new key.
+    if ((form.method || '').toUpperCase() === 'POST') {
+      let field = form.querySelector('input[name="idempotency_key"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'idempotency_key';
+        form.appendChild(field);
+      }
+      field.value = keyFor(form).key;
+    }
     setTimeout(function () {
       form.querySelectorAll(
         'button[type="submit"], button:not([type]), input[type="submit"]'

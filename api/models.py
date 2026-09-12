@@ -54,6 +54,11 @@ class IdempotencyRecord(models.Model):
         help_text=_("When it reached the ERP"))
     status_code = models.PositiveSmallIntegerField(null=True, blank=True)
     response = models.TextField(null=True, blank=True)
+    # Where a redirect pointed. The ERP's own forms answer a successful save
+    # with "see the list", and a replay that returned the status without the
+    # destination would send the browser nowhere. The phone's writes answer in
+    # JSON and leave this empty.
+    location = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
