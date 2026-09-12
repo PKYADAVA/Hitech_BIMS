@@ -1193,6 +1193,7 @@ def customer_receipt_report(request):
     one specific invoice (they are all account-level payments, "reduces the
     outstanding balance", not the settlement of a particular document).
     """
+    from account.services.bank_cash import active_payment_modes
     from decimal import Decimal
     from django.contrib.auth import get_user_model
     from django.utils.dateparse import parse_date
@@ -1296,7 +1297,12 @@ def customer_receipt_report(request):
         "customer_groups": groups, "group": group,
         "customers": customers_for(request.user, Customer.objects.order_by("name")),
         "customer": customer_id,
-        "modes": SalesReceipt.MODE_CHOICES, "mode": mode,
+        # The filter offers what a receipt can actually have been saved
+        # with, which is the Payment Mode master — the five hardcoded
+        # names left a receipt taken on a mode the office added
+        # ("Paytm Business Wallet") impossible to filter for.
+        "modes": [(m, m) for m in active_payment_modes("receipt")],
+        "mode": mode,
         "accounts": bank_cash_accounts(), "account": account_id,
         "locations": Warehouse.objects.order_by("name"), "location": location_id,
         "added_by_users": User.objects.filter(id__in=added_by_ids).order_by("username"),

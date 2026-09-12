@@ -97,10 +97,33 @@ const editingId = {% if payment %}{{ payment.id }}{% else %}null{% endif %};
 
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}{% if f.farmer %} — {{ f.farmer.farmer_name|escapejs }}{% endif %}</option>{% endfor %}`;
 const payTypeOptions = `{% for value, label in pay_types %}<option value="{{ value|escapejs }}">{{ label|escapejs }}</option>{% endfor %}`;
-const modeOptions = `<option value="">select</option>{% for value, label in mode_choices %}<option value="{{ value|escapejs }}">{{ label|escapejs }}</option>{% endfor %}`;
+const modeOptions = `<option value="">select</option>{% for m in payment_modes %}<option value="{{ m|escapejs }}">{{ m|escapejs }}</option>{% endfor %}`;
+const MODE_MAP = {{ payment_mode_map_json|safe }};
 const accountOptions = `<option value="">select</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code|escapejs }} - {{ a.description|escapejs }}</option>{% endfor %}`;
 
 const get = id => document.getElementById(id);
+
+// Choosing a payment mode narrows the account list to the Bank/Cash accounts
+// mapped to it, the same way the receipt forms do — the money a mode moves has
+// to leave the ledger that mode belongs to.
+function applyPaymentMode(tr) {
+  const modeEl = tr && tr.querySelector('.mode');
+  const acc = tr && tr.querySelector('.pay-account');
+  if (!modeEl || !acc) return;
+  const mapped = (MODE_MAP[modeEl.value] || []).map(String);
+  const full = document.createElement('select'); full.innerHTML = accountOptions;
+  const keep = [...full.options].filter(o => !o.value || mapped.length === 0
+                                             || mapped.includes(o.value));
+  acc.innerHTML = keep.map(o => o.outerHTML).join('');
+  acc.value = (mapped.length === 1) ? mapped[0] : '';
+  if (window.jQuery) jQuery(acc).trigger('change.select2');
+}
+document.addEventListener('change', function (e) {
+  if (e.target.classList && e.target.classList.contains('mode')) {
+    applyPaymentMode(e.target.closest('tr'));
+  }
+});
+
 
 function lineRow(row = {}) {
   const tr = document.createElement('tr');

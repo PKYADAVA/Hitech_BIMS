@@ -50,7 +50,9 @@ def _line_dict(line):
 
 
 def _context(user, payment=None):
-    from account.services.bank_cash import bank_cash_accounts
+    from account.services.bank_cash import (active_payment_modes,
+                                            bank_cash_accounts,
+                                            payment_mode_map)
     return {
         "payment": payment,
         "next_payment_no": FarmerGCPayment._next_payment_no() if not payment else None,
@@ -60,7 +62,12 @@ def _context(user, payment=None):
         # account, and offering every ledger invites exactly that.
         "accounts": bank_cash_accounts(),
         "pay_types": FarmerGCPaymentLine.PAY_TYPE_CHOICES,
-        "mode_choices": FarmerGCPaymentLine.MODE_CHOICES,
+        # From the Payment Mode master, as every other payment and receipt
+        # form reads it. This one kept the five names hardcoded on the
+        # model, so a mode the office added — "Paytm Business Wallet" —
+        # appeared on those forms and not on this one.
+        "payment_modes": active_payment_modes("payment"),
+        "payment_mode_map_json": json.dumps(payment_mode_map("payment")),
         "today": timezone.localdate().isoformat(),
         "existing_lines_json": json.dumps(
             [_line_dict(r) for r in payment.lines.select_related(

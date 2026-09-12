@@ -1100,7 +1100,6 @@ def _payment_form_context(user, p=None, request_mode=False):
         "locations": Warehouse.objects.order_by("name"),
         "accounts": _bank_cash_accounts(),
         "today": timezone.localdate().isoformat(),
-        "mode_choices": SupplierPaymentLine.MODE_CHOICES,
         "payment_modes": active_payment_modes("payment"),
         "payment_mode_map_json": json.dumps(payment_mode_map("payment")),
         "existing_lines_json": json.dumps(

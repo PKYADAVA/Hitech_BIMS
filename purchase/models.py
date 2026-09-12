@@ -811,7 +811,14 @@ class SupplierPaymentLine(models.Model):
 
     payment = models.ForeignKey(SupplierPayment, on_delete=models.CASCADE, related_name="lines")
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="payment_lines")
-    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default="Cash")
+    # A plain name from the Payment Mode master — which is what that master
+    # says it is: "the transaction's own mode field stays a plain name
+    # string". The five hardcoded choices predate it, and these dropdowns
+    # have been fed from the master for a while, so a mode somebody added
+    # ("Paytm Business Wallet") offered itself in the list and was then
+    # refused on save. max_length follows PaymentMode.name for the same
+    # reason: twenty characters could not hold that name either.
+    mode = models.CharField(max_length=100, default="Cash")
     pay_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.PROTECT,
                                     related_name="supplier_payment_lines")
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)

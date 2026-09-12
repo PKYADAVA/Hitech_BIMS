@@ -1660,7 +1660,14 @@ class BirdSaleReceipt(models.Model):
     farmer = models.ForeignKey(Farmer, on_delete=models.PROTECT, null=True, blank=True,
                                related_name='bird_sale_receipts')
 
-    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='Cash')
+    # A plain name from the Payment Mode master — which is what that master
+    # says it is: "the transaction's own mode field stays a plain name
+    # string". The five hardcoded choices predate it, and these dropdowns
+    # have been fed from the master for a while, so a mode somebody added
+    # ("Paytm Business Wallet") offered itself in the list and was then
+    # refused on save. max_length follows PaymentMode.name for the same
+    # reason: twenty characters could not hold that name either.
+    mode = models.CharField(max_length=100, default='Cash')
     receipt_account = models.ForeignKey('account.ChartOfAccount', on_delete=models.PROTECT,
                                         related_name='bird_sale_receipts')
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -3211,7 +3218,14 @@ class FarmerGCPaymentLine(models.Model):
     batch = models.ForeignKey(BroilerBatch, on_delete=models.PROTECT, null=True, blank=True,
                               related_name="gc_payment_lines")
     pay_type = models.CharField(max_length=20, choices=PAY_TYPE_CHOICES, default="GC Pay")
-    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default="Cash")
+    # A plain name from the Payment Mode master — which is what that master
+    # says it is: "the transaction's own mode field stays a plain name
+    # string". The five hardcoded choices predate it, and these dropdowns
+    # have been fed from the master for a while, so a mode somebody added
+    # ("Paytm Business Wallet") offered itself in the list and was then
+    # refused on save. max_length follows PaymentMode.name for the same
+    # reason: twenty characters could not hold that name either.
+    mode = models.CharField(max_length=100, default="Cash")
     pay_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.PROTECT,
                                     related_name="farmer_gc_payment_lines",
                                     help_text=_("The cash or bank account the money leaves"))
