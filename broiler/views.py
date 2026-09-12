@@ -1250,7 +1250,8 @@ class FarmerFarmSetupRequestListTemplateView(View):
     Farm Setup Request."""
 
     def get(self, request):
-        return render(request, "farmer_farm_setup_request_list.html")
+        return render(request, "farmer_farm_setup_request_list.html",
+                      _place_filter_options(request.user))
 
 
 @method_decorator(login_required, name="dispatch")
@@ -1337,6 +1338,7 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
 
             qs = FarmerFarmSetupRequest.objects.select_related("branch", "farmer_group", "submitted_by")
             qs = scope_multi(request.user, qs, branches="branch_id")
+            qs = _apply_place_filters(request, qs, branch="branch")
             if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
                 # A non-reviewer sees every draft in their branch — any of
                 # them is up for grabs — plus their own past submissions, so
@@ -2237,6 +2239,16 @@ def _recompute_stock_chain(farm_id, item_id):
             r.save(update_fields=["feed_1_stock", "feed_2_stock"])
 
 
+# Branch / Warehouse filtering for the transaction lists. Defined in
+# user.services so inventory's StockTransfer API — which serves the
+# Chicks Placement page — can use the same rule without importing this
+# module back and closing a cycle.
+from user.services.list_filters import (  # noqa: E402
+    apply_place_filters as _apply_place_filters,
+    place_filter_options as _place_filter_options,
+)
+
+
 def _scope_rows(user, qs, farm_field="farm"):
     """Narrow a transaction queryset to the farms and branches a user may see.
 
@@ -2254,6 +2266,7 @@ def _scope_rows(user, qs, farm_field="farm"):
 class DailyEntryListTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_list.html", {
+            **_place_filter_options(request.user),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
         })
@@ -2263,6 +2276,7 @@ class DailyEntryListTemplateView(View):
 class SingleBatchDailyEntryListTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_single_list.html", {
+            **_place_filter_options(request.user),
             # Same rule as the form: the register's edit dialog offers the same
             # Feed pickers, so it must offer the same list.
             "items": feed_items(),
@@ -2316,6 +2330,7 @@ class DailyEntryAPI(BaseAPIView):
 
             qs = _scope_rows(request.user, DailyEntry.objects.select_related(
                 "farm__branch", "batch", "feed_1", "feed_2"))
+            qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             status = (request.GET.get("status") or "").strip()
@@ -3048,6 +3063,7 @@ def _recompute_medicine_stock_chain(farm_id, item_id):
 class MedicineEntryListTemplateView(View):
     def get(self, request):
         return render(request, "medicine_entry_list.html", {
+            **_place_filter_options(request.user),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
         })
@@ -3073,6 +3089,7 @@ class MedicineEntryAPI(BaseAPIView):
                 return JsonResponse(_medicine_entry_to_dict(row))
 
             qs = MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item")
+            qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             status = (request.GET.get("status") or "").strip()
@@ -3323,7 +3340,8 @@ def _apply_bird_sale(instance, data):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleListTemplateView(View):
     def get(self, request):
-        return render(request, "bird_sale_list.html")
+        return render(request, "bird_sale_list.html",
+                      _place_filter_options(request.user))
 
 
 @method_decorator(login_required, name="dispatch")
@@ -3357,6 +3375,7 @@ class BirdSaleAPI(BaseAPIView):
             qs = _scope_rows(request.user, BirdSale.objects.select_related(
                 "customer", "farmer", "farm", "batch", "lifting_supervisor")
                 .prefetch_related("photos"))
+            qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
@@ -3488,7 +3507,10 @@ def _apply_bird_sale_receipt(instance, data):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleReceiptListTemplateView(View):
     def get(self, request):
-        return render(request, "bird_sale_receipt_list.html")
+        return render(request, "bird_sale_receipt_list.html",
+                      _place_filter_options(request.user,
+                                            branches=False,
+                                            warehouses=True))
 
 
 @method_decorator(login_required, name="dispatch")
@@ -3519,6 +3541,7 @@ class BirdSaleReceiptAPI(BaseAPIView):
                 return JsonResponse(_bird_sale_receipt_to_dict(row))
 
             qs = BirdSaleReceipt.objects.select_related("customer", "farmer", "location", "receipt_account")
+            qs = _apply_place_filters(request, qs, warehouse="location")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
@@ -8067,6 +8090,7 @@ def _chicks_sources(user=None):
 class ChicksPlacementListTemplateView(View):
     def get(self, request):
         return render(request, "chicks_placement_list.html", {
+            **_place_filter_options(request.user, warehouses=True),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": chick_items(),
@@ -9277,6 +9301,7 @@ def _capture_row(c):
 def farm_location_capture_list(request):
     """Broiler > Transactions > Farm Location & Photos — the register."""
     return render(request, "farm_location_capture_list.html", {
+        **_place_filter_options(request.user),
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name")),
         "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
                   for k in FarmCaptureFile.SLOT_TARGETS
@@ -9292,6 +9317,7 @@ def farm_location_capture_api(request):
           .prefetch_related("files"))
     qs = scope_multi(request.user, qs,
                      farms="farm_id", branches="farm__branch_id")
+    qs = _apply_place_filters(request, qs, branch="farm__branch")
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()

@@ -18,9 +18,23 @@
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <span><i class="fas fa-list"></i> Register List</span>
-    <div style="max-width:280px; width:100%;">
-      <input type="text" class="form-control form-control-sm" id="request-search"
-             placeholder="Search request no., farmer, farm...">
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      {% if filter_branches %}
+      {% comment %}This page searches as you type rather than behind a Submit
+      button, so the branch narrows the same way — there is no grid filter row
+      to join.{% endcomment %}
+      <select class="form-select form-select-sm" id="f-branch" style="max-width:210px;"
+              aria-label="Filter by branch">
+        <option value="">All Branches</option>
+        {% for b in filter_branches %}
+        <option value="{{ b.id }}">{{ b.branch_name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <div style="max-width:280px; width:100%;">
+        <input type="text" class="form-control form-control-sm" id="request-search"
+               placeholder="Search request no., farmer, farm...">
+      </div>
     </div>
   </div>
   <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover table-bordered mb-0 ds-grid" id="request-table"><thead><tr><th>Request No.</th><th>Farmer</th><th>Address</th><th>Farm</th><th>Branch</th><th>Submitted By</th><th class="ds-mid">Created</th><th class="ds-mid text-center">Status</th><th class="ds-mid text-center">Action</th></tr></thead><tbody></tbody></table></div></div>
@@ -111,10 +125,13 @@ $(function () {
   }
 
   function loadList() {
-    $.getJSON('{% url "farmer_farm_setup_request_api" %}', function (rows) {
+    $.getJSON('{% url "farmer_farm_setup_request_api" %}',
+              { branch: $("#f-branch").val() || "" }, function (rows) {
       renderRows(rows);
     });
   }
+
+  $("#f-branch").on("change", loadList);
 
   $("#request-search").on("input", function () {
     if (table) table.search(this.value).draw();

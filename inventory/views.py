@@ -1097,6 +1097,13 @@ class StockTransferAPI(View):
         qs = _scope_transfer(request.user, StockTransfer.objects.select_related(
             "item__category", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch",
             "source_hatchery", "source_supplier"))
+        # Branch and Warehouse, for the Chicks Placement list. A transfer
+        # has two ends, so a warehouse matches either of them.
+        from user.services.list_filters import apply_place_filters
+
+        qs = apply_place_filters(
+            request, qs, branch="to_farm__branch",
+            warehouse=["from_warehouse", "to_warehouse"])
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()

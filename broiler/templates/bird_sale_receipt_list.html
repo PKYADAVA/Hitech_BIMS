@@ -28,6 +28,7 @@
         <label class="form-label">To Date:</label>
         <input type="date" class="form-control" id="to-date">
       </div>
+      {% include "_list_place_filter.html" %}
       <div class="col-md-2">
         <button class="btn btn-primary" id="filter-submit">Submit</button>
       </div>
@@ -139,6 +140,7 @@ $(function () {
   function loadRows() {
     $.getJSON("{% url 'bird_sale_receipt_api_list' %}", {
       from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      warehouse: $("#f-warehouse").val() || "",
     }, function (rows) {
       renderRows(rows);
     }).fail(function () {

@@ -1,0 +1,31 @@
+{% comment %}
+Branch / Warehouse controls for a Broiler > Transactions list page.
+
+Each page includes whichever of the two its records can actually be filtered
+by — a daily entry reaches a branch through its farm and has no warehouse; a
+receipt knows its warehouse and no branch. The view decides by passing
+`filter_branches` / `filter_warehouses`, so a page that offers neither
+includes this and renders nothing.
+{% endcomment %}
+{% if filter_branches %}
+<div class="col-md-2">
+  <label class="form-label">Branch:</label>
+  <select class="form-select" id="f-branch">
+    <option value="">All Branches</option>
+    {% for b in filter_branches %}
+    <option value="{{ b.id }}">{{ b.branch_name }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+{% if filter_warehouses %}
+<div class="col-md-2">
+  <label class="form-label">Warehouse:</label>
+  <select class="form-select" id="f-warehouse">
+    <option value="">All Warehouses</option>
+    {% for w in filter_warehouses %}
+    <option value="{{ w.id }}">{{ w.name }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}

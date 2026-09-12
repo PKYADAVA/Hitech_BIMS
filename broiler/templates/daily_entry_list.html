@@ -35,13 +35,17 @@
           <option value="Inactive">Inactive</option>
         </select>
       </div>
-      <div class="col-md-3">
+      {% comment %}Two, not three: with Branch added, the row came to thirteen
+      columns of a twelve-column grid and the buttons dropped to a line of their
+      own.{% endcomment %}
+      <div class="col-md-2">
         <label class="form-label">Farm:</label>
         <select class="form-select" id="farm">
           <option value="">-All-</option>
           {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
         </select>
       </div>
+      {% include "_list_place_filter.html" %}
       <div class="col-md-2">
         <button class="btn btn-primary" id="filter-submit">Submit</button>
         <button type="button" class="btn btn-outline-secondary" id="filter-clear">Clear</button>
@@ -336,7 +340,7 @@ $(function () {
     const filterParams = { status: $("#status").val(), farm: $("#farm").val() };
     if (deepLinkBatch) { filterParams.batch = deepLinkBatch; }
     if (deepLinkNoBatchFarm) { filterParams.nobatch_farm = deepLinkNoBatchFarm; }
-    const dateParams = Object.assign({}, filterParams, { from_date: $("#from-date").val(), to_date: $("#to-date").val() });
+    const dateParams = Object.assign({}, filterParams, { from_date: $("#from-date").val(), to_date: $("#to-date").val(), branch: $("#f-branch").val() || "", });
     $.getJSON("{% url 'daily_entry_api_list' %}", dateParams, function (filteredRows) {
       const qualifyingKeys = new Set(filteredRows.map(groupKey));
       if (!qualifyingKeys.size) { renderGroups([], qualifyingKeys); return; }

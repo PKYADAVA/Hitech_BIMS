@@ -36,6 +36,7 @@
       <select class="form-select" id="farm-filter"><option value="">All farms</option>
         {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_code }} - {{ f.farm_name }}</option>{% endfor %}
       </select></div>
+    {% include "_list_place_filter.html" %}
     <div class="col-md-2"><button class="btn btn-primary" id="filter-submit">Submit</button></div>
   </div>
 </div></div>
@@ -205,6 +206,7 @@ $(function () {
   function load() {
     $.getJSON("{% url 'farm_location_capture_api' %}", {
       from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      branch: $("#f-branch").val() || "",
       farm: $("#farm-filter").val(),
     }, render).fail(() => window.showToast('danger', "Failed to load captures."));
   }
