@@ -610,19 +610,35 @@ window.loadOptions = function (select, url, data, options) {
     return { key: key, holder: holder };
   }
 
-  function settle(entry) {
+  /**
+   * `status` is what came back — or 0 when nothing did, because the link
+   * dropped or the browser gave up waiting.
+   *
+   * Retiring the key on *any* outcome was the mistake this replaces, and it
+   * defeated the guard in exactly the case it was written for. On a slow link
+   * a save reaches the server and is filed, and the answer is lost on the way
+   * back. The browser sees a failure, the key is thrown away, the person sees
+   * nothing and presses save again — and the second press carries a *new* key,
+   * so the server has no way to know it has done this already. Two records.
+   *
+   * So the key is only retired once an answer has actually arrived:
+   *
+   *   2xx  the save is known to have landed; the next press is a new
+   *        intention and must not be answered from this one.
+   *   4xx  the payload was refused. The person will change it and press
+   *        again, and that is a different save — holding the key would hand
+   *        them back the stored complaint about what they just corrected.
+   *   5xx  something broke and the server has already released the key, so
+   *        keeping it costs nothing and a retry does the work.
+   *   0    nothing came back. The one case where the outcome is genuinely
+   *        unknown, and the one where the key has to survive: the retry
+   *        carries it, and the server recognises the work it already did.
+   */
+  function settle(entry, status) {
     release(entry && entry.el);
-    // Retired as soon as the request settles, whatever it answered. A key is
-    // only ever meant to cover one attempt and the copies of it that may
-    // already be on the wire; once the answer is here, the next press is a
-    // new intention. Holding a key past a rejection would be worse than
-    // useless — the person fixes the field, presses save, and is handed the
-    // stored complaint about what they just corrected.
-    //
-    // The case this still catches is the one that matters and needs no help
-    // from here: a browser resending a POST after a refresh sends the
-    // original header along with it, so the server recognises it.
-    if (entry && entry.holder) keys.delete(entry.holder);
+    if (!entry || !entry.holder) return;
+    const answered = status >= 200 && status < 500;
+    if (answered) keys.delete(entry.holder);
   }
 
   // Capture, so the button is known before any handler runs and calls the
@@ -675,7 +691,7 @@ window.loadOptions = function (select, url, data, options) {
       inFlight.set(xhr, { el: hold(pressed), holder: k.holder });
     });
     jQuery(document).ajaxComplete(function (event, xhr) {
-      settle(inFlight.get(xhr));
+      settle(inFlight.get(xhr), xhr.status || 0);
       inFlight.delete(xhr);
     });
   }
@@ -709,12 +725,13 @@ window.loadOptions = function (select, url, data, options) {
       try {
         result = nativeFetch.call(this, input, opts);
       } catch (e) {
-        settle(entry);
+        settle(entry, 0);
         throw e;
       }
       return result.then(
-        function (r) { settle(entry); return r; },
-        function (e) { settle(entry); throw e; }
+        function (r) { settle(entry, r.status); return r; },
+        // No answer at all: the key stays, so the retry is recognised.
+        function (e) { settle(entry, 0); throw e; }
       );
     };
   }
