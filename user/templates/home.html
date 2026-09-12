@@ -311,6 +311,22 @@
   .dw-act-list { overflow:auto; max-height:var(--dw-act-list-max, 250px); }
   .dw-col-broiler_activity .dw-card,
   #dash-activity-slot .dw-card { max-height:none; overflow:visible; }
+
+  /* The alerts card beside it is four parts — its heading, the priority
+     split, the named tiles and the newest few — and .ah-card clips whatever
+     overflows. Once the row's two halves were made one height, anything past
+     the bottom was simply cut off with no way to reach it. Same answer as the
+     activity card: the list is the only part that moves, so the heading, the
+     four counts and the tiles stay where they are and the alerts scroll under
+     them.
+
+     Capped rather than flexed, and the first attempt here is worth recording:
+     making the card a flex column and telling the list to fill it does
+     nothing on its own, because nothing constrains the card's own height —
+     it simply grew by seven hundred pixels and took the row with it. A
+     height has to come from somewhere, and the card beside it already says
+     where. */
+  #ahWidget .ah-widget-list { overflow-y:auto; max-height:var(--ah-widget-list-max, 250px); }
   .dw-act-row { display:grid; align-items:center; gap:10px; min-width:800px;
                 grid-template-columns:66px 6px 20px 1.3fr 1.05fr .95fr 84px 1.1fr;
                 padding:2px; border-bottom:1px solid #f0f3f8; font-size:.76rem; line-height:1.15; }
