@@ -216,8 +216,14 @@ class Channel(models.TextChoices):
 #:
 #: Push joined in-app once ``alerthub.push`` was wired to the Expo sender the
 #: mobile app already registers its device tokens with — both halves existed
-#: and had simply never been joined.
-LIVE_CHANNELS = frozenset({Channel.IN_APP, Channel.PUSH})
+#: and had simply never been joined. SMS joined them the same way, through the
+#: gateway the notification app has been sending on for months.
+#:
+#: SMS differs from the two above in one way worth stating here, where the
+#: decision is visible: a push and a bell cost nothing, and an SMS costs money
+#: per message. It is live, so a rule that asks for it is honoured — but the
+#: asking is per rule, and the recipient can still refuse it.
+LIVE_CHANNELS = frozenset({Channel.IN_APP, Channel.PUSH, Channel.SMS})
 
 
 class Operator(models.TextChoices):

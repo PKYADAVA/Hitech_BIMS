@@ -109,11 +109,15 @@ class PreferenceForm(forms.ModelForm):
     """A user's own delivery preferences.
 
     ``receive_push`` is live — the mobile app registers a device token and
-    alerthub sends through it. ``receive_email`` / ``receive_sms`` /
-    ``receive_whatsapp`` are offered even though nothing sends on those channels
-    yet: the setting is the user's standing answer, and asking everyone again on
-    the day email is switched on would be worse than storing it now. The
-    template labels those as coming soon.
+    alerthub sends through it. ``receive_sms`` is live too, through the gateway
+    the notification app already sends on, and unlike the rest it is opt in:
+    nothing is texted to somebody who has not ticked it, because an SMS costs
+    money per message where a push and a bell do not.
+
+    ``receive_email`` / ``receive_whatsapp`` are still offered with nothing
+    behind them: the setting is the user's standing answer, and asking everyone
+    again on the day email is switched on would be worse than storing it now.
+    The template labels those two as coming soon.
     """
 
     class Meta:

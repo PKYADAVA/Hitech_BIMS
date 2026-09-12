@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from .constants import Channel, LIVE_CHANNELS, Module, Priority
 from .push import push_recipients, send_alert_push
+from .sms import send_alert_sms, sms_recipients
 from .models import Notification, NotificationRecipient
 from .scoping import audience_for
 
@@ -164,6 +165,16 @@ def _deliver(rule, notification, recipients) -> list[str]:
                 continue
             transaction.on_commit(
                 lambda n=notification, w=wanted: send_alert_push(n, w)
+            )
+
+        if channel == Channel.SMS:
+            wanted = sms_recipients(rule, recipients)
+            if not wanted:
+                # Everyone asked for it turned SMS off. Recording it as
+                # delivered would be a claim about messages nobody was sent.
+                continue
+            transaction.on_commit(
+                lambda n=notification, w=wanted: send_alert_sms(n, w)
             )
         delivered.append(channel)
 
