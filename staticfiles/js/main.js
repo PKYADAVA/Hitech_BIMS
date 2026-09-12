@@ -634,11 +634,39 @@ window.loadOptions = function (select, url, data, options) {
    *        unknown, and the one where the key has to survive: the retry
    *        carries it, and the server recognises the work it already did.
    */
+  /**
+   * Say so when a save did not get through.
+   *
+   * Only for a write somebody pressed a button to start — a background write
+   * failing is not something to interrupt them about, and `el` is what says
+   * which of the two this was.
+   *
+   * The wording for a lost answer is careful on purpose. The save may well
+   * have been filed; it is the reply that went missing, and telling somebody
+   * it failed would be a guess presented as a fact. What can be promised is
+   * the part that is now true: pressing save again cannot file it twice,
+   * because the retry carries the same key.
+   */
+  function saveFailed(entry, status) {
+    if (!entry || !entry.el || typeof window.showToast !== 'function') return;
+    window.showToast('danger', status >= 500
+      ? 'The server could not save that. Press Save to try again.'
+      : 'No reply from the server — this may or may not have saved. '
+        + 'Press Save again; it will not be filed twice.');
+  }
+
   function settle(entry, status) {
     release(entry && entry.el);
     if (!entry || !entry.holder) return;
     const answered = status >= 200 && status < 500;
-    if (answered) keys.delete(entry.holder);
+    if (answered) {
+      keys.delete(entry.holder);
+    } else {
+      // Nothing came back, or the server broke. The button is already usable
+      // again; without a word on screen the person sees a save that simply
+      // did nothing, which is what makes them press it a second time.
+      saveFailed(entry, status);
+    }
   }
 
   // Capture, so the button is known before any handler runs and calls the

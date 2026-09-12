@@ -58,6 +58,7 @@ function loadMainJs(win) {
 
 describe("the save guard", () => {
   let calls;
+  let toasts;
 
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -75,6 +76,8 @@ describe("the save guard", () => {
       return record.promise;
     });
     window.crypto = { randomUUID: () => "key-" + (calls.length + 1) + "-" + Math.random() };
+    toasts = [];
+    window.showToast = (type, message) => toasts.push({ type, message });
     loadMainJs(window);
   });
 
@@ -193,6 +196,67 @@ describe("the save guard", () => {
       press(first.button);
       press(second.button);
       expect(keyOf(calls[1])).not.toBe(keyOf(calls[0]));
+    });
+  });
+
+
+  describe("when a save does not get through", () => {
+    it("says so, rather than leaving the button to look like it did nothing", async () => {
+      // Silence is what makes somebody press save a second time.
+      const { button } = formWithButton();
+      press(button).catch(() => {});
+      calls[0].settle.reject(new Error("network"));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0].type).toBe("danger");
+    });
+
+    it("does not claim the save failed when only the reply was lost", async () => {
+      // It may well have been filed. Saying otherwise is a guess presented as
+      // a fact, and the person then re-enters work that is already there.
+      const { button } = formWithButton();
+      press(button).catch(() => {});
+      calls[0].settle.reject(new Error("network"));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(toasts[0].message).toMatch(/may or may not have saved/i);
+      expect(toasts[0].message).toMatch(/not be filed twice/i);
+    });
+
+    it("is plainer about a server error, where nothing was written", async () => {
+      const { button } = formWithButton();
+      press(button);
+      calls[0].settle.resolve({ status: 500 });
+      await calls[0].promise;
+      await Promise.resolve();
+      expect(toasts[0].message).toMatch(/could not save/i);
+    });
+
+    it("says nothing when the save went through", async () => {
+      const { button } = formWithButton();
+      press(button);
+      calls[0].settle.resolve({ status: 200 });
+      await calls[0].promise;
+      await Promise.resolve();
+      expect(toasts).toHaveLength(0);
+    });
+
+    it("says nothing when the page refused the payload", async () => {
+      // A 400 arrives with the page's own message on it; a second notice
+      // about the same thing is noise.
+      const { button } = formWithButton();
+      press(button);
+      calls[0].settle.resolve({ status: 400 });
+      await calls[0].promise;
+      await Promise.resolve();
+      expect(toasts).toHaveLength(0);
+    });
+
+    it("does not interrupt over a write nobody pressed a button for", async () => {
+      // A background write failing is not something to put on screen.
+      window.fetch("/background/", { method: "POST" }).catch(() => {});
+      calls[0].settle.reject(new Error("network"));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(toasts).toHaveLength(0);
     });
   });
 });
