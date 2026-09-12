@@ -55,9 +55,6 @@
   .dash-eyebrow { color:#15803d; letter-spacing:.09em; text-transform:uppercase; font-size:.72rem; font-weight:700; line-height:1.45; }
   .dash-welcome h1 { font-size:1.22rem; margin:3px 0 5px; font-weight:700; line-height:1.3; color:#0f172a; }
   .dash-welcome p { margin:0; max-width:590px; color:#475569; font-size:.78rem; line-height:1.45; }
-  .dash-date { display:inline-flex; align-items:center; gap:7px; margin-top:9px; padding:5px 11px;
-               border:1px solid #cfe6d8; border-radius:8px; background:rgba(255,255,255,.75);
-               font-size:.73rem; color:#3f6f52; white-space:nowrap; }
 
   /* The flock photo, reused from the login page. It is decoration, so it is a
      background rather than an <img>: nothing to describe to a screen reader,
@@ -87,7 +84,7 @@
   /* Filter labels gained a cue icon. */
   .dw-field .form-label > i { width:12px; margin-right:5px; opacity:.65; font-size:.72rem; }
 
-  @media (max-width:767.98px) { .dash-welcome { padding:11px 15px; }.dash-welcome h1 { font-size:1rem; }.dash-date { margin-top:6px; }.dash-panel { padding:16px; } }
+  @media (max-width:767.98px) { .dash-welcome { padding:11px 15px; }.dash-welcome h1 { font-size:1rem; }.dash-panel { padding:16px; } }
   .home-cal-card { max-width: 260px; }
   .home-cal-card .card-header { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; font-size:.8rem; }
   .home-cal-card .card-body { padding:.5rem; }
@@ -512,7 +509,6 @@
           <div class="dash-eyebrow">Hi Tech Farms · Operations Centre</div>
           <h1>Good day, {{ request.user.get_full_name|default:request.user.username }}.</h1>
           <p>Everything you need to keep farm operations moving—organised in one place.</p>
-          <div class="dash-date"><i class="fas fa-clock"></i><span id="navClock"></span></div>
         </div>
       </div>
     </div>
@@ -763,22 +759,6 @@
 {% endblock %}
 
 {% block js %}
-<script>
-  // Live clock in the welcome banner (moved here from the top navbar).
-  (function () {
-    function tick() {
-      var el = document.getElementById('navClock');
-      if (!el) return;
-      var now = new Date();
-      var d = now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
-      var t = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
-      el.innerHTML = d + ' &middot; ' + t;
-    }
-    tick();
-    setInterval(tick, 1000);
-  })();
-</script>
-
 <script>
   // Dashboard widgets. Fetched after paint so a slow aggregate never holds up
   // the page; the grid shows shimmering placeholders until the data lands.

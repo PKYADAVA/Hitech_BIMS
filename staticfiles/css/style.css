@@ -424,7 +424,14 @@ footer { margin-top: auto; }
   background: rgba(255, 255, 255, .12);
   border-color: rgba(255, 255, 255, .18);
   min-height: 34px;
+  /* A pill on the bar, where the square corners of the filter-toolbar version
+     read as a form field dropped into a navigation row. The shape is the only
+     thing that changes: the icon still leads and Ctrl + K still closes it. */
+  border-radius: 999px;
+  padding-left: 14px;
+  padding-right: 6px;
 }
+.bims-navbar .gs-kbd { border-radius: 999px; padding: 1px 9px; }
 .bims-navbar .gs-box > i { color: #9DBBA9; }
 .bims-navbar .gs-input { color: #fff; }
 .bims-navbar .gs-input::placeholder { color: #A9C4B5; }
@@ -440,6 +447,24 @@ footer { margin-top: auto; }
   border-color: rgba(255, 255, 255, .45);
   box-shadow: 0 0 0 .18rem rgba(255, 255, 255, .12);
 }
+
+
+/* ---------- The bar's clock ---------- */
+/* Two short lines, sized like the wordmark's pair so the bar keeps one
+   rhythm, and no taller than the 42px row that holds it. */
+.bims-navbar .nav-clock {
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  color: #fff;
+  white-space: nowrap;
+}
+.bims-navbar .nav-clock-icon { font-size: .9rem; color: #9DBBA9; }
+.bims-navbar .nav-clock-text { display: flex; flex-direction: column; line-height: 1.15; }
+.bims-navbar .nav-clock-date { font-size: .72rem; font-weight: 600; }
+.bims-navbar .nav-clock-time { font-size: .62rem; color: rgba(255, 255, 255, .55); }
 
 /* ---------- Module bar (tier two) ---------- */
 /* The modules moved off the identity bar because eleven of them plus the
