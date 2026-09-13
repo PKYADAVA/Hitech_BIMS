@@ -382,15 +382,28 @@
   .dw-act-dot.dw-c-red   {background:#dc465b} .dw-act-dot.dw-c-cyan  {background:#0087a5}
   .dw-act-dot.dw-c-amber {background:#b45309}
 
+  /* Smaller tiles than they were, and as many across as will hold their own
+     text. Forcing all four onto one line was tried and is worse: at a third
+     of the dashboard that is 94px each, where "18 hours ago" wraps and every
+     sub-line truncates to "in the last 7 d…". A tile whose label cannot be
+     read is not a smaller tile, it is a broken one. Two across here, four on
+     a wide card, and the minimum is what decides which. */
   .dw-act-foot { margin-top:14px; padding-top:14px; border-top:1px solid #edf1f6;
-                display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
-  .dw-act-foot-tile { padding:11px 13px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
+                display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+                gap:8px; }
+  .dw-act-foot-tile { padding:8px 9px; border:1px solid #eaf0f7; border-radius:10px;
+                      background:#fbfdff; min-width:0; }
   .dw-act-foot-tile.t-bad  { background:#fff5f6; border-color:#f7dbdf; }
   .dw-act-foot-tile.t-good { background:#f2fbf8; border-color:#d8f0e9; }
-  .dw-act-foot-value { display:block; font-size:1.05rem; font-weight:700; color:#15233b; }
-  .dw-act-foot-label { display:block; font-size:.74rem; color:#6b7890; margin-top:2px; }
-  .dw-act-foot-sub { display:block; font-size:.72rem; color:#93a4bd; margin-top:1px;
+  .dw-act-foot-value { display:block; font-size:.92rem; font-weight:700; color:#15233b;
+                       line-height:1.25; overflow-wrap:normal; word-break:normal; }
+  .dw-act-foot-label { display:block; font-size:.68rem; color:#6b7890; margin-top:2px;
+                       line-height:1.25; }
+  .dw-act-foot-sub { display:block; font-size:.65rem; color:#93a4bd; margin-top:1px;
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @media (max-width: 575.98px) {
+    .dw-act-foot { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  }
   .dw-card.is-error { border-color:#f7dbdf; background:#fffbfb; }
   .dw-skel { height:96px; border-radius:16px; border:1px solid #e7edf5; background:#fff; }
   .dw-skel:after { content:""; display:block; height:100%; border-radius:16px;
