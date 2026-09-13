@@ -312,8 +312,15 @@
      scrolling the card itself carried the tabs and the totals away with the
      rows and cut the top row in half against the header. The list is the only
      part that should move, and it keeps the sideways scroll it already had. */
-  .dw-act-list { overflow:auto; max-height:var(--dw-act-list-max, 250px); }
-  .dw-col-broiler_activity .dw-card { max-height:none; overflow:visible; }
+  .dw-act-list { overflow:auto; max-height:var(--dw-act-list-max, 190px); }
+  /* Not exempt from the card height above — that exemption is what left this
+     card growing past the two beside it, so a row of three ended at three
+     different heights. It keeps the same ceiling as the rest and stays off its
+     own scrollbar by giving the list a shorter one: heading, tabs, list and
+     the totals add up to less than the cap, so the list is still the only part
+     that moves. */
+  .dw-col-broiler_activity .dw-card,
+  #dash-activity-slot .dw-card { overflow:visible; }
 
   /* The alerts card beside it is four parts — its heading, the priority
      split, the named tiles and the newest few — and .ah-card clips whatever
