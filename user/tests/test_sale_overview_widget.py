@@ -99,6 +99,20 @@ class SaleOverviewTests(TestCase):
         self.sell(400, "800.00", "90")
         self.assertEqual(self.stat("Mean body wt")["value"], "2.000 Kg")
 
+    def test_the_body_weight_is_not_divided_by_a_flock_of_none(self):
+        """A slip with a weight on it and no bird count is rare and not
+        impossible, and a card that raises ZeroDivisionError over one takes
+        the whole dashboard down with it. Moved here with the figure itself,
+        from the Lifting Details card that used to carry it.
+
+        The weight has to be real: nought birds *and* nought weight with no
+        money in is simply an empty day, and the card answers that with its
+        short form long before it reaches a division.
+        """
+        self.sell(0, "800.00", "90")
+        self.assertEqual(self.stat("Mean body wt")["value"], "—")
+        self.assertEqual(self.stat("Sold weight")["value"], "800.00 Kg")
+
     def test_the_mean_age_is_weighted_by_the_birds_that_went(self):
         """A 4,000-bird lifting and a 100-bird one are not two equal opinions
         about the age a flock leaves at."""

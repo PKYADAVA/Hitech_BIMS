@@ -926,21 +926,28 @@ def _sale_overview(viewable, filters, user=None):
 
     return {
         "stats": [
-            {"label": "Sold birds", "value": _num(birds)},
-            {"label": "Sold weight", "value": f"{weight:,.2f} Kg"},
+            {"label": "Sold birds", "value": _num(birds),
+             "icon": "fa-solid fa-kiwi-bird"},
+            {"label": "Sold weight", "value": f"{weight:,.2f} Kg",
+             "icon": "fa-solid fa-scale-balanced"},
             {"label": "Mean age", "value": ("—" if mean_age is None else f"{mean_age:.2f} d"),
-             "sub": "weighted by birds"},
+             "sub": "weighted by birds", "icon": "fa-solid fa-hourglass-half"},
             {"label": "Mean body wt",
              "value": (f"{weight / birds:.3f} Kg" if birds else "—"),
-             "sub": "sold weight per bird"},
+             "sub": "sold weight per bird", "icon": "fa-solid fa-weight-hanging"},
             {"label": "Avg sale rate",
-             "value": (f"₹{value / weight:,.2f}" if weight else "—"), "sub": "per kg"},
-            {"label": "Sale value", "value": "₹" + _inr(value)},
-            {"label": "Cash received", "value": "₹" + _inr(cash)},
+             "value": (f"₹{value / weight:,.2f}" if weight else "—"), "sub": "per kg",
+             "icon": "fa-solid fa-tag"},
+            {"label": "Sale value", "value": "₹" + _inr(value),
+             "icon": "fa-solid fa-coins"},
+            {"label": "Cash received", "value": "₹" + _inr(cash),
+             "icon": "fa-solid fa-money-bill-wave"},
             {"label": "Bank received", "value": "₹" + _inr(banked),
-             "sub": "transfer, cheque, UPI, card"},
+             "sub": "transfer, cheque, UPI, card",
+             "icon": "fa-solid fa-landmark"},
             {"label": "Difference", "value": "₹" + _inr(outstanding),
              "sub": "billed less received, this day",
+             "icon": "fa-solid fa-arrow-trend-down",
              "tone": "bad" if outstanding > 0 else "good"},
         ],
         # Which day the card is showing, and what a branch view could not
@@ -1183,17 +1190,35 @@ def _broiler_activity(viewable, filters, user=None):
     used = list(FILTER_KEYS)
     events = gather_events(filters, user)
 
-    if not events:
-        return {"timeline": [], "timeline_filters": [], "footer_stats": [],
-                "note": "No activity recorded in the last 7 days.", "filters_used": used}
-
     def scoped(qs, prefix):
         qs = _scope_farms(qs, filters, prefix)
         return qs if user is None else _scope_to_user(qs, user, prefix)
 
+    total_farms = scoped(BroilerFarm.objects.all(), "").count()
+
+    if not events:
+        # A quiet week is still worth measuring. The card used to answer with
+        # one grey sentence in the middle of four hundred pixels of white,
+        # which reads as a card that failed to load rather than as a week
+        # nothing happened in — and it left the farm count out, which is the
+        # figure that says how big the nothing is.
+        #
+        # Only the two facts that are true without any events. "Stock Alerts"
+        # is not among them: zero events in the category is not the same
+        # statement as zero items below zero, and there is a card of its own
+        # that answers that one.
+        quiet = [{"label": "Total Activities", "value": "0",
+                  "sub": "in the last 7 days"}]
+        if total_farms:
+            quiet.append({"label": "Active Farms",
+                          "value": f"0 / {_num(total_farms)}",
+                          "sub": "Farms with activity today"})
+        return {"timeline": [], "timeline_filters": [], "footer_stats": quiet,
+                "empty": "Nothing has been recorded on these farms this week.",
+                "filters_used": used}
+
     stock_alerts = sum(1 for e in events if e["category"] == "stock")
     farms_today = {e["farm"] for e in events if as_datetime(e["when"]).date() == day}
-    total_farms = scoped(BroilerFarm.objects.all(), "").count()
 
     # The card wants a rounded-off display string; the page it links to keeps
     # the real timestamp, which is why the two take different shapes of the
@@ -1229,6 +1254,29 @@ def _broiler_activity(viewable, filters, user=None):
         "note": None,
         "filters_used": used,
     }
+
+
+#: One line under each card's name, saying what it answers.
+#:
+#: A dashboard is a dozen cards with two-word titles, and "Liftings" and
+#: "Sale Overview" both sound like they might hold the day's birds. The line
+#: costs nothing to read once and settles which card to look at.
+#:
+#: Kept out of the WIDGETS tuples so adding one to a card does not mean
+#: re-typing its permissions, and out of the templates so the phone and the
+#: web page cannot end up describing the same card differently.
+SUBTITLES = {
+    "live_flock": "Birds on the farms right now",
+    "daily_entries": "What the farms reported today",
+    "flock_ages": "Available birds, by age",
+    "liftings": "Birds lifted from farms",
+    "sale_overview": "Today's sale summary",
+    "broiler_activity": "Live farm activities",
+    "farm_route": "Today's planned round",
+    "receivables": "What customers still owe",
+    "payables": "What is still owed to suppliers",
+    "stock_alerts": "Items that have gone below zero",
+}
 
 
 WIDGETS = [
@@ -1669,6 +1717,7 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
         if prefs is not None and key in decided and key not in prefs:
             continue
         card = {"key": key, "title": title, "icon": icon, "colour": colour,
+                "subtitle": SUBTITLES.get(key, ""),
                 "url": _link(url_name, viewable, filters)}
         # The visible tabs are part of the key: Receivables & Payables builds a
         # different body for someone who may see only one of its two halves.

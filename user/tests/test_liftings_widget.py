@@ -2,8 +2,16 @@
 
 A lifting is the one broiler transaction nobody at the desk witnesses — the
 birds leave the farm and the branch is billed for whatever the slip says. The
-card answers how many went out, how many birds, what weight and across how many
-farms; the register behind it has the rest.
+card answers how many went out and across how many farms; the register behind
+it has the rest.
+
+**Two tiles, not five.** Birds lifted, net weight and average weight used to
+be tiles here as well, and they are the same figures Sale Overview carries as
+Sold birds, Sold weight and Mean body wt — two cards in the same row, so the
+reader met each number twice and had to work out whether they were the same
+number. The birds and the weight are still on this card, in the chart and the
+rows, and the tests below read them from there; the average weight is now
+Sale Overview's alone and is tested with the rest of that card.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -54,14 +62,27 @@ class LiftingWidgetTests(TestCase):
     def stat(self, label, **kw):
         return next(s for s in self.card(**kw)["stats"] if s["label"] == label)
 
+    def charted(self, **kw):
+        """The day's birds and weight, totalled off the chart.
+
+        Where they live now that the tiles are gone. Read from the card rather
+        than recomputed, so a chart that stopped counting a branch fails these
+        as loudly as a wrong tile used to.
+        """
+        chart = self.card(**kw)["chart"]
+        if not chart:
+            return 0, 0.0
+        birds = sum(g["values"][0] for g in chart["groups"])
+        weight = sum(g["values"][1] for g in chart["groups"])
+        return birds, weight
+
     # ---- the day's figures --------------------------------------------------
 
     def test_it_counts_the_day_s_liftings_birds_and_weight(self):
         self.lift(12800, "256.00")
         self.lift(15600, "312.00")
         self.assertEqual(self.stat("Liftings")["value"], "2")
-        self.assertEqual(self.stat("Birds lifted")["value"], "28,400")
-        self.assertEqual(self.stat("Net weight")["value"], "568 Kg")
+        self.assertEqual(self.charted(), (28400, 568.0))
 
     def test_it_counts_the_farms_covered_not_the_liftings(self):
         """Two loads off one farm is one farm covered."""
@@ -74,7 +95,7 @@ class LiftingWidgetTests(TestCase):
         self.lift(500, "10.00", when=self.today - timedelta(days=1))
         self.lift(700, "14.00")
         self.assertEqual(self.stat("Liftings")["value"], "1")
-        self.assertEqual(self.stat("Birds lifted")["value"], "700")
+        self.assertEqual(self.charted(), (700, 14.0))
 
     # ---- which day the card answers for -------------------------------------
 
@@ -82,15 +103,17 @@ class LiftingWidgetTests(TestCase):
         """Birds go out a few times a week. A card of noughts six mornings out
         of seven is a card nobody reads."""
         self.lift(226, "512.00", when=self.today - timedelta(days=14))
-        self.assertEqual(self.stat("Birds lifted")["value"], "226")
+        self.assertEqual(self.charted(), (226, 512.0))
         self.assertIn("the last day with a lifting", self.card()["note"])
 
     def test_a_chosen_date_is_answered_however_quiet_it_was(self):
         """Picking a date is a question about that date, not about the trade."""
         self.lift(226, "512.00", when=self.today - timedelta(days=14))
         card = self.card(filters={"date": self.today})
-        self.assertEqual(next(s for s in card["stats"]
-                              if s["label"] == "Birds lifted")["value"], "0")
+        self.assertEqual(self.stat("Liftings", filters={"date": self.today})["value"], "0")
+        # Nothing moved, so there is no chart: a bar of nought would say the
+        # day was bad rather than empty.
+        self.assertIsNone(card["chart"])
         self.assertIn("No liftings on this day", card["note"])
 
     def test_today_needs_no_explaining(self):
@@ -166,15 +189,13 @@ class LiftingWidgetTests(TestCase):
         other = self.make_farm("Second Farm")
         self.lift(1000, "20.00")
         self.lift(9000, "180.00", farm=other)
-        self.assertEqual(self.stat("Birds lifted", filters={"farm": other.id})["value"],
-                         "9,000")
+        self.assertEqual(self.charted(filters={"farm": other.id}), (9000, 180.0))
 
     def test_it_answers_the_date_filter(self):
         self.lift(4000, "80.00", when=self.today - timedelta(days=3))
         self.assertEqual(
-            self.stat("Birds lifted",
-                      filters={"date": self.today - timedelta(days=3)})["value"],
-            "4,000")
+            self.charted(filters={"date": self.today - timedelta(days=3)}),
+            (4000, 80.0))
 
     def test_it_admits_no_filter_was_ignored(self):
         """Every filter reaches a lifting's farm, so none is left unapplied."""
@@ -218,7 +239,8 @@ class LiftingWidgetTests(TestCase):
                                     prefix="BHR")
         self.lift(1000, "20.00")
         self.lift(8000, "160.00", farm=self.make_farm("Far Farm", branch=far))
-        self.assertEqual(self.stat("Birds lifted", user=clerk)["value"], "1,000")
+        self.assertEqual(self.charted(user=clerk), (1000, 20.0))
+        self.assertEqual(self.stat("Farms covered", user=clerk)["value"], "1")
 
     # ---- the chart ----------------------------------------------------------
 
@@ -243,10 +265,3 @@ class LiftingWidgetTests(TestCase):
     def test_a_day_with_no_liftings_has_no_chart_to_draw(self):
         self.assertIsNone(self.card()["chart"])
 
-    def test_the_average_weight_is_the_figure_a_lifting_is_judged_on(self):
-        self.lift(1000, "2100.00")
-        self.assertEqual(self.stat("Avg wt")["value"], "2.10 Kg")
-
-    def test_the_average_is_not_divided_by_a_flock_of_none(self):
-        self.lift(0, "0.00")
-        self.assertEqual(self.stat("Avg wt")["value"], "—")

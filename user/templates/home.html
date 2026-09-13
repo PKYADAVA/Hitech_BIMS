@@ -166,7 +166,15 @@
              padding-top:17px; margin-top:-17px; }
   .dw-head-icon { width:32px; height:32px; flex:0 0 32px; border-radius:10px; display:grid;
                   place-items:center; font-size:.78rem; }
+  .dw-head-text { min-width:0; }
   .dw-title { font-size:.87rem; font-weight:700; margin:0; }
+  /* What the card answers. A dozen cards with two-word titles all sound like
+     they might hold the day's birds; this is the line that settles which one
+     to look at, and it is read once and then ignored, so it is small.
+
+     Named apart from .dw-sub, which is the tile's own sub line — the two
+     would have collided on nothing but selector specificity. */
+  .dw-card-sub { font-size:.72rem; color:#8494ab; margin:1px 0 0; line-height:1.25; }
   .dw-open { margin-left:auto; font-size:.74rem; font-weight:600; color:#2563eb;
              text-decoration:none; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
   .dw-open:hover { color:#1d4ed8; }
@@ -282,11 +290,30 @@
   }
   .dash-alert-row > [class*="col-"] { display:flex; }
   .dash-alert-row > [class*="col-"] > * { flex:1 1 auto; width:100%; margin-bottom:0 !important; }
-  .dw-col-liftings .dw-stats,
-  .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
-  .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
-  .dw-stat .dw-label { display:block; font-size:.75rem; color:#6b7890; text-transform:uppercase;
-                       letter-spacing:.04em; }
+  .dw-col-liftings .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
+  /* Wider than the rest: these tiles carry an icon column as well as a label.
+     132, not 138 — the grid is 422px with a 9px gap, so 138 asks for more
+     than three columns can have and drops the card to two, five rows tall. */
+  .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(132px, 1fr)); }
+  .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px;
+             background:#fbfdff; display:flex; align-items:flex-start; gap:6px; }
+  .dw-stat-text { min-width:0; flex:1 1 auto; }
+  /* A tinted square, like the card's own mark and the ones on the alert rows
+     — small enough that nine of them in a grid stay quiet. Optional: most
+     cards label their tiles clearly enough without one. */
+  .dw-stat-icon { flex:0 0 18px; width:18px; height:18px; border-radius:6px;
+                  display:grid; place-items:center; font-size:.55rem;
+                  background:#eef2f8; color:#7d8ba1; margin-top:1px; }
+  .dw-stat.t-bad .dw-stat-icon { background:#fde8e8; color:#c0392b; }
+  .dw-stat.t-good .dw-stat-icon { background:#dcf5ee; color:#078b75; }
+  .dw-stat .dw-label { display:block; font-size:.75rem; color:#6b7890;
+                       text-transform:uppercase; letter-spacing:.04em; }
+  /* The icon column costs the label about a word's width, and this card's
+     tiles are 134px in a half-width column. Measured rather than guessed:
+     "CASH RECEIVED" is 88px at .75rem and the label has 88.7px to sit in, so
+     at the shared size it wrapped and made its tile the tall one in a grid
+     of nine. */
+  .dw-col-sale_overview .dw-stat .dw-label { font-size:.68rem; letter-spacing:.02em; }
   /* Break at a space if the value has one ("1,234 kg"), never inside a run of
      characters: `anywhere` let a rupee figure split between two of its own
      digits, and half a number does not announce itself as half a number. If a
@@ -433,6 +460,13 @@
   .dw-act-foot-sub { display:block; font-size:.65rem; color:#93a4bd; margin-top:1px;
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* A card with nothing to report. Centred in what is left of the card so it
+     does not sit at the top with four hundred pixels of white under it. */
+  .dw-empty { flex:1 1 auto; display:flex; flex-direction:column; align-items:center;
+              justify-content:center; gap:8px; padding:26px 12px; text-align:center;
+              color:#8494ab; }
+  .dw-empty i { font-size:1.5rem; color:#c3cddb; }
+  .dw-empty span { font-size:.8rem; max-width:26ch; }
   .dw-card.is-error { border-color:#f7dbdf; background:#fffbfb; }
   .dw-skel { height:96px; border-radius:16px; border:1px solid #e7edf5; background:#fff; }
   .dw-skel:after { content:""; display:block; height:100%; border-radius:16px;
@@ -851,11 +885,19 @@
     }
 
     function stat(s) {
+      // The icon is optional and most cards do without one: a grid of tiles
+      // that are already labelled gains nothing from a picture of each label.
+      // Sale Overview has nine, which is where the eye needs somewhere to
+      // land other than text. It sits beside the text rather than inside the
+      // label line — inline it took 22px off the label and turned "BANK
+      // RECEIVED" into two lines, making that tile the tall one.
       return '<div class="dw-stat' + (s.tone ? ' t-' + esc(s.tone) : '') + '">'
+           + (s.icon ? '<i class="dw-stat-icon ' + esc(s.icon) + '"></i>' : '')
+           + '<span class="dw-stat-text">'
            + '<span class="dw-label">' + esc(s.label) + '</span>'
            + '<span class="dw-value">' + esc(s.value) + '</span>'
            + (s.sub ? '<span class="dw-sub">' + esc(s.sub) + '</span>' : '')
-           + '</div>';
+           + '</span></div>';
     }
 
     function row(r) {
@@ -1009,6 +1051,17 @@
            + '</div>';
     }
 
+    /* A card that has nothing to report, saying so properly.
+     *
+     * The alternative is one grey sentence adrift in a card sized for a
+     * timeline, which reads as a failure to load rather than as a quiet week.
+     */
+    function emptyBlock(text) {
+      return '<div class="dw-empty">'
+           + '<i class="fa-regular fa-calendar-check"></i>'
+           + '<span>' + esc(text) + '</span></div>';
+    }
+
     function timelineCard(w) {
       var tabs = (w.timeline_filters || []).map(function (f, i) {
         return '<button type="button" class="dw-act-tab' + (i === 0 ? ' is-active' : '')
@@ -1021,8 +1074,11 @@
              + (s.sub ? '<span class="dw-act-foot-sub">' + esc(s.sub) + '</span>' : '')
              + '</div>';
       }).join('');
+      var list = (w.timeline || []).length
+        ? '<div class="dw-act-list">' + w.timeline.map(activityRow).join('') + '</div>'
+        : emptyBlock(w.empty || 'Nothing recorded in this period.');
       return (tabs ? '<div class="dw-act-tabs">' + tabs + '</div>' : '')
-           + '<div class="dw-act-list">' + (w.timeline || []).map(activityRow).join('') + '</div>'
+           + list
            + (footer ? '<div class="dw-act-foot">' + footer + '</div>' : '');
     }
 
@@ -1058,7 +1114,9 @@
            + '<div class="dw-card' + (w.error ? ' is-error' : '') + '">'
            + '<div class="dw-head">'
            + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'
-           + '<h3 class="dw-title">' + esc(w.title) + '</h3>'
+           + '<div class="dw-head-text"><h3 class="dw-title">' + esc(w.title) + '</h3>'
+           + (w.subtitle ? '<p class="dw-card-sub">' + esc(w.subtitle) + '</p>' : '')
+           + '</div>'
            + (w.url ? '<a class="dw-open" href="' + esc(w.url) + '" target="_blank" rel="noopener">'
                     + 'Open <i class="fa-solid fa-arrow-up-right-from-square"></i></a>' : '')
            + '</div>' + body + '</div></div>';
