@@ -63,3 +63,4 @@ node_modules/
 
 # Local run-a-server-against-scratch-data settings (see the docstring).
 preview_settings.py
+full_test_settings.py
