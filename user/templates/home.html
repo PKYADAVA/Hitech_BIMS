@@ -301,10 +301,19 @@
   .dw-note { margin-top:11px; font-size:.75rem; color:#6b7890; }
 
   /* ---- Broiler activity feed --------------------------------------------- */
-  .dw-act-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  /* One line, scrolled sideways if the five of them do not fit. Wrapping put a
+     second row of pills above the list in a third-width card, and the list is
+     what the card is for — the row it lost showed three events instead of
+     five. */
+  /* flex:0 0 auto because overflow-x:auto resolves this row's min-height to 0,
+     and the card is a flex column — so without it the strip was squashed to a
+     14px sliver with the pills cut in half. */
+  .dw-act-tabs { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto;
+                 flex:0 0 auto; margin-bottom:10px; padding-bottom:2px;
+                 scrollbar-width:thin; }
   .dw-act-tab { border:1px solid #e7edf5; background:#fbfdff; color:#475569;
-                font-size:.78rem; font-weight:600; padding:6px 13px; border-radius:20px;
-                cursor:pointer; transition:.14s ease; }
+                font-size:.74rem; font-weight:600; padding:4px 11px; border-radius:20px;
+                cursor:pointer; transition:.14s ease; white-space:nowrap; flex:0 0 auto; }
   .dw-act-tab:hover { border-color:#cfe6d8; }
   .dw-act-tab.is-active { background:#e6f7ee; border-color:#bfe8d3; color:#0f8a52; }
 
@@ -396,28 +405,28 @@
   .dw-act-dot.dw-c-red   {background:#dc465b} .dw-act-dot.dw-c-cyan  {background:#0087a5}
   .dw-act-dot.dw-c-amber {background:#b45309}
 
-  /* Smaller tiles than they were, and as many across as will hold their own
-     text. Forcing all four onto one line was tried and is worse: at a third
-     of the dashboard that is 94px each, where "18 hours ago" wraps and every
-     sub-line truncates to "in the last 7 d…". A tile whose label cannot be
-     read is not a smaller tile, it is a broken one. Two across here, four on
-     a wide card, and the minimum is what decides which. */
-  .dw-act-foot { margin-top:14px; padding-top:14px; border-top:1px solid #edf1f6;
-                display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
-                gap:8px; }
-  .dw-act-foot-tile { padding:8px 9px; border:1px solid #eaf0f7; border-radius:10px;
+  /* Two across, always, because there are four of them and four divides by
+     two. auto-fit fitted as many as the width allowed, which is three at some
+     card widths — and three of four leaves one tile alone on a second row,
+     the ragged edge this card kept being pulled up for.
+     Not four across: that was tried and is worse. At a third of the dashboard
+     it is 94px a tile, where "18 hours ago" wraps and every sub-line truncates
+     to "in the last 7 d…". A tile whose label cannot be read is not a smaller
+     tile, it is a broken one. So: a fixed two, an even split, and no orphan. */
+  .dw-act-foot { margin-top:10px; padding-top:10px; border-top:1px solid #edf1f6;
+                display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
+                gap:6px; }
+  .dw-act-foot-tile { padding:6px 8px; border:1px solid #eaf0f7; border-radius:9px;
                       background:#fbfdff; min-width:0; }
   .dw-act-foot-tile.t-bad  { background:#fff5f6; border-color:#f7dbdf; }
   .dw-act-foot-tile.t-good { background:#f2fbf8; border-color:#d8f0e9; }
-  .dw-act-foot-value { display:block; font-size:.92rem; font-weight:700; color:#15233b;
-                       line-height:1.25; overflow-wrap:normal; word-break:normal; }
-  .dw-act-foot-label { display:block; font-size:.68rem; color:#6b7890; margin-top:2px;
-                       line-height:1.25; }
+  .dw-act-foot-value { display:block; font-size:.84rem; font-weight:700; color:#15233b;
+                       line-height:1.2; overflow-wrap:normal; word-break:normal; }
+  .dw-act-foot-label { display:block; font-size:.65rem; color:#6b7890; margin-top:1px;
+                       line-height:1.2; }
   .dw-act-foot-sub { display:block; font-size:.65rem; color:#93a4bd; margin-top:1px;
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  @media (max-width: 575.98px) {
-    .dw-act-foot { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-  }
+
   .dw-card.is-error { border-color:#f7dbdf; background:#fffbfb; }
   .dw-skel { height:96px; border-radius:16px; border:1px solid #e7edf5; background:#fff; }
   .dw-skel:after { content:""; display:block; height:100%; border-radius:16px;
