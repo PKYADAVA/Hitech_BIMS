@@ -80,7 +80,7 @@
       }).join("");
   }
 
-  function metaHTML(alert) {
+  function metaHTML(alert, centre) {
     var bits = [];
     if (alert.place) bits.push(esc(alert.place));
     if (alert.object_display) bits.push(esc(alert.object_display));
@@ -89,6 +89,14 @@
     // up; without a name beside it, nobody knows whether to pick it up too.
     if (alert.status_changed_by_name && alert.status !== "open") {
       bits.push(esc(alert.status_label) + " by " + esc(alert.status_changed_by_name));
+    }
+    // The rest of this rule, which the per-rule cap kept off the card. The
+    // link goes to the centre filtered to that rule, so "+16 more" leads
+    // somewhere that shows the sixteen rather than the whole feed.
+    if (alert.more_like_this > 0) {
+      bits.push('<a class="ar-more" href="' + centre + "?rule_key=" +
+        encodeURIComponent(alert.rule_key) + '">+' + alert.more_like_this +
+        " more like this</a>");
     }
     return bits.join(' <span class="ar-sep">·</span> ');
   }
@@ -115,7 +123,7 @@
     return html;
   }
 
-  function rowHTML(alert) {
+  function rowHTML(alert, centre) {
     var sev = esc(alert.priority);
     return '<div class="ar-row ' + sev + '" data-id="' + alert.id + '">' +
       '<span class="ar-ic ' + sev + '"><i class="' + esc(alert.icon) + '"></i></span>' +
@@ -127,7 +135,7 @@
           '<h3 class="ar-name">' + esc(alert.title) + "</h3>" +
         "</div>" +
         (alert.message ? '<p class="ar-msg">' + esc(alert.message) + "</p>" : "") +
-        '<div class="ar-meta">' + metaHTML(alert) + "</div>" +
+        '<div class="ar-meta">' + metaHTML(alert, centre) + "</div>" +
       "</div>" +
       (alert.reading
         ? '<div class="ar-metric"><b>' + esc(alert.reading) +
@@ -170,7 +178,9 @@
       loaded = {};
       rows.forEach(function (alert) { loaded[alert.id] = alert; });
 
-      list.innerHTML = rows.length ? rows.map(rowHTML).join("") : emptyHTML();
+      list.innerHTML = rows.length
+        ? rows.map(function (alert) { return rowHTML(alert, centre); }).join("")
+        : emptyHTML();
       summaryEl.innerHTML = summaryHTML(summary, centre);
 
       totalEl.textContent = summary.total || 0;

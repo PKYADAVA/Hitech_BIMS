@@ -930,6 +930,22 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   .sn-actions .sn-spacer { margin-left: 0; }
 }
 
+/* The rule chip in the notification centre's filter bar. Not a control - it
+   only ever arrives by link, and the only thing to do with it is take it off. */
+.ah-rule-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .75rem; font-weight: 600; white-space: nowrap;
+  padding: .25rem .4rem .25rem .6rem; border-radius: 999px;
+  background: var(--ah-medium-soft); color: var(--ah-medium);
+  border: 1px solid #fde68a;
+}
+.ah-rule-chip[hidden] { display: none; }
+.ah-rule-chip button {
+  border: 0; background: none; color: inherit; cursor: pointer;
+  font-size: 1rem; line-height: 1; padding: 0 .15rem;
+}
+.ah-rule-chip button:hover { color: var(--ah-ink, #1f2937); }
+
 /* =====================================================================
    Action Required widget
    =====================================================================
@@ -951,6 +967,13 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 .ar-card {
   background: #fff; border: 1px solid var(--ah-line, #e5e7eb);
   border-radius: 12px; overflow: hidden;
+  /* The card's layout follows the column it is in, not the window. It sits
+     full width on its own and at half width beside the alerts feed, and a
+     1440px window says nothing about which of those is happening - the
+     viewport media queries this replaced laid out a 700px column as though it
+     had the whole screen. */
+  container-type: inline-size;
+  container-name: ar;
 }
 
 /* -- header ------------------------------------------------------------ */
@@ -1047,6 +1070,14 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   font-size: .68rem; color: #94a3b8; margin-top: .22rem;
 }
 .ar-meta .ar-sep { opacity: .5; }
+/* "+16 more" - how many others of the same rule are open but not on the card.
+   Without it a capped row looks like the only one of its kind, which is a
+   worse lie than the flood the cap was put there to stop. */
+.ar-more {
+  font-weight: 700; color: #64748b; text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+.ar-more:hover { color: var(--ah-ink, #1f2937); }
 
 /* -- badges ------------------------------------------------------------ */
 
@@ -1163,10 +1194,11 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 
 /* -- responsive -------------------------------------------------------- */
 
-/* Tablet: the reading leaves its own column and joins the body. At this width
-   a right-aligned number leaves the title about forty characters, which is
-   not enough for "Feed Stock Coverage Low" and the farm it is about. */
-@media (max-width: 991.98px) {
+/* Narrow column: the reading leaves its own column and joins the body. Below
+   about 640px a right-aligned number leaves the title some forty characters,
+   which is not enough for "Feed Stock Coverage Low" and the farm it is
+   about - and this is the width the card has whenever it shares its row. */
+@container ar (max-width: 640px) {
   .ar-row {
     grid-template-columns: 28px minmax(0, 1fr);
     grid-template-areas: "icon body" ". metric" ". actions";
@@ -1175,10 +1207,11 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
                gap: .35rem; margin-top: .25rem; }
 }
 
-/* Phone: one column, and the buttons become the width of a thumb. The icon
-   goes - the severity badge already says the same thing in words, and on a
-   320px row every 28px spent on decoration is taken from the title. */
-@media (max-width: 575.98px) {
+/* Narrower still - a phone, or a half-width column on a small laptop. One
+   column, and the buttons become the width of a thumb. The icon goes: the
+   severity badge already says the same thing in words, and at this width
+   every 28px spent on decoration is taken from the title. */
+@container ar (max-width: 460px) {
   .ar-head { padding: .75rem .8rem .6rem; }
   .ar-head-right { width: 100%; margin-left: 0; }
   .ar-row {

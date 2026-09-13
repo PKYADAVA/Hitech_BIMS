@@ -181,12 +181,14 @@ class ActionAlertSerializer(NotificationSerializer):
     available_actions = serializers.SerializerMethodField()
     reading = serializers.SerializerMethodField()
     action_count = serializers.SerializerMethodField()
+    more_like_this = serializers.SerializerMethodField()
 
     class Meta(NotificationSerializer.Meta):
         fields = NotificationSerializer.Meta.fields + [
             "severity_label", "status", "status_label", "status_tone", "status_color",
             "status_changed_at", "status_changed_by_name", "dismiss_reason",
             "available_actions", "reading", "action_count",
+            "more_like_this",
         ]
 
     def get_severity_label(self, obj) -> str:
@@ -244,6 +246,15 @@ class ActionAlertSerializer(NotificationSerializer):
         if obj.threshold_value is not None:
             reading = "%s / %s" % (reading, fmt(obj.threshold_value))
         return ("%s %s" % (reading, unit)).strip()
+
+    def get_more_like_this(self, obj) -> int:
+        """Open alerts from the same rule that the card left out.
+
+        Attached by the view, which is the only place that knows what
+        else it chose not to show. Zero anywhere else, which is honest:
+        a serializer used outside the widget has nothing to compare to.
+        """
+        return getattr(obj, "_more_like_this", 0)
 
     def get_action_count(self, obj) -> int:
         return obj.actions.count()

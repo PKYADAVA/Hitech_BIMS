@@ -87,6 +87,15 @@ permission.
     <input type="date" id="fFrom" title="From date" />
     <input type="date" id="fTo" title="To date" />
     <button class="btn btn-sm btn-outline-secondary" id="fReset">Reset</button>
+    {{ rule_labels|json_script:"ah-rule-labels" }}
+    {# A rule filter arrives by link (the dashboard's "+16 more like this")
+       and has no control of its own. It still has to be visible: a list
+       narrowed by something the page does not show reads as a list with
+       nothing in it. #}
+    <span class="ah-rule-chip" id="fRuleChip" hidden>
+      <span id="fRuleChipLabel"></span>
+      <button type="button" id="fRuleChipClear" aria-label="Show all alert types">&times;</button>
+    </span>
   </div>
 
   <div class="ah-card">
@@ -105,6 +114,9 @@ permission.
 {% block js %}
 <script>
 (function () {
+  var RULE_LABELS = JSON.parse(
+    document.getElementById("ah-rule-labels").textContent);
+
   var root = document.getElementById("ahCentre");
   var CSRF = root.dataset.csrf;
   var list = document.getElementById("ahList");
@@ -123,6 +135,9 @@ permission.
     date_to: document.getElementById("fTo"),
   };
 
+  // Set by a link rather than by a control - see the chip in the filter bar.
+  var ruleKey = "";
+
   function query() {
     var params = new URLSearchParams({ page: page, page_size: 25 });
     Object.keys(controls).forEach(function (key) {
@@ -130,7 +145,38 @@ permission.
       if (!value) return;
       params.set(key === "search" ? "search" : key, value);
     });
+    if (ruleKey) params.set("rule_key", ruleKey);
     return params.toString();
+  }
+
+  /* Open the page on the filters the link asked for.
+   *
+   * The dashboard has always linked here with ?priority=critical and this
+   * page has always ignored it, so every one of those links quietly landed on
+   * the unfiltered feed - the reader saw everything and had no way to tell
+   * that the filter they clicked had been dropped. Reading the query string
+   * is what makes those links mean what they say.
+   */
+  function applyLinkFilters() {
+    var params = new URLSearchParams(window.location.search);
+    Object.keys(controls).forEach(function (key) {
+      var value = params.get(key);
+      if (value !== null) controls[key].value = value;
+    });
+
+    ruleKey = params.get("rule_key") || "";
+    var chip = document.getElementById("fRuleChip");
+    if (ruleKey) {
+      document.getElementById("fRuleChipLabel").textContent =
+        RULE_LABELS[ruleKey] || ruleKey;
+      chip.hidden = false;
+    }
+    document.getElementById("fRuleChipClear").addEventListener("click", function () {
+      ruleKey = "";
+      chip.hidden = true;
+      page = 1;
+      load();
+    });
   }
 
   function load() {
@@ -219,6 +265,7 @@ permission.
     }).catch(function () {});
   });
 
+  applyLinkFilters();
   load();
   refreshCounts();
 })();

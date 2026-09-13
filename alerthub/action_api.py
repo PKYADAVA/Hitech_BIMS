@@ -31,6 +31,55 @@ from .serializers import ActionAlertSerializer, AlertActionSerializer
 #: that they do. The count in the header says how many more there are.
 WIDGET_LIMIT = 5
 
+#: At most this many rows from any one rule.
+#:
+#: Without it the card is whatever is worst, and "worst" is usually eighteen
+#: instances of one thing. On real data every visible row was Negative Stock,
+#: which is a true answer to "what is most urgent" and a useless answer to
+#: "what needs my attention" — the three High alerts and everything else sat
+#: invisible behind a "22 more open" link.
+PER_RULE_LIMIT = 2
+
+#: How far down the urgency order to look for that spread. Deep enough to get
+#: past a flood of one rule, shallow enough that the widget is never reading
+#: the whole table. Past it, the card shows what the window held — which is
+#: the same thing it showed before this cap existed.
+SPREAD_WINDOW = WIDGET_LIMIT * 10
+
+
+def spread(rows, limit=WIDGET_LIMIT, per_rule=PER_RULE_LIMIT):
+    """Pick ``limit`` alerts without letting one rule have them all.
+
+    Two passes. The first takes up to ``per_rule`` from each rule in urgency
+    order; the second fills any slots still empty from what the first pass
+    held back, so a farm whose only problem really is eighteen negative stock
+    lines still gets a full card rather than two rows and a lot of white space.
+
+    The result is re-sorted at the end. Filling from the held-back rows appends
+    them after rows that may be less urgent, and a Critical sitting below a
+    High reads as a sorting bug even when the selection above it was right.
+    """
+    picked, held, seen = [], [], {}
+    for row in rows:
+        if len(picked) >= limit:
+            break
+        taken = seen.get(row.rule_key, 0)
+        if taken < per_rule:
+            picked.append(row)
+            seen[row.rule_key] = taken + 1
+        else:
+            held.append(row)
+
+    for row in held:
+        if len(picked) >= limit:
+            break
+        picked.append(row)
+
+    # ``_rank`` is annotated by by_urgency(); the fallback keeps this usable on
+    # a plain list, which is how it is tested.
+    picked.sort(key=lambda r: (getattr(r, "_rank", 99), -r.created_at.timestamp()))
+    return picked
+
 
 def _fail(error, code=status.HTTP_400_BAD_REQUEST):
     """Turn a validation failure into something the dialog can display.
@@ -86,8 +135,29 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
                   qs.values("status").order_by()
                     .annotate(n=Count("id", distinct=True))}
 
-        rows = self._rows(qs.by_urgency()[:WIDGET_LIMIT])
+        rows = self._rows(spread(qs.by_urgency()[:SPREAD_WINDOW]))
         total = sum(counts.values())
+
+        # How many more of each rule are open but not on the card, so a row
+        # that stands for sixteen others says so rather than looking like the
+        # only one of its kind.
+        by_rule = {row["rule_key"]: row["n"] for row in
+                   qs.values("rule_key").order_by()
+                     .annotate(n=Count("id", distinct=True))}
+        shown_per_rule = {}
+        for row in rows:
+            shown_per_rule[row.rule_key] = shown_per_rule.get(row.rule_key, 0) + 1
+
+        # Only the last row of each rule carries the count. Both rows of a
+        # capped pair are standing in for the same sixteen others, and saying
+        # "+16 more like this" twice reads as thirty-two.
+        last_of_rule = {}
+        for index, row in enumerate(rows):
+            row._more_like_this = 0
+            last_of_rule[row.rule_key] = index
+        for key, index in last_of_rule.items():
+            rows[index]._more_like_this = max(
+                0, by_rule.get(key, 0) - shown_per_rule[key])
 
         return Response({
             "results": ActionAlertSerializer(

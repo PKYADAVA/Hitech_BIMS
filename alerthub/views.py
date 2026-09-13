@@ -45,12 +45,19 @@ def _filter_options(user):
     """
     from user.services.scoping import branches_for, farms_for, warehouses_for
 
+    from alerthub.catalog import CATALOG
+
     return {
         "modules": Module.choices,
         "priorities": Priority.choices,
         "branches": branches_for(user),
         "farms": farms_for(user),
         "warehouses": warehouses_for(user),
+        # rule_key -> its name in the catalogue. A link may narrow the feed to
+        # one rule (the dashboard's "+16 more like this"), and the chip that
+        # says so has to name it in words rather than showing "feed.stock_
+        # coverage_days" to somebody who never sees a rule key anywhere else.
+        "rule_labels": {spec.key: spec.label for spec in CATALOG},
     }
 
 

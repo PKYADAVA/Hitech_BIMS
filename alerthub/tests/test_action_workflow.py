@@ -441,3 +441,137 @@ class SeverityVocabularyTests(TestCase):
         """
         for module in Module:
             self.assertIn(module, MODULE_ICON)
+
+
+class SpreadTests(TestCase):
+    """One rule must not take the whole card.
+
+    Sorting strictly by severity is a true answer to "what is most urgent" and
+    a useless answer to "what needs my attention": on real data every visible
+    row was Negative Stock, and the three High alerts behind them were
+    invisible. The cap trades a little ordering purity for a card that shows
+    more than one problem.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="spreader", password="x", email="s@example.com")
+        self.client.force_login(self.user)
+
+    def rows(self):
+        return self.client.get(API).json()["results"]
+
+    def test_a_flood_of_one_rule_does_not_fill_the_card(self):
+        """The case from production: eighteen of one rule, all critical, and
+        three High alerts that never got a row.
+
+        Enough other rules here to fill the card without help, which is the
+        situation the cap is actually for.
+        """
+        for index in range(8):
+            an_alert(to=self.user, rule_key="inventory.negative_stock",
+                     priority=Priority.CRITICAL, title="Negative Stock %d" % index)
+        for key in ("health.vaccination_due", "finance.payment_due",
+                    "production.daily_entry_missing"):
+            an_alert(to=self.user, rule_key=key, priority=Priority.HIGH, title=key)
+
+        keys = [row["rule_key"] for row in self.rows()]
+        self.assertEqual(keys.count("inventory.negative_stock"), 2)
+        for key in ("health.vaccination_due", "finance.payment_due",
+                    "production.daily_entry_missing"):
+            self.assertIn(key, keys)
+
+    def test_the_cap_gives_way_rather_than_leave_the_card_short(self):
+        """What the cap does *not* promise.
+
+        With nothing else open, holding a flooding rule to two rows would show
+        two problems out of nine and waste three slots. The cap exists to let
+        other rules in ahead of a third row from this one, not to keep the
+        card empty when there are no other rules to let in.
+        """
+        for index in range(8):
+            an_alert(to=self.user, rule_key="inventory.negative_stock",
+                     priority=Priority.CRITICAL, title="Negative Stock %d" % index)
+        an_alert(to=self.user, rule_key="health.vaccination_due",
+                 priority=Priority.HIGH, title="Vaccination Due")
+
+        keys = [row["rule_key"] for row in self.rows()]
+        self.assertEqual(len(keys), 5)
+        # The other rule still got its row before the flood took the rest.
+        self.assertIn("health.vaccination_due", keys)
+
+    def test_the_card_is_still_filled_when_one_rule_is_all_there_is(self):
+        """A farm whose only problem really is eight negative stock lines
+        should get a full card, not two rows and a lot of white space. The cap
+        is there to make room for other rules, not to leave the room empty."""
+        for index in range(8):
+            an_alert(to=self.user, rule_key="inventory.negative_stock",
+                     title="Negative Stock %d" % index)
+        self.assertEqual(len(self.rows()), 5)
+
+    def test_the_rows_are_still_shown_most_urgent_first(self):
+        """Filling the spare slots appends rows that may outrank ones already
+        picked. A Critical sitting below a High reads as a sorting bug even
+        when the selection above it was right."""
+        for index in range(4):
+            an_alert(to=self.user, rule_key="inventory.negative_stock",
+                     priority=Priority.CRITICAL, title="Critical %d" % index)
+        an_alert(to=self.user, rule_key="health.vaccination_due",
+                 priority=Priority.LOW, title="Information one")
+        ranks = [row["priority"] for row in self.rows()]
+        self.assertEqual(ranks, sorted(ranks, key=["critical", "high", "medium",
+                                                   "low"].index))
+
+    def test_a_capped_row_says_how_many_it_stands_for(self):
+        """Without it a capped row looks like the only one of its kind, which
+        is a worse lie than the flood the cap was put there to stop."""
+        for index in range(8):
+            an_alert(to=self.user, rule_key="inventory.negative_stock",
+                     priority=Priority.CRITICAL, title="Negative Stock %d" % index)
+        for key in ("health.vaccination_due", "finance.payment_due",
+                    "production.daily_entry_missing"):
+            an_alert(to=self.user, rule_key=key, priority=Priority.HIGH, title=key)
+
+        shown = [row for row in self.rows()
+                 if row["rule_key"] == "inventory.negative_stock"]
+        self.assertEqual(len(shown), 2)
+        # Eight open, two of them on the card - and said once, on the last of
+        # the pair. Both rows stand in for the same six, so saying it twice
+        # would read as twelve.
+        self.assertEqual([row["more_like_this"] for row in shown], [0, 6])
+
+    def test_a_rule_with_nothing_held_back_says_nothing(self):
+        an_alert(to=self.user, rule_key="health.vaccination_due")
+        self.assertEqual(self.rows()[0]["more_like_this"], 0)
+
+
+class CentreLinkTests(TestCase):
+    """The links the cards point at have to mean what they say.
+
+    The dashboard has always linked to the centre with ?priority=critical and
+    the centre has always ignored it, landing every one of those clicks on the
+    unfiltered feed. Nothing failed; the filter was simply dropped, and the
+    reader had no way to tell.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="linker", password="x", email="lk@example.com")
+        self.client.force_login(self.user)
+
+    def test_the_centre_can_name_a_rule_in_words(self):
+        """The chip that shows a rule filter must not print a rule key at
+        somebody who never sees one anywhere else in the product."""
+        response = self.client.get("/notifications/?rule_key=feed.stock_coverage_days")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Feed Stock Coverage Low")
+
+    def test_the_feed_can_be_narrowed_to_one_rule(self):
+        """What the "+16 more like this" link is for."""
+        an_alert(to=self.user, rule_key="inventory.negative_stock",
+                 title="Negative Stock")
+        an_alert(to=self.user, rule_key="health.vaccination_due",
+                 title="Vaccination Due")
+        data = self.client.get(
+            "/api/alerthub/notifications/?rule_key=inventory.negative_stock").json()
+        self.assertEqual([row["title"] for row in data["results"]], ["Negative Stock"])
