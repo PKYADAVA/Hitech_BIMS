@@ -148,7 +148,12 @@ only ever produce a wrong number.
               <span class="ah-trail-when">{{ entry.created_at|date:"d M Y, H:i" }}</span>
             </div>
             {% if entry.notified %}
-              <div class="ah-trail-note">Told: {{ entry.notified|join:", " }}</div>
+              <div class="ah-trail-note">{% spaceless %}
+                {% if entry.action == 'assigned' %}<span>Handed to</span>
+                {% elif entry.action == 'unassigned' %}<span>Taken off</span>
+                {% else %}<span>Told</span>{% endif %}{% endspaceless %}:
+                {{ entry.notified|join:", " }}
+              </div>
             {% endif %}
             {% if entry.note %}
               <div class="ah-trail-note">“{{ entry.note }}”</div>

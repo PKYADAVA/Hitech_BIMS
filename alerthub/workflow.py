@@ -214,6 +214,91 @@ def reopen(alert, *, user, note=""):
 
 
 # ---------------------------------------------------------------------------
+# Assignment
+# ---------------------------------------------------------------------------
+
+@transaction.atomic
+def assign(alert, *, user, assignee_id, note="") -> AlertAction:
+    """Put somebody's name against this alert. Pass ``None`` to take it off.
+
+    Assignment is not a status and does not move one. "Whose job is this" and
+    "how far along is it" are different questions, and a dashboard that
+    marked an alert acknowledged the moment it was handed to somebody would
+    report that a problem had been picked up by the one person who has not
+    yet looked at it. What it does mean is that the alert is now *somebody's*,
+    and the card says whose.
+
+    The person it is handed to becomes a recipient, for the same reason the
+    escalation dialog makes one: an alert assigned to a supervisor who cannot
+    see it on their own dashboard has been assigned nowhere.
+
+    Reassigning is one move, not two — the trail carries one row naming the
+    new owner, and the old name is in the row before it.
+    """
+    from django.contrib.auth import get_user_model
+
+    from .models import NotificationRecipient
+
+    if not can_action(user, alert):
+        raise PermissionDenied("This alert is not yours to assign.")
+
+    alert = Notification.objects.select_for_update().get(pk=alert.pk)
+    actor = user if getattr(user, "pk", None) else None
+    now = timezone.now()
+    note = (note or "").strip()
+
+    if assignee_id in (None, "", 0, "0"):
+        if alert.assigned_to_id is None:
+            raise ValidationError("This alert is not assigned to anybody.")
+        was = alert.assigned_to.get_full_name() or alert.assigned_to.get_username()
+        entry = AlertAction.objects.create(
+            notification=alert, action=AlertAction.UNASSIGNED, actor=actor,
+            note=note, notified=[was],
+        )
+        alert.assigned_to = None
+        alert.assigned_at = None
+        alert.assigned_by = actor
+        alert.save(update_fields=["assigned_to", "assigned_at", "assigned_by"])
+        logger.info("alerthub: alert %s unassigned by %s", alert.pk, user)
+        return entry
+
+    try:
+        assignee_id = int(assignee_id)
+    except (TypeError, ValueError):
+        raise ValidationError("That is not somebody this can be assigned to.")
+
+    assignee = get_user_model().objects.filter(
+        pk=assignee_id, is_active=True).first()
+    if assignee is None:
+        raise ValidationError("That person no longer has an active account.")
+    if assignee.pk == alert.assigned_to_id:
+        raise ValidationError(
+            "%s already has this one." % (assignee.get_full_name()
+                                          or assignee.get_username())
+        )
+
+    # get_or_create, not create: the rule that raised the alert may already
+    # have addressed it to this person, and the unique constraint would turn
+    # an ordinary assignment into an error page.
+    NotificationRecipient.objects.get_or_create(
+        notification=alert, user=assignee,
+        defaults={"delivered_channels": ["in_app"]},
+    )
+
+    name = assignee.get_full_name() or assignee.get_username()
+    entry = AlertAction.objects.create(
+        notification=alert, action=AlertAction.ASSIGNED, actor=actor,
+        note=note, notified=[name],
+    )
+    alert.assigned_to = assignee
+    alert.assigned_at = now
+    alert.assigned_by = actor
+    alert.save(update_fields=["assigned_to", "assigned_at", "assigned_by"])
+    logger.info("alerthub: alert %s assigned to %s by %s", alert.pk, name, user)
+    return entry
+
+
+# ---------------------------------------------------------------------------
 # Notify Supervisor
 # ---------------------------------------------------------------------------
 

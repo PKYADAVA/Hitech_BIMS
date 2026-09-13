@@ -178,6 +178,7 @@ class ActionAlertSerializer(NotificationSerializer):
     status_tone = serializers.CharField(read_only=True)
     status_color = serializers.SerializerMethodField()
     status_changed_by_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
     available_actions = serializers.SerializerMethodField()
     reading = serializers.SerializerMethodField()
     reading_value = serializers.SerializerMethodField()
@@ -189,6 +190,7 @@ class ActionAlertSerializer(NotificationSerializer):
         fields = NotificationSerializer.Meta.fields + [
             "severity_label", "status", "status_label", "status_tone", "status_color",
             "status_changed_at", "status_changed_by_name", "dismiss_reason",
+            "assigned_to", "assigned_to_name", "assigned_at",
             "available_actions", "reading", "reading_value", "reading_limit",
             "action_count",
             "more_like_this",
@@ -202,6 +204,18 @@ class ActionAlertSerializer(NotificationSerializer):
 
     def get_status_changed_by_name(self, obj) -> str:
         person = obj.status_changed_by
+        if person is None:
+            return ""
+        return person.get_full_name() or person.get_username()
+
+    def get_assigned_to_name(self, obj) -> str:
+        """Whose job this is, in the name the card shows.
+
+        Blank rather than "Unassigned": the card writes its own words for the
+        empty case, and a serializer that puts a label in a name field makes
+        every caller check for that particular sentence.
+        """
+        person = obj.assigned_to
         if person is None:
             return ""
         return person.get_full_name() or person.get_username()

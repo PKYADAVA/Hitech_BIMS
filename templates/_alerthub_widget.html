@@ -8,7 +8,7 @@ failure the other widgets avoid by calling the engine that owns their figure.
 
 Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
 {% endcomment %}
-<div class="ah-card p-3 mb-3" id="ahWidget">
+<div class="ah-card p-3 mb-3" id="ahWidget" data-csrf="{{ csrf_token }}">
 
   <div class="d-flex align-items-center justify-content-between mb-2">
     <h2 class="ah-widget-title">
@@ -151,26 +151,33 @@ document.addEventListener("DOMContentLoaded", function () {
     tiles.innerHTML = '<div class="text-muted small">Could not load alert counts.</div>';
   });
 
-  /* One line per event: what happened, where, when. No buttons — the card
-     beside this one is where alerts are worked, and a second set of controls
-     here only made the two compete. The whole line is a link to the alert. */
+  /* One card per event: what happened, where, when — and the two things you
+     can do to a reading list, behind a kebab. Neither of them answers the
+     alert: marking it read and clearing it off your own list are about this
+     person's view of it, and the card beside this one is where the problem
+     itself is dealt with. Nothing in this menu changes the alert's status,
+     which is why they are not the same words as the worklist's.
+
+     The row is a div rather than a link so the kebab is not a button inside
+     an anchor; the title carries a stretched link that covers the row. */
   function feedHTML(n) {
     var sev = AlertHub.esc(n.priority);
     var where = [];
     if (n.place) where.push(AlertHub.esc(n.place));
     if (n.voucher_no) where.push(AlertHub.esc(n.voucher_no));
-    return '<a class="ah-frow ' + sev + (n.is_read ? "" : " unread") +
-      '" href="' + AlertHub.esc(n.detail_url) + '" data-id="' + n.id + '">' +
+    return '<div class="ah-frow ' + sev + (n.is_read ? "" : " unread") +
+      '" data-id="' + n.id + '">' +
       '<span class="ah-frow-ic ' + sev + '"><i class="' +
         AlertHub.esc(n.icon) + '"></i></span>' +
-      '<span class="ah-frow-body">' +
-        '<span class="ah-frow-top">' +
-          '<span class="ah-frow-title">' + AlertHub.esc(n.title) + "</span>" +
+      '<div class="ah-frow-body">' +
+        '<div class="ah-frow-top">' +
+          '<a class="ah-frow-title" href="' + AlertHub.esc(n.detail_url) +
+            '">' + AlertHub.esc(n.title) + "</a>" +
           '<span class="ah-pill ' + sev + '">' +
             AlertHub.esc(n.priority_label) + "</span>" +
           '<span class="ah-frow-time">' +
             AlertHub.esc(AlertHub.timeAgo(n.created_at)) + "</span>" +
-        "</span>" +
+        "</div>" +
         (n.message
           ? '<span class="ah-frow-msg">' + AlertHub.esc(n.message) + "</span>"
           : "") +
@@ -178,8 +185,94 @@ document.addEventListener("DOMContentLoaded", function () {
           '<span class="ah-chip">' + AlertHub.esc(n.module_label) + "</span>" +
           (where.length ? "<span>" + where.join(" · ") + "</span>" : "") +
         "</span>" +
-      "</span></a>";
+      "</div>" +
+      '<div class="ah-frow-more">' +
+        '<button type="button" class="ah-frow-kebab" aria-haspopup="true"' +
+          ' aria-expanded="false" aria-label="More" title="More">' +
+          '<i class="fa-solid fa-ellipsis-vertical"></i></button>' +
+        '<div class="ah-frow-menu" hidden>' +
+          (n.is_read ? "" :
+            '<button type="button" data-fmove="read">' +
+            '<i class="fa-regular fa-envelope-open"></i>Mark as read</button>') +
+          '<button type="button" data-fmove="dismiss">' +
+          '<i class="fa-solid fa-xmark"></i>Clear from this list</button>' +
+        "</div>" +
+      "</div></div>";
   }
+
+  /* The kebab, and the two moves behind it.
+   *
+   * One listener on the feed rather than one per row: the rows are replaced
+   * wholesale every time the list reloads, and handlers bound to the old ones
+   * would go with them.
+   */
+  var csrf = root.dataset.csrf;
+
+  function closeMenus() {
+    list.querySelectorAll(".ah-frow-menu").forEach(function (m) { m.hidden = true; });
+    list.querySelectorAll(".ah-frow-kebab").forEach(function (k) {
+      k.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  list.addEventListener("click", function (event) {
+    var kebab = event.target.closest(".ah-frow-kebab");
+    if (kebab) {
+      event.preventDefault();
+      var menu = kebab.nextElementSibling;
+      var opening = menu.hidden;
+      closeMenus();
+      menu.hidden = !opening;
+      kebab.setAttribute("aria-expanded", opening ? "true" : "false");
+      return;
+    }
+
+    var button = event.target.closest("[data-fmove]");
+    if (!button) return;
+    event.preventDefault();
+    var row = button.closest(".ah-frow");
+    var id = row && row.dataset.id;
+    if (!id) return;
+    var what = button.dataset.fmove;
+    closeMenus();
+    row.classList.add("is-busy");
+
+    AlertHub.post(AlertHub.API + id + "/" +
+                  (what === "read" ? "mark_read" : "dismiss") + "/", csrf)
+      .then(function (data) {
+        if (what === "dismiss") {
+          // Gone from this person's list, not from the record. The row leaves
+          // rather than greying out: a cleared alert that stays on screen is
+          // the thing clearing it was meant to stop.
+          row.remove();
+          if (!list.querySelector(".ah-frow")) {
+            list.innerHTML = AlertHub.emptyHTML(
+              "Nothing new — you have read everything here");
+          }
+        } else {
+          row.classList.remove("unread");
+          var menu = row.querySelector(".ah-frow-menu");
+          var mark = menu && menu.querySelector('[data-fmove="read"]');
+          if (mark) mark.remove();
+        }
+        row.classList.remove("is-busy");
+        if (typeof data.unread === "number") {
+          unread.textContent = data.unread > 99 ? "99+" : data.unread;
+          unread.classList.toggle("d-none", !data.unread);
+        }
+      })
+      .catch(function () {
+        row.classList.remove("is-busy");
+        if (typeof window.showToast === "function") {
+          window.showToast("danger", "That did not go through. Try again.");
+        }
+      });
+  });
+
+  document.addEventListener("click", function (event) {
+    if (event.target.closest(".ah-frow-more")) return;
+    closeMenus();
+  });
 
   // Unread, like the bell. The counts above are open alerts — they have to
   // agree with the card beside this one — but the list is an inbox: reading

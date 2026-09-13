@@ -125,6 +125,15 @@
       return '<span class="ar-chip">' + text + "</span>";
     }).join("");
 
+    // Whose job it is, when it is somebody's. A name on the row is the
+    // difference between a list everybody scrolls past and a list with an
+    // owner against each line.
+    if (alert.assigned_to_name) {
+      html += '<span class="ar-chip owner">' +
+        '<i class="fa-solid fa-user-check"></i>' +
+        esc(alert.assigned_to_name) + "</span>";
+    }
+
     // Who has it, when somebody has. The status chip says an alert was picked
     // up; without a name beside it, nobody knows whether to pick it up too.
     if (alert.status_changed_by_name && alert.status !== "open") {
@@ -197,6 +206,12 @@
     // changes no status, so it is added here rather than by the server.
     behind.unshift({ key: "notify", label: "Notify Supervisor",
                      icon: "fa-solid fa-user-tie" });
+    // Whose job this is. A separate question from how far along it is, which
+    // is why it is a menu item rather than another status button.
+    behind.unshift({
+      key: "assign", icon: "fa-solid fa-user-check",
+      label: alert.assigned_to_name ? "Reassign…" : "Assign…"
+    });
     // Everything that has already been done about it — acknowledged by whom,
     // notified to whom, dismissed with what reason. Reading, not a move, so
     // it is a link rather than a button.
@@ -371,9 +386,11 @@
 
     var notifyModal = document.getElementById("arNotifyModal");
     var dismissModal = document.getElementById("arDismissModal");
+    var assignModal = document.getElementById("arAssignModal");
     var bs = window.bootstrap;
     var notifyBs = notifyModal && bs ? new bs.Modal(notifyModal) : null;
     var dismissBs = dismissModal && bs ? new bs.Modal(dismissModal) : null;
+    var assignBs = assignModal && bs ? new bs.Modal(assignModal) : null;
     var pending = null;          // the alert a dialog is currently about
 
     function describe(alert) {
@@ -391,6 +408,67 @@
       box.classList.remove("is-invalid");
       dismissBs.show();
       window.setTimeout(function () { box.focus(); }, 300);
+    }
+
+    /* Who this alert could be handed to. The same list the escalation
+       dialog offers — the people near enough to go and look at it — and one
+       choice rather than several, because an alert with two owners has
+       none. */
+    function openAssign(alert, button) {
+      if (!assignBs) return;
+      pending = { alert: alert, button: button };
+      document.getElementById("arAssignAlert").innerHTML = describe(alert);
+      document.getElementById("arAssignNote").value = "";
+      var people = document.getElementById("arAssignPeople");
+      people.innerHTML = '<div class="text-muted small p-2">Loading…</div>';
+      assignBs.show();
+
+      fetch(API + alert.id + "/supervisors/",
+            { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var rows = data.results || [];
+          if (!rows.length) {
+            people.innerHTML = '<div class="text-muted small p-2">' +
+              "No supervisor on this branch has a login, so there is nobody " +
+              "this can be handed to.</div>";
+            return;
+          }
+          // Pre-selected: whoever has it, or — when nobody does — the farm's
+          // own supervisor, who is the answer often enough that the dialog
+          // should be one click. Same default as Notify Supervisor.
+          var already = rows.some(function (person) {
+            return person.id === alert.assigned_to;
+          });
+          var html = rows.map(function (person) {
+            var mine = already ? person.id === alert.assigned_to
+                               : person.is_owner;
+            return '<label class="ar-person">' +
+              '<input type="radio" name="arAssignee" class="form-check-input"' +
+                ' value="' + person.id + '"' + (mine ? " checked" : "") + ">" +
+              "<span>" +
+                '<span class="ar-person-name d-block">' + esc(person.name) + "</span>" +
+                '<span class="ar-person-sub">' + esc(person.role) +
+                  (person.branch ? " · " + esc(person.branch) : "") + "</span>" +
+              "</span>" +
+              (person.is_owner ? '<span class="ar-owner">This farm</span>' : "") +
+              "</label>";
+          }).join("");
+          // Undoing a hand-off is its own choice, and it only exists once
+          // somebody's name is on the alert.
+          if (alert.assigned_to_name) {
+            html += '<label class="ar-person">' +
+              '<input type="radio" name="arAssignee" class="form-check-input" value="">' +
+              "<span><span class=\"ar-person-name d-block\">Nobody</span>" +
+              '<span class="ar-person-sub">Take ' +
+                esc(alert.assigned_to_name) + "'s name off it</span></span></label>";
+          }
+          people.innerHTML = html;
+        })
+        .catch(function () {
+          people.innerHTML = '<div class="text-muted small p-2">' +
+            "Could not load the list of people.</div>";
+        });
     }
 
     function openNotify(alert, button) {
@@ -450,6 +528,29 @@
         move(pending.button, API + pending.alert.id + "/dismiss/", { reason: reason })
           .then(function () { dismissBs.hide(); })
           .catch(function () {})
+          .then(function () { self.disabled = false; });
+      });
+    }
+
+    if (assignModal) {
+      document.getElementById("arAssignConfirm").addEventListener("click", function () {
+        if (!pending) return;
+        var picked = document.querySelector("#arAssignPeople input:checked");
+        if (!picked) {
+          say("danger", "Choose who this is for.");
+          return;
+        }
+        var self = this;
+        self.disabled = true;
+        move(pending.button, API + pending.alert.id + "/assign/", {
+          user_id: picked.value || null,
+          note: document.getElementById("arAssignNote").value
+        }).then(function () {
+          assignBs.hide();
+          say("success", picked.value
+            ? "Assigned. It is on their dashboard now."
+            : "Assignment cleared.");
+        }).catch(function () {})
           .then(function () { self.disabled = false; });
       });
     }
@@ -519,6 +620,7 @@
       var what = button.dataset.move;
       if (what === "dismiss") return openDismiss(alert, button);
       if (what === "notify") return openNotify(alert, button);
+      if (what === "assign") return openAssign(alert, button);
       move(button, API + alert.id + "/" + what + "/", {}).catch(function () {});
     });
 

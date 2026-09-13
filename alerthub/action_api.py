@@ -272,6 +272,23 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
         return self._act(request, pk, workflow.reopen,
                          note=request.data.get("note", ""))
 
+    # --- assignment --------------------------------------------------------
+
+    @action(detail=True, methods=["post"])
+    def assign(self, request, pk=None):
+        """Hand it to somebody, or take their name off it.
+
+        ``user_id`` names the new owner; sending it empty or null clears the
+        assignment, which is a different thing from assigning it to nobody and
+        is the only way to undo a mistaken hand-off.
+
+        The candidate list is the same one Notify Supervisor offers — the
+        people near enough to this alert to go and look at it.
+        """
+        return self._act(request, pk, workflow.assign,
+                         assignee_id=request.data.get("user_id"),
+                         note=request.data.get("note", ""))
+
     # --- escalation --------------------------------------------------------
 
     @action(detail=True, methods=["get"])

@@ -5,8 +5,8 @@ Not a second copy of the Alerts & Notifications card. That one is a feed: it
 says what has been raised, and its job is finished when you have read it. This
 one is a worklist: it shows only alerts nothing has been done about yet, and
 every row carries the moves that take it off the list — go and look at the
-record, pick it up, mark it fixed, wave it off with a reason, or put it in
-front of the supervisor who can go to the farm.
+record, pick it up, mark it fixed, put somebody's name against it, wave it off
+with a reason, or send it to the supervisor who can go to the farm.
 
 Everything it shows comes from /api/alerthub/action-required/, which reads the
 same scoped queryset as the bell. Nothing is invented here: the severity, the
@@ -38,7 +38,7 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
         View All <i class="fa-solid fa-arrow-right ms-1"></i>
       </a>
     </div>
-    {# Severity split. Filled in by script; zero counts are left out. #}
+    {# Severity split. Filled in by script; a zero keeps its chip. #}
     <div class="ar-summary" id="arSummary"></div>
   </div>
 
@@ -83,6 +83,37 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
         <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-sm btn-dark" id="arNotifySend">
           <i class="fa-solid fa-paper-plane me-1"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="arAssignModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-user-check me-2"></i>Assign Alert</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="ar-dialog-alert" id="arAssignAlert"></div>
+        <label class="form-label small fw-semibold">Whose job is this?</label>
+        <div class="ar-people mb-3" id="arAssignPeople"></div>
+        <label class="form-label small fw-semibold" for="arAssignNote">
+          Note <span class="text-muted fw-normal">(optional)</span>
+        </label>
+        <textarea class="form-control form-control-sm" id="arAssignNote" rows="2"
+                  placeholder="Anything they should know before they start."></textarea>
+        <div class="form-text">
+          Assigning puts their name on the alert and sends it to their
+          dashboard. It does not mark it acknowledged — that is theirs to do.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-dark" id="arAssignConfirm">
+          <i class="fa-solid fa-user-check me-1"></i>Assign
         </button>
       </div>
     </div>

@@ -351,6 +351,24 @@ class Notification(models.Model):
     #: answer anybody can audit.
     dismiss_reason = models.TextField(blank=True)
 
+    #: Whose job this is. Deliberately not part of ``status``: who owns a
+    #: problem and how far along it is are two questions, and a farm with
+    #: eight open alerts all assigned to one supervisor is a fact about
+    #: workload that a status column cannot express.
+    #:
+    #: Null is the ordinary case and means "nobody in particular yet", not
+    #: "nobody" — an alert reaches everybody its rule is addressed to whether
+    #: or not one of them has been named.
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="alerts_assigned", db_index=True,
+    )
+    assigned_at = models.DateTimeField(null=True, blank=True)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="alerts_handed_out",
+    )
+
     dedupe_key = models.CharField(max_length=255, db_index=True, blank=True)
 
     created_by = models.ForeignKey(
@@ -487,9 +505,10 @@ class AlertAction(models.Model):
     them is ever edited or deleted — an audit log that can be tidied up is not
     one.
 
-    ``to_status`` is blank on a NOTIFIED row: telling a supervisor moves
-    nothing along by itself, and recording a status change that did not happen
-    would put a lie in the one table meant to be trustworthy.
+    ``to_status`` is blank on a NOTIFIED or ASSIGNED row: telling a supervisor
+    about a problem, or putting their name against it, moves nothing along by
+    itself, and recording a status change that did not happen would put a lie
+    in the one table meant to be trustworthy.
     """
 
     ACKNOWLEDGED = "acknowledged"
@@ -498,6 +517,8 @@ class AlertAction(models.Model):
     DISMISSED = "dismissed"
     REOPENED = "reopened"
     NOTIFIED = "notified"
+    ASSIGNED = "assigned"
+    UNASSIGNED = "unassigned"
 
     ACTION_CHOICES = [
         (ACKNOWLEDGED, "Acknowledged"),
@@ -506,6 +527,8 @@ class AlertAction(models.Model):
         (DISMISSED, "Dismissed"),
         (REOPENED, "Reopened"),
         (NOTIFIED, "Supervisor notified"),
+        (ASSIGNED, "Assigned"),
+        (UNASSIGNED, "Assignment cleared"),
     ]
 
     notification = models.ForeignKey(
@@ -522,8 +545,9 @@ class AlertAction(models.Model):
     note = models.TextField(blank=True)
     from_status = models.CharField(max_length=14, blank=True)
     to_status = models.CharField(max_length=14, blank=True)
-    #: Who was told, on a NOTIFIED row. Names rather than ids, so the entry
-    #: still reads correctly after somebody leaves.
+    #: Who was told, on a NOTIFIED row, or who it was handed to on an
+    #: ASSIGNED one. Names rather than ids, so the entry still reads correctly
+    #: after somebody leaves.
     notified = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
