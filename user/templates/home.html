@@ -579,6 +579,18 @@
 
     {% endif %}
 
+    {% if 'action_required' in dash_panels %}
+    <!-- Action Required: the open exceptions, and the moves that close them.
+         A worklist, not a feed - see templates/_action_required_widget.html.
+         Full width, and high on the page: every block below it reports what
+         has happened, and this is the one that says what to do about it. -->
+    <div class="row g-3 mb-4" style="order:{{ dash_panels.action_required }};">
+      <div class="col-12">
+        {% include "_action_required_widget.html" %}
+      </div>
+    </div>
+    {% endif %}
+
     {% if 'alerts_widget' in dash_panels %}
     <!-- Alerts & Notifications: priority split, named tiles and the newest few.
          Hydrated from /api/alerthub/ so it can never disagree with the bell.

@@ -9,6 +9,7 @@ from django.utils import timezone
 from alerthub.constants import compare
 from alerthub.engine import raise_alert
 from alerthub.measures import (
+    batch_entry_url,
     birds_alive,
     breed_standard,
     live_batches,
@@ -414,5 +415,128 @@ def dispatch_pending(rule):
             object_id=batch.pk,
             object_display=batch.batch_name,
             action_url=safe_url("bird_sale_list"),
+            **scope,
+        )
+
+
+def _last_entry_dates():
+    """batch id -> the date of its most recent daily entry."""
+    from django.db.models import Max
+
+    from broiler.models import DailyEntry
+
+    rows = (DailyEntry.objects.exclude(batch__isnull=True)
+            .values("batch_id").annotate(last=Max("date")))
+    return {row["batch_id"]: row["last"] for row in rows}
+
+
+@detector("production.daily_entry_missing")
+def daily_entry_missing(rule):
+    """A live flock whose daily sheet has not been filled in for some days.
+
+    The gap is measured from the last entry that exists, not from placement —
+    a flock recorded for three weeks and then abandoned is the case this is
+    for, and it is invisible to every rule that reads the latest reading,
+    because the latest reading still looks fine. It is the *absence* that is
+    the alert.
+
+    Batches that have never been entered at all are left to
+    ``batch_not_started``: the two would otherwise raise together on the same
+    flock, saying different things about the same silence.
+    """
+    today = timezone.localdate()
+    last_entries = _last_entry_dates()
+    placed = None
+
+    for batch in live_batches(today):
+        last = last_entries.get(batch.pk)
+        if last is None:
+            continue                      # never started; a different rule
+        gap = (today - last).days
+        if gap <= 0 or not compare(gap, rule.operator, rule.threshold):
+            continue
+
+        scope = _farm_scope(batch)
+        if not rule_applies_to(rule, **scope):
+            continue
+
+        if placed is None:
+            placed = birds_placed([b.pk for b in live_batches(today)])
+
+        raise_alert(
+            rule,
+            title="Daily Entry Missing",
+            message=(
+                f"Batch {batch.batch_name} has no daily entry since "
+                f"{last.strftime('%d %b %Y')} — {gap} days ago "
+                f"(limit {rule.threshold} days)."
+            ),
+            # The date is in the key so a longer silence raises again tomorrow
+            # rather than being folded into yesterday's alert and going quiet.
+            dedupe_key=f"{rule.pk}:entry_missing:{batch.pk}:{today}",
+            measured_value=gap,
+            threshold_value=rule.threshold,
+            object_label="broiler.BroilerBatch",
+            object_id=batch.pk,
+            object_display=batch.batch_name,
+            action_url=batch_entry_url(batch.pk, last),
+            metadata={"last_entry": last.isoformat(), "days_missing": gap,
+                      "birds_placed": str((placed or {}).get(batch.pk, 0))},
+            **scope,
+        )
+
+
+@detector("production.batch_not_started")
+def batch_not_started(rule):
+    """Chicks are on the farm and nothing has been recorded about them.
+
+    Not the same as an unplaced batch — that is ``placement_pending``, and it
+    is a planning gap. This is birds alive on a farm with no feed, no
+    mortality and no weight against their name, which means nobody can say how
+    they are doing and the first anybody hears of a problem is at harvest.
+    """
+    today = timezone.localdate()
+    batches = list(live_batches(today))
+    if not batches:
+        return
+
+    ids = [b.pk for b in batches]
+    placed = birds_placed(ids)
+    last_entries = _last_entry_dates()
+
+    for batch in batches:
+        birds = placed.get(batch.pk) or 0
+        if birds <= 0:
+            continue                      # nothing placed; placement_pending
+        if last_entries.get(batch.pk) is not None:
+            continue                      # started, however long ago
+
+        since = batch.start_date or today
+        age = (today - since).days
+        if age < 0 or not compare(age, rule.operator, rule.threshold):
+            continue
+
+        scope = _farm_scope(batch)
+        if not rule_applies_to(rule, **scope):
+            continue
+
+        raise_alert(
+            rule,
+            title="Batch Not Started",
+            message=(
+                f"Batch {batch.batch_name} has {birds:,.0f} chicks placed on "
+                f"{since.strftime('%d %b %Y')} and no daily entries at all — "
+                f"{age} days (limit {rule.threshold} days)."
+            ),
+            dedupe_key=f"{rule.pk}:not_started:{batch.pk}:{today}",
+            measured_value=age,
+            threshold_value=rule.threshold,
+            object_label="broiler.BroilerBatch",
+            object_id=batch.pk,
+            object_display=batch.batch_name,
+            action_url=batch_entry_url(batch.pk, since),
+            metadata={"placed_on": since.isoformat(), "birds_placed": str(birds),
+                      "age_days": age,
+                      "missing": ["daily entry", "feed", "mortality"]},
             **scope,
         )

@@ -12,6 +12,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from . import trigger, views
+from .action_api import ActionRequiredViewSet
 from .api import NotificationViewSet, PreferenceView
 
 app_name = "alerthub"
@@ -19,6 +20,10 @@ app_name = "alerthub"
 router = DefaultRouter()
 router.register("notifications", NotificationViewSet, basename="notification")
 router.register("preferences", PreferenceView, basename="preference")
+# Separate from "notifications" on purpose: both have a dismiss, and the two
+# mean different things. See alerthub/action_api.py.
+router.register("action-required", ActionRequiredViewSet,
+                basename="action-required")
 
 urlpatterns = [
     # Pages

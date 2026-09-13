@@ -11,10 +11,12 @@ cross-referenced. If the definition changes, these three change together.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import Sum
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,29 @@ def safe_url(name, *args, **kwargs) -> str:
     except NoReverseMatch:
         logger.debug("alerthub: no reverse for %s", name)
         return ""
+
+
+def batch_entry_url(batch_id, since=None, days=14) -> str:
+    """The daily-entry register opened on one flock.
+
+    An alert names a particular flock and a particular problem with it, so the
+    button under it should land on that flock — not on the register as a whole,
+    where the reader has to find the row the alert was already holding.
+
+    ``daily_entry_single_list`` reads ``?batch=`` and expands that group; the
+    dates go through the handler in static/js/main.js, which fills the page's
+    own boxes and presses its own filter button. Both are needed: the register
+    shows the last seven days by default, and a flock is on this list only if
+    it has an entry inside the window — which, for an alert about a flock that
+    has stopped being written up, it will not.
+    """
+    base = safe_url("daily_entry_single_list")
+    if not base:
+        return safe_url("daily_entry_list") or ""
+    today = timezone.localdate()
+    start = since or (today - timedelta(days=days))
+    return "%s?batch=%s&from_date=%s&to_date=%s" % (
+        base, batch_id, start.isoformat(), today.isoformat())
 
 
 def chick_item_ids() -> list[int]:

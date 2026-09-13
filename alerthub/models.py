@@ -1,6 +1,6 @@
 """Persistence for business alerts.
 
-Five tables, each with one job:
+Six tables, each with one job:
 
 * :class:`AlertRule` — the Alert Configuration master. What to watch, at what
   threshold, at what priority, and who to tell.
@@ -12,6 +12,9 @@ Five tables, each with one job:
 * :class:`NotificationPreference` — per-user delivery choices.
 * :class:`OutgoingNotification` — a message a person composed: draft, waiting
   for its hour, or already sent. The composition, as against the delivery.
+* :class:`AlertAction` — what somebody did about an alert, append-only. The
+  status column below says where an alert stands; this says how it got
+  there, and is the only record of a dismissal's stated reason.
 
 **Why recipients are a separate table.** Read state is per person: the same
 "High Mortality" alert is unread for the supervisor and read for the manager,
@@ -34,8 +37,8 @@ from django.utils import timezone
 
 from .catalog import BY_KEY, rule_key_choices
 from .constants import (
-    Category, Channel, Module, NotificationType, Operator, Priority,
-    defaults_for_type,
+    AlertStatus, Category, Channel, Module, NotificationType, OPEN_STATUSES,
+    Operator, Priority, defaults_for_type,
 )
 
 
@@ -185,6 +188,14 @@ class NotificationQuerySet(models.QuerySet):
 
         return visible_notifications(self, user)
 
+    def needing_action(self):
+        """Still open, in whatever sense — untouched, acknowledged or in hand.
+
+        Resolved and dismissed are what taking an alert off the Action Required
+        list means, so they are the only two this leaves out.
+        """
+        return self.filter(status__in=OPEN_STATUSES)
+
     def by_urgency(self):
         """Most urgent first, then most recent.
 
@@ -287,6 +298,27 @@ class Notification(models.Model):
     )
     metadata = models.JSONField(default=dict, blank=True)
 
+    # --- how far along the answer is --------------------------------------
+    # Shared, unlike read state: an alert being worked on is being worked on
+    # for everybody, and two supervisors each acknowledging their own private
+    # copy would leave nobody knowing whether anyone had picked it up. Read
+    # state stays on NotificationRecipient, where it belongs, and this stays
+    # here, where it is one fact about one problem.
+    status = models.CharField(
+        max_length=14, choices=AlertStatus.choices, default=AlertStatus.OPEN,
+        db_index=True,
+    )
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    status_changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="alerts_actioned",
+    )
+    #: Why it was waved off. Required to dismiss and never required otherwise:
+    #: dismissing is the one transition that closes an alert without anything
+    #: having been done about it, and "someone closed it in March" is not an
+    #: answer anybody can audit.
+    dismiss_reason = models.TextField(blank=True)
+
     dedupe_key = models.CharField(max_length=255, db_index=True, blank=True)
 
     created_by = models.ForeignKey(
@@ -305,6 +337,8 @@ class Notification(models.Model):
             models.Index(fields=["priority", "-created_at"]),
             models.Index(fields=["dedupe_key", "-created_at"]),
             models.Index(fields=["module", "-created_at"]),
+            # The Action Required widget: open alerts, newest first.
+            models.Index(fields=["status", "-created_at"]),
         ]
         verbose_name = "Notification"
         verbose_name_plural = "Notifications"
@@ -342,6 +376,16 @@ class Notification(models.Model):
         import os
 
         return os.path.basename(self.attachment.name) if self.attachment else ""
+
+    @property
+    def is_open(self) -> bool:
+        """Still wants somebody's attention."""
+        return self.status in OPEN_STATUSES
+
+    @property
+    def status_tone(self) -> str:
+        """The CSS suffix for the status chip — never the severity's."""
+        return self.status.replace("_", "-")
 
     @property
     def scope_label(self) -> str:
@@ -400,6 +444,65 @@ class NotificationRecipient(models.Model):
             self.read_at = timezone.now()
             if commit:
                 self.save(update_fields=["is_read", "read_at"])
+
+
+class AlertAction(models.Model):
+    """Something a person did about an alert. Append-only.
+
+    The status column on the alert says where it stands *now*; this says how it
+    got there, which is the question anybody asks afterwards. A row is written
+    for every transition and for every supervisor who was told, and none of
+    them is ever edited or deleted — an audit log that can be tidied up is not
+    one.
+
+    ``to_status`` is blank on a NOTIFIED row: telling a supervisor moves
+    nothing along by itself, and recording a status change that did not happen
+    would put a lie in the one table meant to be trustworthy.
+    """
+
+    ACKNOWLEDGED = "acknowledged"
+    STARTED = "started"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+    REOPENED = "reopened"
+    NOTIFIED = "notified"
+
+    ACTION_CHOICES = [
+        (ACKNOWLEDGED, "Acknowledged"),
+        (STARTED, "Work started"),
+        (RESOLVED, "Resolved"),
+        (DISMISSED, "Dismissed"),
+        (REOPENED, "Reopened"),
+        (NOTIFIED, "Supervisor notified"),
+    ]
+
+    notification = models.ForeignKey(
+        Notification, on_delete=models.CASCADE, related_name="actions"
+    )
+    action = models.CharField(max_length=16, choices=ACTION_CHOICES, db_index=True)
+    #: Null once the account is removed. The entry stays — who did it being
+    #: unknown is a smaller loss than the fact of it being done disappearing.
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="alert_actions",
+    )
+    #: The dismissal reason, the note typed into Notify Supervisor, or blank.
+    note = models.TextField(blank=True)
+    from_status = models.CharField(max_length=14, blank=True)
+    to_status = models.CharField(max_length=14, blank=True)
+    #: Who was told, on a NOTIFIED row. Names rather than ids, so the entry
+    #: still reads correctly after somebody leaves.
+    notified = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["notification", "-created_at"])]
+        verbose_name = "Alert action"
+        verbose_name_plural = "Alert actions"
+
+    def __str__(self) -> str:
+        return f"{self.get_action_display()} · {self.notification_id}"
 
 
 class NotificationPreference(models.Model):

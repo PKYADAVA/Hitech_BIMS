@@ -27,21 +27,73 @@ class Priority(models.TextChoices):
 #: Priority -> the Bootstrap-ish tone token the templates and CSS key off.
 #: Single source: the bell, the centre, the history table and the dashboard
 #: widget all read this, so a colour can never mean two things in two places.
+#:
+#: Green is deliberately not in here. It used to mark Low, and an alert that
+#: has been *resolved* is now green everywhere — which would have made green
+#: mean both "nothing much" and "dealt with" on the same dashboard. Low reads
+#: as informational, so it takes blue and Medium moves to amber, which is what
+#: a warning looks like to everyone who has ever seen one.
 PRIORITY_TONE = {
     Priority.CRITICAL: "danger",
     Priority.HIGH: "warning",
-    Priority.MEDIUM: "info",
-    Priority.LOW: "success",
+    Priority.MEDIUM: "warning",
+    Priority.LOW: "info",
 }
 
 #: Priority -> hex, for the places CSS variables cannot reach (inline SVG,
-#: email bodies later). Matches PRIORITY_TONE's intent: red/orange/blue/green.
+#: email bodies later). Red / orange / amber / blue, with green kept back for
+#: resolution. The two tones above collapse to one Bootstrap word; these do
+#: not, and the CSS keys off the priority name rather than the tone.
 PRIORITY_COLOR = {
     Priority.CRITICAL: "#dc2626",
     Priority.HIGH: "#ea580c",
-    Priority.MEDIUM: "#2563eb",
-    Priority.LOW: "#16a34a",
+    Priority.MEDIUM: "#d97706",
+    Priority.LOW: "#2563eb",
 }
+
+#: The state an alert is in, once somebody has touched it.
+#:
+#: Separate from priority on purpose: how bad a thing is and how far along the
+#: answer to it is are different questions, and an alert that has been picked
+#: up is still critical until it is fixed.
+class AlertStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    ACKNOWLEDGED = "acknowledged", "Acknowledged"
+    IN_PROGRESS = "in_progress", "In Progress"
+    RESOLVED = "resolved", "Resolved"
+    DISMISSED = "dismissed", "Dismissed"
+
+
+#: The statuses that still want somebody's attention. Everything the Action
+#: Required widget shows is one of these; resolving or dismissing is precisely
+#: what takes an alert off it.
+OPEN_STATUSES = (AlertStatus.OPEN, AlertStatus.ACKNOWLEDGED,
+                 AlertStatus.IN_PROGRESS)
+
+#: Status -> hex. Green appears here and nowhere else.
+STATUS_COLOR = {
+    AlertStatus.OPEN: "#64748b",
+    AlertStatus.ACKNOWLEDGED: "#2563eb",
+    AlertStatus.IN_PROGRESS: "#7c3aed",
+    AlertStatus.RESOLVED: "#16a34a",
+    AlertStatus.DISMISSED: "#64748b",
+}
+
+#: Priority -> the word the Action Required card puts on the badge.
+#:
+#: Not the same as ``Priority.label``, deliberately. The Alert Configuration
+#: master is choosing an urgency level and "Medium" is the right word there;
+#: the dashboard is telling somebody what kind of problem they are looking at,
+#: and "Warning" and "Information" are what those two levels mean once they
+#: are on a card. Renaming the choices themselves would change the master's
+#: dropdowns to suit a widget, which is the wrong way round.
+SEVERITY_LABEL = {
+    Priority.CRITICAL: "Critical",
+    Priority.HIGH: "High",
+    Priority.MEDIUM: "Warning",
+    Priority.LOW: "Information",
+}
+
 
 #: Sort weight — lower is more urgent. Used for ordering feeds by urgency then
 #: recency, which is not the same as ordering by the priority *string*.
@@ -75,9 +127,15 @@ class Module(models.TextChoices):
 
 
 #: Module -> Font Awesome icon, so an alert looks the same everywhere it renders.
+#:
+#: Every name here must exist in the Font Awesome build base.html pins (6.0.0
+#: free). A name that does not is not an error anywhere — the glyph is simply
+#: blank, on the bell and the centre as well as the dashboard, and nobody
+#: reports a missing picture. ``fa-wheat-awn`` was exactly that for Feed until
+#: it was checked against the loaded stylesheet.
 MODULE_ICON = {
     Module.PRODUCTION: "fa-solid fa-kiwi-bird",
-    Module.FEED: "fa-solid fa-wheat-awn",
+    Module.FEED: "fa-solid fa-seedling",
     Module.HATCHERY: "fa-solid fa-egg",
     Module.HEALTH: "fa-solid fa-syringe",
     Module.INVENTORY: "fa-solid fa-boxes-stacked",

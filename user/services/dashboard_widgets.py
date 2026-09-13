@@ -1289,6 +1289,10 @@ EXTRA_PANELS = [
     # See the empty-tabs note in dashboard_panels.
     ("alerts_widget", "Alerts & Notifications", (),
      "fa-solid fa-bell", "gs-red"),
+    # The exceptions somebody has to answer for, as against the feed of
+    # everything that has been raised. Same gate, same reasoning.
+    ("action_required", "Action Required", (),
+     "fa-solid fa-triangle-exclamation", "gs-red"),
 ]
 
 
@@ -1300,9 +1304,12 @@ EXTRA_PANELS = [
 #: changing this never moves anybody's configured dashboard.
 DEFAULT_PANEL_ORDER = (
     "quick_actions",
-    # Alerts sit directly under Quick Actions: the dashboard's job is to show
-    # what needs doing before what happened, and an unread critical alert
-    # outranks every figure below it.
+    # Then Action Required, then the alerts feed. The three at the top are the
+    # blocks people act on: where to start work, what has gone wrong that is
+    # still open, and everything that has been raised. Only below them does
+    # the dashboard begin reporting figures — a list of exceptions sitting
+    # under three rows of totals is a list nobody scrolls to.
+    "action_required",
     "alerts_widget",
     # Live Flock, Daily Entries and Age wise Available Birds share a row: they
     # are the same question in three parts — what is on the farms, whether it

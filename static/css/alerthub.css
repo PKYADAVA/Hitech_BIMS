@@ -14,10 +14,16 @@
   --ah-critical-soft: #fef2f2;
   --ah-high: #ea580c;
   --ah-high-soft: #fff7ed;
-  --ah-medium: #2563eb;
-  --ah-medium-soft: #eff6ff;
-  --ah-low: #16a34a;
-  --ah-low-soft: #f0fdf4;
+  --ah-medium: #d97706;
+  --ah-medium-soft: #fffbeb;
+  --ah-low: #2563eb;
+  --ah-low-soft: #eff6ff;
+
+  /* Green is a state, not a severity — see PRIORITY_TONE in
+     alerthub/constants.py. It marks an alert that has been dealt with, which
+     is the only thing on a dashboard that should read as good news. */
+  --ah-resolved: #16a34a;
+  --ah-resolved-soft: #f0fdf4;
 
   --ah-ink: #1f2937;
   --ah-muted: #6b7280;
@@ -913,7 +919,7 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 
 .sn-deliv-name { font-weight: 600; }
 .sn-deliv-sub { font-size: .72rem; color: var(--ah-faint); }
-.sn-dot-ok { color: var(--ah-low); }
+.sn-dot-ok { color: var(--ah-resolved); }
 .sn-dot-wait { color: var(--ah-faint); }
 
 @media (max-width: 575.98px) {
@@ -922,4 +928,275 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   .sn-checks label { padding: .5rem .45rem; }
   .sn-actions .btn { flex: 1 1 100%; }
   .sn-actions .sn-spacer { margin-left: 0; }
+}
+
+/* =====================================================================
+   Action Required widget
+   =====================================================================
+   The exceptions somebody has to answer for, as against the feed of
+   everything that has been raised.
+
+   Colour here means one of two things and never anything else. Severity is
+   the stripe, the badge and the icon - red, orange, amber, blue, taken from
+   the --ah-* tokens at the top of this file so the card can never disagree
+   with the bell beside it. Green is resolution, and appears on nothing else:
+   an operational dashboard where green also means "low priority" teaches
+   people that green means nothing in particular.
+
+   Nothing in this block is a brand colour. The card's own furniture is
+   neutral, so that the one coloured thing on a row is the thing that is
+   wrong with it.
+   ------------------------------------------------------------------ */
+
+.ar-card {
+  background: #fff; border: 1px solid var(--ah-line, #e5e7eb);
+  border-radius: 12px; overflow: hidden;
+}
+
+/* -- header ------------------------------------------------------------ */
+
+.ar-head {
+  display: flex; align-items: flex-start; gap: .75rem; flex-wrap: wrap;
+  padding: .85rem 1rem .7rem;
+  border-bottom: 1px solid var(--ah-line, #e5e7eb);
+}
+.ar-title {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .95rem; font-weight: 700; color: var(--ah-ink, #1f2937);
+  margin: 0;
+}
+.ar-title i { color: var(--ah-high); }
+.ar-total {
+  font-size: .7rem; font-weight: 700; line-height: 1;
+  padding: .3rem .5rem; border-radius: 999px;
+  background: #f1f5f9; color: #475569;
+}
+.ar-total.has-critical { background: var(--ah-critical-soft); color: var(--ah-critical); }
+.ar-head-right { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+
+/* The severity split. Each is a filter into the centre, and each disappears
+   when it is zero - a row of zeroes is four pieces of furniture saying
+   nothing, and it pushes the alerts themselves further down the card. */
+.ar-summary { display: flex; flex-wrap: wrap; gap: .35rem; width: 100%; }
+.ar-sum {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .7rem; font-weight: 600; text-decoration: none;
+  padding: .22rem .55rem; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.ar-sum b { font-variant-numeric: tabular-nums; }
+.ar-sum.critical { background: var(--ah-critical-soft); color: var(--ah-critical);
+                   border-color: #fecaca; }
+.ar-sum.high     { background: var(--ah-high-soft);     color: var(--ah-high);
+                   border-color: #fed7aa; }
+.ar-sum.medium   { background: var(--ah-medium-soft);   color: var(--ah-medium);
+                   border-color: #fde68a; }
+.ar-sum.low      { background: var(--ah-low-soft);      color: var(--ah-low);
+                   border-color: #bfdbfe; }
+.ar-sum:hover { filter: brightness(.97); }
+
+/* -- the list ---------------------------------------------------------- */
+
+.ar-list { display: flex; flex-direction: column; }
+.ar-row {
+  display: grid; gap: .1rem .85rem; padding: .8rem 1rem .8rem .85rem;
+  border-bottom: 1px solid #f1f5f9;
+  border-left: 3px solid transparent;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-areas: "icon body metric" ". actions actions";
+}
+.ar-row:last-child { border-bottom: 0; }
+.ar-row.critical { border-left-color: var(--ah-critical); }
+.ar-row.high     { border-left-color: var(--ah-high); }
+.ar-row.medium   { border-left-color: var(--ah-medium); }
+.ar-row.low      { border-left-color: var(--ah-low); }
+/* A row whose move is in flight. Not disabled as a whole - the buttons are,
+   one by one, which is what stops a double press; this only says it is busy. */
+.ar-row.is-busy { opacity: .55; }
+/* Briefly, after a move lands, before the row leaves the list. Green, because
+   this is the one thing on the card that is good news. */
+.ar-row.is-done {
+  border-left-color: var(--ah-resolved);
+  background: var(--ah-resolved-soft);
+  transition: background .25s ease, opacity .25s ease;
+}
+
+.ar-ic {
+  grid-area: icon; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; font-size: .8rem; color: #fff;
+}
+.ar-ic.critical { background: var(--ah-critical); }
+.ar-ic.high     { background: var(--ah-high); }
+.ar-ic.medium   { background: var(--ah-medium); }
+.ar-ic.low      { background: var(--ah-low); }
+
+.ar-body { grid-area: body; min-width: 0; }
+.ar-line1 { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.ar-name {
+  font-size: .83rem; font-weight: 650; color: var(--ah-ink, #1f2937);
+  margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+}
+.ar-msg {
+  font-size: .74rem; color: var(--ah-faint, #6b7280); margin: .12rem 0 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-clamp: 2; overflow: hidden;
+}
+.ar-meta {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  font-size: .68rem; color: #94a3b8; margin-top: .22rem;
+}
+.ar-meta .ar-sep { opacity: .5; }
+
+/* -- badges ------------------------------------------------------------ */
+
+.ar-sev {
+  font-size: .6rem; font-weight: 800; letter-spacing: .045em;
+  text-transform: uppercase; padding: .14rem .42rem; border-radius: 4px;
+  white-space: nowrap; line-height: 1.4;
+}
+.ar-sev.critical { background: var(--ah-critical); color: #fff; }
+.ar-sev.high     { background: var(--ah-high);     color: #fff; }
+.ar-sev.medium   { background: var(--ah-medium);   color: #fff; }
+.ar-sev.low      { background: var(--ah-low);      color: #fff; }
+
+/* Status is an outline, severity is a fill. Two badges sit side by side on
+   every row, and if both were filled the eye would have to read them to find
+   out which one was the urgent one. */
+.ar-state {
+  font-size: .6rem; font-weight: 700; padding: .12rem .42rem;
+  border-radius: 999px; border: 1px solid currentColor;
+  white-space: nowrap; line-height: 1.4; background: #fff;
+}
+.ar-state.acknowledged { color: #2563eb; }
+.ar-state.in-progress  { color: #7c3aed; }
+.ar-state.resolved     { color: var(--ah-resolved); }
+.ar-state.dismissed    { color: #64748b; }
+/* Untouched is the default and the commonest, so it is not worth a chip of
+   its own - the absence of one already says nobody has picked it up. */
+.ar-state.open { display: none; }
+
+/* -- the reading ------------------------------------------------------- */
+
+.ar-metric {
+  grid-area: metric; text-align: right; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.ar-metric b {
+  font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  white-space: nowrap; color: var(--ah-ink, #1f2937);
+}
+.ar-metric span { font-size: .62rem; color: #94a3b8; white-space: nowrap; }
+
+/* -- actions ----------------------------------------------------------- */
+
+.ar-actions {
+  grid-area: actions; display: flex; align-items: center; gap: .35rem;
+  flex-wrap: wrap; margin-top: .5rem;
+}
+.ar-btn {
+  font-size: .7rem; font-weight: 600; line-height: 1;
+  padding: .38rem .6rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid #d5dbe4; background: #fff; color: #475569;
+  display: inline-flex; align-items: center; gap: .3rem;
+}
+.ar-btn:hover:not(:disabled) { background: #f8fafc; border-color: #b9c3d0; }
+.ar-btn:disabled { opacity: .5; cursor: default; }
+.ar-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* The deep link is the primary move on every row: the fastest way to close an
+   alert is usually to go and look at the record it is about. It is dark
+   neutral rather than coloured, so it never competes with the severity. */
+.ar-btn.primary { background: #1f2937; border-color: #1f2937; color: #fff; }
+.ar-btn.primary:hover:not(:disabled) { background: #111827; border-color: #111827; }
+.ar-btn.danger { color: var(--ah-critical); border-color: #fecaca; }
+.ar-btn.danger:hover:not(:disabled) { background: var(--ah-critical-soft); }
+.ar-btn .fa-spinner { animation: ar-spin .7s linear infinite; }
+@keyframes ar-spin { to { transform: rotate(360deg); } }
+
+/* -- empty ------------------------------------------------------------- */
+
+.ar-empty { padding: 2.1rem 1rem; text-align: center; }
+.ar-empty i { font-size: 1.7rem; color: var(--ah-resolved); }
+.ar-empty p { margin: .55rem 0 .15rem; font-weight: 650; font-size: .85rem;
+              color: var(--ah-ink, #1f2937); }
+.ar-empty span { font-size: .74rem; color: var(--ah-faint, #6b7280); }
+
+/* -- footer ------------------------------------------------------------ */
+
+/* The divide the card is built around: what is still to be done is above this
+   line, what has already been done is below it. They are different questions
+   and a reader should never have to work out which half they are in. */
+.ar-foot {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .6rem 1rem; background: #f8fafc;
+  border-top: 1px solid var(--ah-line, #e5e7eb);
+  font-size: .72rem; color: var(--ah-faint, #6b7280);
+}
+.ar-foot a { color: #475569; text-decoration: none; font-weight: 600; }
+.ar-foot a:hover { text-decoration: underline; }
+.ar-foot .ar-spacer { margin-left: auto; }
+.ar-foot .ar-done { color: var(--ah-resolved); font-weight: 700; }
+
+/* -- dialogs ----------------------------------------------------------- */
+
+.ar-people { display: flex; flex-direction: column; gap: .25rem; max-height: 240px;
+             overflow-y: auto; }
+.ar-person {
+  display: flex; align-items: center; gap: .6rem; padding: .5rem .55rem;
+  border: 1px solid var(--ah-line, #e5e7eb); border-radius: 8px; cursor: pointer;
+  margin: 0;
+}
+.ar-person:hover { background: #f8fafc; }
+.ar-person input { margin: 0; flex: 0 0 auto; }
+.ar-person-name { font-size: .82rem; font-weight: 600; color: var(--ah-ink, #1f2937); }
+.ar-person-sub { font-size: .68rem; color: var(--ah-faint, #6b7280); }
+.ar-person .ar-owner {
+  margin-left: auto; font-size: .6rem; font-weight: 700; padding: .1rem .4rem;
+  border-radius: 999px; background: var(--ah-medium-soft); color: var(--ah-medium);
+}
+.ar-dialog-alert {
+  font-size: .75rem; padding: .55rem .65rem; border-radius: 8px;
+  background: #f8fafc; border-left: 3px solid var(--ah-line, #e5e7eb);
+  margin-bottom: .8rem;
+}
+.ar-dialog-alert b { display: block; color: var(--ah-ink, #1f2937); }
+
+/* -- responsive -------------------------------------------------------- */
+
+/* Tablet: the reading leaves its own column and joins the body. At this width
+   a right-aligned number leaves the title about forty characters, which is
+   not enough for "Feed Stock Coverage Low" and the farm it is about. */
+@media (max-width: 991.98px) {
+  .ar-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-areas: "icon body" ". metric" ". actions";
+  }
+  .ar-metric { text-align: left; flex-direction: row; align-items: baseline;
+               gap: .35rem; margin-top: .25rem; }
+}
+
+/* Phone: one column, and the buttons become the width of a thumb. The icon
+   goes - the severity badge already says the same thing in words, and on a
+   320px row every 28px spent on decoration is taken from the title. */
+@media (max-width: 575.98px) {
+  .ar-head { padding: .75rem .8rem .6rem; }
+  .ar-head-right { width: 100%; margin-left: 0; }
+  .ar-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "body" "metric" "actions";
+    padding: .75rem .8rem .75rem .7rem;
+  }
+  .ar-ic { display: none; }
+  .ar-name { white-space: normal; }
+  .ar-actions { margin-top: .6rem; }
+  .ar-actions .ar-btn { flex: 1 1 calc(50% - .35rem); justify-content: center;
+                        padding: .5rem .5rem; }
+  .ar-actions .ar-btn.primary { flex: 1 1 100%; }
+  .ar-foot { padding: .6rem .8rem; }
+  .ar-foot .ar-spacer { margin-left: 0; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-row.is-done { transition: none; }
+  .ar-btn .fa-spinner { animation: none; }
 }

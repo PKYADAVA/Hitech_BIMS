@@ -60,3 +60,6 @@ dist-apk/
 
 # Node tooling for the web script tests (mobile/ has its own)
 node_modules/
+
+# Local run-a-server-against-scratch-data settings (see the docstring).
+preview_settings.py

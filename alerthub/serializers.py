@@ -6,10 +6,13 @@ has to join two payloads or hold a lookup table that can drift from the server's
 """
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import serializers
 
-from .constants import MODULE_ICON, PRIORITY_COLOR, PRIORITY_TONE
-from .models import Notification, NotificationPreference
+from .constants import (MODULE_ICON, PRIORITY_COLOR, PRIORITY_TONE,
+                        SEVERITY_LABEL, STATUS_COLOR, AlertStatus)
+from .models import AlertAction, Notification, NotificationPreference
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -100,6 +103,150 @@ class NotificationSerializer(serializers.ModelSerializer):
         from django.urls import reverse
 
         return reverse("alerthub:notification_detail", args=[obj.pk])
+
+
+def _grouped(value) -> str:
+    """A measured value, grouped the way it is read here.
+
+    Indian grouping — 2,45,000, not 245,000 — because the alert's own message
+    sentence is written that way, and a row that says "2,45,000 outstanding"
+    beside a figure reading "245,000" looks like two different numbers.
+
+    Trailing zeros go: a threshold of 3 is "3 days", not "3.00 days". Whole
+    numbers keep no decimal point at all, which is the difference from
+    ``purchase.templatetags.purchase_extras.indian_currency`` — that one is
+    formatting money, where two decimals are always wanted.
+    """
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return str(value)
+
+    sign = "-" if number < 0 else ""
+    number = abs(number)
+    whole = int(number)
+    fraction = ("%.2f" % (number - whole)).split(".")[1].rstrip("0")
+
+    digits = str(whole)
+    if len(digits) > 3:
+        head, tail = digits[:-3], digits[-3:]
+        parts = []
+        while len(head) > 2:
+            parts.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            parts.insert(0, head)
+        digits = ",".join(parts) + "," + tail
+
+    return sign + digits + ("." + fraction if fraction else "")
+
+
+class AlertActionSerializer(serializers.ModelSerializer):
+    """One line of the audit trail."""
+
+    actor_name = serializers.SerializerMethodField()
+    action_label = serializers.CharField(source="get_action_display", read_only=True)
+
+    class Meta:
+        model = AlertAction
+        fields = ["id", "action", "action_label", "actor_name", "note",
+                  "from_status", "to_status", "notified", "created_at"]
+
+    def get_actor_name(self, obj) -> str:
+        # "System" rather than blank: an entry with no name against it reads
+        # like the name failed to load, when in fact nobody typed it.
+        if obj.actor is None:
+            return "System"
+        return obj.actor.get_full_name() or obj.actor.get_username()
+
+
+class ActionAlertSerializer(NotificationSerializer):
+    """An alert as the Action Required card needs it.
+
+    Everything the base serializer gives the bell, plus the three things this
+    card is built around: where the work has got to, what may be done next, and
+    the one number that made it fire.
+
+    ``available_actions`` is computed on the server from the same transition
+    table the endpoints enforce. The card renders whatever comes back rather
+    than deciding for itself which buttons make sense — two copies of that rule
+    would drift, and the visible copy is the one that would be wrong.
+    """
+
+    severity_label = serializers.SerializerMethodField()
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    status_tone = serializers.CharField(read_only=True)
+    status_color = serializers.SerializerMethodField()
+    status_changed_by_name = serializers.SerializerMethodField()
+    available_actions = serializers.SerializerMethodField()
+    reading = serializers.SerializerMethodField()
+    action_count = serializers.SerializerMethodField()
+
+    class Meta(NotificationSerializer.Meta):
+        fields = NotificationSerializer.Meta.fields + [
+            "severity_label", "status", "status_label", "status_tone", "status_color",
+            "status_changed_at", "status_changed_by_name", "dismiss_reason",
+            "available_actions", "reading", "action_count",
+        ]
+
+    def get_severity_label(self, obj) -> str:
+        return SEVERITY_LABEL.get(obj.priority, obj.get_priority_display())
+
+    def get_status_color(self, obj) -> str:
+        return STATUS_COLOR.get(obj.status, "#64748b")
+
+    def get_status_changed_by_name(self, obj) -> str:
+        person = obj.status_changed_by
+        if person is None:
+            return ""
+        return person.get_full_name() or person.get_username()
+
+    def get_available_actions(self, obj) -> list:
+        from .workflow import TRANSITIONS
+
+        labels = {
+            AlertStatus.ACKNOWLEDGED: ("acknowledge", "Acknowledge"),
+            AlertStatus.IN_PROGRESS: ("start", "Start Work"),
+            AlertStatus.RESOLVED: ("resolve", "Mark Resolved"),
+            AlertStatus.DISMISSED: ("dismiss", "Dismiss"),
+            AlertStatus.OPEN: ("reopen", "Reopen"),
+        }
+        out = []
+        for target in TRANSITIONS.get(obj.status, ()):
+            key, label = labels[target]
+            out.append({"key": key, "label": label, "to": str(target),
+                        # Dismissal is the one that cannot be done from a
+                        # single press, so the card knows to open the dialog.
+                        "needs_reason": target == AlertStatus.DISMISSED})
+        order = ["acknowledge", "start", "resolve", "dismiss", "reopen"]
+        out.sort(key=lambda a: order.index(a["key"]))
+        return out
+
+    def get_reading(self, obj) -> str:
+        """The measurement, in the unit the rule is written in.
+
+        Built from the rule's own threshold wording rather than a format
+        guessed per module, so a coverage rule reads "1.8 days / 3 days" and a
+        weight rule "1,450 g / 1,700 g" without either of them being special
+        cased here.
+        """
+        if obj.measured_value is None:
+            return ""
+        spec = obj.spec
+        unit = ""
+        if spec is not None and getattr(spec, "threshold", None) is not None:
+            unit = getattr(spec.threshold, "unit", "") or ""
+
+        def fmt(value):
+            return _grouped(value)
+
+        reading = fmt(obj.measured_value)
+        if obj.threshold_value is not None:
+            reading = "%s / %s" % (reading, fmt(obj.threshold_value))
+        return ("%s %s" % (reading, unit)).strip()
+
+    def get_action_count(self, obj) -> int:
+        return obj.actions.count()
 
 
 class PreferenceSerializer(serializers.ModelSerializer):

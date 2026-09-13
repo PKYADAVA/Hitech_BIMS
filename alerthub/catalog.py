@@ -118,6 +118,26 @@ CATALOG: tuple[RuleSpec, ...] = (
         description="European Efficiency Factor at settlement falls below target.",
     ),
     RuleSpec(
+        "production.daily_entry_missing", "Daily Entry Missing", Module.PRODUCTION,
+        Priority.HIGH,
+        _t("Days since the last entry", "days", "2", Operator.GTE),
+        FARM,
+        description="A live flock whose daily sheet has not been filled in. "
+                    "Measured from the last entry that exists, so a flock "
+                    "recorded for weeks and then abandoned is caught — which "
+                    "no rule reading the latest figure can see, because the "
+                    "latest figure still looks fine.",
+    ),
+    RuleSpec(
+        "production.batch_not_started", "Batch Not Started", Module.PRODUCTION,
+        Priority.HIGH,
+        _t("Days since placement", "days", "1", Operator.GTE),
+        FARM,
+        description="Chicks are on the farm and nothing has been recorded "
+                    "about them — no feed, no mortality, no weight. Distinct "
+                    "from Placement Pending, which is a batch with no chicks.",
+    ),
+    RuleSpec(
         "production.placement_pending", "Placement Pending", Module.PRODUCTION,
         Priority.MEDIUM,
         _t("Days since batch created", "days", "3", Operator.GTE),
@@ -145,6 +165,17 @@ CATALOG: tuple[RuleSpec, ...] = (
     ),
 
     # --------------------------------------------------------------------- Feed
+    RuleSpec(
+        "feed.stock_coverage_days", "Feed Stock Coverage Low", Module.FEED,
+        Priority.HIGH,
+        _t("Days of cover remaining", "days", "3", Operator.LTE),
+        FARM,
+        description="How many days the feed on the farm will last at the rate "
+                    "it is going out — stock divided by recent daily "
+                    "consumption. Kilograms alone cannot answer that: 800 kg "
+                    "is a fortnight for a young flock and half a day for a "
+                    "full shed near harvest.",
+    ),
     RuleSpec(
         "feed.low_feed_stock", "Low Feed Stock", Module.FEED, Priority.CRITICAL,
         _t("Feed left at farm", "kg", "200", Operator.LTE),
