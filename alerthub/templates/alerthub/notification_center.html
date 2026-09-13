@@ -88,10 +88,11 @@ permission.
     <input type="date" id="fTo" title="To date" />
     <button class="btn btn-sm btn-outline-secondary" id="fReset">Reset</button>
     {{ rule_labels|json_script:"ah-rule-labels" }}
-    {# A rule filter arrives by link (the dashboard's "+16 more like this")
-       and has no control of its own. It still has to be visible: a list
-       narrowed by something the page does not show reads as a list with
-       nothing in it. #}
+    {% comment %}
+      A rule filter arrives by link (the dashboard's "+16 more like this") and
+      has no control of its own. It still has to be visible: a list narrowed by
+      something the page does not show reads as a list with nothing in it.
+    {% endcomment %}
     <span class="ah-rule-chip" id="fRuleChip" hidden>
       <span id="fRuleChipLabel"></span>
       <button type="button" id="fRuleChipClear" aria-label="Show all alert types">&times;</button>

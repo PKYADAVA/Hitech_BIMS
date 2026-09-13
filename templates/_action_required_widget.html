@@ -24,7 +24,12 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
       <span class="ar-total" id="arTotal" hidden>0</span>
     </h2>
     <div class="ar-head-right">
-      <a href="{% url 'alerthub:notification_center' %}"
+      {% comment %}
+        ?is_read= for the same reason as every link the script builds: the
+        centre opens on "Unread only" and this card counts what is open, so
+        without it View All lands on a page saying nothing matches.
+      {% endcomment %}
+      <a href="{% url 'alerthub:notification_center' %}?is_read="
          class="btn btn-sm btn-outline-secondary">
         View All <i class="fa-solid fa-arrow-right ms-1"></i>
       </a>

@@ -62,6 +62,21 @@
 
   /* --------------------------------------------------------------- markup */
 
+  /* A link into the notification centre, showing what this card counts.
+   *
+   * The centre opens on "Unread only". This card counts what is *open*, which
+   * is a different question — an alert somebody read on Monday and did nothing
+   * about is still open on Friday. So "22 more open" led to a page that said
+   * nothing matched, which reads as a broken link rather than as two filters
+   * disagreeing. Every link out of here clears the read filter, so the page it
+   * opens holds the rows this card was counting.
+   */
+  function centreLink(centre, params) {
+    var query = new URLSearchParams(params || {});
+    query.set("is_read", "");            // read and unread alike
+    return centre + "?" + query.toString();
+  }
+
   /* Severity chips, zeroes omitted. A row of "Critical 0 · High 0 · Warning 0"
      is three pieces of furniture that say nothing and push the alerts down. */
   function summaryHTML(summary, centre) {
@@ -74,9 +89,9 @@
     ];
     return levels.filter(function (level) { return summary[level[0]] > 0; })
       .map(function (level) {
-        return '<a class="ar-sum ' + level[0] + '" href="' + centre +
-          "?priority=" + level[0] + '"><b>' + summary[level[0]] + "</b> " +
-          level[1] + "</a>";
+        return '<a class="ar-sum ' + level[0] + '" href="' +
+          centreLink(centre, { priority: level[0] }) + '"><b>' +
+          summary[level[0]] + "</b> " + level[1] + "</a>";
       }).join("");
   }
 
@@ -94,9 +109,9 @@
     // link goes to the centre filtered to that rule, so "+16 more" leads
     // somewhere that shows the sixteen rather than the whole feed.
     if (alert.more_like_this > 0) {
-      bits.push('<a class="ar-more" href="' + centre + "?rule_key=" +
-        encodeURIComponent(alert.rule_key) + '">+' + alert.more_like_this +
-        " more like this</a>");
+      bits.push('<a class="ar-more" href="' +
+        centreLink(centre, { rule_key: alert.rule_key }) + '">+' +
+        alert.more_like_this + " more like this</a>");
     }
     return bits.join(' <span class="ar-sep">·</span> ');
   }
@@ -189,7 +204,7 @@
 
       var hidden = (summary.total || 0) - (summary.shown || 0);
       moreEl.innerHTML = hidden > 0
-        ? '<a href="' + centre + '">' + hidden + " more open</a>"
+        ? '<a href="' + centreLink(centre) + '">' + hidden + " more open</a>"
         : (summary.total ? summary.total + " open" : "");
       resolvedEl.innerHTML = summary.resolved_today
         ? '<span class="ar-done"><i class="fa-solid fa-check me-1"></i>' +
