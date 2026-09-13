@@ -206,10 +206,13 @@ class ActionAlertSerializer(NotificationSerializer):
     def get_available_actions(self, obj) -> list:
         from .workflow import TRANSITIONS
 
+        # One word each. Six buttons have to sit on one line in a card that is
+        # half the dashboard wide, and "Mark Resolved" says nothing "Resolve"
+        # does not — the second word was costing a whole row of card height.
         labels = {
             AlertStatus.ACKNOWLEDGED: ("acknowledge", "Acknowledge"),
-            AlertStatus.IN_PROGRESS: ("start", "Start Work"),
-            AlertStatus.RESOLVED: ("resolve", "Mark Resolved"),
+            AlertStatus.IN_PROGRESS: ("start", "Start"),
+            AlertStatus.RESOLVED: ("resolve", "Resolve"),
             AlertStatus.DISMISSED: ("dismiss", "Dismiss"),
             AlertStatus.OPEN: ("reopen", "Reopen"),
         }

@@ -95,11 +95,17 @@ document.addEventListener("DOMContentLoaded", function () {
     tiles.innerHTML = '<div class="text-muted small">Could not load alert counts.</div>';
   });
 
+  // Unread, like the bell. The counts above are open alerts — they have to
+  // agree with the card beside this one — but the list is an inbox: reading
+  // something is how you take it off, and a feed that kept every alert you
+  // had already read would never be empty and so never be looked at.
   AlertHub.request(AlertHub.API + "recent/").then(function (data) {
     var rows = (data.results || []).slice(0, 5);
     list.innerHTML = rows.length
       ? rows.map(function (n) { return AlertHub.itemHTML(n); }).join("")
-      : AlertHub.emptyHTML("No open alerts — you're all caught up");
+      // Not "no open alerts" — there may well be several, counted above.
+      // This list is what has not been read, and that is what is empty.
+      : AlertHub.emptyHTML("Nothing new — you have read everything here");
   }).catch(function () {
     list.innerHTML = AlertHub.emptyHTML("Could not load alerts",
                                         "fa-solid fa-triangle-exclamation");

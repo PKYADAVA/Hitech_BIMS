@@ -196,6 +196,38 @@ class NotificationQuerySet(models.QuerySet):
         """
         return self.filter(status__in=OPEN_STATUSES)
 
+    def problem_counts(self, *fields):
+        """Count distinct problems, grouped by each of ``fields``.
+
+        ``dedupe_key`` names the subject an alert is about, so rows sharing one
+        are the same problem noticed more than once. Counting rows instead
+        means a card announcing eighteen critical alerts where there are six
+        critical situations — and two cards on one dashboard counting
+        differently is two answers to the same question.
+
+        One query returning distinct tuples, bounded by the number of open
+        problems rather than by the number of rows, and one pass over them for
+        every grouping asked for. A row with no key stands for itself and is
+        counted by id.
+
+        Returns one dict per field, in the order given.
+        """
+        counts = [{} for _ in fields]
+        seen = set()
+        for row in self.values_list(*fields, "dedupe_key", "id").order_by().distinct():
+            key, pk = row[-2], row[-1]
+            identity = key or "id:%s" % pk
+            if identity in seen:
+                continue
+            seen.add(identity)
+            for index, value in enumerate(row[:-2]):
+                counts[index][value] = counts[index].get(value, 0) + 1
+        return counts
+
+    def count_problems(self) -> int:
+        """How many distinct problems, without grouping."""
+        return sum(self.problem_counts("id")[0].values())
+
     def by_urgency(self):
         """Most urgent first, then most recent.
 

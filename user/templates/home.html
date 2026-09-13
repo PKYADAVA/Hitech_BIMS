@@ -259,14 +259,12 @@
     .dw-col-liftings, .dw-col-sale_overview,
     .dw-col-broiler_activity { flex:0 0 33.3333%; max-width:33.3333%; }
   }
-  /* The two halves are the same kind of card now, but they still hold
-     different amounts, so left alone each took its own height and the row's
-     two bottoms did not line up. Each column stretches to the row
-     (Bootstrap's default) and the card inside fills it. */
+  /* One height for the pair, with neither card padded out to reach it.
+     Both are flex columns (alerthub.css) whose list takes whatever the header
+     and footer leave, so the slack goes into the scrolling part rather than
+     into a band of empty white. Action Required's list carries the only hard
+     cap, which makes it the card that decides how tall the row is. */
   .dash-alert-row > [class*="col-"] { display:flex; }
-  /* The !important is Bootstrap's: the alerts card carries .mb-3, whose own
-     !important left it sitting a margin above the row's floor while the card
-     beside it reached the bottom. */
   .dash-alert-row > [class*="col-"] > * { flex:1 1 auto; width:100%; margin-bottom:0 !important; }
   .dw-col-liftings .dw-stats,
   .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
@@ -324,13 +322,20 @@
      it simply grew by seven hundred pixels and took the row with it. A
      height has to come from somewhere, and the card beside it already says
      where. */
-  #ahWidget .ah-widget-list { overflow-y:auto; max-height:var(--ah-widget-list-max, 250px); }
+  /* No matching cap: this list is what absorbs the difference between the two
+     cards, growing to whatever the row's height leaves it. The number below
+     only bites when Action Required is switched off and this card is on the
+     row alone, with nothing else to take its height from. */
+  #ahWidget .ah-widget-list { overflow-y:auto; max-height:var(--ah-widget-list-max, 420px); }
   /* Action Required, beside it, for the same reason and to the same cap: its
      header carries the count and the severity split and its footer separates
      open work from the log, so neither may scroll away with the rows. Matching
      the number keeps the row's two halves the same height without either card
      having to know what the other contains. */
-  #arWidget .ar-list { overflow-y:auto; max-height:var(--ar-list-max, 250px); }
+  /* Two alerts, then it scrolls — and because this is the one hard cap in the
+     row, it is what keeps the pair short. The header says how many there are
+     altogether and the footer links to the rest. */
+  #arWidget .ar-list { max-height:var(--ar-list-max, 200px); }
   .dw-act-row { display:grid; align-items:center; gap:10px; min-width:800px;
                 grid-template-columns:66px 6px 20px 1.3fr 1.05fr .95fr 84px 1.1fr;
                 padding:2px; border-bottom:1px solid #f0f3f8; font-size:.76rem; line-height:1.15; }

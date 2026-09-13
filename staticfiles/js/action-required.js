@@ -133,8 +133,8 @@
         (move.key === "dismiss" ? " danger" : "") +
         '" data-move="' + esc(move.key) + '">' + esc(move.label) + "</button>";
     });
-    html += '<button type="button" class="ar-btn" data-move="notify">' +
-      '<i class="fa-solid fa-user-tie"></i>Notify Supervisor</button>';
+    html += '<button type="button" class="ar-btn" data-move="notify" ' +
+      'title="Notify Supervisor"><i class="fa-solid fa-user-tie"></i>Notify</button>';
     return html;
   }
 

@@ -325,10 +325,24 @@
 .ah-filters input[type="search"] { flex: 1 1 12rem; min-width: 12rem; }
 
 /* Priority summary strip above the feed. */
+/* A flex column for the same reason as the card beside it: sharing a row
+   means the height comes from whichever card is taller, and the list is the
+   part that should take up the slack rather than a band of empty white under
+   the last alert. */
+#ahWidget {
+  container-type: inline-size; container-name: ah;
+  display: flex; flex-direction: column;
+}
+#ahWidget .ah-widget-list { flex: 1 1 auto; min-height: 0; }
+
 .ah-counts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: .75rem;
+  /* Four across, always — the four levels are one scale and reading them off
+     two ragged rows makes the split look like two separate facts. auto-fit
+     put three on one line and one below the moment the card was narrowed to
+     half the dashboard. Narrow containers fall back further down. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .5rem;
   margin-bottom: 1rem;
 }
 .ah-count {
@@ -368,26 +382,34 @@
 
 .ah-widget-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: .6rem;
+  /* One row, however many tiles there are: they are a set, and the last two
+     dropping onto a line of their own read as a second, lesser group. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: .4rem;
   margin-bottom: .9rem;
 }
 .ah-tile {
   background: var(--ah-canvas);
   border-radius: .7rem;
-  padding: .6rem .7rem;
+  padding: .5rem .4rem;
   display: flex;
   align-items: center;
-  gap: .55rem;
+  justify-content: center;
+  gap: .4rem;
+  min-width: 0;
   text-decoration: none;
   color: inherit;
   border: 1px solid var(--ah-line);
   transition: background .12s, transform .12s;
 }
 .ah-tile:hover { background: #eef2f8; transform: translateY(-1px); color: inherit; }
-.ah-tile i { color: var(--ah-muted); font-size: .95rem; width: 1.1rem; text-align: center; }
-.ah-tile-n { font-weight: 700; font-size: 1.05rem; line-height: 1; }
-.ah-tile-l { font-size: .72rem; color: var(--ah-muted); }
+.ah-tile i { color: var(--ah-muted); font-size: .85rem; width: 1rem;
+              text-align: center; flex: 0 0 auto; }
+.ah-tile > span { min-width: 0; }
+.ah-tile-n { font-weight: 700; font-size: 1rem; line-height: 1.1; }
+.ah-tile-l { font-size: .66rem; color: var(--ah-muted); line-height: 1.2;
+             display: block; }
 .ah-tile.has-alerts .ah-tile-n { color: var(--ah-critical); }
 
 .ah-widget-list { display: flex; flex-direction: column; gap: .5rem; }
@@ -967,6 +989,12 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 .ar-card {
   background: #fff; border: 1px solid var(--ah-line, #e5e7eb);
   border-radius: 12px; overflow: hidden;
+  /* A column, so the list between the header and the footer can be told to
+     take whatever height is left rather than a number decided in advance.
+     Sharing a row with the alerts feed means the card's height is set by
+     whichever of the two is taller, and a list that stopped at a fixed 250px
+     left the shorter card with dead space under its own footer. */
+  display: flex; flex-direction: column;
   /* The card's layout follows the column it is in, not the window. It sits
      full width on its own and at half width beside the alerts feed, and a
      1440px window says nothing about which of those is happening - the
@@ -1020,9 +1048,15 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 
 /* -- the list ---------------------------------------------------------- */
 
-.ar-list { display: flex; flex-direction: column; }
+.ar-list {
+  display: flex; flex-direction: column;
+  /* min-height:0 is what makes this scroll rather than push the card taller:
+     a flex item's default minimum is its content, so without it the list
+     refuses to shrink and the footer is driven off the bottom. */
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
 .ar-row {
-  display: grid; gap: .1rem .85rem; padding: .8rem 1rem .8rem .85rem;
+  display: grid; gap: .1rem .85rem; padding: .55rem 1rem .55rem .85rem;
   border-bottom: 1px solid #f1f5f9;
   border-left: 3px solid transparent;
   grid-template-columns: 28px minmax(0, 1fr) auto;
@@ -1122,12 +1156,12 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 /* -- actions ----------------------------------------------------------- */
 
 .ar-actions {
-  grid-area: actions; display: flex; align-items: center; gap: .35rem;
-  flex-wrap: wrap; margin-top: .5rem;
+  grid-area: actions; display: flex; align-items: center; gap: .3rem;
+  flex-wrap: wrap; margin-top: .4rem;
 }
 .ar-btn {
-  font-size: .7rem; font-weight: 600; line-height: 1;
-  padding: .38rem .6rem; border-radius: 6px; cursor: pointer;
+  font-size: .68rem; font-weight: 600; line-height: 1;
+  padding: .32rem .5rem; border-radius: 6px; cursor: pointer;
   border: 1px solid #d5dbe4; background: #fff; color: #475569;
   display: inline-flex; align-items: center; gap: .3rem;
 }
@@ -1197,12 +1231,18 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 /* Narrow column: the reading leaves its own column and joins the body. Below
    about 640px a right-aligned number leaves the title some forty characters,
    which is not enough for "Feed Stock Coverage Low" and the farm it is
-   about - and this is the width the card has whenever it shares its row. */
-@container ar (max-width: 640px) {
+   about. Set below the width this card has when it shares the dashboard
+   row: there the reading keeps its own column, which saves a line of height
+   on every alert. */
+@container ar (max-width: 520px) {
   .ar-row {
     grid-template-columns: 28px minmax(0, 1fr);
     grid-template-areas: "icon body" ". metric" ". actions";
   }
+  /* One line of message. Two lines of prose above a wrapped row of buttons is
+     most of a card, and the reading underneath already carries the number the
+     sentence is explaining. The full text is on the alert's own page. */
+  .ar-msg { -webkit-line-clamp: 1; line-clamp: 1; }
   .ar-metric { text-align: left; flex-direction: row; align-items: baseline;
                gap: .35rem; margin-top: .25rem; }
 }
@@ -1232,4 +1272,19 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   .ar-row.is-done { transition: none; }
   .ar-btn .fa-spinner { animation: none; }
+}
+
+/* Narrow column: one row of six tiles stops being legible somewhere around
+   here, so the set wraps rather than shrinking to strips of two characters.
+   Scoped to the dashboard card, which is the only place they appear. */
+@container ah (max-width: 560px) {
+  #ahWidget .ah-widget-tiles {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container ah (max-width: 380px) {
+  #ahWidget .ah-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ahWidget .ah-widget-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

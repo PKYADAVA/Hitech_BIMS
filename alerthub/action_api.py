@@ -23,6 +23,7 @@ from rest_framework.response import Response
 
 from . import workflow
 from .constants import AlertStatus, Priority
+from .engine import MANUAL_RULE_KEY
 from .models import AlertAction, Notification, NotificationRecipient
 from .serializers import ActionAlertSerializer, AlertActionSerializer
 
@@ -129,6 +130,14 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
             to_attr="_my_recipients",
         )
         return (Notification.objects.for_user(user)
+                # Announcements are not exceptions. A message somebody composed
+                # and sent — "the office is closed on Friday" — arrives as a
+                # notification like any other, and without this it landed on
+                # the worklist wearing Acknowledge, Start Work and Mark
+                # Resolved buttons. There is no work to start and nothing to
+                # resolve; it is something to read, which is what the feed
+                # beside this card is for.
+                .exclude(rule_key=MANUAL_RULE_KEY)
                 .select_related("branch", "farm", "warehouse", "org_centre",
                                 "status_changed_by")
                 .prefetch_related(mine))
@@ -198,34 +207,21 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
         show is counted this way, so "22 more open" means twenty-two more
         problems and the link under it leads to that many distinct subjects.
 
-        One query returning distinct (key, priority, status, rule) tuples —
-        bounded by the number of open problems rather than by the number of
-        rows, which is the point. A row with no key stands for itself and is
-        counted by id.
+        The counting itself lives on the queryset, so the feed card beside
+        this one counts the same way. See
+        :meth:`~alerthub.models.NotificationQuerySet.problem_counts`.
         """
-        counts, states, by_rule, seen = {}, {}, {}, set()
-        fields = ("dedupe_key", "priority", "status", "rule_key", "id")
-        for key, priority, state, rule_key, pk in (
-                qs.values_list(*fields).order_by().distinct()):
-            identity = key or "id:%s" % pk
-            if identity in seen:
-                continue
-            seen.add(identity)
-            counts[priority] = counts.get(priority, 0) + 1
-            states[state] = states.get(state, 0) + 1
-            by_rule[rule_key] = by_rule.get(rule_key, 0) + 1
-        return counts, states, by_rule
+        return qs.problem_counts("priority", "status", "rule_key")
 
     def _closed_today(self) -> int:
         from django.utils import timezone
 
         # Distinct subjects again, so settling one problem that arrived as
         # three rows reads as one thing got through, not three.
-        rows = (self.get_queryset()
+        return (self.get_queryset()
                 .filter(status=AlertStatus.RESOLVED,
                         status_changed_at__date=timezone.localdate())
-                .values_list("dedupe_key", "id").order_by().distinct())
-        return len({key or "id:%s" % pk for key, pk in rows})
+                .count_problems())
 
     # --- the moves ---------------------------------------------------------
 

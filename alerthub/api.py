@@ -8,7 +8,7 @@ adding an endpoint here.
 from __future__ import annotations
 
 from django.db import models
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
@@ -166,31 +166,37 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         branches see different numbers from the same endpoint.
         """
         user = request.user
-        scoped = Notification.objects.for_user(user)
-        unread = scoped.filter(recipients__user=user, recipients__is_read=False)
+        scoped = Notification.objects.for_user(user).not_dismissed_by(user)
+        # Open, not unread. The card used to count what this person had not
+        # read, and its own empty state said "No open alerts — you're all
+        # caught up" — so a farm with eighteen unresolved criticals that
+        # somebody had glanced at on Monday showed four zeroes and a tick
+        # beside a card reporting twenty-seven. Reading an alert is not
+        # answering it.
+        #
+        # The badge below stays unread, because that is a different and
+        # honest question: the bell is a reading list.
+        unread = scoped.needing_action()
 
-        counts = {
-            row["priority"]: row["n"]
-            # .order_by() before .annotate(), and it is load-bearing. This
-            # queryset is distinct() — visible_notifications applies it,
-            # because the join to recipients duplicates rows — and a distinct()
-            # queryset carries its ordering column into the SELECT, from where
-            # it reaches the GROUP BY. Grouped by (priority, created_at) that
-            # is a row per notification, and this dict keeps whichever came
-            # last: six unread criticals were reported to the widget as one,
-            # while the bell beside it counted all nine.
-            for row in unread.values("priority").order_by()
-                             .annotate(n=Count("id", distinct=True))
-        }
+        # Distinct problems, not rows, and the same implementation the Action
+        # Required card counts with — the two sit side by side, and one saying
+        # eighteen critical where the other says six is two answers to one
+        # question. See NotificationQuerySet.problem_counts.
+        counts, = unread.problem_counts("priority")
 
         def by_keys(*keys):
-            return unread.filter(rule_key__in=keys).distinct().count()
+            return unread.filter(rule_key__in=keys).count_problems()
 
         return Response({
             "critical": counts.get(Priority.CRITICAL, 0),
             "high": counts.get(Priority.HIGH, 0),
             "medium": counts.get(Priority.MEDIUM, 0),
             "low": counts.get(Priority.LOW, 0),
+            # What the four above add up to. Worth returning rather than
+            # leaving the reader to sum them: the split is grouped in SQL and
+            # has been wrong before (see alerthub/tests/test_summary_counts.py),
+            # and a total counted separately is what catches that.
+            "open": sum(counts.values()),
             "unread": unread_count(user),
             "tiles": [
                 {"key": "pending_approvals", "label": "Pending Approvals",
@@ -229,17 +235,25 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         A separate endpoint from ``list`` because the bell wants a fixed small
         page with a specific ordering, and giving it its own url keeps the
         polling request out of the centre's filter logic.
+
+        ``?state=open`` asks the other question instead — what is unresolved,
+        whether or not this person has read it. The bell wants unread, because
+        it is a reading list and a thing you have read is no longer news. The
+        dashboard card wants open, because it sits beside a card counting open
+        alerts and the two must not contradict each other.
         """
         user = request.user
+        wants_open = request.query_params.get("state") == "open"
         mine = Prefetch(
             "recipients",
             queryset=NotificationRecipient.objects.filter(user=user),
             to_attr="_my_recipients",
         )
+        qs = Notification.objects.for_user(user).not_dismissed_by(user)
+        qs = (qs.needing_action() if wants_open
+              else qs.filter(recipients__user=user, recipients__is_read=False))
         rows = list(
-            Notification.objects.for_user(user)
-            .filter(recipients__user=user, recipients__is_read=False)
-            .select_related("branch", "farm", "warehouse", "org_centre")
+            qs.select_related("branch", "farm", "warehouse", "org_centre")
             .prefetch_related(mine)
             .by_urgency()[:10]
         )
