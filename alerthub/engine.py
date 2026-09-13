@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
 
-from .constants import Channel, LIVE_CHANNELS, Module, OPEN_STATUSES, Priority
+from .constants import (Channel, LIVE_CHANNELS, Module, OPEN_STATUSES,
+                        AlertStatus, Operator, Priority)
 from .push import push_recipients, send_alert_push
 from .sms import send_alert_sms, sms_recipients
 from .models import Notification, NotificationRecipient
@@ -64,7 +66,9 @@ def raise_alert(
     "unread" count computed from it while telling no one.
     """
     try:
-        if _still_unanswered(rule, dedupe_key) or _recently_raised(rule, dedupe_key):
+        if (_still_unanswered(rule, dedupe_key)
+                or _waved_off_and_no_worse(rule, dedupe_key, measured_value)
+                or _recently_raised(rule, dedupe_key)):
             return None
 
         notification = Notification(
@@ -152,6 +156,72 @@ def _still_unanswered(rule, dedupe_key) -> bool:
     return Notification.objects.filter(
         dedupe_key=dedupe_key[:255], status__in=OPEN_STATUSES
     ).exists()
+
+
+#: How much worse a waved-off measurement has to get before it is worth saying
+#: again, as a fraction of the value at the time it was waved off.
+#:
+#: Some margin is needed or the answer is noise: feed cover drifting from 2.90
+#: days to 2.89 is the same situation measured twice, and re-raising on that
+#: would have somebody dismissing the same alert every morning — which is how a
+#: dismissal button stops being used and the alert stops being read.
+DISMISSAL_TOLERANCE = Decimal("0.05")
+
+#: Operators where a bigger number is a worse situation. Mortality over a
+#: limit, days since the last entry. The rest — low stock, days of cover, body
+#: weight under standard — are worse as they fall.
+_WORSE_WHEN_HIGHER = {Operator.GT, Operator.GTE}
+_WORSE_WHEN_LOWER = {Operator.LT, Operator.LTE}
+
+
+def _waved_off_and_no_worse(rule, dedupe_key, measured_value) -> bool:
+    """Whether somebody has already judged this not worth acting on.
+
+    Dismissing is the one move that closes an alert with nothing done, and it
+    costs a typed reason — "stock arrived this morning, the entry is going in
+    today". Raising the same thing again tomorrow ignores that judgement and
+    asks for it a second time, which makes the reason box pointless.
+
+    So a dismissal holds until the situation actually deteriorates. Not until
+    the condition clears — it never cleared, that is why it had to be
+    dismissed rather than resolved — but until the number moves meaningfully
+    in the bad direction, which is the point at which the earlier judgement
+    was about something else.
+
+    Which direction is bad comes from the rule's own operator, so a rule
+    watching mortality climb and one watching feed cover fall are both
+    handled without either being named here. When the direction cannot be
+    worked out, or either measurement is missing, this declines to guess and
+    lets the cooldown decide as before.
+    """
+    if not dedupe_key:
+        return False
+
+    if rule.operator in _WORSE_WHEN_HIGHER:
+        worse_when_higher = True
+    elif rule.operator in _WORSE_WHEN_LOWER:
+        worse_when_higher = False
+    else:
+        # "Equal to" has no worse. A duplicate invoice number either matches
+        # or does not, and there is no scale to have moved along.
+        return False
+
+    latest = (Notification.objects
+              .filter(dedupe_key=dedupe_key[:255], status=AlertStatus.DISMISSED)
+              .order_by("-status_changed_at", "-id").first())
+    if latest is None or latest.measured_value is None or measured_value is None:
+        return False
+
+    was = latest.measured_value
+    try:
+        now = Decimal(str(measured_value))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+
+    margin = abs(was) * DISMISSAL_TOLERANCE
+    if worse_when_higher:
+        return now <= was + margin
+    return now >= was - margin
 
 
 def _recently_raised(rule, dedupe_key) -> bool:

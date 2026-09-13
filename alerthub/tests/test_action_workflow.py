@@ -823,3 +823,109 @@ class CountProblemsNotRowsTests(TestCase):
                 for n in range(3)]
         workflow.resolve(rows[0], user=self.user)
         self.assertEqual(self.summary()["resolved_today"], 1)
+
+
+class DismissalHoldsTests(TestCase):
+    """A dismissal is a judgement, and it lasts until the facts change.
+
+    Dismissing costs a typed reason. Raising the same thing again tomorrow
+    ignores it and asks for the judgement a second time — which is how the
+    reason box stops being used and the alert stops being read.
+    """
+
+    KEY = "cover:farm:3:finisher"
+
+    def setUp(self):
+        from alerthub.models import AlertRule
+
+        self.user = get_user_model().objects.create_superuser(
+            username="judge", password="x", email="j@example.com")
+        # Days of cover: worse as it falls.
+        self.falling = AlertRule.objects.create(
+            name="Feed Cover", rule_key="feed.stock_coverage_days",
+            module=Module.FEED, priority=Priority.HIGH, is_active=True,
+            cooldown_hours=24, operator="lte", threshold=3,
+        )
+
+    def raise_at(self, value, rule=None):
+        from alerthub.engine import raise_alert
+
+        return raise_alert(rule or self.falling, title="Feed Stock Coverage Low",
+                           message="Cover is %s days." % value,
+                           dedupe_key=self.KEY, measured_value=value)
+
+    def dismiss_at(self, value, rule=None):
+        alert = self.raise_at(value, rule)
+        self.assertIsNotNone(alert, "fixture expected this to be raised")
+        workflow.dismiss(alert, user=self.user, reason="Lorry arrives tomorrow.")
+        Notification.objects.filter(pk=alert.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30))
+        return alert
+
+    def test_the_same_situation_is_not_raised_again(self):
+        """Waved off at 2.9 days, still 2.9 days. Nothing has changed, and the
+        person already said what they were doing about it."""
+        self.dismiss_at("2.9")
+        self.assertIsNone(self.raise_at("2.9"))
+
+    def test_nor_is_a_measurement_that_has_drifted(self):
+        """2.90 to 2.89 is the same situation measured twice."""
+        self.dismiss_at("2.9")
+        self.assertIsNone(self.raise_at("2.87"))
+
+    def test_nor_one_that_has_improved(self):
+        self.dismiss_at("2.9")
+        self.assertIsNone(self.raise_at("2.95"))
+
+    def test_but_a_real_deterioration_is_raised(self):
+        """The lorry did not arrive. Half a day of feed left is not the
+        situation anybody signed off."""
+        self.dismiss_at("2.9")
+        second = self.raise_at("0.5")
+        self.assertIsNotNone(second)
+        self.assertEqual(second.status, AlertStatus.OPEN)
+
+    def test_the_direction_comes_from_the_rule_not_from_a_guess(self):
+        """Mortality is worse as it climbs, feed cover worse as it falls, and
+        neither is named in the engine."""
+        from alerthub.models import AlertRule
+
+        climbing = AlertRule.objects.create(
+            name="Mortality", rule_key="production.cumulative_mortality",
+            module=Module.PRODUCTION, priority=Priority.HIGH, is_active=True,
+            cooldown_hours=24, operator="gte", threshold=5,
+        )
+        self.dismiss_at("6", rule=climbing)
+
+        # Falling is an improvement here, so it stays quiet.
+        self.assertIsNone(self.raise_at("5.5", rule=climbing))
+        # Climbing is the deterioration, so it speaks up.
+        self.assertIsNotNone(self.raise_at("9", rule=climbing))
+
+    def test_a_resolved_alert_is_not_held_back_this_way(self):
+        """Resolving says the problem was dealt with. If the scanner can still
+        see it, that is news whatever the number says — the fix did not hold."""
+        alert = self.raise_at("2.9")
+        workflow.resolve(alert, user=self.user)
+        Notification.objects.filter(pk=alert.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30))
+        self.assertIsNotNone(self.raise_at("2.9"))
+
+    def test_it_declines_to_guess_when_there_is_nothing_to_compare(self):
+        """A rule with no measurement behind it falls back to the cooldown
+        rather than inventing a comparison."""
+        from alerthub.engine import _waved_off_and_no_worse
+
+        self.dismiss_at("2.9")
+        self.assertFalse(_waved_off_and_no_worse(self.falling, self.KEY, None))
+
+    def test_reopening_a_dismissal_lets_it_be_raised_again(self):
+        """Dismissed in error. Reopening has to actually undo it, including
+        the quiet it bought."""
+        alert = self.dismiss_at("2.9")
+        workflow.reopen(alert, user=self.user)
+        # Now open, so the no-duplicates rule holds it instead - which is the
+        # correct answer: it is already back on the list.
+        self.assertIsNone(self.raise_at("2.9"))
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, AlertStatus.OPEN)

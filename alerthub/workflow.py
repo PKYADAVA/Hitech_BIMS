@@ -21,11 +21,22 @@ dismissals is worse than no log — it reads like the problems went away.
 alert is saved**, inside one transaction. The status is the current answer; the
 action rows are how it was arrived at, and the pair must never disagree.
 
-**Resolving is not suppressing.** A resolved alert keeps its measured value,
-its threshold and its scope. The detectors' ``dedupe_key`` stops the next scan
-re-raising the same thing while it is still open, and a resolved alert whose
-underlying condition persists *should* come back — which is the point of
-resolving it rather than dismissing it.
+**Resolving and dismissing are not the same silence.** Both take an alert off
+the list, and the engine treats them quite differently afterwards.
+
+Resolving says the problem was dealt with. If the next scan can still see it,
+that is news — the fix did not hold — so it comes back, with the rule's
+cooldown deciding how soon.
+
+Dismissing says the problem is real and not worth acting on, and costs a typed
+reason for saying so. Raising it again tomorrow would ignore that judgement and
+ask for it a second time, so it stays quiet until the measurement moves
+meaningfully in the bad direction — at which point the earlier judgement was
+about a different situation. Which direction is bad comes from the rule's own
+operator. See ``_waved_off_and_no_worse`` in :mod:`alerthub.engine`.
+
+Neither is a delete, and neither touches the alert's measured value, threshold
+or scope.
 """
 from __future__ import annotations
 
