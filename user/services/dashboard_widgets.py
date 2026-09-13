@@ -667,9 +667,6 @@ def _liftings(viewable, filters, user=None):
     day = chosen or (latest["date"] if latest else timezone.localdate())
 
     today = on(day)
-    totals = today.aggregate(b=Sum("birds"), w=Sum("net_weight"))
-    birds = float(totals["b"] or 0)
-    weight = float(totals["w"] or 0)
     count = today.count()
     farms = today.values("farm_id").distinct().count()
 
@@ -706,13 +703,14 @@ def _liftings(viewable, filters, user=None):
     } for r in by_branch]
 
     return {
+        # Two tiles, not five. Birds lifted, net weight and average weight are
+        # the same figures Sale Overview carries as Sold birds, Sold weight and
+        # Mean body wt — and the two cards sit in the same row, so the reader
+        # met each number twice and had to work out whether they were the same
+        # number. What is left is what only this card answers: how many
+        # liftings there were, and across how many farms.
         "stats": [
             {"label": "Liftings", "value": _num(count), "sub": against},
-            {"label": "Birds lifted", "value": _num(birds)},
-            {"label": "Net weight", "value": f"{weight:,.0f} Kg"},
-            # The one figure a lifting is judged on: the birds are sold by
-            # weight and bought by the head, so the average is the margin.
-            {"label": "Avg wt", "value": (f"{weight / birds:.2f} Kg" if birds else "—")},
             {"label": "Farms covered", "value": _num(farms)},
         ],
         "chart": _bars(groups, series=("Birds", "Weight")) if groups else None,

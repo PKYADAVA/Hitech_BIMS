@@ -219,10 +219,17 @@
   .dw-chart { margin-top:13px; }
   .dw-chart svg { width:100%; height:auto; display:block; max-height:210px;
                   margin:0 auto; }
-  .dw-legend { display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
-               font-size:.75rem; color:#475569; margin-bottom:2px; }
-  .dw-legend span { display:inline-flex; align-items:center; gap:6px; }
-  .dw-legend i { width:13px; height:13px; border-radius:3px; display:inline-block; }
+  /* A chart's series keys, along one line. Named apart from .dw-legend above
+     because that one is the donut's — a column of label/value/percent rows —
+     and sharing the class left this inheriting its flex-direction, which
+     stacked Birds above Weight. `row` is stated rather than assumed for the
+     same reason. */
+  .dw-legend-series { display:flex; flex-direction:row; gap:14px;
+                      justify-content:center; flex-wrap:wrap;
+                      font-size:.75rem; color:#475569; margin-bottom:2px; }
+  .dw-legend-series span { display:inline-flex; align-items:center; gap:6px; }
+  .dw-legend-series i { width:13px; height:13px; border-radius:3px;
+                        display:inline-block; }
   .fpc-grid { stroke:#eef2f7; stroke-width:1; }
   .fpc-axis { font-size:12px; fill:#8494ab; }
   .fpc-val  { font-size:13px; font-weight:700; }
@@ -947,7 +954,7 @@
       });
 
       var legend = series.length > 1 || series[0].label
-        ? '<div class="dw-legend">' + series.map(function (s) {
+        ? '<div class="dw-legend-series">' + series.map(function (s) {
             return '<span><i style="background:' + s.colour + '"></i>'
                  + esc(s.label) + '</span>'; }).join('') + '</div>'
         : '';
