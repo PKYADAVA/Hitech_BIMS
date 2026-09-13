@@ -53,11 +53,38 @@ class DedupeTests(EngineTestCase):
         raise_alert(rule, title="A", dedupe_key="same")
         self.assertEqual(Notification.objects.count(), 2)
 
-    def test_cooldown_expires(self):
+    def test_the_cooldown_expiring_is_not_enough_on_its_own(self):
+        """An unanswered problem stays one row, however old it gets.
+
+        This used to raise a second alert the moment the window passed, which
+        on a nightly scan meant a row a day for the same subject: the real
+        database held twenty-nine open alerts that were ten actual problems,
+        each seen on three consecutive mornings. A second row tells nobody
+        anything — the first is still there, still says the same thing — and
+        it has to be resolved twice.
+        """
         rule = self.make_rule(cooldown_hours=1)
         first = raise_alert(rule, title="A", dedupe_key="same")
 
         # Age the first alert past the window rather than sleeping.
+        Notification.objects.filter(pk=first.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+        self.assertIsNone(raise_alert(rule, title="A", dedupe_key="same"))
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_the_cooldown_governs_again_once_it_has_been_dealt_with(self):
+        """Both halves have to hold: settling the alert lets the subject be
+        raised again, and the cooldown decides how soon."""
+        from alerthub import workflow
+
+        rule = self.make_rule(cooldown_hours=1)
+        first = raise_alert(rule, title="A", dedupe_key="same")
+        workflow.resolve(first, user=self.user)
+
+        # Straight away: too soon, the cooldown holds it.
+        self.assertIsNone(raise_alert(rule, title="A", dedupe_key="same"))
+
         Notification.objects.filter(pk=first.pk).update(
             created_at=timezone.now() - timedelta(hours=2)
         )

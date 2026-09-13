@@ -35,7 +35,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .constants import AlertStatus
+from .constants import OPEN_STATUSES, AlertStatus
 from .models import AlertAction, Notification
 
 logger = logging.getLogger(__name__)
@@ -97,11 +97,40 @@ def _guard(user, alert, target):
         )
 
 
+def _same_problem(alert, user):
+    """Every open alert about the same subject as this one, this user's to act on.
+
+    ``dedupe_key`` identifies the *subject* — this feed item at this warehouse,
+    this flock's mortality — not the occasion it was noticed. A nightly scan
+    raised one row a day for the same subject until the engine was taught not
+    to, so a farm carries rows raised before that fix that all say the same
+    thing.
+
+    Somebody pressing Mark Resolved has dealt with the problem, not with the
+    row. Settling one and leaving its twins on the list is the worst of both:
+    the work was done and the dashboard still says it was not.
+
+    Scoped through ``for_user`` so a grouped move can never reach further than
+    the person could reach one row at a time.
+    """
+    if not alert.dedupe_key:
+        return [alert]
+    rows = (Notification.objects.for_user(user)
+            .filter(dedupe_key=alert.dedupe_key, status__in=OPEN_STATUSES)
+            .exclude(pk=alert.pk))
+    return [alert] + list(rows)
+
+
 @transaction.atomic
 def set_status(alert, target, *, user, note="") -> AlertAction:
     """Move one alert along, and write down that it moved.
 
-    The row is locked for the length of the transaction. Two people pressing
+    Along with every other open alert about the same subject — see
+    :func:`_same_problem`. One press settles the problem; it would be a strange
+    dashboard that asked for the same decision three times because the scanner
+    had noticed something on three mornings.
+
+    Each row is locked for the length of the transaction. Two people pressing
     Acknowledge on the same alert at the same moment is not unusual on a shared
     dashboard, and without the lock both would read "open", both would pass the
     transition check, and the log would carry two acknowledgements of an alert
@@ -118,19 +147,35 @@ def set_status(alert, target, *, user, note="") -> AlertAction:
             "against it cannot be reviewed later."
         )
 
-    entry = AlertAction.objects.create(
-        notification=alert, action=_ACTION_FOR[target], actor=user,
-        note=note, from_status=alert.status, to_status=target,
-    )
+    now = timezone.now()
+    actor = user if getattr(user, "pk", None) else None
+    entry = None
 
-    alert.status = target
-    alert.status_changed_at = timezone.now()
-    alert.status_changed_by = user if getattr(user, "pk", None) else None
-    # Reopening clears the old reason rather than leaving it attached to an
-    # alert that is open again, where it would read as the reason it is open.
-    alert.dismiss_reason = note if target == AlertStatus.DISMISSED else ""
-    alert.save(update_fields=["status", "status_changed_at",
-                              "status_changed_by", "dismiss_reason"])
+    for row in _same_problem(alert, user):
+        # A twin may be at a different point — acknowledged while this one is
+        # open — and a move that is legal here may not be legal there. Skip it
+        # rather than fail the press: the row that was actually pressed is what
+        # the person is waiting on.
+        if row.pk != alert.pk and target not in TRANSITIONS.get(row.status, set()):
+            continue
+
+        row = Notification.objects.select_for_update().get(pk=row.pk)
+        written = AlertAction.objects.create(
+            notification=row, action=_ACTION_FOR[target], actor=actor,
+            note=note, from_status=row.status, to_status=target,
+        )
+        if row.pk == alert.pk:
+            entry = written
+
+        row.status = target
+        row.status_changed_at = now
+        row.status_changed_by = actor
+        # Reopening clears the old reason rather than leaving it attached to an
+        # alert that is open again, where it would read as the reason it is open.
+        row.dismiss_reason = note if target == AlertStatus.DISMISSED else ""
+        row.save(update_fields=["status", "status_changed_at",
+                                "status_changed_by", "dismiss_reason"])
+
     logger.info("alerthub: alert %s -> %s by %s", alert.pk, target, user)
     return entry
 

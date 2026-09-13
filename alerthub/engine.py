@@ -24,7 +24,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from .constants import Channel, LIVE_CHANNELS, Module, Priority
+from .constants import Channel, LIVE_CHANNELS, Module, OPEN_STATUSES, Priority
 from .push import push_recipients, send_alert_push
 from .sms import send_alert_sms, sms_recipients
 from .models import Notification, NotificationRecipient
@@ -64,7 +64,7 @@ def raise_alert(
     "unread" count computed from it while telling no one.
     """
     try:
-        if _recently_raised(rule, dedupe_key):
+        if _still_unanswered(rule, dedupe_key) or _recently_raised(rule, dedupe_key):
             return None
 
         notification = Notification(
@@ -119,6 +119,39 @@ def raise_alert(
         # must never be the reason a save fails.
         logger.exception("alerthub: failed to raise alert for rule %s", rule.pk)
         return None
+
+
+def _still_unanswered(rule, dedupe_key) -> bool:
+    """Whether this exact problem is already on somebody's list, unresolved.
+
+    The cooldown alone was not enough. It asks "was this raised recently",
+    which a nightly scan answers "no" every morning — so one unaddressed
+    problem became a row a day. Three days of that turned ten real problems
+    into twenty-nine alerts, and the dashboard's worklist read as though the
+    farms had three times the trouble they had.
+
+    Raising a second row changes nothing for anybody: the first is still
+    there, still says the same thing, and now has to be resolved twice. So an
+    open, acknowledged or in-progress alert for the same subject suppresses
+    the next one outright, however long ago it was raised.
+
+    Resolved and dismissed deliberately do not suppress. A problem somebody
+    dealt with that the scanner can still see is news, and the cooldown below
+    is what decides how soon it may be said again.
+
+    A rule with no cooldown has opted out of deduplication altogether — it
+    watches genuinely distinct events, a duplicate invoice or a bounced
+    cheque, where the second occurrence is a second thing that happened and
+    not another sighting of the first. This must not quietly overrule that.
+    """
+    if not rule.cooldown_hours:
+        return False
+    if not dedupe_key:
+        # Hand-composed messages carry no key. Two of them are two messages.
+        return False
+    return Notification.objects.filter(
+        dedupe_key=dedupe_key[:255], status__in=OPEN_STATUSES
+    ).exists()
 
 
 def _recently_raised(rule, dedupe_key) -> bool:

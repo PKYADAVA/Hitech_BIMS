@@ -575,3 +575,251 @@ class CentreLinkTests(TestCase):
         data = self.client.get(
             "/api/alerthub/notifications/?rule_key=inventory.negative_stock").json()
         self.assertEqual([row["title"] for row in data["results"]], ["Negative Stock"])
+
+
+class OneProblemOneRowTests(TestCase):
+    """A problem nobody has answered must not become a row a day.
+
+    Found on the real database: twenty-nine open alerts that were ten actual
+    problems, each re-raised on three consecutive mornings. The cooldown asks
+    "was this raised in the last day", which a nightly scan answers "no" every
+    morning, so nothing stopped the pile growing.
+    """
+
+    def setUp(self):
+        from alerthub.models import AlertRule
+
+        self.user = get_user_model().objects.create_superuser(
+            username="scanner", password="x", email="sc@example.com")
+        self.rule = AlertRule.objects.create(
+            name="Negative Stock", rule_key="inventory.negative_stock",
+            module=Module.INVENTORY, priority=Priority.CRITICAL,
+            is_active=True, cooldown_hours=24,
+        )
+
+    def raise_once(self):
+        from alerthub.engine import raise_alert
+
+        return raise_alert(
+            self.rule, title="Negative Stock", message="Starter Feed is -60.",
+            dedupe_key="24:negative:warehouse:18:15",
+        )
+
+    def test_a_problem_already_on_the_list_is_not_raised_again(self):
+        """Not even long after the cooldown has run out. A second row changes
+        nothing for anybody — the first is still there, still says the same
+        thing, and now has to be resolved twice."""
+        first = self.raise_once()
+        self.assertIsNotNone(first)
+
+        Notification.objects.filter(pk=first.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30))
+        self.assertIsNone(self.raise_once())
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_an_alert_being_worked_on_also_suppresses_it(self):
+        """Picked up is still on somebody's list."""
+        first = self.raise_once()
+        workflow.start(first, user=self.user)
+        Notification.objects.filter(pk=first.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30))
+        self.assertIsNone(self.raise_once())
+
+    def test_it_comes_back_once_it_has_been_dealt_with_and_is_still_true(self):
+        """The point of resolving rather than suppressing. A problem somebody
+        fixed that the scanner can still see is news."""
+        first = self.raise_once()
+        workflow.resolve(first, user=self.user)
+        Notification.objects.filter(pk=first.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=30))
+
+        second = self.raise_once()
+        self.assertIsNotNone(second)
+        self.assertNotEqual(second.pk, first.pk)
+
+    def test_the_cooldown_still_governs_how_soon(self):
+        """Resolved five minutes ago and still true is not worth saying again
+        straight away; that is what the cooldown is for."""
+        first = self.raise_once()
+        workflow.resolve(first, user=self.user)
+        self.assertIsNone(self.raise_once())
+
+    def test_an_alert_with_no_key_is_never_held_back_by_this_rule(self):
+        """A keyless alert has no subject to be a second copy *of*, so the
+        open-alert check has nothing to say about it and must not guess.
+
+        Tested against the check itself rather than through ``raise_alert``,
+        because the cooldown sitting behind it keys off the same empty string
+        and would answer first — which is a separate question, and not one
+        this change touches.
+        """
+        from alerthub.engine import _still_unanswered
+
+        an_alert(to=self.user, dedupe_key="")
+        self.assertFalse(_still_unanswered(self.rule, ""))
+
+    def test_a_rule_that_opted_out_of_dedupe_is_left_alone(self):
+        """A cooldown of zero means every occurrence is its own event — a
+        duplicate invoice, a bounced cheque. The second is a second thing that
+        happened, not another sighting of the first, and this check must not
+        quietly overrule that."""
+        from alerthub.engine import _still_unanswered
+
+        self.rule.cooldown_hours = 0
+        an_alert(to=self.user, dedupe_key="24:negative:warehouse:18:15")
+        self.assertFalse(
+            _still_unanswered(self.rule, "24:negative:warehouse:18:15"))
+
+
+class SettleTheProblemTests(TestCase):
+    """One press settles the problem, not the row.
+
+    The rows raised before the engine learned the rule above are still there,
+    three to a problem. Marking one resolved and leaving its twins on the list
+    is the worst of both: the work was done and the dashboard still says it
+    was not.
+    """
+
+    KEY = "24:negative:warehouse:18:15"
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="settler", password="x", email="st@example.com")
+        self.rows = [an_alert(to=self.user, dedupe_key=self.KEY,
+                              title="Negative Stock %d" % n) for n in range(3)]
+
+    def statuses(self):
+        return sorted(Notification.objects.filter(dedupe_key=self.KEY)
+                      .values_list("status", flat=True))
+
+    def test_resolving_one_resolves_every_copy_of_it(self):
+        workflow.resolve(self.rows[0], user=self.user)
+        self.assertEqual(self.statuses(), ["resolved"] * 3)
+
+    def test_dismissing_carries_the_reason_to_every_copy(self):
+        workflow.dismiss(self.rows[0], user=self.user, reason="Stock arrived.")
+        reasons = set(Notification.objects.filter(dedupe_key=self.KEY)
+                      .values_list("dismiss_reason", flat=True))
+        self.assertEqual(reasons, {"Stock arrived."})
+
+    def test_every_copy_gets_its_own_log_entry(self):
+        """Each row's history has to explain that row. "Resolved elsewhere,
+        see another notification" is not something a log should ever say."""
+        workflow.resolve(self.rows[0], user=self.user)
+        for row in self.rows:
+            self.assertTrue(
+                AlertAction.objects.filter(notification=row,
+                                           action=AlertAction.RESOLVED).exists())
+
+    def test_a_different_problem_is_left_alone(self):
+        other = an_alert(to=self.user, dedupe_key="24:negative:farm:1:14",
+                         title="Somewhere else")
+        workflow.resolve(self.rows[0], user=self.user)
+        other.refresh_from_db()
+        self.assertEqual(other.status, AlertStatus.OPEN)
+
+    def test_a_copy_further_along_does_not_fail_the_press(self):
+        """A twin may sit at a point this move is not legal from.
+
+        It cannot happen through the widget any more — a press moves them
+        together — but it is exactly the state the rows raised before that
+        existed in, and a press on one of those must not fail because of what
+        another row says. So the twin is set directly, which is how those rows
+        got out of step in the first place.
+        """
+        Notification.objects.filter(pk=self.rows[1].pk).update(
+            status=AlertStatus.ACKNOWLEDGED)
+
+        entry = workflow.acknowledge(self.rows[0], user=self.user)
+
+        self.assertIsNotNone(entry)
+        self.rows[0].refresh_from_db()
+        self.assertEqual(self.rows[0].status, AlertStatus.ACKNOWLEDGED)
+        # The awkward one was left exactly as it was, not forced.
+        self.rows[1].refresh_from_db()
+        self.assertEqual(self.rows[1].status, AlertStatus.ACKNOWLEDGED)
+
+    def test_it_never_reaches_past_what_the_user_could_reach_one_at_a_time(self):
+        """The grouped move is scoped exactly as a single move is. Otherwise
+        one press on a visible row would quietly close rows this person is not
+        allowed to see."""
+        from alerthub.models import NotificationRecipient
+
+        theirs = an_alert(dedupe_key=self.KEY, title="Somebody else's copy")
+        stranger = get_user_model().objects.create_user(username="elsewhere",
+                                                        password="x")
+        NotificationRecipient.objects.create(notification=theirs, user=stranger)
+
+        workflow.resolve(self.rows[0], user=self.user)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.status, AlertStatus.OPEN)
+
+    def test_the_widget_is_emptied_by_one_press(self):
+        """What the person actually sees: one row standing for three, one
+        press, and the card clear.
+
+        The card collapses the copies, so the press has to reach the two it is
+        not showing — otherwise the row would vanish and come straight back on
+        the next refresh, standing for the twins nobody had settled.
+        """
+        self.client.force_login(self.user)
+        self.assertEqual(len(self.client.get(API).json()["results"]), 1)
+
+        self.client.post("%s%s/resolve/" % (API, self.rows[0].pk),
+                         {}, content_type="application/json")
+
+        self.assertEqual(self.client.get(API).json()["results"], [])
+        self.assertEqual(self.statuses(), ["resolved"] * 3)
+
+
+class CountProblemsNotRowsTests(TestCase):
+    """The card counts problems. Three sightings of one thing is one thing."""
+
+    KEY = "24:negative:warehouse:18:15"
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="counter", password="x", email="ct@example.com")
+        self.client.force_login(self.user)
+
+    def summary(self):
+        return self.client.get(API).json()["summary"]
+
+    def test_repeated_sightings_count_once(self):
+        for n in range(3):
+            an_alert(to=self.user, dedupe_key=self.KEY, title="Negative %d" % n)
+        self.assertEqual(self.summary()["total"], 1)
+
+    def test_and_are_listed_once(self):
+        """Showing the same problem three times was never useful, whenever the
+        rows happened to be written."""
+        for n in range(3):
+            an_alert(to=self.user, dedupe_key=self.KEY, title="Negative %d" % n)
+        self.assertEqual(len(self.client.get(API).json()["results"]), 1)
+
+    def test_the_severity_split_counts_problems_too(self):
+        """Otherwise the chips add up to more than the total beside them."""
+        for n in range(3):
+            an_alert(to=self.user, dedupe_key=self.KEY,
+                     priority=Priority.CRITICAL, title="Negative %d" % n)
+        summary = self.summary()
+        self.assertEqual(summary["critical"], 1)
+        self.assertEqual(summary["total"], 1)
+
+    def test_distinct_problems_still_count_separately(self):
+        an_alert(to=self.user, dedupe_key="24:negative:warehouse:18:15")
+        an_alert(to=self.user, dedupe_key="24:negative:farm:1:14")
+        self.assertEqual(self.summary()["total"], 2)
+
+    def test_rows_with_no_key_each_stand_for_themselves(self):
+        """A hand-written message is not a sighting of anything."""
+        an_alert(to=self.user, dedupe_key="", title="Notice one")
+        an_alert(to=self.user, dedupe_key="", title="Notice two")
+        self.assertEqual(self.summary()["total"], 2)
+
+    def test_settling_a_problem_counts_once_in_the_footer(self):
+        """One problem got through, not three."""
+        rows = [an_alert(to=self.user, dedupe_key=self.KEY, title="N%d" % n)
+                for n in range(3)]
+        workflow.resolve(rows[0], user=self.user)
+        self.assertEqual(self.summary()["resolved_today"], 1)

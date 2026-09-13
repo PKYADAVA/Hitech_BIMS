@@ -15,7 +15,7 @@ acknowledge, resolve or escalate. The decisions themselves belong to
 from __future__ import annotations
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Count, Prefetch
+from django.db.models import Prefetch
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -45,6 +45,29 @@ PER_RULE_LIMIT = 2
 #: the whole table. Past it, the card shows what the window held — which is
 #: the same thing it showed before this cap existed.
 SPREAD_WINDOW = WIDGET_LIMIT * 10
+
+
+def one_per_problem(rows):
+    """Drop rows that are another sighting of a problem already in the list.
+
+    ``dedupe_key`` names the subject, so two rows carrying the same one are the
+    same problem noticed twice. The engine will not raise those any more, but
+    every farm still carries the ones raised before it learned not to — ten
+    real problems arriving as twenty-nine alerts on the database this was
+    written against.
+
+    Showing a problem twice was never useful, whenever the rows were written.
+    Rows with no key are left alone: there is nothing to say they are copies
+    of anything.
+    """
+    seen, out = set(), []
+    for row in rows:
+        if row.dedupe_key:
+            if row.dedupe_key in seen:
+                continue
+            seen.add(row.dedupe_key)
+        out.append(row)
+    return out
 
 
 def spread(rows, limit=WIDGET_LIMIT, per_rule=PER_RULE_LIMIT):
@@ -128,22 +151,10 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
         """
         qs = self.get_queryset().needing_action()
 
-        counts = {row["priority"]: row["n"] for row in
-                  qs.values("priority").order_by()
-                    .annotate(n=Count("id", distinct=True))}
-        states = {row["status"]: row["n"] for row in
-                  qs.values("status").order_by()
-                    .annotate(n=Count("id", distinct=True))}
-
-        rows = self._rows(spread(qs.by_urgency()[:SPREAD_WINDOW]))
+        counts, states, by_rule = self._problem_counts(qs)
+        rows = self._rows(spread(one_per_problem(qs.by_urgency()[:SPREAD_WINDOW])))
         total = sum(counts.values())
 
-        # How many more of each rule are open but not on the card, so a row
-        # that stands for sixteen others says so rather than looking like the
-        # only one of its kind.
-        by_rule = {row["rule_key"]: row["n"] for row in
-                   qs.values("rule_key").order_by()
-                     .annotate(n=Count("id", distinct=True))}
         shown_per_rule = {}
         for row in rows:
             shown_per_rule[row.rule_key] = shown_per_rule.get(row.rule_key, 0) + 1
@@ -178,13 +189,43 @@ class ActionRequiredViewSet(viewsets.GenericViewSet):
             },
         })
 
+    def _problem_counts(self, qs):
+        """Counts of open *problems*, not of rows.
+
+        A problem noticed on three mornings is three rows and one thing to do
+        about it, so counting rows would have the card announce twenty-nine
+        when ten people-hours of work exist. Everything the header and footer
+        show is counted this way, so "22 more open" means twenty-two more
+        problems and the link under it leads to that many distinct subjects.
+
+        One query returning distinct (key, priority, status, rule) tuples —
+        bounded by the number of open problems rather than by the number of
+        rows, which is the point. A row with no key stands for itself and is
+        counted by id.
+        """
+        counts, states, by_rule, seen = {}, {}, {}, set()
+        fields = ("dedupe_key", "priority", "status", "rule_key", "id")
+        for key, priority, state, rule_key, pk in (
+                qs.values_list(*fields).order_by().distinct()):
+            identity = key or "id:%s" % pk
+            if identity in seen:
+                continue
+            seen.add(identity)
+            counts[priority] = counts.get(priority, 0) + 1
+            states[state] = states.get(state, 0) + 1
+            by_rule[rule_key] = by_rule.get(rule_key, 0) + 1
+        return counts, states, by_rule
+
     def _closed_today(self) -> int:
         from django.utils import timezone
 
-        return (self.get_queryset()
+        # Distinct subjects again, so settling one problem that arrived as
+        # three rows reads as one thing got through, not three.
+        rows = (self.get_queryset()
                 .filter(status=AlertStatus.RESOLVED,
                         status_changed_at__date=timezone.localdate())
-                .distinct().count())
+                .values_list("dedupe_key", "id").order_by().distinct())
+        return len({key or "id:%s" % pk for key, pk in rows})
 
     # --- the moves ---------------------------------------------------------
 
