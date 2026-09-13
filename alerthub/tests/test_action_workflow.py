@@ -321,6 +321,35 @@ class WidgetApiTests(TestCase):
         an_alert(to=self.user, measured_value="1450", threshold_value="1700")
         self.assertTrue(self.get()["results"][0]["reading"].startswith("1,450 / 1,700"))
 
+    def test_the_reading_comes_apart_into_the_two_halves_the_row_reads(self):
+        """The card sets these as a sentence — "1.8 vs limit 3 days" — so the
+        unit is said once, on the second half."""
+        an_alert(to=self.user)
+        row = self.get()["results"][0]
+        self.assertEqual(row["reading_value"], "1.8")
+        self.assertEqual(row["reading_limit"], "3 days")
+
+    def test_a_symbol_closes_up_and_is_said_on_both_halves(self):
+        """"8.11 vs limit 5 %" is not how a percentage is written down."""
+        an_alert(to=self.user, rule_key="production.cumulative_mortality",
+                 module=Module.PRODUCTION, measured_value="8.11",
+                 threshold_value="5")
+        row = self.get()["results"][0]
+        self.assertEqual(row["reading_value"], "8.11%")
+        self.assertEqual(row["reading_limit"], "5%")
+
+    def test_a_rule_with_no_limit_keeps_its_unit_on_the_measurement(self):
+        """Negative stock has nothing to compare against. The number has to
+        carry its own unit, and the row must not promise a limit that does
+        not exist — it used to print "-60" under a caption reading
+        "measured / limit"."""
+        an_alert(to=self.user, rule_key="inventory.negative_stock",
+                 module=Module.INVENTORY, measured_value="-60",
+                 threshold_value=None)
+        row = self.get()["results"][0]
+        self.assertEqual(row["reading_value"], "-60")
+        self.assertEqual(row["reading_limit"], "")
+
     def test_a_row_offers_only_moves_the_api_would_accept(self):
         alert = an_alert(to=self.user)
         workflow.start(alert, user=self.user)

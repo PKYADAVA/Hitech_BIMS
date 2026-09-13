@@ -271,6 +271,15 @@
      and footer leave, so the slack goes into the scrolling part rather than
      into a band of empty white. Action Required's list carries the only hard
      cap, which makes it the card that decides how tall the row is. */
+  /* 55/45, not an even half each. The two are not equal work: one is a
+     worklist whose rows carry a problem, a place, a reading against its limit,
+     an age and the buttons that answer it; the other is a feed that has to be
+     readable and nothing more. The wider half goes to the one with more to
+     say. Below xl they stack, and each takes the full width. */
+  @media (min-width: 1200px) {
+    .dash-alert-row > .dash-col-action { flex: 0 0 55%; max-width: 55%; }
+    .dash-alert-row > .dash-col-alerts { flex: 0 0 45%; max-width: 45%; }
+  }
   .dash-alert-row > [class*="col-"] { display:flex; }
   .dash-alert-row > [class*="col-"] > * { flex:1 1 auto; width:100%; margin-bottom:0 !important; }
   .dw-col-liftings .dw-stats,
@@ -331,34 +340,31 @@
   .dw-col-broiler_activity .dw-card,
   #dash-activity-slot .dw-card { overflow:visible; }
 
-  /* The alerts card beside it is four parts — its heading, the priority
-     split, the named tiles and the newest few — and .ah-card clips whatever
-     overflows. Once the row's two halves were made one height, anything past
-     the bottom was simply cut off with no way to reach it. Same answer as the
-     activity card: the list is the only part that moves, so the heading, the
-     four counts and the tiles stay where they are and the alerts scroll under
-     them.
+  /* The row is a fixed frame, and the lists move inside it.
 
-     Capped rather than flexed, and the first attempt here is worth recording:
-     making the card a flex column and telling the list to fill it does
-     nothing on its own, because nothing constrains the card's own height —
-     it simply grew by seven hundred pixels and took the row with it. A
-     height has to come from somewhere, and the card beside it already says
-     where. */
-  /* No matching cap: this list is what absorbs the difference between the two
-     cards, growing to whatever the row's height leaves it. The number below
-     only bites when Action Required is switched off and this card is on the
-     row alone, with nothing else to take its height from. */
-  #ahWidget .ah-widget-list { overflow-y:auto; max-height:var(--ah-widget-list-max, 420px); }
-  /* Action Required, beside it, for the same reason and to the same cap: its
-     header carries the count and the severity split and its footer separates
-     open work from the log, so neither may scroll away with the rows. Matching
-     the number keeps the row's two halves the same height without either card
-     having to know what the other contains. */
-  /* Two alerts, then it scrolls — and because this is the one hard cap in the
-     row, it is what keeps the pair short. The header says how many there are
-     altogether and the footer links to the rest. */
-  #arWidget .ar-list { max-height:var(--ar-list-max, 200px); }
+     Both cards are exactly this tall whatever they hold, so the block of
+     dashboard they occupy is the same height on a quiet morning and a bad
+     one, and nothing below them jumps as the alerts arrive. Each keeps its
+     own heading, counts and footer still and scrolls only its list — the one
+     part with more in it than fits.
+
+     The height has to be stated here rather than left to the content, and the
+     first attempt is worth recording: making the cards flex columns and
+     telling the lists to fill them does nothing on its own, because nothing
+     constrains the cards' own height — one simply grew by seven hundred
+     pixels and took the row with it. */
+  @media (min-width: 992px) {
+    .dash-alert-row > [class*="col-"] { height:var(--dash-alert-h, 520px); }
+    #ahWidget, #arWidget { height:100%; }
+  }
+  /* Stacked on a phone there is no row to keep level and no second card to
+     match, so each is as tall as what it holds and the page scrolls — a fixed
+     frame there would put a scrollbar inside a scrollbar. */
+  #ahWidget .ah-feed { overflow-y:auto; min-height:0; }
+  /* min-height:0 is what makes these scroll rather than push their card
+     taller: a flex item's default minimum is its content, so without it the
+     list refuses to shrink and drives the footer off the bottom. */
+  #arWidget .ar-list { min-height:0; }
   .dw-act-row { display:grid; align-items:center; gap:10px; min-width:800px;
                 grid-template-columns:66px 6px 20px 1.3fr 1.05fr .95fr 84px 1.1fr;
                 padding:2px; border-bottom:1px solid #f0f3f8; font-size:.76rem; line-height:1.15; }
@@ -639,12 +645,12 @@
     <div class="row g-3 mb-4 dash-alert-row"
          style="order:{% if 'action_required' in dash_panels %}{{ dash_panels.action_required }}{% else %}{{ dash_panels.alerts_widget }}{% endif %};">
       {% if 'action_required' in dash_panels %}
-      <div class="col-12{% if 'alerts_widget' in dash_panels %} col-xl-6{% endif %}">
+      <div class="col-12{% if 'alerts_widget' in dash_panels %} dash-col-action{% endif %}">
         {% include "_action_required_widget.html" %}
       </div>
       {% endif %}
       {% if 'alerts_widget' in dash_panels %}
-      <div class="col-12{% if 'action_required' in dash_panels %} col-xl-6{% endif %}">
+      <div class="col-12{% if 'action_required' in dash_panels %} dash-col-alerts{% endif %}">
         {% include "_alerthub_widget.html" %}
       </div>
       {% endif %}

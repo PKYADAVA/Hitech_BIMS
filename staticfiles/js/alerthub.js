@@ -30,10 +30,15 @@
   function timeAgo(iso) {
     var then = new Date(iso);
     var secs = Math.floor((Date.now() - then.getTime()) / 1000);
+    // Singular when there is one of them. "1 days ago" on every alert raised
+    // yesterday is the sort of thing that makes a dashboard look unattended.
+    function ago(n, unit) {
+      return n + " " + unit + (n === 1 ? "" : "s") + " ago";
+    }
     if (secs < 60) return "just now";
-    if (secs < 3600) return Math.floor(secs / 60) + " minutes ago";
-    if (secs < 86400) return Math.floor(secs / 3600) + " hours ago";
-    if (secs < 604800) return Math.floor(secs / 86400) + " days ago";
+    if (secs < 3600) return ago(Math.floor(secs / 60), "minute");
+    if (secs < 86400) return ago(Math.floor(secs / 3600), "hour");
+    if (secs < 604800) return ago(Math.floor(secs / 86400), "day");
     return then.toLocaleDateString();
   }
 

@@ -180,6 +180,8 @@ class ActionAlertSerializer(NotificationSerializer):
     status_changed_by_name = serializers.SerializerMethodField()
     available_actions = serializers.SerializerMethodField()
     reading = serializers.SerializerMethodField()
+    reading_value = serializers.SerializerMethodField()
+    reading_limit = serializers.SerializerMethodField()
     action_count = serializers.SerializerMethodField()
     more_like_this = serializers.SerializerMethodField()
 
@@ -187,7 +189,8 @@ class ActionAlertSerializer(NotificationSerializer):
         fields = NotificationSerializer.Meta.fields + [
             "severity_label", "status", "status_label", "status_tone", "status_color",
             "status_changed_at", "status_changed_by_name", "dismiss_reason",
-            "available_actions", "reading", "action_count",
+            "available_actions", "reading", "reading_value", "reading_limit",
+            "action_count",
             "more_like_this",
         ]
 
@@ -249,6 +252,54 @@ class ActionAlertSerializer(NotificationSerializer):
         if obj.threshold_value is not None:
             reading = "%s / %s" % (reading, fmt(obj.threshold_value))
         return ("%s %s" % (reading, unit)).strip()
+
+    def _unit(self, obj) -> str:
+        spec = obj.spec
+        if spec is not None and getattr(spec, "threshold", None) is not None:
+            return getattr(spec.threshold, "unit", "") or ""
+        return ""
+
+    @staticmethod
+    def _with_unit(number: str, unit: str, last: bool) -> str:
+        """Attach the unit the way that unit is written.
+
+        A symbol closes up against its number and belongs on both halves of a
+        comparison — "8.11% vs limit 5%". A word takes a space and is said
+        once, on the second half, because "8.11 days vs limit 5 days" makes
+        the pair read as two separate facts. "8.11 vs limit 5 %" is what came
+        of treating both the same.
+        """
+        if not unit:
+            return number
+        if unit[0].isalpha():
+            return ("%s %s" % (number, unit)) if last else number
+        return number + unit
+
+    def get_reading_value(self, obj) -> str:
+        """What was measured, on its own.
+
+        Split out of ``reading`` so the card can caption the figure
+        truthfully. One combined string could only ever be labelled
+        "measured / limit", and that is a lie on the rules with no limit to
+        compare against: negative stock fired at -60 showed a lone "-60"
+        under a caption promising two numbers. With the halves apart, a row
+        with a threshold reads "8.11% / 5%" over "measured / limit" and one
+        without reads "-60" over "measured".
+
+        The unit rides on whichever half is last, so the pair says it once
+        rather than twice.
+        """
+        if obj.measured_value is None:
+            return ""
+        return self._with_unit(_grouped(obj.measured_value), self._unit(obj),
+                               last=obj.threshold_value is None)
+
+    def get_reading_limit(self, obj) -> str:
+        """The threshold it was judged against, where the rule has one."""
+        if obj.measured_value is None or obj.threshold_value is None:
+            return ""
+        return self._with_unit(_grouped(obj.threshold_value), self._unit(obj),
+                               last=True)
 
     def get_more_like_this(self, obj) -> int:
         """Open alerts from the same rule that the card left out.

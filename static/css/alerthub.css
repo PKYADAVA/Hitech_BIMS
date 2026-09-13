@@ -25,6 +25,14 @@
   --ah-resolved: #16a34a;
   --ah-resolved-soft: #f0fdf4;
 
+  /* Navy carries the structure - card titles, the primary move on a row -
+     and blue carries anything you can click. Between them and the three
+     severity colours above, nothing on these cards is coloured for
+     decoration: a red thing on the dashboard is a critical thing. */
+  --ah-navy: #16264a;
+  --ah-navy-deep: #0f1b35;
+  --ah-blue: #2563eb;
+
   --ah-ink: #1f2937;
   --ah-muted: #6b7280;
   --ah-faint: #9aa2af;
@@ -110,8 +118,8 @@
    two rows of tiles, so 3rem of padding turns "nothing to report" into the
    tallest thing on the page. The notification centre keeps the roomy one --
    there the empty state IS the page. */
-.ah-widget-list .ah-empty { padding: 1.1rem 1rem; }
-.ah-widget-list .ah-empty i { font-size: 1.35rem; margin-bottom: .4rem; }
+.ah-feed .ah-empty { padding: 1.1rem 1rem; }
+.ah-feed .ah-empty i { font-size: 1.35rem; margin-bottom: .4rem; }
 
 /* ---------------------------------------------------------------- the bell */
 
@@ -333,7 +341,7 @@
   container-type: inline-size; container-name: ah;
   display: flex; flex-direction: column;
 }
-#ahWidget .ah-widget-list { flex: 1 1 auto; min-height: 0; }
+#ahWidget .ah-feed { flex: 1 1 auto; min-height: 0; }
 
 .ah-counts {
   display: grid;
@@ -378,53 +386,209 @@
   border-top: 1px solid var(--ah-line);
 }
 
-/* --------------------------------------------------------- dashboard widget */
+/* --------------------------------------------------------- dashboard widget
 
-.ah-widget-tiles {
-  display: grid;
-  /* One row, however many tiles there are: they are a set, and the last two
-     dropping onto a line of their own read as a second, lesser group. */
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: .4rem;
-  margin-bottom: .9rem;
-}
-.ah-tile {
-  background: var(--ah-canvas);
-  border-radius: .7rem;
-  padding: .5rem .4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: .4rem;
-  min-width: 0;
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid var(--ah-line);
-  transition: background .12s, transform .12s;
-}
-.ah-tile:hover { background: #eef2f8; transform: translateY(-1px); color: inherit; }
-.ah-tile i { color: var(--ah-muted); font-size: .85rem; width: 1rem;
-              text-align: center; flex: 0 0 auto; }
-.ah-tile > span { min-width: 0; }
-.ah-tile-n { font-weight: 700; font-size: 1rem; line-height: 1.1; }
-.ah-tile-l { font-size: .66rem; color: var(--ah-muted); line-height: 1.2;
-             display: block; }
-.ah-tile.has-alerts .ah-tile-n { color: var(--ah-critical); }
+   A monitoring panel, not a second worklist. It sits beside Action Required,
+   which carries the buttons; everything here is read rather than worked, so
+   the chrome is stripped back to rules and weight and the only colour on the
+   card is the severity of what it is reporting.
+   ----------------------------------------------------------------------- */
 
-.ah-widget-list { display: flex; flex-direction: column; gap: .5rem; }
-.ah-widget-item {
-  display: flex;
-  gap: .6rem;
-  align-items: flex-start;
-  padding: .55rem .7rem;
-  border-radius: .6rem;
-  background: var(--ah-canvas);
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid var(--ah-line);
+.ah-widget-title {
+  display: flex; align-items: center; gap: .5rem; margin: 0;
+  font-size: .95rem; font-weight: 700; color: var(--ah-navy);
 }
-.ah-widget-item:hover { background: #eef2f8; color: inherit; }
+.ah-widget-title i {
+  width: 1.7rem; height: 1.7rem; border-radius: .5rem;
+  display: grid; place-items: center; font-size: .8rem;
+  background: var(--ah-critical-soft); color: var(--ah-critical);
+}
+
+/* How many are unread — a reading list's backlog, not a severity. It was a
+   red pill, which put the loudest colour on the card next to a strip whose
+   whole job is to say how much of this is actually critical. */
+.ah-unread {
+  font-size: .66rem; font-weight: 700; line-height: 1;
+  padding: .25rem .45rem; border-radius: 999px;
+  background: #eef2f8; color: var(--ah-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The same line as .ar-sub on the card beside it, and the same treatment. */
+.ah-widget-sub { margin: 0 0 .7rem; font-size: .74rem; color: var(--ah-muted); }
+
+/* The four levels, one small card each: a round tinted badge, the count and
+   what it counts. Same family as the tiles on the rest of the dashboard. */
+.ah-sevstrip {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .4rem; margin-bottom: .55rem;
+}
+.ah-sev-item {
+  display: flex; align-items: center; gap: .45rem; min-width: 0;
+  padding: .45rem .5rem; border-radius: .65rem;
+  border: 1px solid var(--ah-line); background: var(--ah-surface);
+  text-decoration: none; transition: background .12s, border-color .12s;
+}
+.ah-sev-item:hover { background: var(--ah-canvas); }
+.ah-sev-ic {
+  flex: 0 0 auto; width: 1.55rem; height: 1.55rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: .68rem;
+}
+.ah-sev-txt { min-width: 0; display: flex; flex-direction: column; }
+.ah-sev-n { font-size: 1.05rem; font-weight: 700; line-height: 1.05;
+            font-variant-numeric: tabular-nums; }
+.ah-sev-l { font-size: .62rem; color: var(--ah-muted); font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ah-sev-item.critical { border-color: #fde0e0; background: var(--ah-critical-soft); }
+.ah-sev-item.critical .ah-sev-ic { background: var(--ah-critical); color: #fff; }
+.ah-sev-item.critical .ah-sev-n { color: var(--ah-critical); }
+.ah-sev-item.high .ah-sev-ic { background: var(--ah-high); color: #fff; }
+.ah-sev-item.high .ah-sev-n { color: var(--ah-high); }
+.ah-sev-item.medium .ah-sev-ic { background: var(--ah-medium); color: #fff; }
+.ah-sev-item.medium .ah-sev-n { color: var(--ah-medium); }
+.ah-sev-item.low .ah-sev-ic { background: var(--ah-low); color: #fff; }
+.ah-sev-item.low .ah-sev-n { color: var(--ah-low); }
+/* A zero keeps its level's colour and its place. The four are one scale
+   read left to right, and grey-ing the empty ones split the row into the
+   real levels and the others. Only the critical card's wash is dropped —
+   a pink panel saying nothing is critical is the wrong first impression. */
+.ah-sev-item.critical.is-zero { background: var(--ah-surface);
+                                border-color: var(--ah-line); }
+
+/* What is being watched. Six readings across one row; a zero is the
+   commonest value and is dimmed rather than dropped, because "nothing wrong
+   with vaccination" is half of what a monitoring panel is for. */
+.ah-signals {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  gap: .35rem; margin-bottom: .6rem;
+}
+.ah-signal {
+  display: flex; align-items: center; gap: .35rem; min-width: 0;
+  padding: .35rem .4rem; border-radius: .55rem;
+  background: var(--ah-canvas); border: 1px solid var(--ah-line);
+  text-decoration: none; color: inherit;
+}
+.ah-signal:hover { background: #eef2f8; color: inherit; }
+.ah-signal > i { flex: 0 0 auto; font-size: .72rem; color: #94a3b8; }
+.ah-signal > span { min-width: 0; display: flex; flex-direction: column; }
+.ah-signal b { font-size: .82rem; font-weight: 700; line-height: 1.05;
+               color: var(--ah-ink); font-variant-numeric: tabular-nums; }
+.ah-signal span span { font-size: .58rem; color: var(--ah-muted);
+                       line-height: 1.15; }
+.ah-signal.is-clear { background: transparent; }
+.ah-signal.is-clear b { color: #b3bdcb; }
+.ah-signal.is-clear > i { color: #cfd6e0; }
+
+/* The feed. One card per event, washed white on the card's own ground with a
+   rail in its severity — the same shape as the worklist beside it, without
+   the buttons, because this panel is read rather than worked. */
+.ah-feed { display: flex; flex-direction: column; gap: .4rem; }
+.ah-frow {
+  display: flex; gap: .55rem; align-items: flex-start;
+  padding: .5rem .6rem; border-radius: .6rem;
+  background: var(--ah-surface); border: 1px solid var(--ah-line);
+  border-left: 3px solid #cbd5e1;
+  text-decoration: none; color: inherit;
+}
+.ah-frow:hover { background: var(--ah-canvas); color: inherit; }
+.ah-frow.critical { border-left-color: var(--ah-critical); }
+.ah-frow.high     { border-left-color: var(--ah-high); }
+.ah-frow.medium   { border-left-color: var(--ah-medium); }
+.ah-frow.low      { border-left-color: var(--ah-low); }
+.ah-frow-ic {
+  flex: 0 0 auto; width: 1.7rem; height: 1.7rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: .72rem; margin-top: .1rem;
+}
+.ah-frow-ic.critical { background: var(--ah-critical-soft); color: var(--ah-critical); }
+.ah-frow-ic.high     { background: var(--ah-high-soft);     color: var(--ah-high); }
+.ah-frow-ic.medium   { background: var(--ah-medium-soft);   color: var(--ah-medium); }
+.ah-frow-ic.low      { background: var(--ah-low-soft);      color: var(--ah-low); }
+.ah-frow-body { flex: 1 1 auto; min-width: 0; display: flex;
+                flex-direction: column; gap: .1rem; }
+.ah-frow-top { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.ah-frow-title {
+  font-size: .78rem; font-weight: 600; color: var(--ah-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Unread is weight, not a tinted row: five tinted rows is a block of colour
+   saying nothing about which of them matters. */
+.ah-frow.unread .ah-frow-title { font-weight: 700; }
+.ah-frow-time { margin-left: auto; flex: 0 0 auto; font-size: .62rem;
+                color: #9aa2af; white-space: nowrap; }
+.ah-frow-msg {
+  font-size: .7rem; color: #5b6472; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
+.ah-frow-meta { display: flex; align-items: center; gap: .35rem; min-width: 0;
+                font-size: .62rem; color: var(--ah-faint); }
+.ah-frow-meta > span { overflow: hidden; text-overflow: ellipsis;
+                       white-space: nowrap; }
+.ah-frow-meta .ah-chip { font-size: .58rem; padding: .02rem .35rem; }
+
+/* The good-day line. */
+.ah-widget-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; margin-top: .6rem; padding-top: .55rem;
+  border-top: 1px solid var(--ah-line);
+  font-size: .68rem; color: var(--ah-faint);
+}
+/* On a quiet day it is the one piece of good news on the dashboard, and it
+   is worth saying plainly rather than as a grey line of small print. Green
+   is a state here, not a severity. */
+.ah-widget-foot.is-clear {
+  border-top: 0; margin-top: .6rem; padding: .5rem .65rem;
+  border-radius: .6rem; background: var(--ah-resolved-soft);
+  border: 1px solid #bbf7d0; justify-content: flex-start; gap: .55rem;
+}
+.ah-widget-foot.is-clear > span { display: flex; flex-direction: column; }
+.ah-widget-foot.is-clear b { font-size: .76rem; color: #15803d; }
+.ah-widget-foot.is-clear span span { font-size: .66rem; color: #4d7c5a; }
+.ah-foot-ic {
+  flex: 0 0 auto; width: 1.4rem; height: 1.4rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: .66rem;
+  background: var(--ah-resolved); color: #fff;
+}
+.ah-foot-state { display: inline-flex; align-items: center; gap: .35rem;
+                 font-weight: 600; }
+.ah-foot-state.clear { color: var(--ah-resolved); }
+.ah-foot-state.busy { color: var(--ah-muted); }
+.ah-foot-state.busy i { color: var(--ah-high); }
+.ah-foot-time { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------- the trail on one alert */
+
+/* A timeline down the detail page: what was done, by whom, when. Marked with
+   dots on a rule rather than coloured rows — every entry here is a fact about
+   the past, and none of them is more urgent than another. */
+.ah-trail { list-style: none; margin: 0; padding: 0; }
+.ah-trail-row {
+  display: flex; gap: .7rem; padding: 0 0 .85rem;
+  position: relative;
+}
+.ah-trail-row:not(:last-child)::before {
+  content: ""; position: absolute; left: .3rem; top: .95rem; bottom: 0;
+  width: 1px; background: var(--ah-line);
+}
+.ah-trail-dot {
+  flex: 0 0 auto; width: .62rem; height: .62rem; border-radius: 50%;
+  margin-top: .32rem; background: #cbd5e1;
+  box-shadow: 0 0 0 3px #fff; position: relative; z-index: 1;
+}
+.ah-trail-row.resolved .ah-trail-dot { background: var(--ah-resolved); }
+.ah-trail-row.dismissed .ah-trail-dot { background: #94a3b8; }
+.ah-trail-row.reopened .ah-trail-dot { background: var(--ah-high); }
+.ah-trail-body { min-width: 0; }
+.ah-trail-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem;
+  font-size: .82rem; color: var(--ah-ink);
+}
+.ah-trail-who { color: var(--ah-muted); font-size: .76rem; }
+.ah-trail-when { color: var(--ah-faint); font-size: .72rem; }
+.ah-trail-note {
+  font-size: .78rem; color: #5b6472; margin-top: .15rem;
+}
+.ah-trail-empty { font-size: .82rem; color: var(--ah-faint); }
 
 /* ------------------------------------------------------------------ tables */
 
@@ -1016,13 +1180,28 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   font-size: .95rem; font-weight: 700; color: var(--ah-ink, #1f2937);
   margin: 0;
 }
-.ar-title i { color: var(--ah-high); }
+.ar-title { color: var(--ah-navy); }
+/* A tinted square holding the card's own mark — the shape every other card
+   on this dashboard wears, so these two join the set rather than looking
+   like a panel bolted on afterwards. */
+.ar-title i {
+  width: 1.7rem; height: 1.7rem; border-radius: .5rem;
+  display: grid; place-items: center; font-size: .8rem;
+  background: var(--ah-high-soft); color: var(--ah-high);
+}
 .ar-total {
   font-size: .7rem; font-weight: 700; line-height: 1;
   padding: .3rem .5rem; border-radius: 999px;
   background: #f1f5f9; color: #475569;
 }
 .ar-total.has-critical { background: var(--ah-critical-soft); color: var(--ah-critical); }
+/* What the card is for, beside the name of it. Small and grey: it is read
+   once, by somebody wondering which of the two cards answers their question,
+   and never again. */
+.ar-sub {
+  margin: 0; align-self: center; min-width: 0;
+  font-size: .74rem; color: var(--ah-muted);
+}
 .ar-head-right { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
 
 /* The severity split. Each is a filter into the centre, and each disappears
@@ -1036,6 +1215,9 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   border: 1px solid transparent; white-space: nowrap;
 }
 .ar-sum b { font-variant-numeric: tabular-nums; }
+.ar-sum i { font-size: .72rem; }
+.ar-sum.is-zero { background: #f8fafc; color: #94a3b8; border-color: #eef1f5; }
+.ar-sum.is-zero i { color: #cbd5e1; }
 .ar-sum.critical { background: var(--ah-critical-soft); color: var(--ah-critical);
                    border-color: #fecaca; }
 .ar-sum.high     { background: var(--ah-high-soft);     color: var(--ah-high);
@@ -1049,24 +1231,35 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 /* -- the list ---------------------------------------------------------- */
 
 .ar-list {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; gap: .45rem;
+  padding: .55rem .7rem;
   /* min-height:0 is what makes this scroll rather than push the card taller:
      a flex item's default minimum is its content, so without it the list
      refuses to shrink and the footer is driven off the bottom. */
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
+/* A card per alert, washed in its own severity. The wash is the fastest
+   read on the card - a screen of pink is a bad morning before a word of it
+   has been read - and besides the badge, the icon and the reading it is the
+   only place on a row where any colour appears at all.
+
+   Kept tight on purpose. Four short lines and a row of buttons is what an
+   alert needs; anything more and two of them fill the dashboard. */
 .ar-row {
-  display: grid; gap: .1rem .85rem; padding: .55rem 1rem .55rem .85rem;
-  border-bottom: 1px solid #f1f5f9;
-  border-left: 3px solid transparent;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  display: grid; gap: .05rem .7rem; padding: .5rem .7rem .55rem;
+  border: 1px solid transparent; border-left-width: 3px;
+  border-radius: 10px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   grid-template-areas: "icon body metric" ". actions actions";
 }
-.ar-row:last-child { border-bottom: 0; }
-.ar-row.critical { border-left-color: var(--ah-critical); }
-.ar-row.high     { border-left-color: var(--ah-high); }
-.ar-row.medium   { border-left-color: var(--ah-medium); }
-.ar-row.low      { border-left-color: var(--ah-low); }
+.ar-row.critical { background: var(--ah-critical-soft); border-color: #fde0e0;
+                   border-left-color: var(--ah-critical); }
+.ar-row.high     { background: var(--ah-high-soft);     border-color: #fde3cc;
+                   border-left-color: var(--ah-high); }
+.ar-row.medium   { background: var(--ah-medium-soft);   border-color: #fdeab8;
+                   border-left-color: var(--ah-medium); }
+.ar-row.low      { background: var(--ah-low-soft);      border-color: #d7e6ff;
+                   border-left-color: var(--ah-low); }
 /* A row whose move is in flight. Not disabled as a whole - the buttons are,
    one by one, which is what stops a double press; this only says it is busy. */
 .ar-row.is-busy { opacity: .55; }
@@ -1078,9 +1271,12 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   transition: background .25s ease, opacity .25s ease;
 }
 
+/* The module's own icon in the severity's colour: what kind of problem it
+   is and how bad it is, from one glance at one square. */
 .ar-ic {
-  grid-area: icon; width: 28px; height: 28px; border-radius: 8px;
-  display: grid; place-items: center; font-size: .8rem; color: #fff;
+  grid-area: icon; width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center; font-size: .85rem; color: #fff;
+  margin-top: .1rem;
 }
 .ar-ic.critical { background: var(--ah-critical); }
 .ar-ic.high     { background: var(--ah-high); }
@@ -1100,10 +1296,19 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   line-clamp: 2; overflow: hidden;
 }
 .ar-meta {
-  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
-  font-size: .68rem; color: #94a3b8; margin-top: .22rem;
+  display: flex; align-items: center; gap: .25rem; flex-wrap: wrap;
+  font-size: .68rem; color: #94a3b8; margin-top: .25rem;
 }
-.ar-meta .ar-sep { opacity: .5; }
+/* Module, record, place. White on the row's wash, so they read as tags
+   sitting on it rather than as more of the same sentence. */
+.ar-chip {
+  background: rgba(255, 255, 255, .82); border: 1px solid rgba(15, 23, 42, .07);
+  border-radius: 5px; padding: .08rem .35rem;
+  font-size: .66rem; font-weight: 600; color: #64748b;
+  max-width: 14rem; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ar-by { font-size: .66rem; color: #64748b; font-weight: 600; }
 /* "+16 more" - how many others of the same rule are open but not on the card.
    Without it a capped row looks like the only one of its kind, which is a
    worse lie than the flood the cap was put there to stop. */
@@ -1141,23 +1346,35 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
    its own - the absence of one already says nobody has picked it up. */
 .ar-state.open { display: none; }
 
-/* -- the reading ------------------------------------------------------- */
+/* -- what it read, and how old it is ----------------------------------- */
 
+/* The number the rule fired on, set large enough to scan a list by and in
+   the severity's colour. Under it, what the figure is - and it says
+   "measured" rather than "measured / limit" on the rules that have no limit,
+   because a caption naming a second number that is not there is a lie about
+   the data. Under that, the age. */
 .ar-metric {
   grid-area: metric; text-align: right; min-width: 0;
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column; align-items: flex-end;
+  justify-content: flex-start; padding-left: .3rem;
 }
 .ar-metric b {
-  font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums;
-  white-space: nowrap; color: var(--ah-ink, #1f2937);
+  font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  white-space: nowrap; line-height: 1.25; color: var(--ah-ink, #1f2937);
 }
+.ar-metric.critical b { color: var(--ah-critical); }
+.ar-metric.high     b { color: var(--ah-high); }
+.ar-metric.medium   b { color: var(--ah-medium); }
+.ar-metric.low      b { color: var(--ah-low); }
 .ar-metric span { font-size: .62rem; color: #94a3b8; white-space: nowrap; }
+.ar-when { font-size: .64rem; color: #94a3b8; white-space: nowrap;
+           margin-top: .15rem; }
 
 /* -- actions ----------------------------------------------------------- */
 
 .ar-actions {
   grid-area: actions; display: flex; align-items: center; gap: .3rem;
-  flex-wrap: wrap; margin-top: .4rem;
+  flex-wrap: wrap; margin-top: .45rem;
 }
 .ar-btn {
   font-size: .68rem; font-weight: 600; line-height: 1;
@@ -1166,13 +1383,54 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   display: inline-flex; align-items: center; gap: .3rem;
 }
 .ar-btn:hover:not(:disabled) { background: #f8fafc; border-color: #b9c3d0; }
+/* Green is a state here, not a severity - see PRIORITY_TONE in
+   alerthub/constants.py - and this is the only button that produces it. */
+.ar-btn.ok { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; }
+.ar-btn.ok:hover:not(:disabled) { background: #dcfce7; border-color: #86efac; }
 .ar-btn:disabled { opacity: .5; cursor: default; }
 .ar-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* The overflow menu behind the kebab. Dismiss, Notify and anything else that
+   does not move the alert forward live here rather than on the row: six
+   buttons of equal weight are not a hierarchy, and Dismiss sitting the same
+   size as Resolve invites the same click for a very different act. */
+.ar-kebab-wrap { position: relative; display: inline-flex; }
+.ar-kebab { padding: .32rem .42rem; }
+.ar-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+  min-width: 11rem; padding: .25rem;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .12);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.ar-menu-item {
+  display: flex; align-items: center; gap: .45rem; width: 100%;
+  padding: .4rem .5rem; border: 0; border-radius: 6px;
+  background: transparent; color: #334155;
+  font-size: .72rem; font-weight: 600; text-align: left; cursor: pointer;
+}
+.ar-menu-item { text-decoration: none; }
+.ar-menu-item i { width: 1rem; color: #94a3b8; }
+.ar-menu-item:hover { background: #f1f5f9; }
+/* Colour marks severity on this card, not decoration — so the one destructive
+   move is the only item that gets any, and only on hover. */
+.ar-menu-item.danger {
+  color: #b91c1c;
+  /* Kept off the bottom of the list by a rule, so it cannot be hit by
+     somebody aiming at the item above it. */
+  margin-top: .2rem; padding-top: .45rem; border-top: 1px solid #eef1f5;
+  border-radius: 0 0 6px 6px;
+}
+.ar-menu-item.danger:hover { background: #fef2f2; }
+.ar-menu-item.danger i { color: #dc2626; }
+.ar-menu-item:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 /* The deep link is the primary move on every row: the fastest way to close an
    alert is usually to go and look at the record it is about. It is dark
    neutral rather than coloured, so it never competes with the severity. */
-.ar-btn.primary { background: #1f2937; border-color: #1f2937; color: #fff; }
-.ar-btn.primary:hover:not(:disabled) { background: #111827; border-color: #111827; }
+.ar-btn.primary { background: var(--ah-navy); border-color: var(--ah-navy); color: #fff; }
+.ar-btn.primary:hover:not(:disabled) {
+  background: var(--ah-navy-deep); border-color: var(--ah-navy-deep);
+}
 .ar-btn.danger { color: var(--ah-critical); border-color: #fecaca; }
 .ar-btn.danger:hover:not(:disabled) { background: var(--ah-critical-soft); }
 .ar-btn .fa-spinner { animation: ar-spin .7s linear infinite; }
@@ -1228,23 +1486,20 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 
 /* -- responsive -------------------------------------------------------- */
 
-/* Narrow column: the reading leaves its own column and joins the body. Below
-   about 640px a right-aligned number leaves the title some forty characters,
-   which is not enough for "Feed Stock Coverage Low" and the farm it is
-   about. Set below the width this card has when it shares the dashboard
-   row: there the reading keeps its own column, which saves a line of height
-   on every alert. */
+/* Narrow column: the message is cut to a single line. Two lines of prose
+   above a wrapped row of buttons is most of a card, and the facts line under
+   it already carries the number the sentence is explaining. */
 @container ar (max-width: 520px) {
   .ar-row {
-    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-columns: 30px minmax(0, 1fr);
     grid-template-areas: "icon body" ". metric" ". actions";
   }
+  .ar-metric { text-align: left; align-items: baseline; flex-direction: row;
+               gap: .35rem; margin-top: .2rem; padding-left: 0; }
   /* One line of message. Two lines of prose above a wrapped row of buttons is
      most of a card, and the reading underneath already carries the number the
      sentence is explaining. The full text is on the alert's own page. */
   .ar-msg { -webkit-line-clamp: 1; line-clamp: 1; }
-  .ar-metric { text-align: left; flex-direction: row; align-items: baseline;
-               gap: .35rem; margin-top: .25rem; }
 }
 
 /* Narrower still - a phone, or a half-width column on a small laptop. One
@@ -1274,17 +1529,14 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   .ar-btn .fa-spinner { animation: none; }
 }
 
-/* Narrow column: one row of six tiles stops being legible somewhere around
-   here, so the set wraps rather than shrinking to strips of two characters.
-   Scoped to the dashboard card, which is the only place they appear. */
+/* Narrow column: the four levels are one scale, so they stay on one line as
+   long as they can be read, and fall to two rows rather than three. */
 @container ah (max-width: 560px) {
-  #ahWidget .ah-widget-tiles {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+  #ahWidget .ah-signals { grid-auto-flow: row;
+                          grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @container ah (max-width: 380px) {
-  #ahWidget .ah-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #ahWidget .ah-widget-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ahWidget .ah-sevstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ahWidget .ah-signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

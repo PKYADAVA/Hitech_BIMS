@@ -10,49 +10,80 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
 {% endcomment %}
 <div class="ah-card p-3 mb-3" id="ahWidget">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <h2 class="h6 fw-bold mb-0 d-flex align-items-center gap-2">
-      <i class="fa-solid fa-bell text-danger"></i> Alerts &amp; Notifications
-      <span class="badge rounded-pill bg-danger d-none" id="ahWidgetUnread">0</span>
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h2 class="ah-widget-title">
+      <i class="fa-solid fa-bell"></i> Alerts &amp; Notifications
+      <span class="ah-unread d-none" id="ahWidgetUnread">0</span>
     </h2>
-    <a href="{% url 'alerthub:notification_center' %}" class="btn btn-sm btn-outline-primary">
+    {% comment %}The same button as the card beside it. Two cards in a row
+    with two different View All buttons read as two different kinds of thing.
+    {% endcomment %}
+    <a href="{% url 'alerthub:notification_center' %}" class="btn btn-sm btn-outline-secondary">
       View All <i class="fa-solid fa-arrow-right ms-1"></i>
     </a>
   </div>
-
-  {% comment %}Priority split. Each is a link into the centre pre-filtered to
-  that level. Written out rather than looped so the widget needs nothing from
-  the view that includes it — home.html only decides whether to show it.
+  {% comment %}The counterpart to Action Required's line: this card is the
+  feed, that one is the worklist, and side by side they need telling apart.
   {% endcomment %}
-  <div class="ah-counts mb-3">
-    <a class="ah-count critical text-decoration-none"
-       href="{% url 'alerthub:notification_center' %}?priority=critical">
-      <span class="ah-count-n" data-count="critical">–</span>
-      <span class="ah-count-l">Critical Alerts</span>
+  <p class="ah-widget-sub">System events and monitoring alerts</p>
+
+  {% comment %}The priority split: one small card each, read left to right as
+  a single scale. Each is a link into the centre pre-filtered to that level.
+  A level with nothing open keeps its colour and its place — greying the
+  empty ones broke the row into the real levels and the others — but the
+  critical card drops its pink wash, because a pink panel announcing that
+  nothing is critical is the wrong first impression of the day.
+
+  Written out rather than looped so the widget needs nothing from the view
+  that includes it — home.html only decides whether to show it.
+  {% endcomment %}
+  <div class="ah-sevstrip">
+    <a class="ah-sev-item critical" href="{% url 'alerthub:notification_center' %}?priority=critical">
+      <span class="ah-sev-ic"><i class="fa-solid fa-circle-exclamation"></i></span>
+      <span class="ah-sev-txt">
+        <span class="ah-sev-n" data-count="critical">–</span>
+        <span class="ah-sev-l">Critical Alerts</span>
+      </span>
     </a>
-    <a class="ah-count high text-decoration-none"
-       href="{% url 'alerthub:notification_center' %}?priority=high">
-      <span class="ah-count-n" data-count="high">–</span>
-      <span class="ah-count-l">High Priority</span>
+    <a class="ah-sev-item high" href="{% url 'alerthub:notification_center' %}?priority=high">
+      <span class="ah-sev-ic"><i class="fa-solid fa-circle-exclamation"></i></span>
+      <span class="ah-sev-txt">
+        <span class="ah-sev-n" data-count="high">–</span>
+        <span class="ah-sev-l">High Priority</span>
+      </span>
     </a>
-    <a class="ah-count medium text-decoration-none"
-       href="{% url 'alerthub:notification_center' %}?priority=medium">
-      <span class="ah-count-n" data-count="medium">–</span>
-      <span class="ah-count-l">Medium Priority</span>
+    <a class="ah-sev-item medium" href="{% url 'alerthub:notification_center' %}?priority=medium">
+      <span class="ah-sev-ic"><i class="fa-solid fa-triangle-exclamation"></i></span>
+      <span class="ah-sev-txt">
+        <span class="ah-sev-n" data-count="medium">–</span>
+        <span class="ah-sev-l">Medium Priority</span>
+      </span>
     </a>
-    <a class="ah-count low text-decoration-none"
-       href="{% url 'alerthub:notification_center' %}?priority=low">
-      <span class="ah-count-n" data-count="low">–</span>
-      <span class="ah-count-l">Low Priority</span>
+    <a class="ah-sev-item low" href="{% url 'alerthub:notification_center' %}?priority=low">
+      <span class="ah-sev-ic"><i class="fa-solid fa-circle-info"></i></span>
+      <span class="ah-sev-txt">
+        <span class="ah-sev-n" data-count="low">–</span>
+        <span class="ah-sev-l">Low Priority</span>
+      </span>
     </a>
   </div>
 
-  {# The named tiles from the spec: approvals, stock, payments, vaccination… #}
-  <div class="ah-widget-tiles" id="ahWidgetTiles"></div>
+  {% comment %}What is being watched, and how much of each is open. A zero is
+  the commonest value here and is dimmed rather than dropped: a monitoring
+  panel that cannot say "nothing wrong with vaccination" is only reporting
+  bad news.
+  {% endcomment %}
+  <div class="ah-signals" id="ahWidgetTiles"></div>
 
-  <div class="ah-widget-list" id="ahWidgetList">
+  <div class="ah-feed" id="ahWidgetList">
     <div class="ah-empty">Loading…</div>
   </div>
+
+  {% comment %}What the panel exists to be able to say on a good day. A grey
+  line of small print while anything is open; a green banner when nothing
+  critical or high is.
+  {% endcomment %}
+  <div class="ah-widget-foot" id="ahWidgetFoot" hidden></div>
 </div>
 
 <script>
@@ -68,13 +99,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var tiles = document.getElementById("ahWidgetTiles");
   var list = document.getElementById("ahWidgetList");
+  var foot = document.getElementById("ahWidgetFoot");
   var unread = document.getElementById("ahWidgetUnread");
   var CENTRE = "{% url 'alerthub:notification_center' %}";
 
   AlertHub.request(AlertHub.API + "summary/").then(function (data) {
     ["critical", "high", "medium", "low"].forEach(function (key) {
       var el = root.querySelector('[data-count="' + key + '"]');
-      if (el) el.textContent = data[key] || 0;
+      if (!el) return;
+      el.textContent = data[key] || 0;
+      // Nothing at this level is not a warning about anything, so it is not
+      // drawn in the warning's colour. The tile stays, because "no criticals"
+      // is what somebody scanning this strip is hoping to read.
+      el.closest(".ah-sev-item").classList.toggle("is-zero", !data[key]);
     });
 
     if (data.unread > 0) {
@@ -83,17 +120,66 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     tiles.innerHTML = (data.tiles || []).map(function (tile) {
-      return '<a class="ah-tile' + (tile.count ? " has-alerts" : "") +
-        '" href="' + CENTRE + '">' +
+      return '<a class="ah-signal' + (tile.count ? "" : " is-clear") +
+        '" href="' + CENTRE + '" title="' + AlertHub.esc(tile.label) + '">' +
         '<i class="' + AlertHub.esc(tile.icon) + '"></i>' +
         "<span>" +
-          '<span class="ah-tile-n">' + tile.count + "</span><br>" +
-          '<span class="ah-tile-l">' + AlertHub.esc(tile.label) + "</span>" +
+          '<b>' + tile.count + "</b>" +
+          "<span>" + AlertHub.esc(tile.label) + "</span>" +
         "</span></a>";
     }).join("");
+
+    // The line this panel exists to be able to print on a quiet day. A
+    // monitoring feed that only ever speaks up when something is wrong
+    // leaves "nothing shown" and "nothing working" looking the same.
+    var pressing = (data.critical || 0) + (data.high || 0);
+    var now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (pressing) {
+      foot.className = "ah-widget-foot";
+      foot.innerHTML = '<span class="ah-foot-state busy">' +
+        '<i class="fa-solid fa-circle-dot"></i>' + pressing +
+        (pressing === 1 ? " alert needs" : " alerts need") + " attention</span>" +
+        '<span class="ah-foot-time">Updated ' + now + "</span>";
+    } else {
+      foot.className = "ah-widget-foot is-clear";
+      foot.innerHTML = '<span class="ah-foot-ic"><i class="fa-solid fa-check"></i></span>' +
+        "<span><b>All other systems are running normally.</b>" +
+        "<span>Nothing critical or high is open — checked at " + now + ".</span></span>";
+    }
+    foot.hidden = false;
   }).catch(function () {
     tiles.innerHTML = '<div class="text-muted small">Could not load alert counts.</div>';
   });
+
+  /* One line per event: what happened, where, when. No buttons — the card
+     beside this one is where alerts are worked, and a second set of controls
+     here only made the two compete. The whole line is a link to the alert. */
+  function feedHTML(n) {
+    var sev = AlertHub.esc(n.priority);
+    var where = [];
+    if (n.place) where.push(AlertHub.esc(n.place));
+    if (n.voucher_no) where.push(AlertHub.esc(n.voucher_no));
+    return '<a class="ah-frow ' + sev + (n.is_read ? "" : " unread") +
+      '" href="' + AlertHub.esc(n.detail_url) + '" data-id="' + n.id + '">' +
+      '<span class="ah-frow-ic ' + sev + '"><i class="' +
+        AlertHub.esc(n.icon) + '"></i></span>' +
+      '<span class="ah-frow-body">' +
+        '<span class="ah-frow-top">' +
+          '<span class="ah-frow-title">' + AlertHub.esc(n.title) + "</span>" +
+          '<span class="ah-pill ' + sev + '">' +
+            AlertHub.esc(n.priority_label) + "</span>" +
+          '<span class="ah-frow-time">' +
+            AlertHub.esc(AlertHub.timeAgo(n.created_at)) + "</span>" +
+        "</span>" +
+        (n.message
+          ? '<span class="ah-frow-msg">' + AlertHub.esc(n.message) + "</span>"
+          : "") +
+        '<span class="ah-frow-meta">' +
+          '<span class="ah-chip">' + AlertHub.esc(n.module_label) + "</span>" +
+          (where.length ? "<span>" + where.join(" · ") + "</span>" : "") +
+        "</span>" +
+      "</span></a>";
+  }
 
   // Unread, like the bell. The counts above are open alerts — they have to
   // agree with the card beside this one — but the list is an inbox: reading
@@ -102,7 +188,7 @@ document.addEventListener("DOMContentLoaded", function () {
   AlertHub.request(AlertHub.API + "recent/").then(function (data) {
     var rows = (data.results || []).slice(0, 5);
     list.innerHTML = rows.length
-      ? rows.map(function (n) { return AlertHub.itemHTML(n); }).join("")
+      ? rows.map(feedHTML).join("")
       // Not "no open alerts" — there may well be several, counted above.
       // This list is what has not been read, and that is what is empty.
       : AlertHub.emptyHTML("Nothing new — you have read everything here");

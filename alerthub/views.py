@@ -108,6 +108,11 @@ def notification_detail(request, pk):
         "spec": spec,
         "recipient": recipient,
         "recipients": notification.recipients.select_related("user"),
+        # What has been done about it, newest first (AlertAction.Meta orders
+        # it). The status field says where the alert stands now; this is how
+        # it got there, and it is what the Action Required card's History
+        # link comes here to read.
+        "trail": notification.actions.select_related("actor"),
     })
 
 

@@ -126,6 +126,43 @@ only ever produce a wrong number.
     {% endif %}
   </div>
 
+  {% comment %}
+  What has been done about it. Append-only, newest first, and shown even when
+  it is empty: "nobody has touched this" is the answer somebody chasing an
+  alert most often needs, and an absent card looks like a page that failed to
+  load rather than an alert nobody has picked up.
+  {% endcomment %}
+  <div class="ah-form-card">
+    <h2><i class="fa-solid fa-clock-rotate-left text-primary"></i> History</h2>
+    <p class="ah-hint">Every move made on this alert, most recent first.</p>
+    <ol class="ah-trail">
+      {% for entry in trail %}
+        <li class="ah-trail-row {{ entry.action }}">
+          <span class="ah-trail-dot"></span>
+          <div class="ah-trail-body">
+            <div class="ah-trail-head">
+              <b>{{ entry.get_action_display }}</b>
+              <span class="ah-trail-who">
+                by {% firstof entry.actor.get_full_name entry.actor.username "System" %}
+              </span>
+              <span class="ah-trail-when">{{ entry.created_at|date:"d M Y, H:i" }}</span>
+            </div>
+            {% if entry.notified %}
+              <div class="ah-trail-note">Told: {{ entry.notified|join:", " }}</div>
+            {% endif %}
+            {% if entry.note %}
+              <div class="ah-trail-note">“{{ entry.note }}”</div>
+            {% endif %}
+          </div>
+        </li>
+      {% empty %}
+        <li class="ah-trail-empty">
+          Nobody has acted on this alert yet.
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+
   <div class="ah-form-card">
     <h2><i class="fa-solid fa-users text-primary"></i> Sent to</h2>
     <p class="ah-hint">Who received this alert, and whether they have read it.</p>

@@ -87,33 +87,80 @@
       ["critical", "Critical"], ["high", "High"],
       ["medium", "Warning"], ["low", "Information"]
     ];
-    return levels.filter(function (level) { return summary[level[0]] > 0; })
-      .map(function (level) {
-        return '<a class="ar-sum ' + level[0] + '" href="' +
-          centreLink(centre, { priority: level[0] }) + '"><b>' +
-          summary[level[0]] + "</b> " + level[1] + "</a>";
+    // Zeroes are shown, not dropped. Four chips in a fixed order read as a
+    // severity scale somebody can scan; chips that come and go with the counts
+    // change width and position between refreshes, and "no Information items"
+    // is itself worth seeing. A zero is drawn quietly — see .ar-sum.is-zero.
+    var ICON = {
+      critical: "fa-solid fa-circle-exclamation",
+      high: "fa-solid fa-circle-exclamation",
+      medium: "fa-solid fa-triangle-exclamation",
+      low: "fa-solid fa-circle-info"
+    };
+    return levels.map(function (level) {
+        var n = summary[level[0]] || 0;
+        return '<a class="ar-sum ' + level[0] + (n ? "" : " is-zero") + '" href="' +
+          centreLink(centre, { priority: level[0] }) + '">' +
+          '<i class="' + ICON[level[0]] + '"></i><b>' +
+          n + "</b> " + level[1] + "</a>";
       }).join("");
   }
 
+  /* The facts under the message, as chips: where it is and what it is about.
+   *
+   * A row reads problem -> location -> reading -> age -> action. The first
+   * two are here; the reading and the age are the column to the right, where
+   * the number can be set large enough to scan a list by. Chips rather than a
+   * run of text separated by middots because the three are different kinds of
+   * thing - a module, a record, a place - and a reader picking out "Shed 1"
+   * should not have to read the other two first.
+   */
   function metaHTML(alert, centre) {
-    var bits = [];
-    if (alert.place) bits.push(esc(alert.place));
-    if (alert.object_display) bits.push(esc(alert.object_display));
-    bits.push(esc(timeAgo(alert.created_at)));
+    var chips = [];
+    if (alert.module_label) chips.push(esc(alert.module_label));
+    if (alert.object_display) chips.push(esc(alert.object_display));
+    if (alert.place) chips.push(esc(alert.place));
+
+    var html = chips.map(function (text) {
+      return '<span class="ar-chip">' + text + "</span>";
+    }).join("");
+
     // Who has it, when somebody has. The status chip says an alert was picked
     // up; without a name beside it, nobody knows whether to pick it up too.
     if (alert.status_changed_by_name && alert.status !== "open") {
-      bits.push(esc(alert.status_label) + " by " + esc(alert.status_changed_by_name));
+      html += '<span class="ar-by">' + esc(alert.status_label) + " by " +
+        esc(alert.status_changed_by_name) + "</span>";
     }
     // The rest of this rule, which the per-rule cap kept off the card. The
     // link goes to the centre filtered to that rule, so "+16 more" leads
     // somewhere that shows the sixteen rather than the whole feed.
     if (alert.more_like_this > 0) {
-      bits.push('<a class="ar-more" href="' +
+      html += '<a class="ar-more" href="' +
         centreLink(centre, { rule_key: alert.rule_key }) + '">+' +
-        alert.more_like_this + " more like this</a>");
+        alert.more_like_this + " more like this</a>";
     }
-    return bits.join(' <span class="ar-sep">·</span> ');
+    return html;
+  }
+
+  /* The reading and the age, down the right-hand edge.
+   *
+   * The number is the thing the rule fired on, so it is the largest thing on
+   * the row and it is the severity's colour. The caption under it says what
+   * the figure is, and says it truthfully: only the rules with a threshold
+   * are comparing two numbers, and "measured / limit" over a lone reading
+   * promised a limit that does not exist.
+   */
+  function metricHTML(alert) {
+    if (!alert.reading_value) {
+      return '<div class="ar-metric"><span class="ar-when">' +
+        esc(timeAgo(alert.created_at)) + "</span></div>";
+    }
+    return '<div class="ar-metric ' + esc(alert.priority) + '">' +
+      "<b>" + esc(alert.reading_value) +
+        (alert.reading_limit ? " / " + esc(alert.reading_limit) : "") + "</b>" +
+      "<span>" + (alert.reading_limit ? "measured / limit" : "measured") + "</span>" +
+      '<span class="ar-when">' + esc(timeAgo(alert.created_at)) + "</span>" +
+      "</div>";
   }
 
   function actionsHTML(alert) {
@@ -128,13 +175,75 @@
         (alert.object_display ? "Open " + esc(alert.object_display) : "Open record") +
         "</a>";
     }
+    // The moves that carry the alert forward stay on the row; the rest go
+    // behind the kebab. Six buttons of equal weight is not a hierarchy — it
+    // asks the reader to pick, when what is wanted is the next step. Dismiss
+    // in particular is not a peer of Resolve: one answers the problem, the
+    // other waves it off, and they should not sit side by side in the same
+    // size inviting the same click.
+    var ONWARD = { acknowledge: 1, start: 1, resolve: 1 };
+    // Icons for the menu only, where every item has one and a bare label
+    // would sit out of line with the rest. The row's own buttons stay words.
+    var MENU_ICON = { dismiss: "fa-solid fa-ban",
+                      reopen: "fa-solid fa-rotate-left" };
+    var onward = [], behind = [];
     (alert.available_actions || []).forEach(function (move) {
-      html += '<button type="button" class="ar-btn' +
-        (move.key === "dismiss" ? " danger" : "") +
-        '" data-move="' + esc(move.key) + '">' + esc(move.label) + "</button>";
+      if (ONWARD[move.key]) return onward.push(move);
+      behind.push({ key: move.key, label: move.label,
+                    icon: MENU_ICON[move.key] });
     });
-    html += '<button type="button" class="ar-btn" data-move="notify" ' +
-      'title="Notify Supervisor"><i class="fa-solid fa-user-tie"></i>Notify</button>';
+    // Putting it in front of the supervisor who can go and look is a move on
+    // the alert like any other; it is not in the transition table because it
+    // changes no status, so it is added here rather than by the server.
+    behind.unshift({ key: "notify", label: "Notify Supervisor",
+                     icon: "fa-solid fa-user-tie" });
+    // Everything that has already been done about it — acknowledged by whom,
+    // notified to whom, dismissed with what reason. Reading, not a move, so
+    // it is a link rather than a button.
+    if (alert.detail_url) {
+      behind.push({
+        href: alert.detail_url, icon: "fa-solid fa-clock-rotate-left",
+        label: alert.action_count
+          ? "History (" + alert.action_count + ")"
+          : "History"
+      });
+    }
+
+    // Dismiss last, whatever order it arrived in. It is the one move that
+    // closes an alert without anything being done about it, and it should be
+    // the furthest thing from the pointer when the menu opens.
+    behind.sort(function (a, b) {
+      return (a.key === "dismiss" ? 1 : 0) - (b.key === "dismiss" ? 1 : 0);
+    });
+
+    onward.forEach(function (move) {
+      // Resolve is the outcome the card exists to produce, and the only one
+      // of the three that is good news, so it is the only one with any
+      // colour on it. Acknowledge and Start are steps on the way.
+      html += '<button type="button" class="ar-btn' +
+        (move.key === "resolve" ? " ok" : "") + '" data-move="' +
+        esc(move.key) + '">' + esc(move.label) + "</button>";
+    });
+
+    if (behind.length) {
+      html += '<div class="ar-kebab-wrap">' +
+        '<button type="button" class="ar-btn ar-kebab" aria-haspopup="true"' +
+        ' aria-expanded="false" aria-label="More actions" title="More actions">' +
+        '<i class="fa-solid fa-ellipsis-vertical"></i></button>' +
+        '<div class="ar-menu" hidden>' +
+        behind.map(function (move) {
+          var inside = (move.icon ? '<i class="' + esc(move.icon) + '"></i>' : "") +
+            esc(move.label);
+          if (move.href) {
+            return '<a class="ar-menu-item" href="' + esc(move.href) + '">' +
+              inside + "</a>";
+          }
+          return '<button type="button" class="ar-menu-item' +
+            (move.key === "dismiss" ? " danger" : "") +
+            '" data-move="' + esc(move.key) + '">' + inside + "</button>";
+        }).join("") +
+        "</div></div>";
+    }
     return html;
   }
 
@@ -145,17 +254,14 @@
       '<div class="ar-body">' +
         '<div class="ar-line1">' +
           '<span class="ar-sev ' + sev + '">' + esc(alert.severity_label) + "</span>" +
+          '<h3 class="ar-name">' + esc(alert.title) + "</h3>" +
           '<span class="ar-state ' + esc(alert.status_tone) + '">' +
             esc(alert.status_label) + "</span>" +
-          '<h3 class="ar-name">' + esc(alert.title) + "</h3>" +
         "</div>" +
         (alert.message ? '<p class="ar-msg">' + esc(alert.message) + "</p>" : "") +
         '<div class="ar-meta">' + metaHTML(alert, centre) + "</div>" +
       "</div>" +
-      (alert.reading
-        ? '<div class="ar-metric"><b>' + esc(alert.reading) +
-          "</b><span>measured / limit</span></div>"
-        : '<div class="ar-metric"></div>') +
+      metricHTML(alert) +
       '<div class="ar-actions">' + actionsHTML(alert) + "</div>" +
     "</div>";
   }
@@ -378,6 +484,31 @@
     // One listener on the list rather than one per button: the rows are
     // replaced wholesale after every move, and handlers bound to the old ones
     // would go with them.
+    // The kebab. Closes any other open one first, so two menus are never up at
+    // once, and closes on a click anywhere else.
+    list.addEventListener("click", function (event) {
+      var kebab = event.target.closest(".ar-kebab");
+      if (kebab) {
+        event.preventDefault();
+        var menu = kebab.nextElementSibling;
+        var opening = menu.hidden;
+        list.querySelectorAll(".ar-menu").forEach(function (m) { m.hidden = true; });
+        list.querySelectorAll(".ar-kebab").forEach(function (k) {
+          k.setAttribute("aria-expanded", "false");
+        });
+        menu.hidden = !opening;
+        kebab.setAttribute("aria-expanded", opening ? "true" : "false");
+        return;
+      }
+    });
+    document.addEventListener("click", function (event) {
+      if (event.target.closest(".ar-kebab-wrap")) return;
+      list.querySelectorAll(".ar-menu").forEach(function (m) { m.hidden = true; });
+      list.querySelectorAll(".ar-kebab").forEach(function (k) {
+        k.setAttribute("aria-expanded", "false");
+      });
+    });
+
     list.addEventListener("click", function (event) {
       var button = event.target.closest("[data-move]");
       if (!button) return;
