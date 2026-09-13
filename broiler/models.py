@@ -1497,6 +1497,13 @@ class BirdSale(models.Model):
     # restricted to the broiler Supervisor master.
     lifting_supervisor = models.ForeignKey('hr.Employee', on_delete=models.SET_NULL, null=True, blank=True,
                                            related_name='lifting_bird_sales')
+    # And the same thing written by hand, for a lifting supervised by somebody
+    # the employee list does not have — a contractor's man, a stand-in, someone
+    # not yet on the HR register. The sale happened and has to be recordable
+    # either way; `driver` and `vehicle` beside it are free text for exactly
+    # this reason. The two are never both set: picking from the list clears
+    # this, so a row has one answer to "who supervised it" and not two.
+    lifting_supervisor_other = models.CharField(max_length=100, blank=True)
     vehicle = models.CharField(max_length=50, blank=True)
     driver = models.CharField(max_length=100, blank=True)
     remarks = models.CharField(max_length=255, blank=True)

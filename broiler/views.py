@@ -3291,7 +3291,12 @@ def _bird_sale_to_dict(row):
         "birds": row.birds, "net_weight": str(row.net_weight), "avg_weight": str(row.avg_weight),
         "rate": str(row.rate), "round_off": str(row.round_off), "amount": str(row.amount),
         "lifting_supervisor": row.lifting_supervisor_id,
-        "lifting_supervisor_name": str(row.lifting_supervisor) if row.lifting_supervisor_id else "",
+        # One resolved name whichever way it was recorded, so nothing reading
+        # this has to know there are two columns behind it.
+        "lifting_supervisor_name": (str(row.lifting_supervisor)
+                                    if row.lifting_supervisor_id
+                                    else row.lifting_supervisor_other),
+        "lifting_supervisor_other": row.lifting_supervisor_other,
         "vehicle": row.vehicle, "driver": row.driver, "remarks": row.remarks,
         # Field evidence, captured by the phone. A desk raising the same sale
         # from a slip brought in has none of it, so every one of these is
@@ -3332,6 +3337,12 @@ def _apply_bird_sale(instance, data):
     # round_off and amount are derived in BirdSale.save(); a value sent for
     # either is ignored rather than trusted.
     instance.lifting_supervisor_id = data.get("lifting_supervisor") or None
+    # A name typed by hand, kept only when nobody was picked from the list.
+    # Letting both stand would leave the row with two answers and the reader
+    # guessing which one the register meant.
+    instance.lifting_supervisor_other = (
+        "" if instance.lifting_supervisor_id
+        else (data.get("lifting_supervisor_other") or "").strip()[:100])
     instance.vehicle = data.get("vehicle") or ""
     instance.driver = data.get("driver") or ""
     instance.remarks = data.get("remarks") or ""
@@ -6282,7 +6293,8 @@ def lifting_report(request):
             ledger_balance, ledger_cr_dr = "", ""
         # This column is the lifting / weighment supervisor recorded on the sale,
         # not the farm's managing supervisor.
-        supervisor = str(s.lifting_supervisor) if s.lifting_supervisor_id else ""
+        supervisor = (str(s.lifting_supervisor) if s.lifting_supervisor_id
+                      else s.lifting_supervisor_other)
 
         rows.append({
             "date": s.date, "code": code or "", "customer": party,

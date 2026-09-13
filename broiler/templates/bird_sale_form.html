@@ -125,7 +125,36 @@ const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
-const supervisorOptions = `<option value="">select</option>{% for s in supervisors %}<option value="{{ s.id }}">{{ s|escapejs }}</option>{% endfor %}`;
+// A dropdown, because that is what the column is: a list of employees, and a
+// name picked from it is not something to be typed over. The last entry is the
+// way out — a lifting is often supervised by somebody the register does not
+// have (a contractor's man, a stand-in) and the sale still has to be
+// recordable. Choosing it reveals a box for the name.
+// data-no-search keeps main.js's site-wide Select2 upgrade off this one. The
+// Select2 list is drawn into the page and flips above the control when the row
+// sits low in the window, covering the rows being read; the browser's own
+// dropdown is placed by the browser and never does that. The list is a handful
+// of employees, so the search Select2 would add is no loss.
+const SUPERVISOR_OTHER = "__other__";
+const supervisorOptions = `<option value="">select</option>`
+  + `{% for s in supervisors %}<option value="{{ s.id }}">{{ s|escapejs }}</option>{% endfor %}`
+  + `<option value="${SUPERVISOR_OTHER}">Other — type a name</option>`;
+
+// Show the name box only for that last entry, and never carry a stale name
+// forward when the row goes back to a listed employee.
+function applyLiftingSupervisor(tr) {
+  const sel = tr && tr.querySelector('.lifting-supervisor');
+  const box = tr && tr.querySelector('.lifting-supervisor-other');
+  if (!sel || !box) return;
+  const other = sel.value === SUPERVISOR_OTHER;
+  box.classList.toggle('d-none', !other);
+  if (!other) box.value = '';
+}
+document.addEventListener('change', function (e) {
+  if (e.target.classList && e.target.classList.contains('lifting-supervisor')) {
+    applyLiftingSupervisor(e.target.closest('tr'));
+  }
+});
 const customerOptions = `<option value="">select</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
 
 function isFarmerSale() {
@@ -153,7 +182,9 @@ function row() {
     <td><input class="form-control form-control-sm bg-light round-off" readonly value="0.00"
                title="Rounding the total to the rupee"></td>
     <td><input class="form-control form-control-sm bg-light amount" readonly value="0.00"></td>
-    <td><select class="form-select form-select-sm lifting-supervisor">${supervisorOptions}</select></td>
+    <td><select class="form-select form-select-sm lifting-supervisor" data-no-search>${supervisorOptions}</select>
+        <input class="form-control form-control-sm mt-1 lifting-supervisor-other d-none"
+               placeholder="Type name" maxlength="100" autocomplete="off"></td>
     <td><input class="form-control form-control-sm vehicle"></td>
     <td><input class="form-control form-control-sm driver"></td>
     <td><input class="form-control form-control-sm remarks"></td>
@@ -161,6 +192,15 @@ function row() {
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
+  // A new row starts on the date of the row above it, not on today. A sheet
+  // is nearly always one day's liftings, so seeding today made every row after
+  // the first wrong whenever yesterday's were being entered — and wrong
+  // quietly, because a box holding today looks exactly as filled as a correct
+  // one. It stays only until somebody changes it.
+  const rows = get('row-table').tBodies[0].rows;
+  const previous = rows.length ? rows[rows.length - 1].querySelector('.date') : null;
+  if (previous && previous.value) tr.querySelector('.date').value = previous.value;
+
   get('row-table').tBodies[0].append(tr);
   applySaleTypeToRow(tr);
   refreshRowAddButtons();
@@ -298,7 +338,10 @@ get('bird-sale-form').addEventListener('submit', function (e) {
     birds: tr.querySelector('.birds').value,
     net_weight: tr.querySelector('.net-weight').value,
     rate: tr.querySelector('.rate').value,
-    lifting_supervisor: tr.querySelector('.lifting-supervisor').value,
+    lifting_supervisor: tr.querySelector('.lifting-supervisor').value === SUPERVISOR_OTHER
+                        ? "" : tr.querySelector('.lifting-supervisor').value,
+    lifting_supervisor_other: tr.querySelector('.lifting-supervisor').value === SUPERVISOR_OTHER
+                              ? tr.querySelector('.lifting-supervisor-other').value.trim() : "",
     vehicle: tr.querySelector('.vehicle').value,
     driver: tr.querySelector('.driver').value,
     remarks: tr.querySelector('.remarks').value,
@@ -351,7 +394,13 @@ get('bird-sale-form').addEventListener('submit', function (e) {
   tr.querySelector('.birds').value = "{{ instance.birds }}";
   tr.querySelector('.net-weight').value = "{{ instance.net_weight }}";
   tr.querySelector('.rate').value = "{{ instance.rate }}";
+  {% if instance.lifting_supervisor_other %}
+  tr.querySelector('.lifting-supervisor').value = SUPERVISOR_OTHER;
+  tr.querySelector('.lifting-supervisor-other').value = "{{ instance.lifting_supervisor_other|escapejs }}";
+  {% else %}
   tr.querySelector('.lifting-supervisor').value = "{{ instance.lifting_supervisor_id|default:'' }}";
+  {% endif %}
+  applyLiftingSupervisor(tr);
   tr.querySelector('.vehicle').value = "{{ instance.vehicle|escapejs }}";
   tr.querySelector('.driver').value = "{{ instance.driver|escapejs }}";
   tr.querySelector('.remarks').value = "{{ instance.remarks|escapejs }}";
