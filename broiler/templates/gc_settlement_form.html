@@ -117,10 +117,17 @@
     </div>
   </div>
 
-  <!-- Feed Details -->
-  <h6 class="gcs-sub mt-3">Feed Details</h6>
-  <div class="row">
+  {% comment %}
+    A title over each half, not one title over both. "Feed Details" headed the
+    left column while sitting centred across the whole row, and the right
+    column had no title at all — "Med/Vaccine Details" was standing in the
+    column-head line, doing duty as both the section name and the name of the
+    first column, which left "Quantity" looking like its pair rather than the
+    only column there is.
+  {% endcomment %}
+  <div class="row mt-3">
     <div class="col-md-6">
+      <h6 class="gcs-sub">Feed Details</h6>
       <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">KGS</span><span class="gcs-colhead flex-fill">BAGS</span></div></div>
       <div class="gcs-row"><label>Feed In</label><div class="gcs-inputs"><input id="f-feed_in" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_in_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
       <div class="gcs-row"><label>Feed Consumption</label><div class="gcs-inputs"><input id="f-feed_consumption" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_consumption_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
@@ -128,7 +135,8 @@
       <div class="gcs-row"><label>Feed Balance</label><div class="gcs-inputs"><input id="f-feed_balance" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_balance_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
     </div>
     <div class="col-md-6">
-      <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Med/Vaccine Details</span><span class="gcs-colhead flex-fill">Quantity</span></div></div>
+      <h6 class="gcs-sub">Med/Vaccine Details</h6>
+      <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Quantity</span></div></div>
       <div class="gcs-row"><label>Transfer In</label><div class="gcs-inputs"><input id="f-med_transfer_in" class="form-control form-control-sm gcs-ro" readonly></div></div>
       <div class="gcs-row"><label>Consumption</label><div class="gcs-inputs"><input id="f-med_consumption" class="form-control form-control-sm gcs-ro" readonly></div></div>
       <div class="gcs-row"><label>Transfer Out</label><div class="gcs-inputs"><input id="f-med_transfer_out" class="form-control form-control-sm gcs-ro" readonly></div></div>
@@ -137,8 +145,9 @@
   </div>
 
   <!-- Costing -->
-  <h6 class="gcs-sub mt-3">Costing Details</h6>
-  <div class="row justify-content-center"><div class="col-md-8">
+  {# Inside the column, so the heading travels with the block it names. #}
+  <div class="row justify-content-center mt-3"><div class="col-md-8">
+    <h6 class="gcs-sub">Costing Details</h6>
     <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Amount</span><span class="gcs-colhead flex-fill">Per unit</span></div></div>
     <div class="gcs-row"><label>Chick Cost</label><div class="gcs-inputs"><input id="f-chick_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-chick_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
     <div class="gcs-row"><label>Feed Cost</label><div class="gcs-inputs"><input id="f-feed_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
@@ -150,8 +159,8 @@
   </div></div>
 
   <!-- Rearing Charges -->
-  <h6 class="gcs-sub mt-3">Rearing Charges</h6>
-  <div class="row justify-content-center"><div class="col-md-8">
+  <div class="row justify-content-center mt-3"><div class="col-md-8">
+    <h6 class="gcs-sub">Rearing Charges</h6>
     <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Rs.</span><span class="gcs-colhead flex-fill">Amount</span></div></div>
     <div class="gcs-row"><label>Standard Growing Charges</label><div class="gcs-inputs"><input id="f-std_gc_rate" class="form-control form-control-sm gcs-ro" readonly><input id="f-standard_growing_charges" class="form-control form-control-sm gcs-ro" readonly></div></div>
     <div class="gcs-row"><label>Growing Charge Incentive/Decentive</label><div class="gcs-inputs"><input id="f-gc_incdec_rate" class="form-control form-control-sm gcs-ro" readonly><input id="f-gc_incentive_decentive" class="form-control form-control-sm gcs-ro" readonly></div></div>
@@ -166,8 +175,8 @@
   </div></div>
 
   <!-- Decentives -->
-  <h6 class="gcs-sub mt-3">Decentives</h6>
-  <div class="row justify-content-center"><div class="col-md-8">
+  <div class="row justify-content-center mt-3"><div class="col-md-8">
+    <h6 class="gcs-sub">Decentives</h6>
     <div class="gcs-row"><label>Birds Shortage Amount</label><div class="gcs-inputs"><input id="f-birds_shortage_rate" class="form-control form-control-sm gcs-edit" type="number" step="0.01" placeholder="Rate"><input id="f-birds_shortage_amount" class="form-control form-control-sm gcs-ro" readonly></div></div>
     <div class="gcs-row"><label>FCR Deduction</label><div class="gcs-inputs"><input id="f-fcr_deduction" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
     <div class="gcs-row"><label>Mortality Deduction</label><div class="gcs-inputs"><input id="f-mortality_deduction" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
@@ -301,7 +310,7 @@ async function loadRecheck() {
     const names = Object.keys(d.changes || {});
     if (!names.length) {
       body.innerHTML = '<div class="text-success small">'
-        + 'These figures already agree with the batch's records. Nothing to correct.</div>';
+        + "These figures already agree with the batch's records. Nothing to correct.</div>";
       apply.disabled = true;
       return;
     }
