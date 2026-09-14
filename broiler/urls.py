@@ -245,6 +245,8 @@ urlpatterns = [
     path('create-gc-settlement/', views.GCSettlementAPI.as_view(), name='gc_settlement_create'),
     path('gc_settlement/<int:id>/', views.GCSettlementAPI.as_view(), name='gc_settlement_detail'),
     path('gc_settlement/<int:id>/delete/', views.GCSettlementAPI.as_view(), name='gc_settlement_delete'),
+    path('gc_settlement/<int:id>/recalculate/', views.gc_settlement_recalculate,
+         name='gc_settlement_recalculate'),
     path('gc_settlement/<int:id>/print/', views.gc_settlement_print, name='gc_settlement_print'),
 
     path('farm-location-capture/', views.farm_location_capture_list, name='farm_location_capture_list'),

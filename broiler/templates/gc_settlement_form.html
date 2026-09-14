@@ -189,7 +189,43 @@
 
   <div class="text-center mt-4">
     <button id="gcs-submit" class="btn btn-primary px-4">Submit</button>
+    {% comment %}
+      Only on a settlement that already exists, and only for someone who may
+      edit one. Submit sends what is on the form; this asks the server to work
+      the read-only figures out again from the batch's records, which is the
+      one thing Submit will not do — editing a settlement deliberately leaves
+      the computed figures as they were stored.
+    {% endcomment %}
+    {% if page_perms.edit %}
+    <button type="button" id="gcs-recheck" class="btn btn-outline-secondary px-4 d-none"
+            title="Work the read-only figures out again from this batch's records">
+      <i class="fas fa-rotate me-1"></i>Recheck figures
+    </button>
+    {% endif %}
     <button type="button" id="gcs-cancel" class="btn btn-danger px-4">Cancel</button>
+  </div>
+
+  <div class="modal fade" id="gcs-recheck-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Recheck figures</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            What this settlement would say if its read-only figures were worked
+            out from the batch's records as they stand now. Anything typed in by
+            hand is left alone.
+          </p>
+          <div id="gcs-recheck-body"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-sm btn-primary" id="gcs-recheck-apply">Apply corrections</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -240,7 +276,71 @@ function setSelectOption(id, val, label) {
   el.value = val;
   $(el).trigger('change.select2');
 }
-$('#gcs-add-btn').on('click', function () { editId = null; showForm(); });
+$('#gcs-add-btn').on('click', function () { editId = null; showForm(); showRecheckButton(); });
+
+/* ---- Recheck figures -------------------------------------------------- *
+ * Submit sends the form. This asks the server what the read-only figures
+ * would be if they were derived again now, shows the difference, and applies
+ * it only if it is accepted — it alters a document a farmer was paid against,
+ * so it is never a single unexplained press.                                */
+function showRecheckButton() {
+  const btn = document.getElementById('gcs-recheck');
+  if (btn) btn.classList.toggle('d-none', !editId);
+}
+
+async function loadRecheck() {
+  const body = document.getElementById('gcs-recheck-body');
+  body.innerHTML = '<div class="text-muted small">Checking…</div>';
+  const modal = new bootstrap.Modal(document.getElementById('gcs-recheck-modal'));
+  modal.show();
+
+  const apply = document.getElementById('gcs-recheck-apply');
+  try {
+    const res = await fetch(`/gc_settlement/${editId}/recalculate/`);
+    const d = await res.json();
+    const names = Object.keys(d.changes || {});
+    if (!names.length) {
+      body.innerHTML = '<div class="text-success small">'
+        + 'These figures already agree with the batch's records. Nothing to correct.</div>';
+      apply.disabled = true;
+      return;
+    }
+    apply.disabled = false;
+    body.innerHTML = '<table class="table table-sm mb-0"><thead><tr>'
+      + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Should be</th>'
+      + '</tr></thead><tbody>'
+      + names.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
+          + `<td class="text-end text-muted">${d.changes[k].from || '-'}</td>`
+          + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
+      + '</tbody></table>';
+  } catch (e) {
+    body.innerHTML = '<div class="text-danger small">Could not check this settlement.</div>';
+    apply.disabled = true;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.getElementById('gcs-recheck');
+  if (btn) btn.addEventListener('click', loadRecheck);
+  const apply = document.getElementById('gcs-recheck-apply');
+  if (apply) apply.addEventListener('click', async function () {
+    this.disabled = true;
+    try {
+      const res = await fetch(`/gc_settlement/${editId}/recalculate/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ note: 'Rechecked from the settlement form' }),
+      });
+      const d = await res.json();
+      bootstrap.Modal.getInstance(document.getElementById('gcs-recheck-modal')).hide();
+      if (typeof showToast === 'function') showToast('success', d.message || 'Corrected.');
+      showList(); loadList();
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('danger', 'Could not apply the corrections.');
+      this.disabled = false;
+    }
+  });
+});
 $('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showList(); loadList(); });
 $('#gcs-filter-btn').on('click', loadList);
 $(document).on('click', '.gcs-del', function () {
@@ -252,6 +352,7 @@ $(document).on('click', '.gcs-del', function () {
 $(document).on('click', '.gcs-edit', function () {
   $.getJSON(`/gc_settlement/${$(this).data('id')}/`, function (d) {
     editId = d.id;
+    showRecheckButton();
     document.getElementById('f-branch').value = d.branch || '';
     document.getElementById('f-line').value = d.line || '';
     document.getElementById('f-supervisor').value = d.supervisor || '';

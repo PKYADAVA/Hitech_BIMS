@@ -9038,6 +9038,52 @@ def _gc_settlement_detail(s):
 
 
 @login_required
+def gc_settlement_recalculate(request, id):
+    """Re-derive a settled batch's figures from its records as they stand.
+
+    GET answers what would change and writes nothing; POST applies it and
+    leaves an audit row. Split that way on purpose — this alters a document a
+    farmer was paid against, so the difference has to be readable before
+    anybody accepts it.
+
+    Which fields move, and why the person's own entries do not, is in
+    :mod:`broiler.services.gc_recalc`.
+    """
+    from broiler.services import gc_recalc
+
+    settlement = get_object_or_404(
+        GrowingChargeSettlement.objects.select_related("batch", "scheme", "farm"), id=id)
+    include_date = (request.GET.get("include_date", "1") != "0"
+                    if request.method == "GET" else True)
+
+    if request.method == "GET":
+        changes, _merged = gc_recalc.plan(settlement, include_date=include_date)
+        return JsonResponse({
+            "settlement": settlement.settlement_code,
+            "batch": settlement.batch.batch_name,
+            "changes": changes,
+            "up_to_date": not changes,
+        })
+
+    if request.method != "POST":
+        return JsonResponse({"error": "GET to preview, POST to apply."}, status=405)
+
+    try:
+        body = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        body = {}
+    result = gc_recalc.recalculate(
+        settlement, user=request.user,
+        include_date=body.get("include_date", True),
+        note=body.get("note") or "")
+    if not result:
+        return JsonResponse({"message": "Already up to date — nothing changed.",
+                             "changes": {}, "up_to_date": True})
+    return JsonResponse({"message": "%d figure(s) corrected." % len(result["changes"]),
+                         "changes": result["changes"], "up_to_date": False})
+
+
+@login_required
 def gc_settlement_print(request, id):
     """Farmer-facing printable Growing Charges / Batch Closing report for a
     saved settlement (the "Shalimar" field set). Shows performance + the

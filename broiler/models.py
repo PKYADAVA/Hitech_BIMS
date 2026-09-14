@@ -2101,6 +2101,47 @@ class GrowingChargeSettlement(models.Model):
             super().save(update_fields=['settlement_code'])
 
 
+
+class GCSettlementRecalculation(models.Model):
+    """One re-run of a settled batch's figures, and what it changed.
+
+    A settlement is a snapshot: every figure the form showed, frozen on the day
+    it was signed. That is the right shape for a document somebody is paid
+    against — but it means a fault in the calculation outlives its own fix. A
+    batch settled while Feed Out counted only warehouse returns kept the wrong
+    balance for ever, because editing a settlement deliberately leaves the
+    computed figures alone and touches only what a person typed.
+
+    So the figures can be re-derived from the batch's records and written back.
+    That is an alteration to a signed document, and it leaves a row here saying
+    who did it, when, and every field that moved — append-only, never edited.
+    A correction nobody can see afterwards is indistinguishable from an error.
+
+    ``changes`` is ``{field: {"from": str, "to": str}}``, as strings: this is
+    read years later, and it has to survive a field changing type or leaving
+    the model altogether.
+    """
+
+    settlement = models.ForeignKey(
+        GrowingChargeSettlement, on_delete=models.CASCADE,
+        related_name="recalculations")
+    actor = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="gc_recalculations",
+        help_text=_("Null once the account is removed; the entry stays."))
+    changes = models.JSONField(default=dict, blank=True)
+    note = models.TextField(blank=True, help_text=_("Why it was re-run."))
+    created_at = models.DateTimeField(default=now, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("GC settlement recalculation")
+        verbose_name_plural = _("GC settlement recalculations")
+
+    def __str__(self) -> str:
+        return f"{self.settlement.settlement_code} · {len(self.changes)} changed"
+
+
 class FeedPhaseMaster(models.Model):
     """Header for a feeding program (Broiler > Master > Feed Phase Master):
     a program for a bird type / breed, valid over an effective window, with a
