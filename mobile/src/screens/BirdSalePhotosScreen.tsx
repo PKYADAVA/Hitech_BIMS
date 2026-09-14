@@ -4,8 +4,10 @@ import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "rea
 
 import { listResource } from "@/api/resources";
 import { Row } from "@/api/types";
-import { capturePhoto, CapturePermissionError, pickPhoto } from "@/capture";
+import { capturePhoto, CapturePermissionError, pickPhoto, requireLocation } from "@/capture";
 import { AppIcon } from "@/components/AppIcon";
+import { needsPin } from "@/domain/liftingPin";
+import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
@@ -27,6 +29,18 @@ type Props = NativeStackScreenProps<ModuleStackParams, "BirdSalePhotos">;
  * What is already filed is shown but not touched: this screen only adds. The
  * per-kind cap counts held and pending together, so the Add tile goes at the
  * same point the server would start refusing (BirdSalePhoto.MAX_PER_KIND).
+ *
+ * It stamps the lifting's pin too, when the sale has none. The sale form
+ * takes a fix at submit, but a sale raised at the desk from a slip brought
+ * back never went through that — and this screen is where somebody standing
+ * at the farm finally attaches its photographs. Taking the fix here is the
+ * only chance those records get, and the same reasoning as the form's: a pin
+ * that has to be remembered is missing from exactly the records where it
+ * would have mattered.
+ *
+ * A sale that already has a pin keeps it. Photographs are often added later
+ * and somewhere else, and moving the pin to the office a week afterwards
+ * would turn a true record into a false one.
  */
 
 const SALES_PATH = "/broiler/bird-sales/";
@@ -106,6 +120,40 @@ export function BirdSalePhotosScreen({ navigation, route }: Props) {
 
   const count = PHOTO_KINDS.reduce((n, { kind }) => n + pending[kind].length, 0);
 
+  /**
+   * Put this lifting on the map, if it is not already.
+   *
+   * Never allowed to fail the upload: the photographs are what this screen is
+   * for, the pin is the bonus. A phone with its location switched off, or
+   * denied, or unable to see the sky, still files its evidence — and says so
+   * afterwards rather than pretending.
+   *
+   * Returns what to tell the user, or "" when there is nothing to say.
+   */
+  const stampLocation = async (): Promise<string> => {
+    if (!needsPin(row)) return "";
+    try {
+      const point = await requireLocation();
+      const found = await reverseGeocode(point.latitude, point.longitude);
+      await writeThrough({
+        type: "bird_sale", label: "Lifting location",
+        method: "PATCH", path: `${SALES_PATH}${saleId}/`,
+        body: {
+          fields: {
+            lift_latitude: point.latitude,
+            lift_longitude: point.longitude,
+            lift_place: found?.display ?? "",
+          },
+        },
+      });
+      return "";
+    } catch {
+      return "The photographs are filed, but this phone could not read its "
+        + "location, so the lifting still has no pin on the map. Switch "
+        + "location on for BIMS and add one more photograph to stamp it.";
+    }
+  };
+
   const upload = async () => {
     setError("");
     setSaving(true);
@@ -140,11 +188,17 @@ export function BirdSalePhotosScreen({ navigation, route }: Props) {
       setError(`Could not upload: ${[...new Set(failed)].join(", ")}. Press Upload to try again.`);
       return;
     }
+    // Only once the photographs are safely away: a fix taken before them
+    // would hold up the thing the user pressed the button for, behind a
+    // permission prompt they may well refuse.
+    const unstamped = await stampLocation();
+
     if (queued) {
       await notify("Saved on this phone",
         "No signal — these photos are stored on the device and will go to the "
         + "ERP by themselves once you are back in range.");
     }
+    if (unstamped) await notify("No location recorded", unstamped);
     queryClient.invalidateQueries({ queryKey: ["list", SALES_PATH] });
     queryClient.invalidateQueries({ queryKey: ["list", PHOTOS_PATH] });
     navigation.goBack();

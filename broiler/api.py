@@ -76,10 +76,23 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
         from .views import _resolve_batch
 
         attrs = super().validate(attrs)
-        farm = attrs.get("farm") or getattr(self.instance, "farm", None)
-        sale_type = attrs.get("sale_type") or getattr(self.instance, "sale_type", "customer")
+        instance = self.instance
+        farm = attrs.get("farm") or getattr(instance, "farm", None)
+        sale_type = attrs.get("sale_type") or getattr(instance, "sale_type", "customer")
 
-        if farm is not None:
+        # Is this write deciding the shape of the sale, or touching something
+        # else about one that already exists?
+        #
+        # A partial update naming neither the farm nor the kind of sale — a
+        # phone stamping where the lifting happened, say — must not go through
+        # the derivation below. _resolve_batch would hand back the farm's
+        # *currently* open flock, so patching a sale's location in October
+        # would quietly re-file an August lifting against whatever is on the
+        # farm now: the birds would come off the wrong flock and no one would
+        # have asked for it.
+        deciding = instance is None or "farm" in attrs or "sale_type" in attrs
+
+        if farm is not None and deciding:
             # The client's choice is honoured but not trusted: _resolve_batch
             # only accepts a batch belonging to this farm, and falls back to
             # the farm's open one otherwise. Overriding it unconditionally —
@@ -94,9 +107,17 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
             else:
                 attrs["farmer"] = None
 
-        if sale_type == "customer" and not attrs.get("customer"):
+        # The buyer as this write leaves it: what it sets, or failing that what
+        # is already on the record. Read off `attrs` alone, a PATCH that did
+        # not mention the customer was refused for not having one — which is
+        # how "Customer is required for a Customer Sale" came back at a phone
+        # trying to save nothing but a pair of coordinates.
+        customer = attrs.get("customer", getattr(instance, "customer", None))
+        farmer = attrs.get("farmer", getattr(instance, "farmer", None))
+
+        if sale_type == "customer" and not customer:
             raise serializers.ValidationError({"customer": "Customer is required for a Customer Sale."})
-        if sale_type == "farmer" and not attrs.get("farmer"):
+        if sale_type == "farmer" and not farmer:
             raise serializers.ValidationError(
                 {"farmer": "The selected farm has no farmer on record — pick a different farm."}
             )
