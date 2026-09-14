@@ -125,6 +125,14 @@ class MobileEditRequestTests(MobileChangeRequestMapTests):
         Read from the templates rather than the URLconf because not every one
         of them is a link — Stock Transfer opens a modal on the same page, and
         a URL-based check would call it unsupported.
+
+        Matched on the button's title rather than on "request-edit", which is
+        the href of the link-shaped ones only. Searching for the href was the
+        same mistake this docstring warns about, one level down: it found the
+        seven registers that navigate and missed every one that opens a modal
+        — Daily Entry, Chicks Placement, Medicine Entry, four of the five
+        inventory registers. The phone withheld Request Edit on all of them
+        and this test called that parity.
         """
         templates = {os.path.basename(p)[:-5]: p
                      for p in glob.glob("*/templates/*.html")}
@@ -136,7 +144,7 @@ class MobileEditRequestTests(MobileChangeRequestMapTests):
                 unreadable.append((module, tab))
                 continue
             with open(path, encoding="utf-8") as fh:
-                if "request-edit" in fh.read():
+                if "Request modification" in fh.read():
                     found.add(module)
         self.assertEqual(unreadable, [],
                          "no list template found for these tabs — add an alias")

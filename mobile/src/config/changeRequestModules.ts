@@ -50,19 +50,31 @@ export const CHANGE_REQUEST_MODULE: Record<string, string> = {
  * The modules whose web register offers "Request modification" as well as
  * "Request deletion".
  *
- * Not every module does, and the difference is not an oversight on the web's
- * part: a proposed edit is stored as a payload and replayed by the module's
- * own save when a reviewer approves it, so a module whose correction cannot be
- * expressed as one payload — a Daily Entry, which is a day in a chain of days,
- * or a stock move whose running balances are recomputed from the rows around
- * it — offers only deletion. Mirroring the web here rather than deciding for
- * ourselves keeps the phone from queueing a request the web would never have
- * raised.
+ * Mirrored from the web rather than decided here: a proposed edit is stored as
+ * a payload and replayed by the module's own save when a reviewer approves it,
+ * and which modules can take that is a judgement the web register has already
+ * made. Deciding it again on the phone risks queueing a request nobody can
+ * safely approve.
+ *
+ * Seven were missing — Daily Entry, Chicks Placement, Medicine Entry and four
+ * of the five inventory registers — and the test meant to catch that was
+ * looking for the wrong thing. It searched each web template for the string
+ * "request-edit", which is the href of the registers whose button is a link;
+ * the ones that open a modal on the same page carry no such href, so the
+ * check found seven of the fourteen and called the rest deliberate. It now
+ * matches the button's title, which all of them share.
  */
 export const REQUEST_EDIT_MODULES = new Set<string>([
   "bird_sale",
   "bird_sale_receipt",
+  "chicks_placement",
+  "daily_entry",
   "farm_location_capture",
+  "inventory_adjustment",
+  "medicine_entry",
+  "medicine_transfer",
+  "stock_issue",
+  "stock_receive",
   "chick_sale",
   "delivery_challan",
   "egg_grading",

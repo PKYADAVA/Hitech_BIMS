@@ -18,13 +18,16 @@ describe("editRequestModule", () => {
     expect(editRequestModule("sales-invoices")).toBe("sales_invoice");
   });
 
-  it("refuses a register that only takes deletion requests", () => {
-    // Daily Entry is a day in a chain of days: a correction replayed on its
-    // own would land outside the running figures it was built from, so the
-    // web offers deletion and nothing else.
+  it("takes an edit request on Daily Entry, as the web register does", () => {
+    // This test used to assert the opposite, on the reasoning that a Daily
+    // Entry is a day in a chain of days and a correction replayed on its own
+    // would land outside the running figures it was built from. Sound
+    // reasoning, but not the web's: daily_entry_list.html draws the same
+    // Request modification button as every other register. The judgement is
+    // the web's to make and the phone's to mirror, and the phone was
+    // withholding a route the ERP offers.
     expect(CHANGE_REQUEST_MODULE["broiler-daily-entries"]).toBe("daily_entry");
-    expect(REQUEST_EDIT_MODULES.has("daily_entry")).toBe(false);
-    expect(editRequestModule("broiler-daily-entries")).toBeUndefined();
+    expect(editRequestModule("broiler-daily-entries")).toBe("daily_entry");
   });
 
   it("refuses a register with no change-request handler at all", () => {
@@ -45,10 +48,14 @@ describe("editRequestModule", () => {
     }
   });
 
-  it("offers strictly fewer edit requests than deletion requests", () => {
-    // Not an arbitrary count — it records that the two are deliberately
-    // different sets. If they ever coincide, the narrowing has been lost.
-    expect(REQUEST_EDIT_MODULES.size)
-      .toBeLessThan(Object.keys(CHANGE_REQUEST_MODULE).length);
+  it("never offers an edit request the deletion map cannot route", () => {
+    // The narrowing that matters is direction, not size. This once asserted
+    // the edit set was strictly the smaller of the two, which was a count
+    // dressed up as a rule: every module the phone can reach turns out to
+    // accept a correction, so the sets coincide, and the old assertion
+    // failed on a map that had finally caught up with the web.
+    const reachable = new Set(Object.values(CHANGE_REQUEST_MODULE));
+    const strays = [...REQUEST_EDIT_MODULES].filter((m) => !reachable.has(m));
+    expect(strays).toEqual([]);
   });
 });
