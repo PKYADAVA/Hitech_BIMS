@@ -19,6 +19,10 @@
      `.ds table.ds-entry` in design-system.css. */
   #row-table { --ds-entry-h: 28px; --ds-entry-fs: .8rem; }
   #row-table th, #row-table td { padding: .25rem .35rem; white-space: nowrap; }
+  /* The totals read as a conclusion rather than as another line to fill in:
+     a rule above them, a tint behind them, and their boxes in bold. */
+  #row-table tfoot td { background: #f7f9fc; border-top: 2px solid #e3e9f2; }
+  #row-table tfoot .form-control { font-weight: 700; color: #1f2937; }
 </style>
 
 <div class="page-header">
@@ -69,6 +73,33 @@
             </tr>
           </thead>
           <tbody></tbody>
+          {% comment %}
+            What the sheet comes to, under the columns it totals rather than
+            in a block of its own: a figure headed "Total Amount" three
+            inches from the Amount column is a figure somebody has to match
+            up by eye.
+
+            Two of these are averages and not sums. Avg Wt. is the sheet's
+            whole weight over its whole bird count, and Rate is its whole
+            value over its whole weight — weighted, because adding a column
+            of per-kg rates together produces a number that means nothing,
+            and averaging them unweighted lets a 40-bird line pull the
+            figure as hard as a 4,000-bird one.
+          {% endcomment %}
+          <tfoot class="bs-totals">
+            <tr>
+              <td colspan="6" class="text-end fw-bold">Total</td>
+              <td><input class="form-control form-control-sm bg-light" id="t-birds" readonly value="0"></td>
+              <td><input class="form-control form-control-sm bg-light" id="t-net-weight" readonly value="0.00"></td>
+              <td><input class="form-control form-control-sm bg-light" id="t-avg-weight" readonly value="0.00"
+                         title="Total net weight over total birds"></td>
+              <td><input class="form-control form-control-sm bg-light" id="t-rate" readonly value="0.00"
+                         title="Total amount over total net weight"></td>
+              <td><input class="form-control form-control-sm bg-light" id="t-round-off" readonly value="0.00"></td>
+              <td><input class="form-control form-control-sm bg-light" id="t-amount" readonly value="0.00"></td>
+              <td colspan="5"></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -211,6 +242,9 @@ function row() {
   get('row-table').tBodies[0].append(tr);
   applySaleTypeToRow(tr);
   refreshRowAddButtons();
+  // A new row is all noughts, so it changes no figure — but it does change
+  // the first one, from "nothing entered yet" to a sheet with a line on it.
+  recalcTotals();
   return tr;
 }
 
@@ -238,6 +272,26 @@ function recalcRow(tr) {
   tr.querySelector('.avg-weight').value = (birds ? netWeight / birds : 0).toFixed(2);
   tr.querySelector('.round-off').value = (amount - raw).toFixed(2);
   tr.querySelector('.amount').value = amount.toFixed(2);
+  recalcTotals();
+}
+
+// What the sheet comes to. Read off the rows rather than accumulated as they
+// are typed, so a deleted row cannot leave its figures behind in the total.
+function recalcTotals() {
+  let birds = 0, netWeight = 0, roundOff = 0, amount = 0;
+  document.querySelectorAll('#row-table tbody tr').forEach(tr => {
+    birds += Number(tr.querySelector('.birds').value) || 0;
+    netWeight += Number(tr.querySelector('.net-weight').value) || 0;
+    roundOff += Number(tr.querySelector('.round-off').value) || 0;
+    amount += Number(tr.querySelector('.amount').value) || 0;
+  });
+  get('t-birds').value = birds.toLocaleString('en-IN');
+  get('t-net-weight').value = netWeight.toFixed(2);
+  get('t-round-off').value = roundOff.toFixed(2);
+  get('t-amount').value = amount.toFixed(2);
+  // Weighted, not the mean of the column above — see the note on the tfoot.
+  get('t-avg-weight').value = (birds ? netWeight / birds : 0).toFixed(2);
+  get('t-rate').value = (netWeight ? amount / netWeight : 0).toFixed(2);
 }
 
 get('row-table').addEventListener('input', e => {
@@ -326,7 +380,7 @@ function fillBatchSelect(sel, batches) {
 
 get('row-table').addEventListener('click', e => {
   if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
-    e.target.closest('tr').remove(); refreshRowAddButtons();
+    e.target.closest('tr').remove(); refreshRowAddButtons(); recalcTotals();
   }
   if (e.target.closest('.add-row-inline')) { row(); }
 });
