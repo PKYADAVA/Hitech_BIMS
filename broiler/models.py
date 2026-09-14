@@ -2093,12 +2093,41 @@ class GrowingChargeSettlement(models.Model):
     def __str__(self):
         return f"{self.settlement_code} - {self.batch}"
 
+    @classmethod
+    def next_settlement_code(cls):
+        """One past the highest GCST number in use.
+
+        Not the primary key, which is what this used to be. A key is never
+        issued twice, so deleting a settlement took its number out of
+        circulation for good: delete GCST-0005, save the batch again, and the
+        new one came out GCST-0006 with 0005 gone for ever. Deleting a
+        settlement here reopens the batch to be settled again, so the number
+        has to come back with it.
+
+        Highest-in-use plus one, which is how every other document in this
+        system is numbered. It refills the number of a settlement that was the
+        latest, and does not go back for a gap in the middle — delete 0003 out
+        of five and the next is still 0006. Same as the farm codes, the batch
+        numbers and the rest.
+        """
+        serials = []
+        for existing in cls.objects.values_list("settlement_code", flat=True):
+            match = re.match(r"^GCST-(\d+)$", existing or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"GCST-{max(serials, default=0) + 1:04d}"
+
     def save(self, *args, **kwargs):
-        is_new = self._state.adding
+        if self._state.adding and not self.settlement_code:
+            # Issued before the insert rather than after it, so the unique
+            # index is what settles a race: two saves reading the same highest
+            # both attempt it, and the loser is reissued and tries again.
+            self.settlement_code = self.next_settlement_code()
+            return mint_with_retry(
+                lambda: super(GrowingChargeSettlement, self).save(*args, **kwargs),
+                lambda: setattr(self, "settlement_code", self.next_settlement_code()),
+                label="settlement code")
         super().save(*args, **kwargs)
-        if is_new and not self.settlement_code:
-            self.settlement_code = f"GCST-{self.pk:04d}"
-            super().save(update_fields=['settlement_code'])
 
 
 
