@@ -627,6 +627,16 @@ def _flock_ages(viewable, filters, user=None):
     }
 
 
+#: The windows the Lifting Details chart offers, shortest first; the longest
+#: is also how much data the card is sent.
+#:
+#: Two, not the usual week/fortnight/month. The chart draws two bars a day in
+#: a card that is half a dashboard column wide, so a month is sixty bars in
+#: four hundred pixels — a texture rather than a reading. A range nobody can
+#: read off is not a range worth offering.
+LIFTING_CHART_DAYS = (7, 14)
+
+
 def _liftings(viewable, filters, user=None):
     """The day's liftings: how many went out, how many birds, and what weight.
 
@@ -645,6 +655,14 @@ def _liftings(viewable, filters, user=None):
     The previous lifting day is on the card too, as the sub line. A count on
     its own says nothing — eighteen liftings is a busy day or a slow one
     depending on what the day before it did.
+
+    Under the tiles, the same question over a window rather than a day: birds
+    and weight per day for the last week or fortnight, both series in one
+    chart. The tiles answer "what happened on this day"; the chart answers
+    "and is that normal", which is the question the tiles raise and cannot
+    settle. The window ends on the day the card is showing, so choosing a date
+    on the filter bar moves the chart with the tiles instead of leaving a
+    week that has nothing to do with the figures above it.
     """
     from django.db.models import Sum
     from broiler.models import BirdSale
@@ -691,16 +709,30 @@ def _liftings(viewable, filters, user=None):
         "meta": f"{float(r.net_weight or 0):,.0f} kg",
     } for r in today.select_related("farm").order_by("-id")[:3]]
 
-    # Where the day's birds went out from. A branch that lifted nothing is left
-    # off rather than drawn as a nought — the chart is about what moved.
-    by_branch = (today.values("farm__branch__branch_name")
-                 .annotate(b=Sum("birds"), w=Sum("net_weight"))
-                 .order_by("-b"))
-    groups = [{
-        "label": (r["farm__branch__branch_name"] or "No branch"),
-        "meta": f"{_num(r['b'] or 0)} birds · {float(r['w'] or 0):,.0f} kg",
-        "values": [round(float(r["b"] or 0)), round(float(r["w"] or 0), 1)],
-    } for r in by_branch]
+    # Birds and weight per day across the window, ending on the day the card
+    # is showing. Every day in the window is in the list, including the ones
+    # nothing moved on — the opposite of the rule the branch chart this
+    # replaced used. A branch that lifted nothing is not part of the day's
+    # story and was left off; a Tuesday that lifted nothing between two busy
+    # days is the whole shape of the week, and a gap where a bar should be is
+    # what shows it.
+    window = day - timedelta(days=LIFTING_CHART_DAYS[-1] - 1)
+    per_day = {
+        r["date"]: r for r in
+        scoped().filter(date__gte=window, date__lte=day)
+        .values("date").annotate(b=Sum("birds"), w=Sum("net_weight"))
+    }
+    chart_days = []
+    for offset in range(LIFTING_CHART_DAYS[-1]):
+        when = window + timedelta(days=offset)
+        row = per_day.get(when)
+        birds = round(float(row["b"] or 0)) if row else 0
+        kg = round(float(row["w"] or 0), 1) if row else 0.0
+        chart_days.append({
+            "date": when.isoformat(),
+            "label": when.strftime("%d %b"),
+            "values": [birds, kg],
+        })
 
     return {
         # Two tiles, not five. Birds lifted, net weight and average weight are
@@ -713,7 +745,16 @@ def _liftings(viewable, filters, user=None):
             {"label": "Liftings", "value": _num(count), "sub": against},
             {"label": "Farms covered", "value": _num(farms)},
         ],
-        "chart": _bars(groups, series=("Birds", "Weight")) if groups else None,
+        # The window, for the card to slice to whichever range is chosen.
+        # Sent whole rather than re-fetched per range: a fortnight of two
+        # numbers is a few hundred bytes, and a round trip to redraw a chart
+        # somebody is flicking between two settings of is a round trip they
+        # wait for.
+        "chart_days": chart_days,
+        # Through _bars so the palette stays defined in exactly one place;
+        # the groups come from chart_days, so only the series half is wanted.
+        "chart_series": _bars([], series=("Birds", "Weight"))["series"],
+        "chart_ranges": list(LIFTING_CHART_DAYS),
         "rows": rows,
         "rows_title": "Latest liftings" if rows else None,
         # Which day is on the card. Unasked-for dates have to say so, or a

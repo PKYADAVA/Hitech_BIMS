@@ -63,18 +63,21 @@ class LiftingWidgetTests(TestCase):
         return next(s for s in self.card(**kw)["stats"] if s["label"] == label)
 
     def charted(self, **kw):
-        """The day's birds and weight, totalled off the chart.
+        """The day's birds and weight, read off the chart's last day.
 
-        Where they live now that the tiles are gone. Read from the card rather
-        than recomputed, so a chart that stopped counting a branch fails these
-        as loudly as a wrong tile used to.
+        Where they live now that the tiles are gone. The series runs up to and
+        including the day the card is showing, so its final entry is that day
+        — read from the card rather than recomputed, so a chart that stopped
+        counting a farm fails these as loudly as a wrong tile used to.
         """
-        chart = self.card(**kw)["chart"]
-        if not chart:
-            return 0, 0.0
-        birds = sum(g["values"][0] for g in chart["groups"])
-        weight = sum(g["values"][1] for g in chart["groups"])
+        days = self.card(**kw)["chart_days"]
+        birds, weight = days[-1]["values"]
         return birds, weight
+
+    def series(self, **kw):
+        """(label, birds, weight) per day, oldest first."""
+        return [(d["label"], d["values"][0], d["values"][1])
+                for d in self.card(**kw)["chart_days"]]
 
     # ---- the day's figures --------------------------------------------------
 
@@ -111,9 +114,7 @@ class LiftingWidgetTests(TestCase):
         self.lift(226, "512.00", when=self.today - timedelta(days=14))
         card = self.card(filters={"date": self.today})
         self.assertEqual(self.stat("Liftings", filters={"date": self.today})["value"], "0")
-        # Nothing moved, so there is no chart: a bar of nought would say the
-        # day was bad rather than empty.
-        self.assertIsNone(card["chart"])
+        self.assertEqual(card["chart_days"][-1]["values"], [0, 0.0])
         self.assertIn("No liftings on this day", card["note"])
 
     def test_today_needs_no_explaining(self):
@@ -244,24 +245,64 @@ class LiftingWidgetTests(TestCase):
 
     # ---- the chart ----------------------------------------------------------
 
-    def test_the_chart_is_the_day_s_birds_and_weight_by_branch(self):
+    def test_the_chart_is_birds_and_weight_per_day_over_the_window(self):
+        """Both series in one chart, a cluster a day, ending on the day the
+        card is showing."""
+        self.lift(1000, "2000.00", when=self.today - timedelta(days=2))
+        self.lift(400, "900.00")
+
+        card = self.card()
+        self.assertEqual([s["label"] for s in card["chart_series"]],
+                         ["Birds", "Weight"])
+        self.assertEqual(self.series()[-3:],
+                         [((self.today - timedelta(days=2)).strftime("%d %b"),
+                           1000, 2000.0),
+                          ((self.today - timedelta(days=1)).strftime("%d %b"),
+                           0, 0.0),
+                          (self.today.strftime("%d %b"), 400, 900.0)])
+
+    def test_a_day_nothing_moved_on_is_in_the_series_as_a_gap(self):
+        """The opposite of the rule the branch chart this replaced used. A
+        branch that lifted nothing is not part of the day's story; a Tuesday
+        that lifted nothing between two busy days is the shape of the week,
+        and a chart that closed the gap would draw a fortnight of trade as
+        two days side by side."""
+        self.lift(500, "10.00")
+        days = self.series()
+        self.assertEqual(len(days), 14)
+        self.assertEqual([d[1] for d in days[:-1]], [0] * 13)
+
+    def test_the_window_ends_on_the_day_the_card_is_showing(self):
+        """So choosing a date on the filter bar moves the chart with the
+        tiles, instead of leaving a week that has nothing to do with the
+        figures above it."""
+        chosen = self.today - timedelta(days=5)
+        self.lift(700, "14.00", when=chosen)
+        days = self.series(filters={"date": chosen})
+        self.assertEqual(days[-1], (chosen.strftime("%d %b"), 700, 14.0))
+
+    def test_the_series_is_read_through_the_scope_like_everything_else(self):
         far = Branch.objects.create(branch_name="Bahraich", region=self.region,
                                     prefix="BHR")
         self.lift(1000, "2000.00")
         self.lift(400, "900.00", farm=self.make_farm("Far Farm", branch=far))
+        self.assertEqual(self.series(filters={"branch": self.branch.id})[-1],
+                         (self.today.strftime("%d %b"), 1000, 2000.0))
 
-        chart = self.card()["chart"]
-        self.assertEqual([s["label"] for s in chart["series"]], ["Birds", "Weight"])
-        self.assertEqual([(g["label"], g["values"]) for g in chart["groups"]],
-                         [("Akbarpur", [1000, 2000.0]), ("Bahraich", [400, 900.0])])
-
-    def test_a_branch_that_lifted_nothing_is_left_off_the_chart(self):
-        """A bar of nought says a branch had a bad day; it had no lifting at all."""
-        Branch.objects.create(branch_name="Bahraich", region=self.region, prefix="BHR")
+    def test_the_ranges_offered_are_the_ones_the_card_can_draw(self):
+        """The longest is also how much data is sent, so the card can switch
+        between them without another request."""
         self.lift(1000, "2000.00")
-        self.assertEqual([g["label"] for g in self.card()["chart"]["groups"]],
-                         ["Akbarpur"])
+        card = self.card()
+        self.assertEqual(card["chart_ranges"], [7, 14])
+        self.assertEqual(len(card["chart_days"]), max(card["chart_ranges"]))
 
-    def test_a_day_with_no_liftings_has_no_chart_to_draw(self):
-        self.assertIsNone(self.card()["chart"])
+    def test_a_farm_that_has_never_lifted_still_gets_an_axis(self):
+        """A window of noughts, not an absent chart. The card says "no
+        liftings recorded here yet" in its note; a chart that vanished as well
+        would leave the reader wondering whether it had failed to load."""
+        card = self.card()
+        self.assertEqual(len(card["chart_days"]), 14)
+        self.assertEqual({tuple(d["values"]) for d in card["chart_days"]},
+                         {(0, 0.0)})
 

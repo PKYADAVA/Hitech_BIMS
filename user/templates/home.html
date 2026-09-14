@@ -460,6 +460,19 @@
   .dw-act-foot-sub { display:block; font-size:.65rem; color:#93a4bd; margin-top:1px;
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+  /* The chart's own heading, and the control that says how far back it goes.
+     A select rather than a row of pills: two ranges today, and a control that
+     would change shape if a third were added is a control that has to be
+     redesigned to add one. */
+  .dw-range-head { display:flex; align-items:center; gap:8px; margin:14px 0 2px; }
+  .dw-range-title { font-size:.75rem; font-weight:700; color:#44546b;
+                    text-transform:uppercase; letter-spacing:.04em; }
+  .dw-range { margin-left:auto; font-size:.72rem; font-weight:600; color:#44546b;
+              border:1px solid #dde5ef; border-radius:8px; background:#fff;
+              padding:3px 6px; cursor:pointer; }
+  .dw-range:focus-visible { outline:2px solid #2563eb; outline-offset:1px; }
+  .dw-chart-slot { min-height:1px; }
+
   /* A card with nothing to report. Centred in what is left of the card so it
      does not sit at the top with four hundred pixels of white under it. */
   .dw-empty { flex:1 1 auto; display:flex; flex-direction:column; align-items:center;
@@ -962,7 +975,15 @@
       var groups = c.groups || [];
       if (!groups.length) return '';
       var series = c.series && c.series.length ? c.series : [{ label: '' }];
-      var W = Math.max(360, 74 * groups.length * (series.length > 1 ? 1.6 : 1) + 74);
+      // Width in viewBox units, which is not the width on screen: the SVG is
+      // scaled to whatever box it is given. Letting it grow with the group
+      // count therefore *shrinks* everything drawn on it — the same chart
+      // over a fortnight rendered its axis at half the size of the one over
+      // a week. A caller drawing the same chart at more than one length
+      // passes fixedWidth so the text stays one size and the bars thin
+      // instead.
+      var W = c.fixedWidth
+        || Math.max(360, 74 * groups.length * (series.length > 1 ? 1.6 : 1) + 74);
       // Shorter than it was: a card carrying a chart stood 140px taller than
       // its neighbour and dragged the whole row down with it. The plot loses
       // the height, not the labels — those are read, the empty air above the
@@ -1004,13 +1025,23 @@
             : (g.colour || series[0].colour || '#2f9ef5');
           var h = Math.max(plotH - (y(v) - padT), v > 0 ? 2 : 0);
           svg += '<rect x="' + x + '" y="' + (padT + plotH - h) + '" width="'
-               + (barW - 6) + '" height="' + h + '" rx="3" fill="' + colour + '"/>'
-               + '<text x="' + (x + (barW - 6) / 2) + '" y="' + (padT + plotH - h - 6)
-               + '" class="fpc-val" text-anchor="middle" fill="' + colour + '">'
-               + esc(String(v.toLocaleString())) + '</text>';
+               + (barW - 6) + '" height="' + h + '" rx="3" fill="' + colour + '"/>';
+          // A day nothing happened on is drawn as a gap, not as a "0" — over
+          // a fortnight that is a dozen noughts crowding the days that have
+          // something to say. Charts whose zero IS the reading (an age band
+          // with no birds in it) leave the flag off and keep their label.
+          if ((v > 0 || !c.hideZeroLabels) && !c.hideValues) {
+            svg += '<text x="' + (x + (barW - 6) / 2) + '" y="' + (padT + plotH - h - 6)
+                 + '" class="fpc-val" text-anchor="middle" fill="' + colour + '">'
+                 + esc(String(v.toLocaleString())) + '</text>';
+          }
         });
-        svg += '<text x="' + (padL + slot * gi + slot / 2) + '" y="' + (H - padB + 18)
-             + '" class="fpc-cat" text-anchor="middle">' + esc(g.label) + '</text>';
+        // Every label, or every other one when they would touch. A date
+        // axis at a fortnight has more days than it has room for names.
+        if (gi % (c.labelEvery || 1) === 0) {
+          svg += '<text x="' + (padL + slot * gi + slot / 2) + '" y="' + (H - padB + 18)
+               + '" class="fpc-cat" text-anchor="middle">' + esc(g.label) + '</text>';
+        }
         if (g.meta) {
           svg += '<text x="' + (padL + slot * gi + slot / 2) + '" y="' + (H - padB + 34)
                + '" class="fpc-meta" text-anchor="middle">' + esc(g.meta) + '</text>';
@@ -1049,6 +1080,61 @@
                ? '<span class="dw-act-avatar">' + esc(a.user_initials) + '</span><span>' + esc(a.user_name) + '</span>'
                : '') + '</div>'
            + '</div>';
+    }
+
+    /**
+     * A chart over a window, with the control that picks the window.
+     *
+     * The card is sent the longest range it offers and slices to whichever is
+     * chosen, so flicking between a week and a fortnight is instant and costs
+     * no request. `days` is the whole window, newest last; the select takes
+     * the last N of them.
+     *
+     * The days are stashed on the slot rather than in a variable, because the
+     * grid is rebuilt wholesale on every filter reload and anything held
+     * outside the DOM would be describing a card that is no longer there.
+     */
+    var RANGE_LABEL = { 7: 'Last 7 days', 14: 'Last 14 days', 30: 'Last 30 days' };
+
+    function rangeChart(w) {
+      var days = w.chart_days || [];
+      if (!days.length) return '';
+      var ranges = (w.chart_ranges && w.chart_ranges.length)
+        ? w.chart_ranges : [days.length];
+      var options = ranges.map(function (n, i) {
+        return '<option value="' + n + '"' + (i === 0 ? ' selected' : '') + '>'
+             + esc(RANGE_LABEL[n] || ('Last ' + n + ' days')) + '</option>';
+      }).join('');
+      return '<div class="dw-range-head">'
+           + '<span class="dw-range-title">Birds &amp; weight per day</span>'
+           + '<select class="dw-range" data-key="' + esc(w.key) + '"'
+           + ' aria-label="How far back the chart goes">' + options + '</select>'
+           + '</div>'
+           + '<div class="dw-chart-slot" data-key="' + esc(w.key) + '"></div>';
+    }
+
+    /* Draw one range chart into its slot. Called on first paint and whenever
+       the select moves. */
+    function drawRange(slot, days, series, howMany) {
+      var window = days.slice(-howMany);
+      // The series arrive with their colours already on them — the palette
+      // lives in dashboard_widgets.CHART_COLOURS and is not worth a second
+      // copy over here to drift from it.
+      // Past about eight days the card runs out of room for a number over
+      // every bar and a date under every cluster. The bars and the y-axis
+      // carry the reading at that density; the labels are what goes.
+      var dense = window.length > 8;
+      slot.innerHTML = barChart({
+        series: series, groups: window,
+        // The width the shortest range would have chosen for itself. Both
+        // ranges then draw their labels at the same size, and the fortnight
+        // differs from the week by having thinner bars rather than smaller
+        // everything.
+        fixedWidth: 900,
+        hideZeroLabels: true,
+        hideValues: dense,
+        labelEvery: dense ? 2 : 1
+      });
     }
 
     /* A card that has nothing to report, saying so properly.
@@ -1095,6 +1181,7 @@
         body += '<div class="dw-stats">' + w.stats.map(stat).join('') + '</div>';
       }
       if (w.chart) body += barChart(w.chart);
+      if (w.chart_days) body += rangeChart(w);
       if (w.rows && w.rows.length) {
         body += '<div class="dw-rows">'
               + (w.rows_title ? '<div class="dw-rows-title">' + esc(w.rows_title) + '</div>' : '')
@@ -1133,6 +1220,37 @@
      * its column wrapper stays behind and is removed, since a Bootstrap column
      * nested in another column no longer carries a width.
      */
+    /**
+     * First paint for every range chart on the grid, and the control that
+     * redraws one.
+     *
+     * The window and its series ride on the slot as data, so a card rebuilt
+     * by a filter reload brings its own figures with it — a map held out here
+     * would go on describing the card that was replaced.
+     */
+    function drawRanges(cards) {
+      cards.forEach(function (w) {
+        if (!w.chart_days) return;
+        var slot = grid.querySelector('.dw-chart-slot[data-key="' + w.key + '"]');
+        if (!slot) return;
+        slot._days = w.chart_days;
+        slot._series = w.chart_series || [];
+        var picker = grid.querySelector('.dw-range[data-key="' + w.key + '"]');
+        drawRange(slot, slot._days, slot._series,
+                  picker ? Number(picker.value) : slot._days.length);
+      });
+    }
+
+    grid.addEventListener('change', function (event) {
+      var picker = event.target.closest('.dw-range');
+      if (!picker) return;
+      var slot = grid.querySelector('.dw-chart-slot[data-key="'
+                                    + picker.dataset.key + '"]');
+      if (slot && slot._days) {
+        drawRange(slot, slot._days, slot._series, Number(picker.value));
+      }
+    });
+
     function placeActivity() {
       var slot = document.getElementById('dash-activity-slot');
       if (!slot) return;                       // alerts panel is switched off
@@ -1187,6 +1305,10 @@
           // No widgets is a legitimate answer: a user may have access to none
           // of the four reports these are drawn from.
           grid.innerHTML = (data.widgets || []).map(card).join('');
+          // The charts are drawn after the markup is in the document, not
+          // built into it: barChart measures nothing, but the slice a range
+          // chart draws depends on where its select was left.
+          drawRanges(data.widgets || []);
           placeActivity();
         })
         .catch(function () { if (mine === token) { grid.innerHTML = ''; placeActivity(); } })
