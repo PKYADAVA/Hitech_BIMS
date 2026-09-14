@@ -11,10 +11,14 @@
 {% include '_broiler_transaction_subnavbar.html' with active_tab='bird_sale' %}
 
 <style>
+  /* Tighter than the grid's 32px default: this sheet is seventeen columns
+     wide, so every pixel of row height is paid for seventeen times over.
+     Setting the two variables sizes every control in the row — the plain
+     boxes and the searchable ones alike, which is the point: Customer, Farm
+     and Batch keep their search and stop standing proud of the line. See
+     `.ds table.ds-entry` in design-system.css. */
+  #row-table { --ds-entry-h: 28px; --ds-entry-fs: .8rem; }
   #row-table th, #row-table td { padding: .25rem .35rem; white-space: nowrap; }
-  #row-table .form-control, #row-table .form-select {
-    padding: .15rem .4rem; font-size: .8rem; min-height: 28px; height: 28px;
-  }
 </style>
 
 <div class="page-header">

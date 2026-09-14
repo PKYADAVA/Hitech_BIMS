@@ -269,12 +269,48 @@
 .ds table.ds-entry tbody tr:hover td { background: #fbfcfe; }
 
 /* Controls inside the grid: shorter and denser than a standalone form field,
-   and quiet until focused so the data reads as a table rather than as 60 boxes. */
+   and quiet until focused so the data reads as a table rather than as 60 boxes.
+
+   The two variables are the knob. A sheet wide enough to need tighter rows
+   overrides them on its own table and every control follows — including the
+   searchable ones, which are the reason they exist: Select2 hides the real
+   <select> and draws its own box beside it, so the rule below could not
+   reach it, and on all thirty-five entry screens a searchable column stood
+   four pixels proud of every plain one in the same row. */
+.ds table.ds-entry {
+  --ds-entry-h: 32px;
+  --ds-entry-fs: var(--ds-grid-data);
+}
 .ds table.ds-entry .form-control,
 .ds table.ds-entry .form-select {
-  height: 32px; font-size: var(--ds-grid-data);
+  height: var(--ds-entry-h); font-size: var(--ds-entry-fs);
   padding: 0 8px; border-radius: 6px;
   border-color: #eef1f5; background: #fff; width: 100%;
+}
+
+/* The same box, for a column that kept its search. Select2's own sizing is
+   tuned for a filter bar, which is why it arrives too tall here; these rules
+   put it back on the grid's measurements. Only the closed control is
+   restyled — the open list is appended to <body>, out of this scope, and is
+   fine as it is. */
+.ds table.ds-entry .select2-container { width: 100% !important; }
+.ds table.ds-entry .select2-container--bootstrap-5 .select2-selection {
+  height: var(--ds-entry-h); min-height: var(--ds-entry-h);
+  border-radius: 6px; border-color: #eef1f5;
+  /* On the box as well as on the text inside it: the placeholder and the
+     clear button are drawn by Select2 as separate children, and sizing only
+     the rendered value left them a size of their own. */
+  font-size: var(--ds-entry-fs);
+}
+.ds table.ds-entry .select2-container--bootstrap-5 .select2-selection--single
+  .select2-selection__rendered {
+  line-height: calc(var(--ds-entry-h) - 2px);
+  font-size: var(--ds-entry-fs);
+  padding-left: 8px; padding-right: 26px;
+}
+.ds table.ds-entry .select2-container--bootstrap-5 .select2-selection--single
+  .select2-selection__arrow {
+  height: calc(var(--ds-entry-h) - 2px);
 }
 .ds table.ds-entry .form-control:hover,
 .ds table.ds-entry .form-select:hover { border-color: var(--ds-border); }
