@@ -23,7 +23,7 @@ from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
 from .models import (
-    BirdSale, BirdSaleReceipt, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
+    BirdSale, BirdSalePhoto, BirdSaleReceipt, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
     BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
@@ -3368,6 +3368,10 @@ class BirdSaleFormTemplateView(View):
             "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
             "today": timezone.localdate().isoformat(),
             "request_mode": request_mode,
+            # What a photograph may be labelled, for the Add control on the
+            # evidence card. Read off the model so the page cannot offer a
+            # kind the API would reject.
+            "photo_kinds": BirdSalePhoto.KIND_CHOICES,
         })
 
 

@@ -23,6 +23,14 @@
      a rule above them, a tint behind them, and their boxes in bold. */
   #row-table tfoot td { background: #f7f9fc; border-top: 2px solid #e3e9f2; }
   #row-table tfoot .form-control { font-weight: 700; color: #1f2937; }
+  /* The remove button sits on the picture rather than under it: under it, in
+     a grid of four, it is not obvious which picture it belongs to. */
+  .evidence-thumb { position: relative; display: inline-block; }
+  .evidence-thumb .evidence-remove {
+    position: absolute; top: 4px; right: 4px;
+    padding: .1rem .35rem; line-height: 1; opacity: .85;
+  }
+  .evidence-thumb:hover .evidence-remove { opacity: 1; }
 </style>
 
 <div class="page-header">
@@ -107,13 +115,25 @@
 
   {% if instance %}
     {% comment %}
-      What the phone captured on site. Read-only: a desk has neither a camera
-      pointed at the lorry nor a GPS standing at the weighbridge, so this is
-      shown to be checked against, never edited here. A sale raised at the
-      desk has no evidence and the card stays away entirely.
+      What the phone captured on site: the truck, the birds, the weighbridge
+      slip — the pictures that make a slip nobody at the desk witnessed
+      checkable.
+
+      The pictures were read-only here, on the reasoning that evidence the
+      desk can alter is not evidence. What that overlooked is the ordinary
+      case: a photo of the wrong lorry, a thumb over the lens, a slip
+      photographed twice and the real one missed. There was no way to correct
+      any of it from the desk, and the register's only remedy was deleting
+      the whole sale. So a picture can be dropped and another put up — every
+      change through the same scoped API the phone posts to, and never for
+      somebody whose edits go to approval, whose photo change would otherwise
+      skip the review their figures are waiting on.
+
+      The card is shown on every sale being edited now, not only the ones
+      that already carry evidence: a sale raised at the desk is exactly the
+      one somebody may want to attach the weighbridge slip to afterwards.
     {% endcomment %}
-    {% if instance.has_location or instance.photos.exists %}
-    <div class="card mb-3">
+    <div class="card mb-3" id="evidence-card" data-sale="{{ instance.id }}">
       <div class="card-header">
         <i class="fas fa-camera me-1"></i><strong>Lifting Evidence</strong>
         <span class="text-muted small ms-1">captured on site</span>
@@ -128,19 +148,49 @@
             </a>
           </p>
         {% endif %}
-        <div class="row">
+        <div class="row" id="evidence-photos">
           {% for photo in instance.photos.all %}
-            <div class="col-6 col-md-3 mb-3 text-center">
-              <a href="{{ photo.image.url }}" target="_blank" rel="noopener">
-                <img src="{{ photo.image.url }}" class="img-fluid rounded border" alt="{{ photo.get_kind_display }}">
-              </a>
+            <div class="col-6 col-md-3 mb-3 text-center evidence-item" data-photo="{{ photo.id }}">
+              <div class="evidence-thumb">
+                <a href="{{ photo.image.url }}" target="_blank" rel="noopener">
+                  <img src="{{ photo.image.url }}" class="img-fluid rounded border" alt="{{ photo.get_kind_display }}">
+                </a>
+                {% if not request_mode %}
+                  <button type="button" class="btn btn-sm btn-danger evidence-remove"
+                          title="Remove this photo" aria-label="Remove this photo">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                {% endif %}
+              </div>
               <div class="small text-muted mt-1">{{ photo.get_kind_display }}</div>
             </div>
           {% endfor %}
         </div>
+        <p class="text-muted small mb-0 {% if instance.photos.exists %}d-none{% endif %}" id="evidence-empty">
+          No photographs against this lifting.
+        </p>
+
+        {% if request_mode %}
+          <p class="text-muted small mb-0 mt-2">
+            <i class="fas fa-lock me-1"></i>Photographs can only be changed by
+            somebody who may edit this sale directly.
+          </p>
+        {% else %}
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+            <label class="form-label mb-0 small fw-semibold" for="evidence-kind">Add a photo</label>
+            <select class="form-select form-select-sm w-auto" id="evidence-kind" data-no-search>
+              {% for value, label in photo_kinds %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+            <input type="file" class="form-control form-control-sm w-auto" id="evidence-file"
+                   accept="image/*">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="evidence-add">
+              <i class="fas fa-upload me-1"></i>Upload
+            </button>
+            <span class="small text-muted" id="evidence-msg"></span>
+          </div>
+        {% endif %}
       </div>
     </div>
-    {% endif %}
   {% endif %}
 
   {% if request_mode %}<div class="alert alert-warning mt-2 mb-3"><i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.</div>{% endif %}
@@ -434,6 +484,126 @@ get('bird-sale-form').addEventListener('submit', function (e) {
     window.location.href = "{% url 'bird_sale_list' %}";
   }).catch(err => alert(err.message));
 });
+
+{% if instance and not request_mode %}
+/* Lifting evidence: put a photograph up, or take one down.
+ *
+ * Straight to the same scoped API the phone posts to, rather than through
+ * this form's own submit: the pictures are rows of their own, and folding
+ * them into the sale's payload would mean a mis-shot photo could only be
+ * corrected by re-saving the whole sheet. Each change lands on its own and
+ * is visible immediately.
+ *
+ * The API enforces what may be uploaded — the per-kind cap, the scope, the
+ * permission — and answers a refusal with a sentence. That sentence is shown
+ * as it arrives; there is no second copy of those rules here to drift from
+ * them.
+ */
+(function liftingEvidence() {
+  const card = get('evidence-card');
+  if (!card) return;
+  const API = '/api/v1/broiler/bird-sale-photos/';
+  const list = get('evidence-photos');
+  const empty = get('evidence-empty');
+  const msg = get('evidence-msg');
+
+  function csrf() {
+    // CSRF_COOKIE_HTTPONLY is on, so document.cookie never carries the token;
+    // the form's own hidden input is where it is.
+    const field = document.querySelector('input[name=csrfmiddlewaretoken]');
+    return field ? field.value : '{{ csrf_token }}';
+  }
+
+  function say(text, bad) {
+    msg.textContent = text || '';
+    msg.className = 'small ' + (bad ? 'text-danger' : 'text-success');
+    if (text && !bad) window.setTimeout(() => { msg.textContent = ''; }, 4000);
+  }
+
+  /* The API answers in an envelope; a refusal carries its reason in it.
+   *
+   * `fields` before `message`: on a rejected upload the message is only
+   * "Validation failed." and the sentence worth reading — that the file was
+   * not an image, or that this kind already has its five — is in `fields`.
+   * Showing the message alone tells somebody their upload failed and nothing
+   * they can act on.
+   */
+  async function reason(response) {
+    try {
+      const err = (await response.json()).error;
+      if (typeof err === 'string') return err;
+      if (err && err.fields) {
+        const said = Object.values(err.fields).flat().filter(Boolean);
+        if (said.length) return said.join(' ');
+      }
+      if (err && err.message) return err.message;
+    } catch (e) { /* fall through to the status */ }
+    return 'That did not go through (HTTP ' + response.status + ').';
+  }
+
+  function showEmptiness() {
+    empty.classList.toggle('d-none', !!list.querySelector('.evidence-item'));
+  }
+
+  list.addEventListener('click', async (e) => {
+    const button = e.target.closest('.evidence-remove');
+    if (!button) return;
+    const item = button.closest('.evidence-item');
+    if (!window.confirm('Remove this photograph from the lifting? '
+                        + 'The picture is deleted and cannot be brought back.')) return;
+    button.disabled = true;
+    try {
+      const r = await fetch(API + item.dataset.photo + '/',
+                            { method: 'DELETE', headers: { 'X-CSRFToken': csrf() } });
+      if (!r.ok) throw new Error(await reason(r));
+      item.remove();
+      showEmptiness();
+      say('Photograph removed.');
+    } catch (err) {
+      button.disabled = false;
+      say(err.message, true);
+    }
+  });
+
+  const addButton = get('evidence-add');
+  addButton.addEventListener('click', async () => {
+    const file = get('evidence-file').files[0];
+    if (!file) { say('Choose a picture first.', true); return; }
+    const form = new FormData();
+    form.append('sale', card.dataset.sale);
+    form.append('kind', get('evidence-kind').value);
+    form.append('image', file);
+    addButton.disabled = true;
+    say('Uploading…');
+    try {
+      const r = await fetch(API, { method: 'POST', body: form,
+                                   headers: { 'X-CSRFToken': csrf() } });
+      if (!r.ok) throw new Error(await reason(r));
+      const photo = (await r.json()).data || {};
+      const label = get('evidence-kind').selectedOptions[0].textContent;
+      const tile = document.createElement('div');
+      tile.className = 'col-6 col-md-3 mb-3 text-center evidence-item';
+      tile.dataset.photo = photo.id;
+      tile.innerHTML = '<div class="evidence-thumb">'
+        + '<a href="' + photo.image + '" target="_blank" rel="noopener">'
+        + '<img src="' + photo.image + '" class="img-fluid rounded border" alt=""></a>'
+        + '<button type="button" class="btn btn-sm btn-danger evidence-remove"'
+        + ' title="Remove this photo" aria-label="Remove this photo">'
+        + '<i class="fas fa-trash"></i></button></div>'
+        + '<div class="small text-muted mt-1"></div>';
+      tile.querySelector('.small').textContent = label;
+      list.appendChild(tile);
+      get('evidence-file').value = '';
+      showEmptiness();
+      say('Photograph added.');
+    } catch (err) {
+      say(err.message, true);
+    } finally {
+      addButton.disabled = false;
+    }
+  });
+})();
+{% endif %}
 
 {% if instance %}
 (function prefillEdit() {

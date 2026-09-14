@@ -120,12 +120,46 @@ class BirdSaleEvidenceTests(TestCase):
         self.assertIn("Weighbridge Slip", page)
         self.assertIn("google.com/maps?q=26.85,80.95", page)
 
-    def test_a_desk_sale_grows_no_empty_evidence_card(self):
+    def test_a_desk_sale_is_offered_somewhere_to_put_the_slip(self):
+        """The card used to stay away from a sale with no evidence, and while
+        it was read-only that was right: an empty panel showing nothing was
+        furniture. Now that a photograph can be put up from here, the sale
+        with none is the one that most needs the control — a lifting typed up
+        at the desk is exactly where the slip arrives afterwards, by hand."""
         from django.urls import reverse
 
         sale = self.a_sale()
         page = self.client.get(reverse("bird_sale_edit", args=[sale.id])).content.decode()
-        self.assertNotIn("Lifting Evidence", page)
+        self.assertIn("Lifting Evidence", page)
+        self.assertIn("No photographs against this lifting.", page)
+        self.assertIn('id="evidence-add"', page)
+
+    def test_a_photograph_can_be_taken_down_by_somebody_who_may_edit(self):
+        from django.urls import reverse
+
+        sale = self.a_sale()
+        BirdSalePhoto.objects.create(sale=sale, kind="truck", image=a_photo("t.gif"))
+        page = self.client.get(reverse("bird_sale_edit", args=[sale.id])).content.decode()
+        self.assertIn("evidence-remove", page)
+        self.assertIn('id="evidence-add"', page)
+
+    def test_a_change_request_cannot_touch_the_photographs(self):
+        """Somebody whose figures go to approval must not be able to change
+        the evidence on the way — that would be the one edit that skipped the
+        review the rest of the sale is waiting on."""
+        from django.urls import reverse
+
+        sale = self.a_sale()
+        BirdSalePhoto.objects.create(sale=sale, kind="truck", image=a_photo("t.gif"))
+        page = self.client.get(
+            reverse("bird_sale_request_change", args=[sale.id])).content.decode()
+        # The pictures are still there to be checked against...
+        self.assertIn("Lifting Evidence", page)
+        self.assertIn("Truck Photo", page)
+        # ...and nothing on the page can change them.
+        self.assertNotIn("btn-danger evidence-remove", page)
+        self.assertNotIn('id="evidence-add"', page)
+        self.assertIn("Photographs can only be changed", page)
 
     def test_the_lifting_report_carries_the_evidence_column(self):
         """The register shows it per sale; the Lifting Report is where the desk
