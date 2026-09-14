@@ -4568,7 +4568,8 @@ def _price_outgoing_rows_at_batch_cost(rows, item_rate_by_id):
 def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, mortality_rows,
                          chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
                          medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
-                         bird_sale_rows, fetch_type="farmer", scheme_override=None):
+                         bird_sale_rows, fetch_type="farmer", scheme_override=None,
+                         feed_transfer_out_rows=None, medicine_transfer_out_rows=None):
     """Batch Costing Information and Summary block of the Growing Charge
     Statement — bird/feed/weight KPIs plus the cost roll-up. Cost drivers
     (Admin Cost, Grade) come from the batch's applicable GrowingChargeScheme
@@ -4615,12 +4616,20 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     avg_feed_rate = _div(feed_in_amount, feed_in_kg)
     feed_consumed = sum((r["consumed"] or 0) for r in feed_summary_rows)
     feed_return_kg = sum((r["quantity"] or 0) for r in feed_return_rows)
+    # Feed that left the farm for another farm rather than back to the
+    # warehouse. Both are stock leaving this batch's custody, and a closing
+    # balance that counts only one of them says the farmer is still holding
+    # feed they passed on weeks ago.
+    feed_transfer_out_kg = sum(
+        (r["quantity"] or 0) for r in (feed_transfer_out_rows or []))
 
     # --- medicine / vaccine ---
     med_in_qty = sum((r["quantity"] or 0) for r in medicine_transfer_rows)
     med_in_amount = sum((r["amount"] or 0) for r in medicine_transfer_rows)
     med_consumed = sum((r["quantity"] or 0) for r in medicine_consumption_rows)
     med_return_qty = sum((r["quantity"] or 0) for r in medicine_return_rows)
+    med_transfer_out_qty = sum(
+        (r["quantity"] or 0) for r in (medicine_transfer_out_rows or []))
     avg_med_rate = _div(med_in_amount, med_in_qty)
 
     # The Management report asks what this flock cost the company in money it
@@ -4833,11 +4842,13 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         "feed_sent": Decimal(str(feed_in_kg)).quantize(q2),
         "feed_consumed": Decimal(str(feed_consumed)).quantize(q2),
         "feed_return": Decimal(str(feed_return_kg)).quantize(q2),
+        "feed_transfer_out": Decimal(str(feed_transfer_out_kg)).quantize(q2),
         "feed_cost": feed_cost.quantize(q2),
         "chick_cost": Decimal(str(chick_cost)).quantize(q2),
         "med_sent": Decimal(str(med_in_qty)).quantize(q2),
         "med_consumed": Decimal(str(med_consumed)).quantize(q2),
         "med_return": Decimal(str(med_return_qty)).quantize(q2),
+        "med_transfer_out": Decimal(str(med_transfer_out_qty)).quantize(q2),
         "med_cost": med_cost.quantize(q2),
         "admin_cost": admin_cost.quantize(q2),
         "total_production_cost": total_production_cost.quantize(q2),
@@ -5154,6 +5165,8 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
         medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
         bird_sale_rows, fetch_type=fetch_type, scheme_override=scheme_override,
+        feed_transfer_out_rows=feed_transfer_out_rows,
+        medicine_transfer_out_rows=medicine_transfer_out_rows,
     )
 
     # Dashboard KPI tiles + trend charts (Feed Consumption / Mortality) — as
@@ -5502,7 +5515,11 @@ def _live_flock_row(batch, today):
     transfer_in_farms = StockTransfer.objects.filter(
         to_batch=batch, from_location_type="farm", item_id__in=feed_item_ids
     ).aggregate(t=Sum("quantity"))["t"] or Decimal("0")
-    transfer_out_farms = sum((_num(r["quantity"]) for r in report.get("feed_transfer_out", [])), Decimal("0"))
+    # The costing engine counts this now, so the settlement tab and this panel
+    # cannot drift apart: they disagreed for exactly as long as each worked it
+    # out for itself, one of them forgetting that feed passed to another farm
+    # has also left.
+    transfer_out_farms = _num(bc.get("feed_transfer_out"))
 
     feed_sent = _num(bc.get("feed_sent"))
     feed_return = _num(bc.get("feed_return"))
@@ -8602,6 +8619,13 @@ def _gc_settlement_autofill(batch, scheme, report=None):
     shortage_rate = _shortage_rate(scheme, bc)
     shortage_amount = shortage_rate * shortage_birds
 
+    # Stock that left this batch, by either route. See the note on "feed_out"
+    # below for why both count.
+    _feed_out = _num(bc.get("feed_return")) + _num(bc.get("feed_transfer_out"))
+    _feed_balance = _num(bc.get("feed_sent")) - _num(bc.get("feed_consumed")) - _feed_out
+    _med_out = _num(bc.get("med_return")) + _num(bc.get("med_transfer_out"))
+    _med_closing = _num(bc.get("med_sent")) - _num(bc.get("med_consumed")) - _med_out
+
     data = {
         "placement_date": bc.get("placement_date"),
         "liquidation_date": last_sale_date,
@@ -8622,12 +8646,16 @@ def _gc_settlement_autofill(batch, scheme, report=None):
         "day_gain": _num(bc.get("day_gain")), "eef": _num(bc.get("eef")),
         "grade": bc.get("grade") if bc.get("grade") not in (None, "No Data") else "",
         # Feed / medicine
+        # Feed Out is everything that left the farm: returned to the warehouse
+        # *and* passed on to another farm. Counting only the return left a
+        # batch closing with a balance of feed it had given away — the Batch
+        # History Report's Feed Summary said 0 for the same flock, because its
+        # own balance has always subtracted both (see the feed_summary_rows
+        # balance in _build_batch_report). The two now read one definition.
         "feed_in": _num(bc.get("feed_sent")), "feed_consumption": _num(bc.get("feed_consumed")),
-        "feed_out": _num(bc.get("feed_return")),
-        "feed_balance": _num(bc.get("feed_sent")) - _num(bc.get("feed_consumed")) - _num(bc.get("feed_return")),
+        "feed_out": _feed_out, "feed_balance": _feed_balance,
         "med_transfer_in": _num(bc.get("med_sent")), "med_consumption": _num(bc.get("med_consumed")),
-        "med_transfer_out": _num(bc.get("med_return")),
-        "med_closing": _num(bc.get("med_sent")) - _num(bc.get("med_consumed")) - _num(bc.get("med_return")),
+        "med_transfer_out": _med_out, "med_closing": _med_closing,
         # Costing (per-unit = per kg of sold live weight)
         "chick_cost": _num(bc.get("chick_cost")), "chick_cost_per_unit": _div(_num(bc.get("chick_cost")), sold_weight),
         "feed_cost": _num(bc.get("feed_cost")), "feed_cost_per_unit": _div(_num(bc.get("feed_cost")), sold_weight),
