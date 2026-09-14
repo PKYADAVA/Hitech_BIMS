@@ -174,3 +174,104 @@ class FeedThatLeftTheFarmTests(TestCase):
         bc = self.report()["batch_costing"]
         self.assertEqual(bc["feed_return"], Decimal("500.00"))
         self.assertEqual(bc["feed_transfer_out"], Decimal("500.00"))
+
+
+class ClosingDateTests(TestCase):
+    """The settlement closes after everything it is settling.
+
+    Reported alongside the feed balance, from the same batch: the birds sold
+    out on 30 August, feed went to two other farms on 2 September and back to
+    the warehouse on 9 September, and the GC Date offered was 31 August — the
+    day after the last sale, and a week before two of the movements the
+    settlement accounts for.
+    """
+
+    def setUp(self):
+        self.placed = timezone.localdate() - timedelta(days=60)
+
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="A. Pal")
+        farmer = Farmer.objects.create(farmer_name="Vishvanath")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="Baskhari", farm_name="Vishvanath Farm",
+            farm_capacity=5000)
+        self.neighbour = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="Baskhari", farm_name="Pappu Yadav Farm",
+            farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="AKB-1102-1",
+            book_number="BK-AKB", start_date=self.placed)
+
+        self.store = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.feed = Item.objects.create(
+            description="Finisher Feed",
+            category=ItemCategory.objects.create(name="Feed"),
+            valuation_method="Weighted Average", standard_cost_per_unit=42,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+    def day(self, n):
+        return self.placed + timedelta(days=n)
+
+    def sell(self, days_in):
+        from broiler.models import BirdSale
+
+        BirdSale.objects.create(
+            batch=self.batch, farm=self.farm, date=self.day(days_in),
+            birds=1000, net_weight=Decimal("2000"), rate=Decimal("107"),
+            amount=Decimal("214000"))
+
+    def entry(self, days_in):
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.supervisor,
+            date=self.day(days_in), feed_1=self.feed, feed_1_qty=Decimal("100"))
+
+    def move_out(self, days_in, to_warehouse):
+        StockTransfer.objects.create(
+            date=self.day(days_in), item=self.feed, quantity=Decimal("100"),
+            rate=42, from_location_type="farm", from_farm=self.farm,
+            from_batch=self.batch,
+            **({"to_location_type": "warehouse", "to_warehouse": self.store}
+               if to_warehouse else
+               {"to_location_type": "farm", "to_farm": self.neighbour}))
+
+    def gc_date(self):
+        report = _build_batch_report(self.batch, fetch_type="farmer")
+        return _gc_settlement_autofill(self.batch, None, report=report)["gc_date_default"]
+
+    def test_it_closes_on_the_last_movement_not_the_last_sale(self):
+        """The reported batch, in order: sale, then transfers for another ten
+        days."""
+        self.entry(30)
+        self.sell(40)
+        self.move_out(43, to_warehouse=False)    # on to a running farm
+        self.move_out(50, to_warehouse=True)     # back to the warehouse
+        self.assertEqual(self.gc_date(), self.day(50))
+
+    def test_a_daily_entry_can_be_the_last_word(self):
+        """Nothing about this is specific to transfers — whatever happened
+        last is what the batch closes on."""
+        self.sell(40)
+        self.entry(44)
+        self.assertEqual(self.gc_date(), self.day(44))
+
+    def test_a_sale_can_still_be_the_last_word(self):
+        """The ordinary case has to keep working: sell up and close."""
+        self.entry(30)
+        self.sell(40)
+        self.assertEqual(self.gc_date(), self.day(40))
+
+    def test_it_is_the_day_itself_not_the_day_after(self):
+        """It used to offer last sale + 1. The rule is the date of the last
+        entry, so a batch whose last act was a sale closes on the sale."""
+        self.sell(40)
+        self.assertNotEqual(self.gc_date(), self.day(41))
+        self.assertEqual(self.gc_date(), self.day(40))
+
+    def test_a_batch_nothing_has_happened_to_has_no_closing_date(self):
+        """Rather than a guess, or a crash on max() of nothing."""
+        self.assertIsNone(self.gc_date())

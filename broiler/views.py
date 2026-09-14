@@ -8529,6 +8529,34 @@ def _shortage_rate(scheme, bc):
     return max(std_prod, prod, avg_rate)  # WHICH_IS_HIGHER
 
 
+#: Every table in a batch report that records something happening on a date.
+#: Weekly subtotal rows in "mortality" carry no date and fall out on their own.
+_BATCH_ACTIVITY_TABLES = (
+    "chick_placement", "feed_purchase", "feed_transfer_in", "feed_return",
+    "feed_transfer_out", "medicine_transfer_in", "medicine_consumption",
+    "medicine_return", "medicine_transfer_out", "bird_sales", "mortality",
+)
+
+
+def _last_activity_date(report):
+    """The last day anything happened on this batch.
+
+    A sale, a daily entry, stock in or stock out — the settlement closes after
+    all of it, so it has to look at all of it. A batch's last movement is
+    routinely days after its last sale: the birds are lifted, and the feed left
+    over goes back to the warehouse or on to a farm still running. One reported
+    batch sold out on 30 August and returned feed on 9 September, and closed
+    dated 31 August, before two of the transfers it was settling.
+
+    Returns ``None`` for a batch with no dated rows at all, which is a batch
+    nothing has been done to yet.
+    """
+    dates = [row["date"] for table in _BATCH_ACTIVITY_TABLES
+             for row in (report.get(table) or [])
+             if isinstance(row, dict) and row.get("date")]
+    return max(dates) if dates else None
+
+
 def _gc_settlement_autofill(batch, scheme, report=None):
     """All settlement field defaults for a batch, keyed by the model's field
     names. Read-only figures come from _build_batch_report; incentive/deduction
@@ -8542,11 +8570,14 @@ def _gc_settlement_autofill(batch, scheme, report=None):
     bc = report["batch_costing"]
     q2 = Decimal("0.01")
 
-    # Final liquidation = the LAST bird-sale date; GC closing defaults to the
-    # day after it (editable in the form).
+    # Final liquidation = the LAST bird-sale date. GC closing = the last day
+    # anything at all happened on this batch, which is usually later: the birds
+    # go, and then over the following days the leftover feed is sent back or
+    # passed to a farm still running. Closing on the day after the last sale
+    # dated the settlement before movements it is supposed to account for.
     sale_dates = [r["date"] for r in report.get("bird_sales", []) if r.get("date")]
     last_sale_date = max(sale_dates) if sale_dates else bc.get("sale_start_date")
-    gc_date_default = (last_sale_date + timedelta(days=1)) if last_sale_date else None
+    gc_date_default = _last_activity_date(report) or last_sale_date
 
     sold_weight = _num(bc.get("sold_weight"))
     sold_birds = _num(bc.get("sold_birds"))
