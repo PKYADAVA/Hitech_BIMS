@@ -552,7 +552,13 @@ class AlertAction(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
-        ordering = ("-created_at",)
+        # Newest first, and ties broken by insertion order. Two entries written
+        # in one transaction — a hand-off that unassigns and reassigns, a
+        # status move that settles several copies of one problem — share a
+        # timestamp to the microsecond, and "-created_at" alone then returns
+        # them in whatever order the database felt like. An audit trail that
+        # can show a hand-off backwards is not one.
+        ordering = ("-created_at", "-id")
         indexes = [models.Index(fields=["notification", "-created_at"])]
         verbose_name = "Alert action"
         verbose_name_plural = "Alert actions"

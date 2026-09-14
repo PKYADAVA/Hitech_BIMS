@@ -140,13 +140,22 @@ describe("the Action Required card", () => {
   });
 
   describe("the severity chips", () => {
-    it("leave out a level nothing is at", async () => {
-      // "Critical 0 · High 0 · Warning 0" is three pieces of furniture saying
-      // nothing, and it pushes the alerts themselves down the card.
+    it("show all four levels, in a fixed order", async () => {
+      // They read as one scale somebody can scan. Chips that came and went
+      // with the counts changed width and position between refreshes, and
+      // "nothing at Information" is itself worth seeing.
+      await render(payload([anAlert()], { critical: 2, high: 0, medium: 0, low: 0 }));
+      const chips = Array.from(document.querySelectorAll("#arSummary .ar-sum"));
+      expect(chips.map((c) => c.textContent.replace(/\s+/g, " ").trim())).toEqual([
+        "2 Critical", "0 High", "0 Warning", "0 Information",
+      ]);
+    });
+
+    it("mark an empty level so a zero is not read as a count", async () => {
       await render(payload([anAlert()], { critical: 2, high: 0, medium: 0, low: 0 }));
       const chips = document.querySelectorAll("#arSummary .ar-sum");
-      expect(chips).toHaveLength(1);
-      expect(chips[0].textContent).toContain("Critical");
+      expect(chips[0].classList.contains("is-zero")).toBe(false);
+      expect(chips[1].classList.contains("is-zero")).toBe(true);
     });
 
     it("name a level the same way the row badge does", async () => {
@@ -155,7 +164,8 @@ describe("the Action Required card", () => {
       await render(
         payload([anAlert({ priority: "medium", severity_label: "Warning" })], { medium: 1 })
       );
-      expect(document.querySelector("#arSummary .ar-sum").textContent).toContain("Warning");
+      expect(document.querySelector("#arSummary .ar-sum.medium").textContent)
+        .toContain("Warning");
       expect(document.querySelector(".ar-sev").textContent).toBe("Warning");
     });
   });
@@ -166,20 +176,44 @@ describe("the Action Required card", () => {
       const moves = Array.from(root.querySelectorAll("[data-move]")).map(
         (el) => el.dataset.move
       );
-      // Notify is always offered; the rest come from the payload.
-      expect(moves).toEqual(["acknowledge", "dismiss", "notify"]);
+      // Every move the server offered is on the row somewhere — dismiss
+      // behind the kebab rather than on the face of it, but present.
+      expect(moves).toEqual(expect.arrayContaining(["acknowledge", "dismiss"]));
+      // Notify and Assign are offered on every alert: they are not state
+      // transitions, so the server does not list them.
+      expect(moves).toEqual(expect.arrayContaining(["notify", "assign"]));
+    });
+
+    it("put the forward moves on the row and the rest behind the kebab", async () => {
+      // Resolve is the outcome this card exists to produce; dismissing closes
+      // an alert with nothing done about it, so it is the furthest thing from
+      // the pointer.
+      await render(payload([anAlert({ available_actions: [
+        { key: "resolve", label: "Resolve", needs_reason: false },
+        { key: "dismiss", label: "Dismiss", needs_reason: true },
+      ] })]));
+      const onRow = Array.from(root.querySelectorAll(".ar-actions > .ar-btn[data-move]"))
+        .map((el) => el.dataset.move);
+      const behind = Array.from(root.querySelectorAll(".ar-menu [data-move]"))
+        .map((el) => el.dataset.move);
+      expect(onRow).toContain("resolve");
+      expect(onRow).not.toContain("dismiss");
+      expect(behind).toContain("dismiss");
     });
 
     it("do not invent one the server left out", async () => {
       // The whole reason there is no transition table in this file: a second
       // copy would drift, and the visible copy is the one that would be wrong.
       await render(payload([anAlert({ available_actions: [
-        { key: "resolve", label: "Mark Resolved", needs_reason: false },
+        { key: "resolve", label: "Resolve", needs_reason: false },
       ] })]));
       const moves = Array.from(root.querySelectorAll("[data-move]")).map(
         (el) => el.dataset.move
       );
-      expect(moves).toEqual(["resolve", "notify"]);
+      expect(moves).not.toContain("acknowledge");
+      expect(moves).not.toContain("start");
+      expect(moves).not.toContain("dismiss");
+      expect(moves).toContain("resolve");
     });
 
     it("lead with the record the alert is about", async () => {
