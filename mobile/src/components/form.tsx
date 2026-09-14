@@ -259,7 +259,7 @@ function SelectControl({
   const [query, setQuery] = useState("");
   // Inline options win, and suppress the fetch: passing no path leaves the
   // query disabled rather than firing a request whose result is discarded.
-  const { options: fetched, loading } = usePickerOptions(
+  const { options: fetched, loading, unavailable } = usePickerOptions(
     field.options ? undefined : field.optionsPath,
     field.optionLabelKeys
   );
@@ -320,7 +320,18 @@ function SelectControl({
               ) : null
             }
             ListEmptyComponent={
-              <Text style={styles.empty}>{loading ? "Loading…" : "No options."}</Text>
+              // Three different silences, and they are not interchangeable.
+              // "No options" against a list that failed to load tells somebody
+              // the farms do not exist, which sends them looking for the wrong
+              // problem.
+              <Text style={styles.empty}>
+                {loading
+                  ? "Loading…"
+                  : unavailable
+                    ? "Not available offline. Open this list once while you "
+                      + "have signal and it will be here afterwards."
+                    : "No options."}
+              </Text>
             }
             renderItem={({ item }) => (
               // A disabled option is shown, not hidden: "this shed already has

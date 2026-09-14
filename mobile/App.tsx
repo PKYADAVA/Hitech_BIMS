@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { defaultShouldDehydrateQuery } from "@tanstack/react-query";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StatusBar } from "expo-status-bar";
@@ -78,15 +79,22 @@ export default function App() {
             maxAge: 1000 * 60 * 60 * 24,
             dehydrateOptions: {
               shouldDehydrateQuery: (query) =>
-                // Everything else is meant to survive a restart as read
-                // cache. The version check is the one query that must not:
+                // Only what actually arrived. Supplying this option replaces
+                // React Query's own rule, which keeps successes alone — so
+                // every failed and half-finished query was being written to
+                // disk as well, and rehydrated on the next launch as a
+                // failure. A picker that had once failed came back failed,
+                // in front of the good copy that a later fetch would have
+                // put there.
+                defaultShouldDehydrateQuery(query)
+                // The version check is the one success that must not persist:
                 // installing an update *over* an existing app (not
                 // uninstall-first) keeps local storage, so a persisted
                 // "force_update: true" answer would outlive the very
                 // update that was supposed to clear it — and the blocking
                 // modal it drives has no dismiss button, so a stale replay
                 // of it is a lockout, not a stale screen.
-                query.queryKey[0] !== "app-version",
+                && query.queryKey[0] !== "app-version",
             },
           }}
         >
