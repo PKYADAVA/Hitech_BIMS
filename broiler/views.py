@@ -8494,14 +8494,41 @@ def _actual_gc_rate(scheme, std_cost, actual_cost, base_rate):
     return max(Decimal("0"), base_rate + adj)
 
 
-def _sales_incentive_per_kg(scheme, avg_sale_rate):
-    """Sales incentive per kg of sold weight. The slab's ``sales_incentive`` is
-    a rate PER RUPEE of sale rate above the band floor, accrued progressively
-    across bands (like the growing-charge tiers): e.g. band 105-140 @ 0.10 and
-    a ₹115 sale rate -> (115-105) x 0.10 = ₹1.00/kg. Below the lowest band's
-    floor there is no incentive; above the highest band's ceiling it caps."""
+def _sales_incentive_per_kg(scheme, avg_sale_rate, production_cost_per_kg=None):
+    """Sales incentive per kg of sold weight, within the scheme's own limits.
+
+    The slab's ``sales_incentive`` is a rate PER RUPEE of sale rate above the
+    band floor, accrued progressively across bands (like the growing-charge
+    tiers): e.g. band 105-140 @ 0.10 and a ₹115 sale rate -> (115-105) x 0.10 =
+    ₹1.00/kg. Below the lowest band's floor there is no incentive; above the
+    highest band's ceiling it stops accruing.
+
+    Two limits sit beside the bands in the Growing Charge master, and until
+    this read them they were captured, stored and ignored — a scheme could be
+    configured with both and neither changed a rupee:
+
+    ``maximum_prod_cost``
+        The most a batch may have cost to produce and still earn this
+        incentive at all. A good sale rate on a flock that cost too much to
+        grow is not the farmer's to share in, so past this the incentive is
+        nothing rather than less.
+
+    ``maximum_rate_incentive``
+        The ceiling on what the bands may add up to per kg, however far the
+        sale rate climbs through them.
+
+    Both are optional and both are stored as 0 when nobody fills them in,
+    which is why neither is applied at zero: read literally, a blank Maximum
+    Prod. Cost would mean no batch ever qualifies, and every scheme that never
+    set one would quietly stop paying the incentive it does define.
+    """
     if not scheme:
         return Decimal("0")
+
+    ceiling = _num(getattr(scheme, "maximum_prod_cost", 0))
+    if ceiling > 0 and _num(production_cost_per_kg) > ceiling:
+        return Decimal("0")
+
     v = _num(avg_sale_rate)
     per_kg = Decimal("0")
     for band in sorted(scheme.sales_incentives.all(), key=lambda r: _num(r.sale_rate_from)):
@@ -8511,6 +8538,10 @@ def _sales_incentive_per_kg(scheme, avg_sale_rate):
         per_kg += (min(v, hi) - lo) * rate
         if v <= hi:
             break
+
+    cap = _num(getattr(scheme, "maximum_rate_incentive", 0))
+    if cap > 0:
+        per_kg = min(per_kg, cap)
     return per_kg
 
 
@@ -8609,7 +8640,8 @@ def _gc_settlement_autofill(batch, scheme, report=None):
     # ---- slab-derived incentives (treated as per-kg of sold live weight,
     #      except summer which is per-bird on its `incentive_on` basis) ----
     if scheme:
-        sales_rate = _sales_incentive_per_kg(scheme, bc.get("avg_sale_rate"))
+        sales_rate = _sales_incentive_per_kg(
+            scheme, bc.get("avg_sale_rate"), bc.get("production_cost_per_kg"))
         mort_rate = _slab_match(scheme.mortality_incentives.all(), bc.get("total_mort_pct"),
                                 "from_mortality_pct", "to_mortality_pct", "incentive_value")
         fcr_rate = _slab_match(scheme.fcr_incentives.all(), bc.get("cfcr"),
