@@ -228,6 +228,70 @@ $.extend(true, $.fn.dataTable.defaults, {
   }
   window.searchableSelect = searchableSelect;
 
+  /* A list always opens downward, and is always fully on screen.
+   *
+   * Select2 flips its list above the control when the window has less than
+   * the list's height below it. On an entry sheet that is most of the rows:
+   * the list covers the lines above the one being filled in, which are the
+   * lines somebody is reading to fill it. The browser's own dropdown never
+   * does this, which is why the lifting supervisor column opted out of
+   * Select2 altogether for a while rather than put up with it.
+   *
+   * So the placement is taken back. `_positionDropdown` is wrapped rather
+   * than replaced: Select2 keeps calling it on scroll and resize, and each
+   * time it is allowed to do its own arithmetic before the answer is
+   * overruled. Only the direction is changed, and only when it chose above.
+   *
+   * Forcing it down would push the list off the bottom of a window with no
+   * room, so `select2:open` scrolls the page far enough to bring it back —
+   * which is the part that makes this an improvement rather than a trade.
+   */
+  const amd = $.fn.select2 && $.fn.select2.amd;
+  if (amd && typeof amd.require === 'function') {
+    try {
+      const AttachBody = amd.require('select2/dropdown/attachBody');
+      const position = AttachBody.prototype._positionDropdown;
+      AttachBody.prototype._positionDropdown = function () {
+        position.apply(this, arguments);
+        if (!this.$container.hasClass('select2-container--above')) return;
+
+        // The same offsets Select2 works in: the dropdown is positioned
+        // against its parent, which is the body unless the field is in a
+        // modal.
+        let $parent = this.$dropdownParent;
+        if ($parent.css('position') === 'static') $parent = $parent.offsetParent();
+        const parent = $parent.offset() || { top: 0, left: 0 };
+        const offset = this.$container.offset();
+
+        this.$dropdown.removeClass('select2-dropdown--above')
+                      .addClass('select2-dropdown--below');
+        this.$container.removeClass('select2-container--above')
+                       .addClass('select2-container--below');
+        this.$dropdownContainer.css({
+          top: offset.top + this.$container.outerHeight(false) - parent.top,
+          left: offset.left - parent.left,
+        });
+      };
+    } catch (e) {
+      // Select2 changed its module layout: leave the placement alone rather
+      // than half-apply it. The list flips as it used to, which is the
+      // behaviour this replaced and not a broken page.
+    }
+  }
+
+  /* Bring a list that now hangs below the fold back into view. */
+  $(document).on('select2:open', function () {
+    window.setTimeout(function () {
+      const dropdown = document.querySelector('.select2-container--open .select2-dropdown')
+        || document.querySelector('.select2-dropdown');
+      if (!dropdown) return;
+      const below = dropdown.getBoundingClientRect().bottom
+        - document.documentElement.clientHeight;
+      // 8px so the list does not sit flush against the bottom edge.
+      if (below > 0) window.scrollBy({ top: below + 8, behavior: 'instant' });
+    }, 0);
+  });
+
   // Keep the rendered Select2 in sync when code assigns values directly —
   // el.value = x, $el.val(x), form.reset() — none of which fire 'change'.
   // 'change.select2' updates Select2's display without running app handlers.

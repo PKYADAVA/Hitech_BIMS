@@ -18,6 +18,11 @@ from typing import Any
 from rest_framework.renderers import JSONRenderer
 
 
+#: Statuses that must not carry a message body. RFC 9110: a 204 response ends
+#: at the headers, and a 304 carries none either.
+BODYLESS = frozenset({204, 304})
+
+
 class EnvelopeJSONRenderer(JSONRenderer):
     """Wrap the serialized body in the standard envelope."""
 
@@ -25,6 +30,24 @@ class EnvelopeJSONRenderer(JSONRenderer):
         renderer_context = renderer_context or {}
         response = renderer_context.get("response")
         status_code = getattr(response, "status_code", 200) or 200
+
+        # Nothing at all on a 204, envelope included.
+        #
+        # Wrapping one produced `204 No Content` with `Content-Length: 51`,
+        # which is a response that contradicts itself. A client or proxy that
+        # believes the status stops reading at the headers, so those 51 bytes
+        # stay in the connection and are read as the beginning of the next
+        # request on it — whose request line is then `{"success": true, ...`.
+        # nginx answers that with **505 HTTP Version Not Supported**, which is
+        # how this surfaced: the first DELETE on a page worked, the second one
+        # failed, and reloading fixed it because the reload opened fresh
+        # connections. Only behind a proxy; the dev server is forgiving enough
+        # to hide it.
+        #
+        # Every v1 DELETE was affected, the phone's included — the web app had
+        # simply never issued one until the bird sale evidence card did.
+        if status_code in BODYLESS:
+            return b""
 
         if status_code >= 400:
             payload = {
