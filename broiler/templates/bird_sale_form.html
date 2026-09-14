@@ -134,11 +134,14 @@ const farmOptions = `<option value="">select</option>{% for f in farms %}<option
 // way out — a lifting is often supervised by somebody the register does not
 // have (a contractor's man, a stand-in) and the sale still has to be
 // recordable. Choosing it reveals a box for the name.
-// data-no-search keeps main.js's site-wide Select2 upgrade off this one. The
-// Select2 list is drawn into the page and flips above the control when the row
-// sits low in the window, covering the rows being read; the browser's own
-// dropdown is placed by the browser and never does that. The list is a handful
-// of employees, so the search Select2 would add is no loss.
+//
+// Searchable, like the three columns before it. It carried data-no-search for
+// a while, to keep main.js's site-wide Select2 upgrade off it: Select2 draws
+// its list into the page and flips it above the control when the row sits low
+// in the window, over the rows being read, where the browser's own dropdown
+// never does. That is the price of the search box, and this column pays it on
+// the same terms as Customer, Farm and Batch rather than being the one control
+// in the row that behaves differently.
 const SUPERVISOR_OTHER = "__other__";
 const supervisorOptions = `<option value="">select</option>`
   + `{% for s in supervisors %}<option value="{{ s.id }}">{{ s|escapejs }}</option>{% endfor %}`
@@ -186,7 +189,7 @@ function row() {
     <td><input class="form-control form-control-sm bg-light round-off" readonly value="0.00"
                title="Rounding the total to the rupee"></td>
     <td><input class="form-control form-control-sm bg-light amount" readonly value="0.00"></td>
-    <td><select class="form-select form-select-sm lifting-supervisor" data-no-search>${supervisorOptions}</select>
+    <td><select class="form-select form-select-sm lifting-supervisor">${supervisorOptions}</select>
         <input class="form-control form-control-sm mt-1 lifting-supervisor-other d-none"
                placeholder="Type name" maxlength="100" autocomplete="off"></td>
     <td><input class="form-control form-control-sm vehicle"></td>
