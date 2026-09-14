@@ -4912,6 +4912,11 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             "date": pi.purchase.date, "trnum": pi.purchase.purchase_no, "dc_no": pi.purchase.dc_no,
             "from_location": pi.destination_name, "item": str(pi.item),
             "quantity": pi.rcv_qty, "rate": pi.rate, "amount": pi.amount,
+            # Whether this row names the flock or was matched to it by date
+            # alone (the batch__isnull branch above). The closing date reads
+            # this: a purchase that only *might* be this batch's must not be
+            # what decides when this batch finished.
+            "batch_id": pi.batch_id,
         })
 
     transfers = (StockTransfer.objects.filter(to_batch=batch)
@@ -8538,6 +8543,23 @@ _BATCH_ACTIVITY_TABLES = (
 )
 
 
+def _names_this_batch(row) -> bool:
+    """Whether this row is certainly this flock's, not merely near it in time.
+
+    Feed Purchase is the one table that reaches beyond the batch: it collects
+    the farm's purchases and keeps those that name no flock at all, so an entry
+    made before anyone typed the batch number is not lost from the history.
+    That is right for a history and wrong for a closing date. Batches are left
+    without an end date until they are settled, so the window has no upper
+    bound, and an untagged purchase for the *next* flock would otherwise decide
+    when the last one finished — settling one flock on another's dates.
+
+    Every other table is built from this batch's own rows and carries no
+    ``batch_id`` to check, which is why the default is to trust it.
+    """
+    return row.get("batch_id", True) is not None
+
+
 def _last_activity_date(report):
     """The last day anything happened on this batch.
 
@@ -8553,7 +8575,7 @@ def _last_activity_date(report):
     """
     dates = [row["date"] for table in _BATCH_ACTIVITY_TABLES
              for row in (report.get(table) or [])
-             if isinstance(row, dict) and row.get("date")]
+             if isinstance(row, dict) and row.get("date") and _names_this_batch(row)]
     return max(dates) if dates else None
 
 

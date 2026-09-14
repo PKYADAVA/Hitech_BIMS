@@ -275,3 +275,43 @@ class ClosingDateTests(TestCase):
     def test_a_batch_nothing_has_happened_to_has_no_closing_date(self):
         """Rather than a guess, or a crash on max() of nothing."""
         self.assertIsNone(self.gc_date())
+
+    def buy_for_the_farm(self, days_in, batch=None):
+        """A feed purchase delivered straight to the farm.
+
+        ``batch=None`` is the row the Batch History report keeps by date alone
+        — bought for this farm, naming no flock.
+        """
+        from purchase.models import GeneralPurchase, GeneralPurchaseItem
+        from purchase.models import Supplier
+
+        purchase = GeneralPurchase.objects.create(
+            supplier=Supplier.objects.create(name="Ravi Feeds"),
+            date=self.day(days_in))
+        return GeneralPurchaseItem.objects.create(
+            purchase=purchase, item=self.feed, farm=self.farm, batch=batch,
+            sent_qty=100, rcv_qty=100, rate=42, amount=4200)
+
+    def test_a_purchase_naming_this_flock_counts(self):
+        """Tagged to the batch, so it is this batch's activity."""
+        self.sell(40)
+        self.buy_for_the_farm(45, batch=self.batch)
+        self.assertEqual(self.gc_date(), self.day(45))
+
+    def test_a_purchase_naming_no_flock_does_not_close_this_one(self):
+        """The case worth guarding. Batches keep no end date until they are
+        settled, so the report's date window has no upper bound and an
+        untagged purchase bought for the *next* flock is swept in. It may
+        appear in the history — that is deliberate, better than losing it —
+        but it must not be the thing that decides when this flock finished.
+        """
+        self.sell(40)
+        self.buy_for_the_farm(60)               # no batch named
+        self.assertEqual(self.gc_date(), self.day(40))
+
+    def test_the_untagged_purchase_is_still_in_the_history(self):
+        """Excluded from the closing date, not hidden from the report."""
+        self.sell(40)
+        self.buy_for_the_farm(60)
+        rows = _build_batch_report(self.batch, fetch_type="farmer")["feed_purchase"]
+        self.assertEqual([r["date"] for r in rows], [self.day(60)])
