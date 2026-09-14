@@ -1,0 +1,52 @@
+/**
+ * The version in app.json and the version in build.gradle are the same version.
+ *
+ * They are read by different things and neither knows about the other:
+ *
+ *   build.gradle  stamps the APK — what Android compares on install, and what
+ *                 the user sees under Settings > Apps
+ *   app.json      is where the running app reads its own number from, through
+ *                 Constants.expoConfig (see config.ts, APP_VERSION_CODE)
+ *
+ * The sideload update check compares the second against the version_code on
+ * the server's AppRelease row. Let them drift and the app reports a number its
+ * own APK does not carry: it goes on offering an update it has already
+ * installed, or — worse — stops offering one it has not, because the number it
+ * believes it is running is ahead of the number it actually is.
+ *
+ * Nothing else pairs them. Two files, edited by hand, once per release.
+ */
+import fs from "fs";
+import path from "path";
+
+const root = path.resolve(__dirname, "..", "..");
+
+function fromAppJson(): { version: string; versionCode: number } {
+  const app = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8")).expo;
+  return { version: app.version, versionCode: app.android.versionCode };
+}
+
+function fromGradle(): { version: string; versionCode: number } {
+  const gradle = fs.readFileSync(
+    path.join(root, "android", "app", "build.gradle"), "utf8");
+  const code = gradle.match(/versionCode\s+(\d+)/);
+  const name = gradle.match(/versionName\s+"([^"]+)"/);
+  if (!code || !name) throw new Error("could not read the version out of build.gradle");
+  return { version: name[1], versionCode: Number(code[1]) };
+}
+
+describe("app version", () => {
+  it("reads the same from app.json and build.gradle", () => {
+    expect(fromAppJson()).toEqual(fromGradle());
+  });
+
+  it("has a version code that can be released", () => {
+    // Android refuses an install whose versionCode is below the installed
+    // one, so a release is only distributable if this keeps climbing — and
+    // the server's AppRelease.version_code is unique, so a repeat cannot be
+    // published either.
+    const { versionCode } = fromAppJson();
+    expect(Number.isInteger(versionCode)).toBe(true);
+    expect(versionCode).toBeGreaterThan(0);
+  });
+});
