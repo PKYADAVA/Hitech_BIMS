@@ -88,6 +88,31 @@ img, svg, video { height: auto; }
   .bims-navbar .navbar-brand { margin-right: .25rem !important; }
 }
 
+/* Below the expand width the module tier has nothing to show.
+   -----------------------------------------------------------------------
+   Its links live in #mainNavCollapse, which the hamburger in the bar above
+   opens — and that collapse sits *inside* this bar, so the bar cannot simply
+   be hidden or the drawer would go with it. What it can do is stop reserving
+   room: the 32px it is given is deliberate on a desktop, where the module
+   names are in it, and on a phone it is 32px of empty green between the
+   header and the page. That band is what "the navigation bar isn't visible"
+   describes — a strip that looks like a navbar and holds nothing.
+
+   height:auto lets it be nothing when the drawer is shut and as tall as the
+   drawer when it is open. */
+@media (max-width: 1199.98px) {
+  .bims-modulebar {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    border-bottom: 0;
+  }
+  /* Nothing to draw when it is closed — without this the background paints a
+     hairline even at zero height. */
+  .bims-modulebar:not(:has(.navbar-collapse.show)) { background: transparent; }
+}
+
 /* The bar is only expanded where all the menus fit, so it is always a single
    row — below 1200px it collapses into the hamburger instead of wrapping. */
 @media (min-width: 1200px) {

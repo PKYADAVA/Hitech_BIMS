@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260912a" />
 
   <!-- Responsiveness layer: adapts the existing design to every screen size -->
-  <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260910a" />
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260914a" />
 
   <!-- Alerts & Notifications module (bell, centre, widget) -->
   <link rel="stylesheet" href="{% static 'css/alerthub.css' %}?v=20260913o" />
@@ -98,6 +98,21 @@
   <!-- DataTables -->
   <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+  {% comment %}
+    DataTables Responsive — the plugin that folds a register's spare columns
+    into a row you can open, instead of leaving a thirteen-column table to be
+    swiped sideways on a phone.
+
+    Its stylesheet was loaded in <head> from the start and its JavaScript
+    never was, so `responsive: true` — set on sixty-seven registers — was an
+    option DataTables did not recognise and quietly ignored. Every one of them
+    rendered as a 1,100px table inside a 326px screen, reachable only by
+    dragging. The CSS being there is why nothing looked broken enough to
+    chase: the styles for the collapsed rows were present, waiting for rows
+    that were never collapsed.
+  {% endcomment %}
+  <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+  <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
