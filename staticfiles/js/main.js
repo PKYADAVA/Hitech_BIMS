@@ -253,6 +253,16 @@ $.extend(true, $.fn.dataTable.defaults, {
       const position = AttachBody.prototype._positionDropdown;
       AttachBody.prototype._positionDropdown = function () {
         position.apply(this, arguments);
+        // Select2 calls this again on every scroll and resize while a list is
+        // open, so a throw in here would break the list mid-use rather than
+        // fail once at startup. Whatever goes wrong, Select2's own placement
+        // has already been applied above and stands.
+        try {
+          this._placeBelow();
+        } catch (e) { /* leave Select2's answer alone */ }
+      };
+
+      AttachBody.prototype._placeBelow = function () {
         if (!this.$container.hasClass('select2-container--above')) return;
 
         // The same offsets Select2 works in: the dropdown is positioned
@@ -279,17 +289,31 @@ $.extend(true, $.fn.dataTable.defaults, {
     }
   }
 
-  /* Bring a list that now hangs below the fold back into view. */
+  /* Fit the list into the room below, rather than move the page to make room.
+   *
+   * Scrolling the page on open was the first attempt and it is not safe:
+   * Select2 opens on mousedown, so the page would slide out from under the
+   * pointer mid-press, and the mouseup at the end of an ordinary press could
+   * land on something else — which Select2 reads as a click outside and
+   * closes on. A synthetic click never shows it, because its down and up are
+   * in the same tick.
+   *
+   * Said plainly: that failure was reasoned from how the events are ordered,
+   * not observed here. It was reported from a browser and never reproduced
+   * in a harness. What is certain is that capping the list needs no page
+   * movement at all, so the question cannot arise.
+   */
+  const LIST_FLOOR = 120;   // below this a list is not worth opening at all
   $(document).on('select2:open', function () {
-    window.setTimeout(function () {
-      const dropdown = document.querySelector('.select2-container--open .select2-dropdown')
-        || document.querySelector('.select2-dropdown');
-      if (!dropdown) return;
-      const below = dropdown.getBoundingClientRect().bottom
-        - document.documentElement.clientHeight;
-      // 8px so the list does not sit flush against the bottom edge.
-      if (below > 0) window.scrollBy({ top: below + 8, behavior: 'instant' });
-    }, 0);
+    const dropdown = document.querySelector('.select2-container--open .select2-dropdown');
+    const results = dropdown && dropdown.querySelector('.select2-results__options');
+    if (!results) return;
+    // Whatever the dropdown spends on the search box and its own padding has
+    // to come out of the room before the list gets what is left.
+    const chrome = dropdown.offsetHeight - results.offsetHeight;
+    const room = document.documentElement.clientHeight
+      - dropdown.getBoundingClientRect().top - 8;
+    results.style.maxHeight = Math.max(LIST_FLOOR, room - chrome) + 'px';
   });
 
   // Keep the rendered Select2 in sync when code assigns values directly —
