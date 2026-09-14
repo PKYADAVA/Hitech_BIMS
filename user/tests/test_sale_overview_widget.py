@@ -82,6 +82,11 @@ class SaleOverviewTests(TestCase):
     def stat(self, label, **kw):
         return next(s for s in self.card(**kw)["stats"] if s["label"] == label)
 
+    def trend(self, **kw):
+        """(label, value, birds) per day, oldest last-day-first order."""
+        return [(d["label"], d["values"][0], d["values"][1])
+                for d in self.card(**kw)["chart_days"]]
+
     # ---- what was sold ------------------------------------------------------
 
     def test_it_totals_the_birds_the_weight_and_the_value(self):
@@ -148,6 +153,54 @@ class SaleOverviewTests(TestCase):
         BirdSale.objects.create(farm=self.farm, batch=batch, date=self.today,
                                 birds=4000, net_weight=Decimal("8000"), rate=Decimal("90"))
         self.assertEqual(self.stat("Mean age")["value"], "40.00 d")
+
+    # ---- the trend ----------------------------------------------------------
+
+    def test_the_trend_is_value_and_birds_per_day(self):
+        """Two series, one chart: the question is whether the money follows
+        the birds, which is a comparison of two shapes."""
+        self.sell(400, "800.00", "90", when=self.today - timedelta(days=2))
+        self.sell(100, "200.00", "90")
+        card = self.card()
+        self.assertEqual([s["label"] for s in card["chart_series"]],
+                         ["Sale value", "Birds sold"])
+        self.assertEqual(card["chart_axes"], ["money", "count"])
+        self.assertEqual(self.trend()[-3:],
+                         [((self.today - timedelta(days=2)).strftime("%d %b"),
+                           72000, 400),
+                          ((self.today - timedelta(days=1)).strftime("%d %b"), 0, 0),
+                          (self.today.strftime("%d %b"), 18000, 100)])
+
+    def test_a_day_with_no_sale_is_a_gap_in_the_line(self):
+        """A trade that runs a few days a week is mostly gaps, and a chart
+        that closed them would draw a fortnight as three days side by side."""
+        self.sell(100, "200.00", "90")
+        days = self.trend()
+        self.assertEqual(len(days), 14)
+        self.assertEqual([d[1] for d in days[:-1]], [0] * 13)
+
+    def test_the_window_ends_on_the_day_the_card_is_showing(self):
+        chosen = self.today - timedelta(days=4)
+        self.sell(250, "500.00", "80", when=chosen)
+        self.assertEqual(self.trend(filters={"date": chosen})[-1],
+                         (chosen.strftime("%d %b"), 40000, 250))
+
+    def test_the_trend_is_there_on_a_day_that_sold_nothing(self):
+        """The case it earns its place: the tiles say nought and the chart
+        says whether that is a lull or a stop."""
+        self.sell(300, "600.00", "90", when=self.today - timedelta(days=3))
+        card = self.card(filters={"date": self.today})
+        self.assertEqual(self.stat("Sold birds",
+                                   filters={"date": self.today})["value"], "0")
+        self.assertEqual(card["chart_days"][-1]["values"], [0, 0])
+        self.assertEqual(card["chart_days"][-4]["values"], [54000, 300])
+
+    def test_the_trend_is_billing_and_not_collection(self):
+        """A receipt is dated to when it was taken, so a payment against an
+        earlier lot would draw one day's money against another day's sale.
+        The Difference tile answers that question, for the day it means."""
+        self.receipt("50000")
+        self.assertEqual(self.trend()[-1], (self.today.strftime("%d %b"), 0, 0))
 
     # ---- what came back -----------------------------------------------------
 

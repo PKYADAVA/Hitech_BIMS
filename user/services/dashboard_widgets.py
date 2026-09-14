@@ -755,6 +755,8 @@ def _liftings(viewable, filters, user=None):
         # the groups come from chart_days, so only the series half is wanted.
         "chart_series": _bars([], series=("Birds", "Weight"))["series"],
         "chart_ranges": list(LIFTING_CHART_DAYS),
+        "chart_title": "Birds & weight per day",
+        "chart_kind": "bars",
         "rows": rows,
         "rows_title": "Latest liftings" if rows else None,
         # Which day is on the card. Unasked-for dates have to say so, or a
@@ -827,6 +829,60 @@ def _sale_branches(filters, user):
             return []
         return [chosen]
     return None if allowed is None else sorted(allowed)
+
+
+#: The windows the Sale Value Trend offers, shortest first; the longest is
+#: also how much data the card is sent. Same two as the lifting chart, and
+#: for the same reason — a month of daily marks in a half-width card is a
+#: texture rather than a reading.
+SALE_TREND_DAYS = (7, 14)
+
+
+def _sale_trend(branch_ids, day):
+    """Sale value and birds sold per day, ending on the day the card shows.
+
+    Two quantities that cannot share a scale: a day's value is in lakhs and
+    its birds are in thousands, so a single axis draws one of them as a line
+    along the floor. Value is the bars against the left axis and birds the
+    line against the right — the shape being asked for is whether the money
+    follows the birds, which is a comparison of two shapes rather than of two
+    heights.
+
+    Money only, not receipts: a receipt is booked at an office and dated to
+    when it was taken, so putting it on a daily line beside the day's billing
+    would draw one lot's payment against another lot's sale. The Difference
+    tile answers that question for the day, which is the day it means.
+    """
+    from django.db.models import Sum
+    from broiler.models import BirdSale
+
+    window = day - timedelta(days=SALE_TREND_DAYS[-1] - 1)
+    rows = BirdSale.objects.filter(date__gte=window, date__lte=day)
+    if branch_ids is not None:
+        rows = rows.filter(farm__branch_id__in=branch_ids)
+    per_day = {r["date"]: r for r in
+               rows.values("date").annotate(v=Sum("amount"), b=Sum("birds"))}
+
+    days = []
+    for offset in range(SALE_TREND_DAYS[-1]):
+        when = window + timedelta(days=offset)
+        row = per_day.get(when)
+        days.append({
+            "date": when.isoformat(),
+            "label": when.strftime("%d %b"),
+            "values": [round(float(row["v"] or 0)) if row else 0,
+                       round(float(row["b"] or 0)) if row else 0],
+        })
+    return {
+        "chart_days": days,
+        "chart_series": _bars([], series=("Sale value", "Birds sold"))["series"],
+        "chart_ranges": list(SALE_TREND_DAYS),
+        "chart_title": "Sale value trend",
+        "chart_kind": "combo",
+        # What the two axes count, so the chart can label them without the
+        # card knowing which widget it is drawing.
+        "chart_axes": ["money", "count"],
+    }
 
 
 def _sale_note(day, chosen, orphan_money):
@@ -932,7 +988,10 @@ def _sale_overview(viewable, filters, user=None):
                     "filters_used": used}
         last = _last_sale_date(branch_ids)
         where = " here" if branch_ids is not None else ""
+        # The trend goes on this return too. A day of noughts is exactly when
+        # somebody wants to know whether the week behind it was quiet as well.
         return {"stats": [{"label": "Sold birds", "value": "0"}],
+                **_sale_trend(branch_ids, day),
                 "note": ("No bird sales on this day. The last was "
                          f"{last.strftime('%d %b %Y')}."
                          if last else f"No bird sales recorded{where} yet."),
@@ -995,6 +1054,7 @@ def _sale_overview(viewable, filters, user=None):
         # account for.
         "note": _sale_note(day, chosen, orphan_money),
         "filters_used": used,
+        **_sale_trend(branch_ids, day),
     }
 
 
