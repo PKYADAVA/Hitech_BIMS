@@ -15,20 +15,13 @@
   .ffr-thumb { height: 34px; width: 44px; object-fit: cover; border-radius: 3px; }
   .ffr-doc { font-size: .72rem; }
   td.ffr-none { color: #8a939b; }
-  /* Sr No is frozen at the left so a row keeps its number 40 columns along.
-     z-index matters more than it looks: sticky cells paint in document order,
-     so without a higher stacking value the ones that come after simply cover
-     this one as the table scrolls under them. The heading has to out-rank both
-     its own row (which is sticky to the top) and the frozen body cells. */
+  /* Sr No is no longer frozen. Frozen, it slid over the columns beside it as
+     the table scrolled sideways and covered their values; it now scrolls with
+     the rest of the row, like every other report table. */
   .rpt-scroll .rpt-table td.ffr-sr,
   .rpt-scroll .rpt-table thead th:first-child {
-    position: sticky; left: 0; text-align: center; min-width: 3rem; }
-  .rpt-scroll .rpt-table td.ffr-sr {
-    background: #fff; color: #6c757d; z-index: 2;
-    box-shadow: 1px 0 0 #dee2e6; }
-  .rpt-scroll .rpt-table tbody tr:hover td.ffr-sr { background: #f4f8fc; }
-  .rpt-scroll .rpt-table thead th:first-child {
-    z-index: 5; box-shadow: 1px 0 0 #274d84; }
+    text-align: center; min-width: 3rem; }
+  .rpt-scroll .rpt-table td.ffr-sr { color: #6c757d; }
 </style>{% endblock %}
 {% block nav %}
   {% include 'main_top_navbar.html' with active_tab='broiler' %}

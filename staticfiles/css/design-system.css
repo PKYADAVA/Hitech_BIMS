@@ -772,14 +772,16 @@ body.ds-shell .content > footer { display: none; }
    beside it as the report scrolled, so a total read as 7,700.00 where it was
    17,700.00. A cell that spans columns is not a key column and is never worth
    freezing. */
-.ds .rpt-table th:first-child:not([colspan]),
-.ds .rpt-table td:first-child:not([colspan]),
+/* Report tables (.rpt-table) no longer freeze their first column
+   automatically. Frozen, the first column slid over the columns beside it as
+   a table scrolled sideways and cut numbers off at the left: 2429.00 in the
+   Opening Birds column read as 29.00 under a frozen Date column. A frozen
+   column is only safe where a table opts in with .freeze-1 or .freeze-2. */
 .ds table.ds-grid.freeze-1 th:first-child:not([colspan]),
 .ds table.ds-grid.freeze-1 td:first-child:not([colspan]) {
   position: sticky; left: 0; z-index: 1;
   background: var(--ds-card);
 }
-.ds .rpt-table thead th:first-child,
 .ds table.ds-grid.freeze-1 thead th:first-child {
   z-index: 3; background: var(--ds-header-bg);
 }
@@ -796,7 +798,6 @@ body.ds-shell .content > footer { display: none; }
    other sticky heading cells carry — so scrolling sideways slid the next
    heading over the frozen one while the frozen data stayed put, and dates
    read under "Age" or "Opening Birds". */
-.ds .rpt-table thead th:first-child:not([colspan]),
 .ds table.ds-grid.freeze-1 thead th:first-child:not([colspan]),
 .ds table.ds-grid.freeze-2 thead th:nth-child(2) {
   z-index: 4;
@@ -810,8 +811,6 @@ body.ds-shell .content > footer { display: none; }
 }
 .ds table.ds-grid thead:has(tr + tr) th { top: auto; }
 /* The shadow is what tells you a column is frozen rather than just first. */
-.ds .rpt-table th:first-child:not([colspan])::after,
-.ds .rpt-table td:first-child:not([colspan])::after,
 .ds table.ds-grid.freeze-1 th:first-child:not([colspan])::after,
 .ds table.ds-grid.freeze-1 td:first-child:not([colspan])::after {
   content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
