@@ -87,7 +87,9 @@
   .gc-info-chip .k { display: block; font-size: .62rem; color: #898781; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
   .gc-info-chip b { font-weight: 700; color: #222; }
 
-  .gc-page { padding: 1.1rem 1.25rem 1.5rem; }
+  /* No side padding: the filter toolbar and title above sit flush with the
+     page edges, and this padding set everything below 19px in from them. */
+  .gc-page { padding: 1.1rem 0 1.5rem; }
 
   .gc-kpi-row {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
