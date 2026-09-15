@@ -21,6 +21,7 @@ SOURCE_BULK = "Bulk Revision"
 SOURCE_UPLOAD = "Upload"
 SOURCE_API = "Mobile / API"
 SOURCE_ADMIN = "Admin"
+SOURCE_CHANGE_REQUEST = "Change Request"
 SOURCE_SYSTEM = "System"
 
 _change = contextvars.ContextVar("item_price_change", default=None)

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Item Price List{% endblock %}
 
@@ -493,6 +494,7 @@
   </div>
 </div>
 
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
     const csrfToken = "{{ csrf_token }}";
@@ -593,11 +595,17 @@ $(function () {
         if (CAN.edit && row.entry) {
             parts.push(`<button type="button" class="ipl-act edit" data-act="edit" data-entry="${row.entry}" data-item="${row.item}" data-price="${esc(row.price)}" data-date="${esc(row.effective_date)}" title="Edit this price" aria-label="Edit this price"><i class="fas fa-pen"></i></button>`);
         }
+        if (!CAN.edit && row.entry) {
+            parts.push(`<button type="button" class="ipl-act edit" data-act="request-edit" data-entry="${row.entry}" data-item="${row.item}" data-price="${esc(row.price)}" data-date="${esc(row.effective_date)}" title="Request modification" aria-label="Request modification"><i class="fas fa-pen-to-square"></i></button>`);
+        }
         if (CAN.add) {
             parts.push(`<button type="button" class="ipl-act copy" data-act="copy" data-item="${row.item}" data-price="${esc(row.price || "")}" title="Add a new dated price for this item" aria-label="Add a new dated price"><i class="fas fa-copy"></i></button>`);
         }
         if (CAN.del && row.entry) {
             parts.push(`<button type="button" class="ipl-act del" data-act="delete" data-entry="${row.entry}" data-item="${row.item}" title="Delete this price" aria-label="Delete this price"><i class="fas fa-trash"></i></button>`);
+        }
+        if (!CAN.del && row.entry) {
+            parts.push(`<button type="button" class="ipl-act del" data-act="request-delete" data-entry="${row.entry}" data-item="${row.item}" title="Request deletion" aria-label="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>`);
         }
         if (CAN.toggle) {
             const label = row.is_active ? "Make item inactive" : "Make item active";
@@ -793,6 +801,10 @@ $(function () {
         if (d.act === "copy") openAdd({ item: d.item, price: d.price });
         if (d.act === "delete") deleteEntry(Number(d.entry), Number(d.item));
         if (d.act === "toggle") toggleItem(Number(d.item));
+        // Without the right, the change is proposed and waits in Change
+        // Requests for someone who holds it, as on every other register.
+        if (d.act === "request-edit") openEdit(Number(d.entry), Number(d.item), d.price, d.date, true);
+        if (d.act === "request-delete") window.submitDeleteChangeRequest("item_price_list", Number(d.entry), load);
     });
 
     function toggleItem(itemId) {
@@ -845,6 +857,8 @@ $(function () {
                     const buttons = [];
                     if (CAN.edit) buttons.push(`<button type="button" class="ipl-act edit" data-act="edit" data-entry="${e.id}" data-item="${itemId}" data-price="${esc(e.price)}" data-date="${esc(e.effective_date)}" title="Edit this price" aria-label="Edit this price"><i class="fas fa-pen"></i></button>`);
                     if (CAN.del) buttons.push(`<button type="button" class="ipl-act del" data-act="delete" data-entry="${e.id}" data-item="${itemId}" title="Delete this price" aria-label="Delete this price"><i class="fas fa-trash"></i></button>`);
+                    if (!CAN.edit) buttons.push(`<button type="button" class="ipl-act edit" data-act="request-edit" data-entry="${e.id}" data-item="${itemId}" data-price="${esc(e.price)}" data-date="${esc(e.effective_date)}" title="Request modification" aria-label="Request modification"><i class="fas fa-pen-to-square"></i></button>`);
+                    if (!CAN.del) buttons.push(`<button type="button" class="ipl-act del" data-act="request-delete" data-entry="${e.id}" data-item="${itemId}" title="Request deletion" aria-label="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>`);
                     return `<tr>
                         <td>${esc(e.effective_date)}</td>
                         <td class="text-end fw-semibold">${money(e.price)}</td>
@@ -866,8 +880,10 @@ $(function () {
     }
 
     let editing = null;
-    function openEdit(entryId, itemId, price, date) {
-        editing = { entry: entryId, item: itemId };
+    function openEdit(entryId, itemId, price, date, asRequest) {
+        editing = { entry: entryId, item: itemId, request: !!asRequest };
+        $("#iplEditLabel").text(asRequest ? "Request Price Change" : "Edit Price");
+        $("#ipl-edit-form button[type=submit]").text(asRequest ? "Submit for approval" : "Update");
         $("#ipl-e-item").text(itemLabels.get(itemId) || "");
         $("#ipl-e-price").val(price);
         $("#ipl-e-date").val(date);
@@ -883,6 +899,13 @@ $(function () {
         e.preventDefault();
         if (!editing) return;
         const target = editing;
+        if (target.request) {
+            $("#iplEditModal").modal("hide");
+            window.submitChangeRequest("item_price_list", target.entry, {
+                item: target.item, price: $("#ipl-e-price").val(), effective_date: $("#ipl-e-date").val(),
+            }, window.location.href);
+            return;
+        }
         $.ajax({
             url: URLS.entry(target.entry),
             type: "PUT",

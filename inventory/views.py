@@ -3714,7 +3714,52 @@ def inventory_issued_report(request):
 # --------------------------------------------------------------------------
 from hatchery.change_requests import CHANGE_REQUEST_HANDLERS as _CR_HANDLERS  # noqa: E402
 
+
+def _save_item_price_change_request(data, oid):
+    """What an approved Item Price List change request replays: the price and
+    effective date, checked the way an edit on the page is, and recorded in
+    the change log as coming through a change request (with the reviewer as
+    the one who made it)."""
+    from inventory.price_audit import SOURCE_CHANGE_REQUEST, price_change
+    from inventory.services.price_list import PriceRowError, parse_date, parse_price
+
+    entry = get_object_or_404(ItemPriceList, id=oid)
+    try:
+        price = parse_price(data.get("price"))
+    except PriceRowError:
+        raise ValidationError("The proposed price is not a number.")
+    if price is None or price <= 0:
+        raise ValidationError("The proposed price must be more than zero.")
+    on_date = parse_date(data.get("effective_date")) or entry.effective_date
+    if (ItemPriceList.objects.filter(item_id=entry.item_id, effective_date=on_date)
+            .exclude(id=entry.id).exists()):
+        raise ValidationError("This item already has a price entry for that date.")
+    with price_change(SOURCE_CHANGE_REQUEST):
+        entry.price = price
+        entry.effective_date = on_date
+        entry.save()
+    return entry
+
+
+def _delete_item_price_change_request(entry):
+    from inventory.price_audit import SOURCE_CHANGE_REQUEST, price_change
+
+    with price_change(SOURCE_CHANGE_REQUEST):
+        entry.delete()
+
+
 _CR_HANDLERS.update({
+    # Item Price List: a user without Edit or Delete proposes a price change
+    # or a deletion; one who holds the right approves it. New prices are not
+    # requested this way (they need the Add right), the same as every other
+    # register.
+    "item_price_list": {
+        "api": "/item-price-list/",
+        "label": "Item Price List", "tab": "item_price_list", "model": ItemPriceList,
+        "save": _save_item_price_change_request,
+        "delete": _delete_item_price_change_request,
+        "number": lambda obj: f"{obj.item.item_code} from {obj.effective_date:%d.%m.%Y}",
+    },
     "stock_transfer": {
         "api": "/stock_transfer_api/",
         "label": "Stock Transfer", "tab": "stock_transfer_list", "model": StockTransfer,

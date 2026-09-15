@@ -32,6 +32,7 @@ export const CHANGE_REQUEST_MODULE: Record<string, string> = {
   // Inventory
   "inventory-adjustments": "inventory_adjustment",
   "inventory-medicine-transfers": "medicine_transfer",
+  "inventory-price-list": "item_price_list",
   "inventory-stock-issues": "stock_issue",
   "inventory-stock-receives": "stock_receive",
   "inventory-stock-transfers": "stock_transfer",
@@ -71,6 +72,7 @@ export const REQUEST_EDIT_MODULES = new Set<string>([
   "daily_entry",
   "farm_location_capture",
   "inventory_adjustment",
+  "item_price_list",
   "medicine_entry",
   "medicine_transfer",
   "stock_issue",

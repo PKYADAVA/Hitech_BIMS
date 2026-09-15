@@ -216,9 +216,14 @@ class LetterheadTests(PriceListBase):
     def test_the_page_carries_the_company_for_printed_exports(self):
         from account.models import CompanyProfile
 
+        from django.core.cache import cache
+
         company = CompanyProfile.get_solo()
         company.name = "Hi Tech Farms"
         company.save()
+        # The page reads the company through a five-minute cache; an earlier
+        # test in the same run may have filled it with a different name.
+        cache.delete("company_profile_solo")
         response = self.client.get(reverse("item_price_list"))
         self.assertContains(response, 'data-co-name="Hi Tech Farms"')
         self.assertContains(response, "pdfLetterhead")
