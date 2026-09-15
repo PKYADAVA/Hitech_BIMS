@@ -393,6 +393,25 @@
         </div>
 
         <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#6b7280;--ci-bg:#f1f2f4"><i class="fas fa-truck-ramp-box"></i></span>Other Items Transferred Out</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+              <thead>
+                <tr><th class="ds-mid">Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Item</th><th class="ds-num">Quantity</th><th class="ds-num">Rate</th><th class="ds-num">Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.other_transfer_out %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No non-feed items transferred out of this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-boxes-stacked"></i></span>Feed Summary</div>
           <div class="table-responsive">
             <table class="table table-bordered mb-0 report-table rpt-table ds-grid">

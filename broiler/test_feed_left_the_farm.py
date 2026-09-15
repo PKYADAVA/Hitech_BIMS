@@ -189,6 +189,37 @@ class FeedThatLeftTheFarmTests(TestCase):
         self.assertEqual(self.report()["batch_costing"]["feed_balance"],
                          Decimal("1000.00"))
 
+    def test_non_feed_items_moved_out_are_listed_apart_from_feed(self):
+        """Chicks moved out of the batch — to another farm or back to the
+        warehouse — are not feed. They get their own table and leave Feed
+        Return, Feed Transferred Out, Feed Balance and the Feed Summary alone."""
+        chicks = Item.objects.create(
+            description="Broiler Chicks",
+            category=ItemCategory.objects.create(name="Broiler Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=35,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        self.a_batch_that_used_everything()
+        StockTransfer.objects.create(
+            date=self.placed + timedelta(days=5), item=chicks,
+            quantity=Decimal("200"), rate=35,
+            from_location_type="farm", from_farm=self.farm, from_batch=self.batch,
+            to_location_type="farm", to_farm=self.neighbour)
+        StockTransfer.objects.create(
+            date=self.placed + timedelta(days=6), item=chicks,
+            quantity=Decimal("50"), rate=35,
+            from_location_type="farm", from_farm=self.farm, from_batch=self.batch,
+            to_location_type="warehouse", to_warehouse=self.store)
+
+        report = self.report()
+        bc = report["batch_costing"]
+        self.assertEqual(bc["feed_return"], Decimal("500.00"))
+        self.assertEqual(bc["feed_transfer_out"], Decimal("500.00"))
+        self.assertEqual(bc["feed_balance"], Decimal("0.00"))
+        self.assertEqual([r["quantity"] for r in report["other_transfer_out"]],
+                         [Decimal("200"), Decimal("50")])
+        self.assertNotIn("Broiler Chicks", [r["item"] for r in report["feed_summary"]])
+
 
 class ClosingDateTests(TestCase):
     """The settlement closes after everything it is settling.

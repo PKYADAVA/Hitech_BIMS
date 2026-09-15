@@ -4979,6 +4979,11 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
                           .select_related("item__category", "to_warehouse", "to_farm")
                           .order_by("date", "id"))
     feed_return_rows, feed_transfer_out_rows = [], []
+    # Items leaving the batch that are not feed, shown in their own table so
+    # they neither inflate the feed figures nor disappear. "Not feed" uses the
+    # same rule as the incoming split above — a chick-category item — so an
+    # item is never counted as feed on the way in and not on the way out.
+    other_transfer_out_rows = []
     for t in outgoing_transfers:
         row = {
             "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
@@ -4986,7 +4991,11 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             "item": str(t.item), "item_id": t.item_id, "quantity": t.quantity, "rate": t.rate,
             "amount": (t.quantity or 0) * (t.rate or 0),
         }
-        (feed_return_rows if t.to_warehouse_id else feed_transfer_out_rows).append(row)
+        category_name = t.item.category.name if t.item.category_id else ""
+        if "chick" in category_name.lower():
+            other_transfer_out_rows.append(row)
+        else:
+            (feed_return_rows if t.to_warehouse_id else feed_transfer_out_rows).append(row)
 
     outgoing_med_transfers = (MedicineTransfer.objects.filter(from_batch=batch)
                               .prefetch_related("items__item").select_related("to_warehouse", "to_farm")
@@ -5113,6 +5122,9 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         if not t.item.category_id or "chick" not in t.item.category.name.lower():
             _feed_bucket(t.item.item_code)["transfer_in"] += t.quantity or 0
     for t in outgoing_transfers:
+        # Same split as the tables above: non-feed items are not feed stock.
+        if t.item.category_id and "chick" in t.item.category.name.lower():
+            continue
         if t.to_warehouse_id:
             _feed_bucket(t.item.item_code)["returned"] += t.quantity or 0
         else:
@@ -5203,6 +5215,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         "feed_transfer_in": feed_rows,
         "feed_return": feed_return_rows,
         "feed_transfer_out": feed_transfer_out_rows,
+        "other_transfer_out": other_transfer_out_rows,
         "feed_summary": feed_summary_rows,
         "medicine_transfer_in": medicine_transfer_rows,
         "medicine_return": medicine_return_rows,
@@ -8571,7 +8584,8 @@ def _shortage_rate(scheme, bc):
 #: Weekly subtotal rows in "mortality" carry no date and fall out on their own.
 _BATCH_ACTIVITY_TABLES = (
     "chick_placement", "feed_purchase", "feed_transfer_in", "feed_return",
-    "feed_transfer_out", "medicine_transfer_in", "medicine_consumption",
+    "feed_transfer_out", "other_transfer_out", "medicine_transfer_in",
+    "medicine_consumption",
     "medicine_return", "medicine_transfer_out", "bird_sales", "mortality",
 )
 
