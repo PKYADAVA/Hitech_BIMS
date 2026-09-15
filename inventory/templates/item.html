@@ -91,6 +91,7 @@
   .itl-notpriced:hover { text-decoration: underline; }
   .itl-unassigned { color: #b54708; font-size: .72rem; font-weight: 600; white-space: nowrap; }
   .itl-neg { color: #b42318; font-weight: 600; }
+  .itl-unit { margin-left: .25rem; font-size: .66rem; color: #64748b; }
   #item-table tr.itl-row-off .itl-name, #item-table tr.itl-row-off .itl-code-link { color: #94a3b8; }
   .itl-actions { display: flex; gap: .25rem; justify-content: center; }
   .itl-act {
@@ -671,7 +672,8 @@
                         if (d === null) {
                             return `<a class="itl-notpriced" href="${URLS.priceList(row.item_code)}" title="Add a price in the Item Price List">Not Priced</a>`;
                         }
-                        return `<a class="itl-price" href="${URLS.priceList(row.item_code)}" title="Open in the Item Price List">${money(d)}</a><span class="itl-subline">${esc(row.price_date)}</span>`;
+                        // One line, level with the other figures; the date is in the tooltip.
+                        return `<a class="itl-price" href="${URLS.priceList(row.item_code)}" title="In force from ${esc(row.price_date)}. Open in the Item Price List">${money(d)}</a>`;
                     },
                 },
                 {
@@ -679,7 +681,7 @@
                     render: (d, type, row) => {
                         if (type !== "display") return type === "sort" || type === "type" ? Number(d) : d;
                         const unit = uomLabel(row.storage_uom__symbol, row.storage_uom__name);
-                        return `<span class="${Number(d) < 0 ? "itl-neg" : ""}">${money(d)}</span>${unit ? `<span class="itl-subline">${esc(unit)}</span>` : ""}`;
+                        return `<span class="${Number(d) < 0 ? "itl-neg" : ""}">${money(d)}</span>${unit ? `<span class="itl-unit">${esc(unit)}</span>` : ""}`;
                     },
                 },
                 {
