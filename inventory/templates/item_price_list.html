@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Inventory{% endblock %}
+{% block title %}Item Price List{% endblock %}
 
 {% block nav %}
 {% include 'main_top_navbar.html' with active_tab='inventory' %}
@@ -9,103 +9,783 @@
 {% block content %}
 {% include '_inventory_subnavbar.html' with active_tab='item_price_list' %}
 
-<div class="page-header">
-    <div class="page-header-title">Manage Item Price List</div>
-    <div class="page-header-subtitle">Add and manage dated price entries for items</div>
+<style>
+  .ipl-page { display: flex; flex-direction: column; gap: .85rem; }
+  .ipl-head, .ipl-filters, .ipl-card {
+    background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem;
+  }
+  .ipl-head { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; padding: .85rem 1rem; }
+  .ipl-head-icon {
+    width: 42px; height: 42px; flex: 0 0 42px; border-radius: .6rem;
+    background: #1d6fe0; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  }
+  .ipl-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .ipl-sub { font-size: .8rem; color: #64748b; }
+  .ipl-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  .ipl-filters {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: .6rem; padding: .7rem;
+  }
+  .ipl-filter {
+    display: flex; align-items: center; gap: .6rem; min-width: 0;
+    border: 1px solid #eef1f5; border-radius: .5rem; padding: .45rem .6rem;
+  }
+  .ipl-filter-icon {
+    width: 34px; height: 34px; flex: 0 0 34px; border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--ipl-bg); color: var(--ipl-fg);
+  }
+  .ipl-filter-body { flex: 1; min-width: 0; }
+  .ipl-filter label { display: block; font-size: .7rem; font-weight: 600; color: #475569; margin-bottom: .15rem; }
+
+  .ipl-card { padding: .7rem; }
+  .ipl-dt-top { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .ipl-dt-top .dataTables_length label { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .8rem; }
+  .ipl-dt-end { margin-left: auto; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .ipl-card .dt-buttons .btn {
+    background: #fff; border: 1px solid #d7dde5; color: #334155; font-size: .78rem; padding: .3rem .65rem;
+  }
+  .ipl-card .dt-buttons .btn:hover { background: #f1f5f9; }
+  .ipl-table-wrap { overflow-x: auto; }
+  .ipl-dt-bottom {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: .5rem; margin-top: .6rem; font-size: .8rem;
+  }
+  .ipl-selected { font-size: .78rem; font-weight: 600; color: #1d6fe0; }
+
+  #ipl-table td { vertical-align: middle; }
+  /* Narrower side padding than the design-system grid's 12px, so all
+     thirteen columns, Actions included, fit without a sideways scroll. */
+  .ds .ipl-card table.ds-grid thead th,
+  .ds .ipl-card table.ds-grid tbody td { padding-left: 8px; padding-right: 8px; }
+  #ipl-table .ipl-check { width: 34px; text-align: center; }
+  .ipl-code { white-space: nowrap; color: #334155; font-variant-numeric: tabular-nums; }
+  .ipl-name { font-weight: 600; color: #0f172a; }
+  .ipl-price { font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ipl-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ipl-next { display: block; font-size: .68rem; font-weight: 600; color: #b54708; }
+  .ipl-muted { color: #94a3b8; }
+  .ipl-up { color: #b42318; font-weight: 600; }
+  .ipl-down { color: #067647; font-weight: 600; }
+  .ipl-actions { display: flex; gap: .3rem; justify-content: center; }
+  .ipl-act {
+    width: 28px; height: 28px; border: 0; border-radius: .4rem;
+    display: inline-flex; align-items: center; justify-content: center; font-size: .75rem;
+  }
+  .ipl-act:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .ipl-act.view { background: #e8f1fd; color: #1d6fe0; }
+  .ipl-act.edit { background: #fff1db; color: #b54708; }
+  .ipl-act.copy { background: #eef1f5; color: #475569; }
+  .ipl-act.del { background: #fde8e8; color: #c0392b; }
+
+  .ipl-foot {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    background: #ecfaf1; border: 1px solid #c9eed7; border-radius: .6rem;
+    padding: .6rem .9rem; font-size: .8rem; color: #14532d;
+  }
+  .ipl-foot .ipl-last { margin-left: auto; color: #166534; }
+
+  .ipl-preview { max-height: 45vh; overflow: auto; border: 1px solid #e3e8ef; border-radius: .4rem; }
+  .ipl-preview table { margin: 0; font-size: .8rem; }
+  .ipl-preview thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+  .ipl-summary { font-size: .8rem; margin: .6rem 0 .4rem; color: #334155; }
+  .ipl-r-create { color: #067647; font-weight: 600; }
+  .ipl-r-replace { color: #b54708; font-weight: 600; }
+  .ipl-r-skip { color: #b42318; font-weight: 600; }
+  .ipl-r-same { color: #64748b; font-weight: 600; }
+  .ipl-r-msg { display: block; font-size: .7rem; color: #64748b; font-weight: 400; }
+  .ipl-steps { font-size: .8rem; color: #334155; padding-left: 1.1rem; margin-bottom: .6rem; }
+  .ipl-log-wrap { max-height: 60vh; overflow: auto; }
+  .ipl-log-wrap table { font-size: .8rem; margin: 0; }
+  .ipl-log-wrap thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+</style>
+
+<div class="ipl-page" id="ipl-page"
+     data-can-add="{{ page_perms.add|yesno:'1,0' }}"
+     data-can-edit="{{ page_perms.edit|yesno:'1,0' }}"
+     data-can-delete="{{ page_perms.delete|yesno:'1,0' }}">
+
+  <div class="ipl-head">
+    <div class="ipl-head-icon"><i class="fas fa-tags"></i></div>
+    <div>
+      <div class="ipl-title">Item Price List</div>
+      <div class="ipl-sub">View and manage prices of all items. You can update, export or print the price list.</div>
+    </div>
+    <div class="ipl-head-actions">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="ipl-log-btn">
+        <i class="fas fa-clock-rotate-left me-1"></i>Change Log
+      </button>
+      {% if page_perms.add %}
+      <button type="button" class="btn btn-outline-success btn-sm" id="ipl-upload-btn">
+        <i class="fas fa-file-arrow-up me-1"></i>Upload
+      </button>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="ipl-revise-btn">
+        <i class="fas fa-percent me-1"></i>Bulk Revise
+      </button>
+      <button type="button" class="btn btn-success btn-sm" id="ipl-add-btn">
+        <i class="fas fa-plus me-1"></i>Add Price
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="ipl-filters">
+    <div class="ipl-filter">
+      <span class="ipl-filter-icon" style="--ipl-bg:#e8f1fd;--ipl-fg:#1d6fe0"><i class="fas fa-layer-group"></i></span>
+      <div class="ipl-filter-body">
+        <label for="ipl-f-category">Item Category</label>
+        <select id="ipl-f-category" class="form-select form-select-sm">
+          <option value="">All Categories</option>
+          {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="ipl-filter">
+      <span class="ipl-filter-icon" style="--ipl-bg:#e7f7ee;--ipl-fg:#067647"><i class="fas fa-sitemap"></i></span>
+      <div class="ipl-filter-body">
+        <label for="ipl-f-type">Item Type</label>
+        <select id="ipl-f-type" class="form-select form-select-sm">
+          <option value="">All Types</option>
+          {% for value, label in item_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="ipl-filter">
+      <span class="ipl-filter-icon" style="--ipl-bg:#f1ebfd;--ipl-fg:#6941c6"><i class="fas fa-circle-check"></i></span>
+      <div class="ipl-filter-body">
+        <label for="ipl-f-status">Status</label>
+        <select id="ipl-f-status" class="form-select form-select-sm">
+          <option value="all">All Statuses</option>
+          <option value="active" selected>Active</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="not_priced">Not Priced</option>
+        </select>
+      </div>
+    </div>
+    <div class="ipl-filter">
+      <span class="ipl-filter-icon" style="--ipl-bg:#eef1f5;--ipl-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
+      <div class="ipl-filter-body">
+        <label for="ipl-f-search">Search</label>
+        <input type="search" id="ipl-f-search" class="form-control form-control-sm" placeholder="Search by item code or name...">
+      </div>
+    </div>
+  </div>
+
+  <div class="ipl-card">
+    <table class="table table-hover mb-0 ds-grid" id="ipl-table" style="width:100%">
+      <thead>
+        <tr>
+          <th class="ipl-check"><input type="checkbox" class="form-check-input" id="ipl-check-all" aria-label="Select all items shown"></th>
+          <th>#</th>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>Category</th>
+          <th>Item Type</th>
+          <th>Unit</th>
+          <th class="ds-num">Price (&#8377;)</th>
+          <th class="ds-num">Previous (&#8377;)</th>
+          <th class="ds-num">Change</th>
+          <th>Effective Date</th>
+          <th>Status</th>
+          <th class="ds-mid">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="ipl-toolbar-end" hidden>
+      <span class="ipl-selected" id="ipl-selected"></span>
+      <button type="button" class="btn btn-link btn-sm p-0" id="ipl-clear-selection" hidden>Clear selection</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="ipl-clear">
+        <i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters
+      </button>
+    </div>
+  </div>
+
+  <div class="ipl-foot">
+    <i class="far fa-lightbulb"></i>
+    <span><b>Tip:</b> Use the filters or search to find items quickly. Tick items to revise only those, or export the price list for offline use.</span>
+    <span class="ipl-last"><i class="far fa-clock me-1"></i>Last Updated: <span id="ipl-last">&mdash;</span></span>
+  </div>
 </div>
 
-<div class="row g-4">
-    <div class="text-end mb-3">
-        {% if page_perms.add %}<button
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#priceListFormModal"
-        >
-            <i class="fas fa-plus"></i> Add New Price
-        </button>{% endif %}
-    </div>
-    <!-- Add Modal -->
-    <div class="modal fade" id="priceListFormModal" tabindex="-1" aria-labelledby="priceListFormModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="priceListFormModalLabel">Add Prices</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="price-list-form">
-                        {% csrf_token %}
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label for="pl-date" class="form-label">Date <span class="text-danger">*</span></label>
-                                <input type="date" id="pl-date" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-bordered align-middle mb-0 ds-grid" id="pl-row-table">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Item Description <span class="text-danger">*</span></th>
-                                        <th class="ds-num" style="width: 180px;">Rate <span class="text-danger">*</span></th>
-                                        <th style="width: 110px;">+/-</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Submit</button>
-                        </div>
-                    </form>
-                </div>
+{{ items_json|json_script:"ipl-items" }}
+
+<!-- Add Price -->
+<div class="modal fade" id="priceListFormModal" tabindex="-1" aria-labelledby="priceListFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="priceListFormModalLabel">Add Prices</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="price-list-form">
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <label for="pl-date" class="form-label">Effective Date <span class="text-danger">*</span></label>
+              <input type="date" id="pl-date" class="form-control" required>
             </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 ds-grid" id="pl-row-table">
+              <thead class="table-light">
+                <tr>
+                  <th>Item Description <span class="text-danger">*</span></th>
+                  <th class="ds-num" style="width: 180px;">Rate <span class="text-danger">*</span></th>
+                  <th style="width: 110px;">+/-</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Submit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit one price -->
+<div class="modal fade" id="iplEditModal" tabindex="-1" aria-labelledby="iplEditLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="ipl-edit-form">
+        <div class="modal-header">
+          <h5 class="modal-title" id="iplEditLabel">Edit Price</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-    </div>
-    <!-- List Section -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Item Price List</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered mb-0 ds-grid" id="price-list-table">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Item</th>
-                                <th class="ds-num">Price</th>
-                                <th>Effective Date</th>
-                                <th class="ds-mid">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="price-list-table-body">
-                            <!-- AJAX content will load here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="modal-body">
+          <p class="fw-semibold mb-3" id="ipl-e-item"></p>
+          <div class="mb-3">
+            <label for="ipl-e-price" class="form-label">Price (&#8377;) <span class="text-danger">*</span></label>
+            <input type="number" id="ipl-e-price" class="form-control" step="0.01" min="0.01" required>
+          </div>
+          <div class="mb-1">
+            <label for="ipl-e-date" class="form-label">Effective Date <span class="text-danger">*</span></label>
+            <input type="date" id="ipl-e-date" class="form-control" required>
+          </div>
+          <div class="form-text">The change is recorded in the Change Log with your name.</div>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+      </form>
     </div>
+  </div>
+</div>
+
+<!-- One item's history -->
+<div class="modal fade" id="iplHistoryModal" tabindex="-1" aria-labelledby="iplHistoryLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="iplHistoryLabel">Price History</h5>
+          <div class="small text-muted" id="ipl-h-meta"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ipl-h-prices-pane" type="button" role="tab">Price History</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ipl-h-log-pane" type="button" role="tab">Change Log</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="ipl-h-prices-pane" role="tabpanel">
+            <div class="ipl-log-wrap">
+              <table class="table table-sm table-hover" id="ipl-h-prices">
+                <thead><tr><th>Effective Date</th><th class="text-end">Price (&#8377;)</th><th class="text-end">Change</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="tab-pane fade" id="ipl-h-log-pane" role="tabpanel">
+            <div class="ipl-log-wrap">
+              <table class="table table-sm table-hover" id="ipl-h-log">
+                <thead><tr><th>When</th><th>Action</th><th>Price (&#8377;)</th><th>Effective Date</th><th>By</th><th>Source</th><th>Note</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk revision -->
+<div class="modal fade" id="iplReviseModal" tabindex="-1" aria-labelledby="iplReviseLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="iplReviseLabel">Bulk Price Revision</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small mb-3" id="ipl-rev-scope"></p>
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-2">
+            <label for="ipl-rev-mode" class="form-label">Revise by</label>
+            <select id="ipl-rev-mode" class="form-select form-select-sm ipl-rev-input">
+              <option value="percent">Percentage (%)</option>
+              <option value="amount">Fixed amount (&#8377;)</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label for="ipl-rev-direction" class="form-label">Direction</label>
+            <select id="ipl-rev-direction" class="form-select form-select-sm ipl-rev-input">
+              <option value="increase">Increase</option>
+              <option value="decrease">Decrease</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label for="ipl-rev-value" class="form-label">Value</label>
+            <input type="number" id="ipl-rev-value" class="form-control form-control-sm ipl-rev-input" step="0.01" min="0">
+          </div>
+          <div class="col-6 col-md-2">
+            <label for="ipl-rev-date" class="form-label">Effective Date</label>
+            <input type="date" id="ipl-rev-date" class="form-control form-control-sm ipl-rev-input">
+          </div>
+          <div class="col-12 col-md-3">
+            <label for="ipl-rev-note" class="form-label">Note (kept in the Change Log)</label>
+            <input type="text" id="ipl-rev-note" class="form-control form-control-sm" maxlength="255" placeholder="e.g. Supplier rate revision">
+          </div>
+          <div class="col-12 col-md-1 d-grid">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="ipl-rev-preview">Preview</button>
+          </div>
+        </div>
+        <div class="ipl-summary" id="ipl-rev-summary" tabindex="-1" aria-live="polite"></div>
+        <div class="ipl-preview" id="ipl-rev-wrap" hidden>
+          <table class="table table-sm table-hover" id="ipl-rev-table">
+            <thead><tr><th>Item Code</th><th>Item Name</th><th class="text-end">Current (&#8377;)</th><th class="text-end">New (&#8377;)</th><th class="text-end">Change</th><th>Effective Date</th><th>Result</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ipl-rev-save" disabled>Save revised prices</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload -->
+<div class="modal fade" id="iplUploadModal" tabindex="-1" aria-labelledby="iplUploadLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="iplUploadLabel">Upload Prices</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ol class="ipl-steps">
+          <li>Download the template. It lists every item with its current price.</li>
+          <li>Fill in New Price for the items to change and leave the rest blank. An Effective Date on a row is optional.</li>
+          <li>Upload the file and check the preview before saving.</li>
+        </ol>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-3 d-grid">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'item_price_list_template_data' %}">
+              <i class="fas fa-download me-1"></i>Download template
+            </a>
+          </div>
+          <div class="col-12 col-md-4">
+            <label for="ipl-up-file" class="form-label">Price file (.xlsx or .csv)</label>
+            <input type="file" id="ipl-up-file" class="form-control form-control-sm" accept=".xlsx,.csv">
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="ipl-up-date" class="form-label">Effective Date for rows without one</label>
+            <input type="date" id="ipl-up-date" class="form-control form-control-sm">
+          </div>
+          <div class="col-6 col-md-2 d-grid">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="ipl-up-preview">Preview</button>
+          </div>
+        </div>
+        <div class="ipl-summary" id="ipl-up-summary" tabindex="-1" aria-live="polite"></div>
+        <div class="ipl-preview" id="ipl-up-wrap" hidden>
+          <table class="table table-sm table-hover" id="ipl-up-table">
+            <thead><tr><th>Row</th><th>Item Code</th><th>Item Name</th><th class="text-end">Current (&#8377;)</th><th class="text-end">New (&#8377;)</th><th class="text-end">Change</th><th>Effective Date</th><th>Result</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ipl-up-save" disabled>Save uploaded prices</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Change log, all items -->
+<div class="modal fade" id="iplLogModal" tabindex="-1" aria-labelledby="iplLogLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="iplLogLabel">Price Change Log</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">The latest 500 changes, newest first.</p>
+        <div class="ipl-log-wrap">
+          <table class="table table-sm table-hover" id="ipl-log-table">
+            <thead><tr><th>When</th><th>Item</th><th>Action</th><th>Price (&#8377;)</th><th>Effective Date</th><th>By</th><th>Source</th><th>Note</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-$(document).ready(function () {
+$(function () {
     const csrfToken = "{{ csrf_token }}";
+    const page = document.getElementById("ipl-page");
+    const CAN = {
+        add: page.dataset.canAdd === "1",
+        edit: page.dataset.canEdit === "1",
+        del: page.dataset.canDelete === "1",
+    };
+    const URLS = {
+        overview: "{% url 'item_price_list_overview_data' %}",
+        audit: "{% url 'item_price_list_audit_data' %}",
+        revise: "{% url 'item_price_list_revise_data' %}",
+        upload: "{% url 'item_price_list_upload_data' %}",
+        apply: "{% url 'item_price_list_bulk_create' %}",
+        create: "{% url 'item_price_list_create' %}",
+        history: (id) => `/item-price-list/item/${id}/history/`,
+        entry: (id) => `/item-price-list/${id}/`,
+        remove: (id) => `/item-price-list/${id}/delete/`,
+    };
+    const items = JSON.parse(document.getElementById("ipl-items").textContent);
     const today = localDay();
-    $("#pl-date").val(today);
 
     // escapeHtml() provided globally by main.js
+    const esc = (v) => escapeHtml(v === null || v === undefined ? "" : String(v));
+    const money = (v) => (v === null || v === undefined || v === "")
+        ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dash = '<span class="ipl-muted">&mdash;</span>';
+    const BADGE = { active: "is-active", upcoming: "is-pending", not_priced: "is-inactive", superseded: "is-closed" };
+    const badge = (status, label) => `<span class="ds-badge ${BADGE[status] || "is-info"}">${esc(label)}</span>`;
+    const apiError = (xhr, fallback) => (xhr.responseJSON && xhr.responseJSON.error) || fallback;
+    const jsonHeaders = { "X-CSRFToken": csrfToken };
 
-    const itemOptionsHtml = `<option value="" selected disabled>select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+    function change(pct) {
+        if (pct === null || pct === undefined) return dash;
+        const n = Number(pct);
+        if (n === 0) return '<span class="ipl-muted">0.00%</span>';
+        const cls = n > 0 ? "ipl-up" : "ipl-down";
+        const arrow = n > 0 ? "fa-arrow-up" : "fa-arrow-down";
+        return `<span class="${cls}"><i class="fas ${arrow} me-1"></i>${Math.abs(n).toFixed(2)}%</span>`;
+    }
 
-    // One shared date in the header, then any number of item/rate rows —
-    // all of them saved in a single request, or none of them.
+    // ---- the list ----------------------------------------------------------
+    const selected = new Set();
+    const filters = {
+        category: $("#ipl-f-category"),
+        type: $("#ipl-f-type"),
+        status: $("#ipl-f-status"),
+        search: $("#ipl-f-search"),
+    };
+
+    $.fn.dataTable.ext.search.push(function (settings, _data, index) {
+        if (settings.nTable.id !== "ipl-table") return true;
+        const row = settings.aoData[index]._aData;
+        const category = filters.category.val();
+        const type = filters.type.val();
+        const status = filters.status.val();
+        if (category && String(row.category_id) !== category) return false;
+        if (type && row.item_type !== type) return false;
+        if (status && status !== "all" && row.status !== status) return false;
+        return true;
+    });
+
+    function actions(row) {
+        const parts = [`<button type="button" class="ipl-act view" data-act="history" data-item="${row.item}" title="View price history" aria-label="View price history"><i class="fas fa-eye"></i></button>`];
+        if (CAN.edit && row.entry) {
+            parts.push(`<button type="button" class="ipl-act edit" data-act="edit" data-entry="${row.entry}" data-item="${row.item}" data-price="${esc(row.price)}" data-date="${esc(row.effective_date)}" title="Edit this price" aria-label="Edit this price"><i class="fas fa-pen"></i></button>`);
+        }
+        if (CAN.add) {
+            parts.push(`<button type="button" class="ipl-act copy" data-act="copy" data-item="${row.item}" data-price="${esc(row.price || "")}" title="Add a new dated price for this item" aria-label="Add a new dated price"><i class="fas fa-copy"></i></button>`);
+        }
+        if (CAN.del && row.entry) {
+            parts.push(`<button type="button" class="ipl-act del" data-act="delete" data-entry="${row.entry}" data-item="${row.item}" title="Delete this price" aria-label="Delete this price"><i class="fas fa-trash"></i></button>`);
+        }
+        return `<div class="ipl-actions">${parts.join("")}</div>`;
+    }
+
+    const EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
+    const numeric = (d, type, blankSort) => d === null ? (type === "sort" || type === "type" ? blankSort : "") : d;
+
+    const table = $("#ipl-table").DataTable({
+        data: [],
+        dom: "<'ipl-dt-top'<'ipl-dt-length'l><'ipl-dt-buttons'B><'ipl-dt-end'>><'ipl-table-wrap'tr><'ipl-dt-bottom'ip>",
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+        order: [[2, "asc"]],
+        language: {
+            lengthMenu: "Show _MENU_",
+            emptyTable: "No items match these filters",
+            zeroRecords: "No items match these filters",
+        },
+        buttons: [
+            { extend: "copy", exportOptions: EXPORT },
+            { extend: "csv", title: "Item Price List", exportOptions: EXPORT },
+            { extend: "excel", title: "Item Price List", exportOptions: EXPORT },
+            { extend: "pdf", title: "Item Price List", orientation: "landscape", exportOptions: EXPORT },
+            { extend: "print", title: "Item Price List", exportOptions: EXPORT },
+            { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
+        ],
+        columns: [
+            {
+                data: null, orderable: false, searchable: false, className: "ipl-check no-export no-colvis",
+                render: (_d, type, row) => type === "display"
+                    ? `<input type="checkbox" class="form-check-input ipl-row-check" data-item="${row.item}" ${selected.has(row.item) ? "checked" : ""} aria-label="Select ${esc(row.item_code)}">`
+                    : "",
+            },
+            { data: null, orderable: false, searchable: false, className: "no-export", defaultContent: "" },
+            { data: "item_code", className: "ipl-code" },
+            { data: "item_name", render: (d, type) => type === "display" ? `<span class="ipl-name">${esc(d)}</span>` : d },
+            { data: "category" },
+            { data: "item_type" },
+            { data: "unit", defaultContent: "" },
+            {
+                data: "price", className: "ipl-price",
+                render: (d, type, row) => {
+                    if (type !== "display") return numeric(d, type, -1);
+                    if (d === null) return dash;
+                    const next = row.next_price !== null
+                        ? `<span class="ipl-next" title="Price already set for a later date">&rarr; ${money(row.next_price)} from ${esc(row.next_date)}</span>`
+                        : "";
+                    return money(d) + next;
+                },
+            },
+            {
+                data: "previous_price", className: "ipl-num",
+                render: (d, type) => type === "display" ? (d === null ? dash : money(d)) : numeric(d, type, -1),
+            },
+            {
+                data: "change_pct", className: "ipl-num",
+                render: (d, type) => {
+                    if (type === "display") return change(d);
+                    if (d === null) return type === "sort" || type === "type" ? -1e9 : "";
+                    return type === "export" ? `${d}%` : d;
+                },
+            },
+            { data: "effective_date", render: (d, type) => d === null ? (type === "display" ? dash : "") : d },
+            { data: "status", render: (d, type, row) => type === "display" ? badge(d, row.status_label) : row.status_label },
+            {
+                data: null, orderable: false, searchable: false, className: "no-export no-colvis",
+                render: (_d, type, row) => type === "display" ? actions(row) : "",
+            },
+        ],
+    });
+
+    $(".ipl-dt-end").append($("#ipl-toolbar-end").children());
+
+    table.on("draw", function () {
+        const info = table.page.info();
+        table.column(1, { search: "applied", order: "applied", page: "current" }).nodes()
+            .each((cell, i) => { cell.textContent = info.start + i + 1; });
+        syncCheckAll();
+    });
+
+    function updateCounts(counts) {
+        const labels = { all: "All Statuses", active: "Active", upcoming: "Upcoming", not_priced: "Not Priced" };
+        Object.keys(labels).forEach((key) => {
+            filters.status.find(`option[value="${key}"]`).text(`${labels[key]} (${counts[key] || 0})`);
+        });
+        filters.status.trigger("change.select2");
+    }
+
+    function load() {
+        return $.getJSON(URLS.overview)
+            .done(function (res) {
+                const known = new Set(res.rows.map((r) => r.item));
+                [...selected].forEach((id) => { if (!known.has(id)) selected.delete(id); });
+                table.clear().rows.add(res.rows).draw(false);
+                $("#ipl-last").text(res.last_updated || "—");
+                updateCounts(res.counts);
+                selectionChanged();
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the price list.")));
+    }
+
+    filters.category.on("change", () => table.draw());
+    filters.type.on("change", () => table.draw());
+    filters.status.on("change", () => table.draw());
+    filters.search.on("input", () => table.search(filters.search.val()).draw());
+
+    $("#ipl-clear").on("click", function () {
+        filters.category.val("").trigger("change");
+        filters.type.val("").trigger("change");
+        filters.status.val("all").trigger("change");
+        filters.search.val("");
+        table.search("").draw();
+    });
+
+    // ---- selection ---------------------------------------------------------
+    function syncCheckAll() {
+        const shown = table.rows({ search: "applied" }).data().toArray();
+        const picked = shown.filter((r) => selected.has(r.item)).length;
+        const box = document.getElementById("ipl-check-all");
+        box.checked = shown.length > 0 && picked === shown.length;
+        box.indeterminate = picked > 0 && picked < shown.length;
+    }
+
+    function selectionChanged() {
+        const n = selected.size;
+        $("#ipl-selected").text(n ? `${n} selected` : "");
+        $("#ipl-clear-selection").prop("hidden", n === 0);
+        syncCheckAll();
+    }
+
+    $("#ipl-table tbody").on("change", ".ipl-row-check", function () {
+        const id = Number(this.dataset.item);
+        if (this.checked) { selected.add(id); } else { selected.delete(id); }
+        selectionChanged();
+    });
+
+    $("#ipl-check-all").on("change", function () {
+        const on = this.checked;
+        table.rows({ search: "applied" }).data().each((r) => { if (on) { selected.add(r.item); } else { selected.delete(r.item); } });
+        table.rows({ search: "applied" }).nodes().to$().find(".ipl-row-check").prop("checked", on);
+        selectionChanged();
+    });
+
+    $("#ipl-clear-selection").on("click", function () {
+        selected.clear();
+        table.rows().nodes().to$().find(".ipl-row-check").prop("checked", false);
+        selectionChanged();
+    });
+
+    // ---- row actions -------------------------------------------------------
+    let historyItem = null;
+
+    $(document).on("click", ".ipl-act", function () {
+        const d = this.dataset;
+        if (d.act === "history") openHistory(Number(d.item));
+        if (d.act === "edit") openEdit(Number(d.entry), Number(d.item), d.price, d.date);
+        if (d.act === "copy") openAdd({ item: d.item, price: d.price });
+        if (d.act === "delete") deleteEntry(Number(d.entry), Number(d.item));
+    });
+
+    const ACTION_BADGE = { create: "is-active", update: "is-pending", delete: "is-cancelled" };
+
+    function pair(before, after, fmt) {
+        if (before === null && after === null) return dash;
+        if (before === null) return fmt(after);
+        if (after === null) return `<s class="ipl-muted">${fmt(before)}</s>`;
+        if (before === after) return fmt(after);
+        return `${fmt(before)} <i class="fas fa-arrow-right mx-1 ipl-muted"></i> ${fmt(after)}`;
+    }
+
+    function logRows(list, withItem) {
+        if (!list.length) {
+            return `<tr><td colspan="${withItem ? 8 : 7}" class="text-center text-muted">No changes recorded yet</td></tr>`;
+        }
+        return list.map((l) => `<tr>
+            <td class="text-nowrap">${esc(l.when)}</td>
+            ${withItem ? `<td>${esc(l.item)}</td>` : ""}
+            <td><span class="ds-badge ${ACTION_BADGE[l.action] || "is-info"}">${esc(l.action_label)}</span></td>
+            <td class="text-nowrap">${pair(l.old_price, l.new_price, money)}</td>
+            <td class="text-nowrap">${pair(l.old_date, l.new_date, esc)}</td>
+            <td>${esc(l.by)}</td>
+            <td>${esc(l.source)}</td>
+            <td>${esc(l.note)}</td>
+        </tr>`).join("");
+    }
+
+    function openHistory(itemId) {
+        $.getJSON(URLS.history(itemId))
+            .done(function (res) {
+                const it = res.item;
+                historyItem = itemId;
+                $("#iplHistoryLabel").text(`${it.item_code} - ${it.item_name}`);
+                $("#ipl-h-meta").text([it.category, it.item_type, it.unit].filter(Boolean).join(" · "));
+                const body = res.entries.map((e) => {
+                    const buttons = [];
+                    if (CAN.edit) buttons.push(`<button type="button" class="ipl-act edit" data-act="edit" data-entry="${e.id}" data-item="${itemId}" data-price="${esc(e.price)}" data-date="${esc(e.effective_date)}" title="Edit this price" aria-label="Edit this price"><i class="fas fa-pen"></i></button>`);
+                    if (CAN.del) buttons.push(`<button type="button" class="ipl-act del" data-act="delete" data-entry="${e.id}" data-item="${itemId}" title="Delete this price" aria-label="Delete this price"><i class="fas fa-trash"></i></button>`);
+                    return `<tr>
+                        <td>${esc(e.effective_date)}</td>
+                        <td class="text-end fw-semibold">${money(e.price)}</td>
+                        <td class="text-end">${change(e.change_pct)}</td>
+                        <td>${badge(e.status, e.status_label)}</td>
+                        <td><div class="ipl-actions">${buttons.join("") || dash}</div></td>
+                    </tr>`;
+                }).join("") || '<tr><td colspan="5" class="text-center text-muted">No prices recorded for this item yet</td></tr>';
+                $("#ipl-h-prices tbody").html(body);
+                $("#ipl-h-log tbody").html(logRows(res.audit, false));
+                $("#iplHistoryModal").modal("show");
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the price history.")));
+    }
+
+    function afterChange(itemId) {
+        load();
+        if (historyItem === itemId && $("#iplHistoryModal").hasClass("show")) openHistory(itemId);
+    }
+
+    let editing = null;
+    function openEdit(entryId, itemId, price, date) {
+        editing = { entry: entryId, item: itemId };
+        const it = items.find((i) => i.id === itemId);
+        $("#ipl-e-item").text(it ? it.label : "");
+        $("#ipl-e-price").val(price);
+        $("#ipl-e-date").val(date);
+        $("#iplEditModal").modal("show");
+    }
+
+    $("#ipl-edit-form").on("submit", function (e) {
+        e.preventDefault();
+        if (!editing) return;
+        const target = editing;
+        $.ajax({
+            url: URLS.entry(target.entry),
+            type: "PUT",
+            headers: jsonHeaders,
+            contentType: "application/json",
+            data: JSON.stringify({ price: $("#ipl-e-price").val(), effective_date: $("#ipl-e-date").val() }),
+        })
+            .done(function () {
+                $("#iplEditModal").modal("hide");
+                window.showToast("success", "Price updated.");
+                afterChange(target.item);
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not update the price.")));
+    });
+
+    async function deleteEntry(entryId, itemId) {
+        if (!(await window.bimsConfirm("Delete this price? New transfers will then take the price in force before it."))) return;
+        $.ajax({ url: URLS.remove(entryId), method: "DELETE", headers: jsonHeaders })
+            .done(function () {
+                window.showToast("success", "Price deleted.");
+                afterChange(itemId);
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not delete the price.")));
+    }
+
+    // ---- add prices (one date, many rows) ----------------------------------
+    const itemOptionsHtml = '<option value="" selected disabled>select</option>'
+        + items.map((i) => `<option value="${i.id}">${esc(i.label)}</option>`).join("");
+
     function plRow() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td><select class="form-select pl-item" required>${itemOptionsHtml}</select></td>
-            <td><input type="number" class="form-control pl-price" step="0.01" min="0" required></td>
+            <td><input type="number" class="form-control pl-price" step="0.01" min="0.01" required></td>
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-primary pl-add-row me-1" title="Add Row"><i class="fas fa-plus"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-danger pl-remove-row" title="Delete"><i class="fas fa-trash"></i></button>
@@ -115,8 +795,8 @@ $(document).ready(function () {
         return tr;
     }
 
-    // Only the last row offers "+"; the sole remaining row can't be deleted,
-    // or there'd be no "+" left to add one back.
+    // Only the last row offers "+"; the sole remaining row cannot be deleted,
+    // or there would be no "+" left to add one back.
     function refreshPlRowButtons() {
         const rows = document.querySelectorAll("#pl-row-table tbody tr");
         rows.forEach((tr, i) => {
@@ -131,6 +811,16 @@ $(document).ready(function () {
         $("#pl-date").val(today);
     }
 
+    function openAdd(prefill) {
+        resetPlForm();
+        if (prefill) {
+            const tr = document.querySelector("#pl-row-table tbody tr");
+            $(tr.querySelector(".pl-item")).val(String(prefill.item)).trigger("change");
+            tr.querySelector(".pl-price").value = prefill.price || "";
+        }
+        $("#priceListFormModal").modal("show");
+    }
+
     document.getElementById("pl-row-table").addEventListener("click", function (e) {
         if (e.target.closest(".pl-add-row")) { plRow(); }
         const remove = e.target.closest(".pl-remove-row");
@@ -139,163 +829,200 @@ $(document).ready(function () {
 
     resetPlForm();
     $("#priceListFormModal").on("hidden.bs.modal", resetPlForm);
-
-    function loadPriceList() {
-        $.ajax({
-            url: "{% url 'item_price_list_list' %}",
-            type: "GET",
-            success: function (response) {
-                const table = $("#price-list-table");
-                const tableBody = $("#price-list-table-body");
-
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
-                tableBody.empty();
-                $(".price-list-edit-modal").remove();
-
-                response.forEach((entry) => {
-                    const modalId = `editPriceListModal-${entry.id}`;
-                    const formId = `edit-price-list-form-${entry.id}`;
-                    const tableRow = `
-                        <tr>
-                            <td>${escapeHtml(entry.item_label)}</td>
-                            <td>${Number(entry.price).toFixed(2)}</td>
-                            <td>${escapeHtml(entry.effective_date)}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm"
-                                    data-bs-toggle="modal" data-bs-target="#${modalId}" title="Edit">
-                                    <i class="fas fa-pen"></i>
-                                </button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-price-list"
-                                    data-id="${entry.id}" title="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>{% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-
-                    const modal = `
-                        <div class="modal fade price-list-edit-modal" id="${modalId}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Price</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form id="${formId}">
-                                        <div class="modal-body">
-                                            <div class="mb-3">
-                                                <label class="form-label">Item</label>
-                                                <select class="form-select" name="pl-item" required>${itemOptionsHtml}</select>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Price</label>
-                                                <input type="number" class="form-control" name="pl-price" value="${entry.price}" step="0.01" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Effective Date</label>
-                                                <input type="date" class="form-control" name="pl-date" value="${entry.effective_date}" required>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                            <button type="submit" class="btn btn-primary">Update</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    tableBody.append(tableRow);
-                    $("body").append(modal);
-                    $(`#${modalId} [name="pl-item"]`).val(entry.item);
-
-                    $(`#${formId}`).off("submit").on("submit", function (e) {
-                        e.preventDefault();
-                        const jsonData = {
-                            item: $(`#${formId} [name="pl-item"]`).val(),
-                            price: parseFloat($(`#${formId} [name="pl-price"]`).val()) || 0,
-                            effective_date: $(`#${formId} [name="pl-date"]`).val(),
-                        };
-                        $.ajax({
-                            url: `/item-price-list/${entry.id}/`,
-                            type: "PUT",
-                            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
-                            data: JSON.stringify(jsonData),
-                            success: function () {
-                                loadPriceList();
-                                $(`#${modalId}`).modal("hide");
-                                window.showToast('success', "Price list entry updated successfully!");
-                            },
-                            error: function (xhr) {
-                                window.showToast('danger', xhr.responseJSON?.error || "Failed to update entry.");
-                            },
-                        });
-                    });
-                });
-
-                table.DataTable();
-            },
-            error: function (xhr, status, error) {
-                console.error(`Failed to load price list: ${error}`);
-            },
-        });
-    }
-
-    loadPriceList();
+    $("#ipl-add-btn").on("click", () => openAdd(null));
 
     $("#price-list-form").on("submit", function (event) {
         event.preventDefault();
-
         const rows = [...document.querySelectorAll("#pl-row-table tbody tr")].map((tr) => ({
             item: tr.querySelector(".pl-item").value,
             price: parseFloat(tr.querySelector(".pl-price").value) || 0,
         }));
-
         const chosen = rows.map((r) => r.item);
         if (new Set(chosen).size !== chosen.length) {
-            window.showToast('danger', "The same item appears on more than one row.");
+            window.showToast("danger", "The same item appears on more than one row.");
             return;
         }
-
         $.ajax({
-            url: "{% url 'item_price_list_create' %}",
+            url: URLS.create,
             method: "POST",
-            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
-            data: JSON.stringify({
-                effective_date: $("#pl-date").val(),
-                rows: rows,
-            }),
-            success: function (response) {
+            headers: jsonHeaders,
+            contentType: "application/json",
+            data: JSON.stringify({ effective_date: $("#pl-date").val(), rows: rows }),
+        })
+            .done(function (response) {
                 $("#priceListFormModal").modal("hide");
-                loadPriceList();
-                window.showToast('success', response.message || "Price list entries added successfully!");
-            },
-            error: function (xhr) {
-                window.showToast('danger', xhr.responseJSON?.error || "An error occurred while adding the entry.");
-            },
-        });
+                load();
+                window.showToast("success", response.message || "Prices added.");
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not add the prices.")));
     });
 
-    $(document).on("click", ".delete-price-list", async function () {
-        const id = $(this).data("id");
-        if (!(await window.bimsConfirm("Are you sure you want to delete this price list entry?"))) return;
+    // ---- previews shared by bulk revision and upload -----------------------
+    const RESULT = {
+        create: ["New price", "ipl-r-create"],
+        replace: ["Replaces same-date price", "ipl-r-replace"],
+        skip: ["Skipped", "ipl-r-skip"],
+        error: ["Error", "ipl-r-skip"],
+        unchanged: ["No change", "ipl-r-same"],
+    };
+
+    function renderPreview(prefix, res, withRow) {
+        const body = res.rows.map((r) => {
+            const [label, cls] = RESULT[r.action] || [r.action, ""];
+            return `<tr>
+                ${withRow ? `<td>${esc(r.row)}</td>` : ""}
+                <td class="ipl-code">${esc(r.item_code)}</td>
+                <td>${esc(r.item_name)}</td>
+                <td class="ipl-num">${r.current_price === null ? dash : money(r.current_price)}</td>
+                <td class="ipl-num fw-semibold">${r.new_price === null ? dash : money(r.new_price)}</td>
+                <td class="ipl-num">${change(r.change_pct)}</td>
+                <td>${r.effective_date ? esc(r.effective_date) : dash}</td>
+                <td><span class="${cls}">${esc(label)}</span>${r.message ? `<span class="ipl-r-msg">${esc(r.message)}</span>` : ""}</td>
+            </tr>`;
+        }).join("");
+        $(`${prefix}-table tbody`).html(body);
+        $(`${prefix}-wrap`).prop("hidden", false);
+
+        const c = res.counts;
+        const saving = (c.create || 0) + (c.replace || 0);
+        const parts = [];
+        if (c.create) parts.push(`${c.create} new`);
+        if (c.replace) parts.push(`${c.replace} replacing a same-date price`);
+        if (c.unchanged) parts.push(`${c.unchanged} unchanged`);
+        if (c.skip) parts.push(`${c.skip} skipped`);
+        if (c.error) parts.push(`${c.error} with errors (not saved)`);
+        $(`${prefix}-summary`).text(parts.join(" · "));
+        $(`${prefix}-save`).prop("disabled", saving === 0)
+            .text(saving ? `Save ${saving} price${saving === 1 ? "" : "s"}` : "Nothing to save");
+        // Keep focus inside the dialog once the preview is drawn; left on the
+        // page body, Escape no longer reaches the dialog to close it.
+        document.querySelector(`${prefix}-summary`).focus();
+    }
+
+    function clearPreview(prefix) {
+        $(`${prefix}-table tbody`).empty();
+        $(`${prefix}-wrap`).prop("hidden", true);
+        $(`${prefix}-summary`).text("");
+        $(`${prefix}-save`).prop("disabled", true).text("Save prices");
+    }
+
+    function applyRows(list, source, note, modal, button) {
+        const rows = list.filter((r) => r.action === "create" || r.action === "replace")
+            .map((r) => ({ item: r.item, price: r.new_price, effective_date: r.effective_date }));
+        if (!rows.length) return;
+        $(button).prop("disabled", true);
         $.ajax({
-            url: `/item-price-list/${id}/delete/`,
-            method: "DELETE",
-            headers: { "X-CSRFToken": csrfToken },
-            success: function () {
-                loadPriceList();
-                window.showToast('success', "Price list entry deleted successfully!");
-            },
-            error: function (xhr) {
-                window.showToast('danger', xhr.responseJSON?.error || "An error occurred while deleting the entry.");
-            },
-        });
+            url: URLS.apply,
+            method: "POST",
+            headers: jsonHeaders,
+            contentType: "application/json",
+            data: JSON.stringify({ rows: rows, source: source, note: note }),
+        })
+            .done(function (res) {
+                $(modal).modal("hide");
+                window.showToast("success", res.message || "Prices saved.");
+                selected.clear();
+                load();
+            })
+            .fail(function (xhr) {
+                window.showToast("danger", apiError(xhr, "Could not save the prices."));
+                $(button).prop("disabled", false);
+            });
+    }
+
+    // ---- bulk revision -----------------------------------------------------
+    let reviseIds = [];
+    let reviseRows = [];
+
+    $("#ipl-revise-btn").on("click", function () {
+        let text;
+        if (selected.size) {
+            reviseIds = [...selected];
+            text = `${reviseIds.length} selected item${reviseIds.length === 1 ? "" : "s"}`;
+        } else {
+            reviseIds = table.rows({ search: "applied" }).data().toArray().map((r) => r.item);
+            text = `${reviseIds.length} item${reviseIds.length === 1 ? "" : "s"} shown by the current filters`;
+        }
+        if (!reviseIds.length) {
+            window.showToast("danger", "No items to revise. Tick items in the list or change the filters.");
+            return;
+        }
+        $("#ipl-rev-scope").text(`Revising ${text}. Each new price is worked from the item's price in force on the effective date. Tick items in the list first to revise only those.`);
+        $("#ipl-rev-date").val(today);
+        $("#ipl-rev-value").val("");
+        $("#ipl-rev-note").val("");
+        reviseRows = [];
+        clearPreview("#ipl-rev");
+        $("#iplReviseModal").modal("show");
     });
+
+    $(".ipl-rev-input").on("change input", function () { reviseRows = []; clearPreview("#ipl-rev"); });
+
+    $("#ipl-rev-preview").on("click", function () {
+        const raw = parseFloat($("#ipl-rev-value").val());
+        if (!(raw > 0)) {
+            window.showToast("danger", "Enter the percentage or amount to revise by.");
+            return;
+        }
+        const value = $("#ipl-rev-direction").val() === "decrease" ? -raw : raw;
+        $.ajax({
+            url: URLS.revise,
+            method: "POST",
+            headers: jsonHeaders,
+            contentType: "application/json",
+            data: JSON.stringify({ items: reviseIds, mode: $("#ipl-rev-mode").val(), value: value, effective_date: $("#ipl-rev-date").val() }),
+        })
+            .done(function (res) { reviseRows = res.rows; renderPreview("#ipl-rev", res, false); })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not preview the revision.")));
+    });
+
+    $("#ipl-rev-save").on("click", function () {
+        applyRows(reviseRows, "bulk", $("#ipl-rev-note").val(), "#iplReviseModal", this);
+    });
+
+    // ---- upload ------------------------------------------------------------
+    let uploadRows = [];
+
+    $("#ipl-upload-btn").on("click", function () {
+        $("#ipl-up-file").val("");
+        $("#ipl-up-date").val(today);
+        uploadRows = [];
+        clearPreview("#ipl-up");
+        $("#iplUploadModal").modal("show");
+    });
+
+    $("#ipl-up-file, #ipl-up-date").on("change", function () { uploadRows = []; clearPreview("#ipl-up"); });
+
+    $("#ipl-up-preview").on("click", function () {
+        const file = document.getElementById("ipl-up-file").files[0];
+        if (!file) {
+            window.showToast("danger", "Choose the filled-in template (.xlsx or .csv) first.");
+            return;
+        }
+        const form = new FormData();
+        form.append("file", file);
+        form.append("effective_date", $("#ipl-up-date").val());
+        $.ajax({ url: URLS.upload, method: "POST", headers: jsonHeaders, data: form, processData: false, contentType: false })
+            .done(function (res) { uploadRows = res.rows; renderPreview("#ipl-up", res, true); })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not read the file.")));
+    });
+
+    $("#ipl-up-save").on("click", function () {
+        const file = document.getElementById("ipl-up-file").files[0];
+        applyRows(uploadRows, "upload", file ? `Uploaded from ${file.name}` : "", "#iplUploadModal", this);
+    });
+
+    // ---- change log --------------------------------------------------------
+    $("#ipl-log-btn").on("click", function () {
+        $.getJSON(URLS.audit)
+            .done(function (res) {
+                $("#ipl-log-table tbody").html(logRows(res.rows, true));
+                $("#iplLogModal").modal("show");
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the change log.")));
+    });
+
+    load();
 });
 </script>
 {% endblock %}

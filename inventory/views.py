@@ -76,7 +76,11 @@ def item_category(request):
 @login_required
 def item_price_list(request):
     items = Item.objects.order_by('item_code')
-    return render(request, 'item_price_list.html', {'items': items})
+    return render(request, 'item_price_list.html', {
+        'items_json': [{'id': i.id, 'label': f"{i.item_code} - {i.description}"} for i in items],
+        'categories': ItemCategory.objects.order_by('name'),
+        'item_types': Item.TYPE_CHOICES,
+    })
 
 @login_required
 def warehouse(request):
@@ -575,7 +579,9 @@ class ItemPriceListAPI(View):
 
         try:
             with transaction.atomic():
-                created = ItemPriceList.objects.bulk_create(entries)
+                for entry in entries:
+                    entry.save()
+                created = entries
         except IntegrityError:
             return JsonResponse({"error": "This item already has a price entry for that date"}, status=400)
         return JsonResponse({
@@ -618,6 +624,132 @@ class ItemPriceListAPI(View):
 
         entry.delete()
         return JsonResponse({"message": "Price list entry deleted"})
+
+
+# --- Item Price List: current prices, history, bulk revision, upload ---------
+
+
+def _price_list_json(request):
+    try:
+        return json.loads(request.body or b"{}"), None
+    except json.JSONDecodeError:
+        return None, JsonResponse({"error": "Invalid JSON"}, status=400)
+
+
+@login_required
+def item_price_list_overview(request):
+    """Every item once, with the price in force today: the page's main table."""
+    from inventory.services.price_list import last_price_change, price_overview
+
+    rows = price_overview(category=request.GET.get("category"),
+                          item_type=request.GET.get("item_type"),
+                          search=request.GET.get("search"))
+    counts = {"active": 0, "upcoming": 0, "not_priced": 0, "all": len(rows)}
+    for row in rows:
+        counts[row["status"]] += 1
+    status = (request.GET.get("status") or "").strip()
+    if status and status != "all":
+        rows = [row for row in rows if row["status"] == status]
+    last = last_price_change()
+    return JsonResponse({
+        "today": timezone.localdate().isoformat(),
+        "rows": rows,
+        "counts": counts,
+        "last_updated": last.strftime("%d %b %Y %I:%M %p") if last else None,
+    })
+
+
+@login_required
+def item_price_list_history(request, item_id):
+    from inventory.services.price_list import item_price_history
+
+    item = get_object_or_404(
+        Item.objects.select_related("category", "storage_uom", "consumption_uom"), id=item_id)
+    return JsonResponse(item_price_history(item))
+
+
+@login_required
+def item_price_list_audit(request):
+    from inventory.services.price_list import audit_rows
+
+    return JsonResponse({"rows": audit_rows(item_id=request.GET.get("item"))})
+
+
+@login_required
+def item_price_list_revise_preview(request):
+    """What a bulk revision would set, item by item. Saves nothing."""
+    from inventory.services.price_list import PriceRowError, revise_preview
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    data, error = _price_list_json(request)
+    if error:
+        return error
+    try:
+        return JsonResponse(revise_preview(data.get("items"), data.get("mode"),
+                                           data.get("value"), data.get("effective_date")))
+    except PriceRowError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+
+@login_required
+def item_price_list_upload_preview(request):
+    """What an uploaded price file would set, row by row. Saves nothing."""
+    from inventory.services.price_list import PriceRowError, parse_price_upload
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    upload = request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"error": "Choose a file to upload."}, status=400)
+    try:
+        return JsonResponse(parse_price_upload(upload, default_date=request.POST.get("effective_date")))
+    except PriceRowError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+
+@login_required
+def item_price_list_apply(request):
+    """Save the rows of a previewed bulk revision or upload, all or none.
+
+    Adding a dated price needs Add on the Item Price List (this url's own
+    right); changing a price already set for that date also needs Edit."""
+    from inventory.price_audit import SOURCE_BULK, SOURCE_UPLOAD
+    from inventory.services.price_list import PriceRowError, apply_price_rows
+    from user.access import user_can
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    data, error = _price_list_json(request)
+    if error:
+        return error
+    source = SOURCE_UPLOAD if data.get("source") == "upload" else SOURCE_BULK
+    try:
+        result = apply_price_rows(
+            data.get("rows"), source=source, note=str(data.get("note") or ""),
+            can_replace=user_can(request.user, "item_price_list", "edit"))
+    except PriceRowError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    saved = result["created"] + result["updated"]
+    message = f"{saved} price{'' if saved == 1 else 's'} saved"
+    if result["updated"]:
+        message += f" ({result['updated']} replaced a price already set for that date)"
+    return JsonResponse({"message": message, **result}, status=201)
+
+
+@login_required
+def item_price_list_template(request):
+    """Every item with its current price and an empty New Price column, to
+    fill in and upload."""
+    from django.http import HttpResponse
+
+    from inventory.services.price_list import price_template_workbook
+
+    response = HttpResponse(
+        price_template_workbook(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="item_price_list_template.xlsx"'
+    return response
 
 
 @login_required

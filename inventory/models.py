@@ -1,6 +1,7 @@
 import re
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -267,6 +268,43 @@ class ItemPriceList(models.Model):
 
     def __str__(self):
         return f"{self.item} - {self.price} (from {self.effective_date})"
+
+
+class ItemPriceListAudit(models.Model):
+    """One change to an Item Price List entry: who made it, the price and date
+    before and after, and where it was made from.
+
+    Written by the receivers in inventory/price_audit.py, so it is kept however
+    the change arrives: the price list page, a bulk revision, an upload, the
+    mobile API or the admin. The entry and item are held as plain ids with the
+    item's name copied in, so the record outlives a deleted price or item."""
+
+    ACTION_CHOICES = [
+        ('create', 'Created'),
+        ('update', 'Updated'),
+        ('delete', 'Deleted'),
+    ]
+
+    price_entry_ref = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    item_ref = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    item_label = models.CharField(max_length=255, blank=True)
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    old_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    new_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    old_effective_date = models.DateField(null=True, blank=True)
+    new_effective_date = models.DateField(null=True, blank=True)
+    source = models.CharField(max_length=30, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                             null=True, blank=True, related_name='+')
+    user_label = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f"{self.get_action_display()} {self.item_label} at {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class StockTransfer(models.Model):
