@@ -673,9 +673,23 @@ def item_price_list_history(request, item_id):
 
 @login_required
 def item_price_list_audit(request):
-    from inventory.services.price_list import audit_rows
+    from inventory.services.price_list import audit_filter_options, audit_rows
 
-    return JsonResponse({"rows": audit_rows(item_id=request.GET.get("item"))})
+    filters = {key: (request.GET.get(key) or "").strip()
+               for key in ("date_from", "date_to", "action", "source", "user")}
+    # The latest 500 on opening; up to 2,000 once narrowed by a filter.
+    limit = 2000 if any(filters.values()) else 500
+    rows = audit_rows(item_id=request.GET.get("item"), limit=limit, **filters)
+    return JsonResponse({"rows": rows, "limited": len(rows) >= limit,
+                         "options": audit_filter_options()})
+
+
+@login_required
+def item_price_list_usage(request, id):
+    """How many saved transfers are dated inside one price's span."""
+    from inventory.services.price_list import price_usage
+
+    return JsonResponse(price_usage(get_object_or_404(ItemPriceList, id=id)))
 
 
 @login_required

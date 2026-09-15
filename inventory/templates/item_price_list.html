@@ -69,6 +69,9 @@
   .ipl-price { font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ipl-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ipl-next { display: block; font-size: .68rem; font-weight: 600; color: #b54708; }
+  .ipl-margin { display: block; font-size: .66rem; font-weight: 600; color: #067647; }
+  .ipl-margin.below { color: #b42318; }
+  .ipl-margin.odd { color: #64748b; font-weight: 500; }
   .ipl-muted { color: #94a3b8; }
   .ipl-undefined { font-size: .72rem; font-weight: 600; color: #b42318; white-space: nowrap; }
   .ipl-up { color: #b42318; font-weight: 600; }
@@ -114,7 +117,10 @@
      data-can-add="{{ page_perms.add|yesno:'1,0' }}"
      data-can-edit="{{ page_perms.edit|yesno:'1,0' }}"
      data-can-delete="{{ page_perms.delete|yesno:'1,0' }}"
-     data-can-toggle="{{ can_toggle_items|yesno:'1,0' }}">
+     data-can-toggle="{{ can_toggle_items|yesno:'1,0' }}"
+     data-co-name="{{ company.name }}"
+     data-co-meta="{{ company.address }}{% if company.gstin %} &middot; GSTIN {{ company.gstin }}{% endif %}{% if company.mobile %} &middot; {{ company.mobile }}{% endif %}"
+     data-by="{{ request.user.get_full_name|default:request.user.username }}">
 
   <div class="ipl-head">
     <div class="ipl-head-icon"><i class="fas fa-tags"></i></div>
@@ -190,11 +196,16 @@
           <th>Effective Date</th>
           <th>Status</th>
           <th class="ds-mid">Actions</th>
+          <th class="ipl-export-extra no-colvis">Margin over Cost %</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
     <div id="ipl-toolbar-end" hidden>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="ipl-below-cost">
+        <label class="form-check-label small" for="ipl-below-cost">Below cost only</label>
+      </div>
       <span class="ipl-selected" id="ipl-selected"></span>
       <button type="button" class="btn btn-link btn-sm p-0" id="ipl-clear-selection" hidden>Clear selection</button>
       <button type="button" class="btn btn-outline-secondary btn-sm" id="ipl-clear">
@@ -270,6 +281,7 @@
             <input type="date" id="ipl-e-date" class="form-control" required>
           </div>
           <div class="form-text">The change is recorded in the Change Log with your name.</div>
+          <div class="alert alert-warning py-2 small mb-0 mt-2" id="ipl-e-usage" hidden></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -339,6 +351,7 @@
             <select id="ipl-rev-mode" class="form-select form-select-sm ipl-rev-input">
               <option value="percent">Percentage (%)</option>
               <option value="amount">Fixed amount (&#8377;)</option>
+              <option value="purchase">Last purchase rate + %</option>
             </select>
           </div>
           <div class="col-6 col-md-2">
@@ -437,7 +450,38 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="small text-muted mb-2">The latest 500 changes, newest first.</p>
+        <div class="row g-2 align-items-end mb-2">
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-from">From</label>
+            <input type="date" id="ipl-log-from" class="form-control form-control-sm ipl-log-f">
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-to">To</label>
+            <input type="date" id="ipl-log-to" class="form-control form-control-sm ipl-log-f">
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-action">Action</label>
+            <select id="ipl-log-action" class="form-select form-select-sm ipl-log-f">
+              <option value="">All</option>
+              <option value="create">Created</option>
+              <option value="update">Updated</option>
+              <option value="delete">Deleted</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-source">Source</label>
+            <select id="ipl-log-source" class="form-select form-select-sm ipl-log-f"><option value="">All</option></select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-user">By</label>
+            <select id="ipl-log-user" class="form-select form-select-sm ipl-log-f"><option value="">Anyone</option></select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-0" for="ipl-log-item">Item</label>
+            <input type="search" id="ipl-log-item" class="form-control form-control-sm" placeholder="Code or name">
+          </div>
+        </div>
+        <p class="small text-muted mb-2" id="ipl-log-note"></p>
         <div class="ipl-log-wrap">
           <table class="table table-sm table-hover" id="ipl-log-table">
             <thead><tr><th>When</th><th>Item</th><th>Action</th><th>Price (&#8377;)</th><th>Effective Date</th><th>By</th><th>Source</th><th>Note</th></tr></thead>
@@ -469,6 +513,7 @@ $(function () {
         history: (id) => `/item-price-list/item/${id}/history/`,
         entry: (id) => `/item-price-list/${id}/`,
         remove: (id) => `/item-price-list/${id}/delete/`,
+        usage: (id) => `/item-price-list/${id}/usage/`,
     };
     // Active items for the Add Prices dropdown, and every item's name for the
     // edit dialog. Both are refreshed from the list data on every load, so an
@@ -487,6 +532,33 @@ $(function () {
     const badge = (status, label) => `<span class="ds-badge ${BADGE[status] || "is-info"}">${esc(label)}</span>`;
     const apiError = (xhr, fallback) => (xhr.responseJSON && xhr.responseJSON.error) || fallback;
     const jsonHeaders = { "X-CSRFToken": csrfToken };
+
+    // Company letterhead for printed and PDF exports, like the other reports.
+    const clean = (text) => (text || "").replace(/\s+/g, " ").trim();
+    const CO = { name: clean(page.dataset.coName), meta: clean(page.dataset.coMeta), by: clean(page.dataset.by) };
+    const stamp = () => `Generated ${new Date().toLocaleString("en-IN")}${CO.by ? " by " + CO.by : ""}`;
+    function printLetterhead(win) {
+        const title = $(win.document.body).find("h1").first();
+        title.css({ fontSize: "16px", margin: "2px 0" })
+            .before(`<div style="font-family:sans-serif"><div style="font-size:15px;font-weight:700">${esc(CO.name)}</div><div style="font-size:11px;color:#555">${esc(CO.meta)}</div></div>`)
+            .after(`<div style="font-family:sans-serif;font-size:10px;color:#555;margin-bottom:8px">${esc(stamp())}</div>`);
+    }
+    function pdfLetterhead(doc) {
+        doc.content.splice(0, 0,
+            { text: CO.name, fontSize: 13, bold: true, margin: [0, 0, 0, 2] },
+            { text: CO.meta, fontSize: 8, color: "#555555", margin: [0, 0, 0, 6] });
+        doc.content.push({ text: stamp(), fontSize: 7, color: "#555555", margin: [0, 8, 0, 0] });
+    }
+    const excelTop = () => [CO.name, CO.meta].filter(Boolean).join(" \u00b7 ");
+
+    function usageText(u) {
+        const parts = [];
+        if (u.stock_transfers) parts.push(`${u.stock_transfers} stock transfer${u.stock_transfers === 1 ? "" : "s"}`);
+        if (u.medicine_transfers) parts.push(`${u.medicine_transfers} medicine transfer line${u.medicine_transfers === 1 ? "" : "s"}`);
+        if (!parts.length) return "";
+        const span = u.until ? `from ${u.from} to before ${u.until}` : `from ${u.from} onwards`;
+        return `${parts.join(" and ")} dated ${span} fall under this price. They keep the rate they were saved with; a transfer entered later for those dates takes the changed price.`;
+    }
 
     function change(pct) {
         if (pct === null || pct === undefined) return dash;
@@ -512,6 +584,7 @@ $(function () {
         const status = filters.status.val();
         if (category && String(row.category_id) !== category) return false;
         if (status && status !== "all" && row.status !== status) return false;
+        if (document.getElementById("ipl-below-cost").checked && !row.below_cost) return false;
         return true;
     });
 
@@ -533,7 +606,11 @@ $(function () {
         return `<div class="ipl-actions">${parts.join("")}</div>`;
     }
 
-    const EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
+    const EXPORT = {
+        columns: (idx, _data, node) => node.classList.contains("ipl-export-extra")
+            || (table.column(idx).visible() && !node.classList.contains("no-export")),
+        orthogonal: "export",
+    };
     const numeric = (d, type, blankSort) => d === null ? (type === "sort" || type === "type" ? blankSort : "") : d;
 
     const table = $("#ipl-table").DataTable({
@@ -551,9 +628,9 @@ $(function () {
         buttons: [
             { extend: "copy", exportOptions: EXPORT },
             { extend: "csv", title: "Item Price List", exportOptions: EXPORT },
-            { extend: "excel", title: "Item Price List", exportOptions: EXPORT },
-            { extend: "pdf", title: "Item Price List", orientation: "landscape", exportOptions: EXPORT },
-            { extend: "print", title: "Item Price List", exportOptions: EXPORT },
+            { extend: "excel", title: "Item Price List", messageTop: excelTop, exportOptions: EXPORT },
+            { extend: "pdf", title: "Item Price List", orientation: "landscape", exportOptions: EXPORT, customize: pdfLetterhead },
+            { extend: "print", title: "Item Price List", exportOptions: EXPORT, customize: printLetterhead },
             { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
         ],
         columns: [
@@ -589,7 +666,16 @@ $(function () {
                     const next = row.next_price !== null
                         ? `<span class="ipl-next" title="Price already set for a later date">&rarr; ${money(row.next_price)} from ${esc(row.next_date)}</span>`
                         : "";
-                    return money(d) + next;
+                    let margin = "";
+                    if (row.cost_note) {
+                        margin = `<span class="ipl-margin odd" title="${esc(row.cost_note)}">Unit mismatch</span>`;
+                    } else if (row.margin_pct !== null) {
+                        const tip = `Last purchase cost ${money(row.cost_rate)} per unit; margin ${row.margin_pct}%`;
+                        margin = row.below_cost
+                            ? `<span class="ipl-margin below" title="${esc(tip)}">Below cost</span>`
+                            : `<span class="ipl-margin" title="${esc(tip)}">+${Number(row.margin_pct).toFixed(2)}%</span>`;
+                    }
+                    return money(d) + next + margin;
                 },
             },
             {
@@ -610,6 +696,8 @@ $(function () {
                 data: null, orderable: false, searchable: false, className: "no-export no-colvis",
                 render: (_d, type, row) => type === "display" ? actions(row) : "",
             },
+            { data: "margin_pct", visible: false, searchable: false, className: "ipl-export-extra no-colvis",
+              render: (d) => d === null ? "" : d },
         ],
     });
 
@@ -649,12 +737,14 @@ $(function () {
 
     filters.category.on("change", () => table.draw());
     filters.status.on("change", () => table.draw());
+    $("#ipl-below-cost").on("change", () => table.draw());
     filters.search.on("input", () => table.search(filters.search.val()).draw());
 
     $("#ipl-clear").on("click", function () {
         filters.category.val("").trigger("change");
         filters.status.val("all").trigger("change");
         filters.search.val("");
+        $("#ipl-below-cost").prop("checked", false);
         table.search("").draw();
     });
 
@@ -781,6 +871,11 @@ $(function () {
         $("#ipl-e-item").text(itemLabels.get(itemId) || "");
         $("#ipl-e-price").val(price);
         $("#ipl-e-date").val(date);
+        $("#ipl-e-usage").prop("hidden", true).text("");
+        $.getJSON(URLS.usage(entryId)).done(function (u) {
+            const text = usageText(u);
+            if (text && editing && editing.entry === entryId) $("#ipl-e-usage").text(text).prop("hidden", false);
+        });
         $("#iplEditModal").modal("show");
     }
 
@@ -804,7 +899,11 @@ $(function () {
     });
 
     async function deleteEntry(entryId, itemId) {
-        if (!(await window.bimsConfirm("Delete this price? New transfers will then take the price in force before it."))) return;
+        let usage = null;
+        try { usage = await $.getJSON(URLS.usage(entryId)); } catch (e) { usage = null; }
+        const extra = usage ? usageText(usage) : "";
+        const question = "Delete this price? New transfers will then take the price in force before it.";
+        if (!(await window.bimsConfirm(extra ? `${question} ${extra}` : question))) return;
         $.ajax({ url: URLS.remove(entryId), method: "DELETE", headers: jsonHeaders })
             .done(function () {
                 window.showToast("success", "Price deleted.");
@@ -995,9 +1094,12 @@ $(function () {
     $(".ipl-rev-input").on("change input", function () { reviseRows = []; clearPreview("#ipl-rev"); });
 
     $("#ipl-rev-preview").on("click", function () {
+        const reviseMode = $("#ipl-rev-mode").val();
         const raw = parseFloat($("#ipl-rev-value").val());
-        if (!(raw > 0)) {
-            window.showToast("danger", "Enter the percentage or amount to revise by.");
+        if (!(raw > 0) && !(reviseMode === "purchase" && raw === 0)) {
+            window.showToast("danger", reviseMode === "purchase"
+                ? "Enter the mark-up % on the last purchase rate (0 to match it)."
+                : "Enter the percentage or amount to revise by.");
             return;
         }
         const value = $("#ipl-rev-direction").val() === "decrease" ? -raw : raw;
@@ -1049,13 +1151,53 @@ $(function () {
     });
 
     // ---- change log --------------------------------------------------------
-    $("#ipl-log-btn").on("click", function () {
-        $.getJSON(URLS.audit)
+    function fillChoices(selector, values, allLabel) {
+        const select = $(selector);
+        const keep = select.val();
+        select.html(`<option value="">${allLabel}</option>`
+            + values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join(""));
+        if (keep && values.includes(keep)) select.val(keep);
+        select.trigger("change.select2");
+    }
+
+    function loadLog() {
+        const params = {
+            date_from: $("#ipl-log-from").val(), date_to: $("#ipl-log-to").val(),
+            action: $("#ipl-log-action").val(), source: $("#ipl-log-source").val(), user: $("#ipl-log-user").val(),
+        };
+        return $.getJSON(URLS.audit, params)
             .done(function (res) {
+                const logTable = $("#ipl-log-table");
+                if ($.fn.DataTable.isDataTable(logTable)) logTable.DataTable().destroy();
                 $("#ipl-log-table tbody").html(logRows(res.rows, true));
-                $("#iplLogModal").modal("show");
+                fillChoices("#ipl-log-source", res.options.sources, "All");
+                fillChoices("#ipl-log-user", res.options.users, "Anyone");
+                const n = res.rows.length;
+                $("#ipl-log-note").text(n
+                    ? `${n} change${n === 1 ? "" : "s"}, newest first${res.limited ? " (the latest only: narrow the filters to reach older ones)" : ""}.`
+                    : "");
+                if (n) {
+                    logTable.DataTable({
+                        dom: "<'ipl-dt-top'B>t", paging: false, info: false, order: [],
+                        buttons: [
+                            { extend: "csv", title: "Item Price Change Log" },
+                            { extend: "excel", title: "Item Price Change Log", messageTop: excelTop },
+                            { extend: "print", title: "Item Price Change Log", customize: printLetterhead },
+                        ],
+                    });
+                    logTable.DataTable().column(1).search($("#ipl-log-item").val() || "").draw();
+                }
             })
             .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the change log.")));
+    }
+
+    $("#ipl-log-btn").on("click", function () {
+        loadLog().done(() => $("#iplLogModal").modal("show"));
+    });
+    $(".ipl-log-f").on("change", () => loadLog());
+    $("#ipl-log-item").on("input", function () {
+        const logTable = $("#ipl-log-table");
+        if ($.fn.DataTable.isDataTable(logTable)) logTable.DataTable().column(1).search(this.value).draw();
     });
 
     // A new item made on the Items page shows up here without a manual

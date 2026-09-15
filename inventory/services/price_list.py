@@ -21,6 +21,9 @@ from inventory.models import Item, ItemPriceList, ItemPriceListAudit
 
 TWO_PLACES = Decimal("0.01")
 MAX_ROWS = 5000
+#: A repricing from the last purchase that moves a price by more than this is
+#: flagged in the preview: usually a unit mismatch rather than a real change.
+LARGE_CHANGE_PCT = 50
 
 STATUS_ACTIVE = "active"
 STATUS_UPCOMING = "upcoming"
@@ -66,6 +69,42 @@ def _unit(item):
     if not uom:
         return ""
     return uom.symbol or uom.name
+
+
+_KG = {"kg", "kgs", "kilogram", "kilograms"}
+_BAG = {"bag", "bags"}
+
+
+def _unit_kind(text):
+    value = (text or "").strip().lower()
+    if value in _KG:
+        return "kg"
+    if value in _BAG:
+        return "bag"
+    return value
+
+
+def purchase_rate_per_price_unit(item, rate, unit):
+    """A purchase rate restated in the unit the item is priced in.
+
+    Bills are typed per whatever unit the supplier sold in, and the price list
+    is per the item's own unit, so a feed bought at 42 per Kg and priced at
+    2,000 per Bag cannot be compared as it stands. Kg and Bag convert through
+    the item's Kg per Bag. None when the two units cannot be matched: a wrong
+    comparison is worse than none. A blank unit on either side is taken as the
+    same unit."""
+    if rate is None:
+        return None
+    rate = Decimal(str(rate))
+    have, want = _unit_kind(unit), _unit_kind(_unit(item))
+    if not have or not want or have == want:
+        return _money(rate)
+    per_bag = Decimal(str(item.kg_per_bag)) if item.kg_per_bag else None
+    if per_bag and have == "kg" and want == "bag":
+        return _money(rate * per_bag)
+    if per_bag and have == "bag" and want == "kg":
+        return _money(rate / per_bag)
+    return None
 
 
 def parse_date(value):
@@ -243,7 +282,21 @@ def price_overview(today=None, category=None, status=None, search=None):
             "status_label": STATUS_LABELS[state],
             "entries": len(entries),
             "last_purchase": purchases.get(item.id),
+            "cost_rate": None,
+            "margin_pct": None,
+            "below_cost": False,
+            "cost_note": "",
         })
+        purchase = purchases.get(item.id)
+        if purchase and shown:
+            cost = purchase_rate_per_price_unit(item, purchase["rate"], purchase["unit"])
+            if cost is None:
+                row["cost_note"] = ("Bought per %s, priced per %s. Set the item's Kg per Bag "
+                                    "or check the units to compare." % (purchase["unit"], _unit(item)))
+            elif cost > 0:
+                row["cost_rate"] = str(cost)
+                row["margin_pct"] = _pct(shown.price, cost)
+                row["below_cost"] = shown.price < cost
         rows.append(row)
 
     if status and status != "all":
@@ -257,10 +310,22 @@ def last_price_change():
     return timezone.localtime(stamp) if stamp else None
 
 
-def audit_rows(item_id=None, limit=500):
+def audit_rows(item_id=None, limit=500, date_from=None, date_to=None,
+               action=None, source=None, user=None):
     logs = ItemPriceListAudit.objects.select_related("user").order_by("-created_at", "-id")
     if item_id and str(item_id).isdigit():
         logs = logs.filter(item_ref=int(item_id))
+    start, end = parse_date(date_from), parse_date(date_to)
+    if start:
+        logs = logs.filter(created_at__date__gte=start)
+    if end:
+        logs = logs.filter(created_at__date__lte=end)
+    if action:
+        logs = logs.filter(action=action)
+    if source:
+        logs = logs.filter(source=source)
+    if user:
+        logs = logs.filter(user_label=user)
     rows = []
     for log in logs[:limit]:
         by = log.user_label
@@ -282,6 +347,40 @@ def audit_rows(item_id=None, limit=500):
             "note": log.note,
         })
     return rows
+
+
+def price_usage(entry):
+    """Saved transfers dated inside this price's span: from its effective
+    date up to the item's next dated price.
+
+    Those transfers keep the rate they were saved with, so changing or
+    deleting the price does not revalue them, but a transfer entered later for
+    one of those dates takes the changed price. Shown before an edit or a
+    delete so that is known first."""
+    from inventory.models import MedicineTransferItem, StockTransfer
+
+    later = (ItemPriceList.objects
+             .filter(item_id=entry.item_id, effective_date__gt=entry.effective_date)
+             .order_by("effective_date").values_list("effective_date", flat=True).first())
+    stock = StockTransfer.objects.filter(item_id=entry.item_id, date__gte=entry.effective_date)
+    medicine = MedicineTransferItem.objects.filter(
+        item_id=entry.item_id, transfer__date__gte=entry.effective_date)
+    if later:
+        stock = stock.filter(date__lt=later)
+        medicine = medicine.filter(transfer__date__lt=later)
+    return {
+        "from": _iso(entry.effective_date),
+        "until": _iso(later),
+        "stock_transfers": stock.count(),
+        "medicine_transfers": medicine.count(),
+    }
+
+
+def audit_filter_options():
+    """The sources and people that appear in the change log, for its filters."""
+    sources = set(ItemPriceListAudit.objects.values_list("source", flat=True))
+    users = set(ItemPriceListAudit.objects.values_list("user_label", flat=True))
+    return {"sources": sorted(s for s in sources if s), "users": sorted(u for u in users if u)}
 
 
 def item_price_history(item, today=None):
@@ -324,15 +423,15 @@ def revise_preview(item_ids, mode, value, effective_date):
 
     Each row is "create" (a new dated price), "replace" (the item already has
     a price on that date) or "skip" with the reason."""
-    if mode not in ("percent", "amount"):
-        raise PriceRowError("Choose whether to revise by a percentage or a fixed amount.")
+    if mode not in ("percent", "amount", "purchase"):
+        raise PriceRowError("Choose a percentage, a fixed amount or the last purchase rate.")
     try:
         value = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         raise PriceRowError("Enter the revision as a number.")
-    if not value.is_finite() or value == 0:
+    if not value.is_finite() or (value == 0 and mode != "purchase"):
         raise PriceRowError("Enter a revision other than zero.")
-    if mode == "percent" and value <= -100:
+    if mode in ("percent", "purchase") and value <= -100:
         raise PriceRowError("A decrease must be less than 100%.")
     on_date = parse_date(effective_date)
     if not on_date:
@@ -346,6 +445,7 @@ def revise_preview(item_ids, mode, value, effective_date):
     items = list(Item.objects.filter(id__in=ids).select_related(
         "category", "storage_uom", "consumption_uom").order_by("item_code"))
     grouped = _entries_by_item(ids)
+    purchases = last_purchase_rates(ids) if mode == "purchase" else {}
     rows = []
     counts = {"create": 0, "replace": 0, "skip": 0}
     for item in items:
@@ -360,23 +460,50 @@ def revise_preview(item_ids, mode, value, effective_date):
             "action": "skip",
             "message": "",
         })
+        new = None
         if not item.is_active:
             row["message"] = "Item is inactive"
+        elif mode == "purchase":
+            # Priced from what was last paid, restated in the item's unit, so
+            # an item with no price yet can be priced this way too.
+            purchase = purchases.get(item.id)
+            cost = (purchase_rate_per_price_unit(item, purchase["rate"], purchase["unit"])
+                    if purchase else None)
+            if purchase is None:
+                row["message"] = "No purchase rate to work from"
+            elif cost is None or cost <= 0:
+                row["message"] = "Bought per %s, priced per %s: units do not match" % (
+                    purchase["unit"] or "unit", _unit(item) or "unit")
+            else:
+                new = _money(cost * (1 + value / 100))
+                row["base_rate"] = str(cost)
+                row["message"] = "From last purchase %s on %s" % (cost, purchase["date"])
         elif base is None:
             row["message"] = "No price in force on %s to revise" % on_date.strftime("%d.%m.%Y")
+        elif mode == "percent":
+            new = _money(base.price * (1 + value / 100))
         else:
-            if mode == "percent":
-                new = _money(base.price * (1 + value / 100))
-            else:
-                new = _money(base.price + value)
+            new = _money(base.price + value)
+
+        if new is not None:
             if new <= 0:
                 row["message"] = "Revised price would be zero or less"
             else:
                 row["new_price"] = str(new)
-                row["change_pct"] = _pct(new, base.price)
-                if base.effective_date == on_date:
+                row["change_pct"] = _pct(new, base.price) if base else None
+                if (mode == "purchase" and row["change_pct"] is not None
+                        and abs(Decimal(row["change_pct"])) > LARGE_CHANGE_PCT):
+                    # A price entered per Kg on an item whose unit is Bag reads
+                    # as 50 times too low next to a per-Kg bill, and repricing
+                    # from it would multiply it by fifty. Said before saving.
+                    row["message"] += ("; a change of over %s%%, check the item's unit"
+                                       % LARGE_CHANGE_PCT)
+                    row["large_change"] = True
+                if base and base.effective_date == on_date:
                     row["action"] = "replace"
-                    row["message"] = "Replaces the price already set for this date"
+                    replaces = "Replaces the price already set for this date"
+                    row["message"] = ("%s; %s" % (row["message"], replaces.lower())
+                                      if row["message"] else replaces)
                 else:
                     row["action"] = "create"
         counts[row["action"]] += 1

@@ -32,6 +32,7 @@ urlpatterns = [
     path('item-price-list/overview/', views.item_price_list_overview, name='item_price_list_overview_data'),
     path('item-price-list/item/<int:item_id>/history/', views.item_price_list_history, name='item_price_list_history_data'),
     path('item-price-list/audit/', views.item_price_list_audit, name='item_price_list_audit_data'),
+    path('item-price-list/<int:id>/usage/', views.item_price_list_usage, name='item_price_list_usage_data'),
     path('item-price-list/revise/preview/', views.item_price_list_revise_preview, name='item_price_list_revise_data'),
     path('item-price-list/upload/preview/', views.item_price_list_upload_preview, name='item_price_list_upload_data'),
     path('item-price-list/apply/', views.item_price_list_apply, name='item_price_list_bulk_create'),
