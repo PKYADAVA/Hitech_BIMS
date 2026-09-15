@@ -160,7 +160,7 @@
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="upcoming">Upcoming</option>
-          <option value="not_priced">Not Defined</option>
+          <option value="not_priced">Not Priced</option>
         </select>
       </div>
     </div>
@@ -618,7 +618,7 @@ $(function () {
     });
 
     function updateCounts(counts) {
-        const labels = { all: "All Statuses", active: "Active", inactive: "Inactive", upcoming: "Upcoming", not_priced: "Not Defined" };
+        const labels = { all: "All Statuses", active: "Active", inactive: "Inactive", upcoming: "Upcoming", not_priced: "Not Priced" };
         Object.keys(labels).forEach((key) => {
             filters.status.find(`option[value="${key}"]`).text(`${labels[key]} (${counts[key] || 0})`);
         });
