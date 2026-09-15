@@ -32,6 +32,15 @@
   line-height:1.9rem; font-size:.74rem; padding-left:.4rem; }
 .rpt-filter .select2-container .select2-selection--single .select2-selection__arrow { height:1.9rem; }
 .rpt-filter .btn-sm { font-size:.72rem; padding:.2rem .5rem; }
+/* Every control in the bar is the dropdowns' 1.9rem tall. A plain text box
+   (Farm Code) and the Submit/Print buttons took the site's full-size 36px and
+   44px, and since the bar lines controls up along their bottom edge, their
+   labels and tops sat higher than the rest of the row. */
+.ds .rpt-filter .form-control,
+.ds .rpt-filter .btn {
+  height:1.9rem; min-height:0; padding-top:0; padding-bottom:0; line-height:1.9rem;
+}
+.ds .rpt-filter .btn { display:inline-flex; align-items:center; gap:.35rem; }
 .rpt-filter .row { --bs-gutter-y:.3rem; }
 /* Some reports wrap their filters in a Bootstrap card; drop the card chrome so
    the bar looks the same as a plain .rpt-filter. */
