@@ -8610,6 +8610,57 @@ def _last_activity_date(report):
     return max(dates) if dates else None
 
 
+def _pending_item_balances(report):
+    """Feed and medicine still sitting on the farm, item by item.
+
+    A batch is closed by settling it, and closing it with stock still on hand
+    leaves that stock belonging to nothing: the flock is finished, the next one
+    has not been placed, and the feed or medicine is neither eaten, nor back in
+    the warehouse, nor on another farm's books. So a settlement is refused
+    until every item has been consumed, returned or transferred out.
+
+    Per item, not per batch. A total can come to nothing while one feed is 100
+    kg over and another 100 kg short, and "any item balance left" means any
+    item.
+
+    Feed reads the Feed Summary's own per-item balance, which already subtracts
+    both ways stock leaves a farm. Medicine has no summary, so it is balanced
+    here the same way: in, less used, less returned, less transferred out.
+
+    Only a positive balance is stock left. A negative one is a recording
+    problem — more used than was ever received — and not something that can
+    be returned or moved on.
+    """
+    q2 = Decimal("0.01")
+    pending = []
+
+    for row in report.get("feed_summary") or []:
+        balance = Decimal(str(row.get("balance") or 0)).quantize(q2)
+        if balance > 0:
+            pending.append({"kind": "Feed", "item": row.get("item") or "",
+                            "balance": balance})
+
+    medicine = {}
+
+    def bucket(row):
+        key = row.get("item_id")
+        return medicine.setdefault(key, {"item": row.get("item") or "",
+                                         "balance": Decimal("0")})
+
+    for row in report.get("medicine_transfer_in") or []:
+        bucket(row)["balance"] += Decimal(str(row.get("quantity") or 0))
+    for table in ("medicine_consumption", "medicine_return", "medicine_transfer_out"):
+        for row in report.get(table) or []:
+            bucket(row)["balance"] -= Decimal(str(row.get("quantity") or 0))
+
+    for key, b in medicine.items():
+        balance = b["balance"].quantize(q2)
+        if key is not None and balance > 0:
+            pending.append({"kind": "Medicine", "item": b["item"], "balance": balance})
+
+    return pending
+
+
 def _gc_settlement_autofill(batch, scheme, report=None):
     """All settlement field defaults for a batch, keyed by the model's field
     names. Read-only figures come from _build_batch_report; incentive/deduction
@@ -8956,9 +9007,29 @@ class GCSettlementAPI(View):
         gc_date = timezone.datetime.fromisoformat(data["gc_date"]).date() if data.get("gc_date") \
             else timezone.localdate()
 
+        # The report is built once and read twice: for the closing-stock check
+        # below, and for the autofill.
+        report = _build_batch_report(batch, fetch_type="farmer", scheme_override=scheme)
+
+        # Closing a batch with stock still on the farm leaves that stock
+        # belonging to nothing. Refused until it is consumed, returned or
+        # transferred out — see _pending_item_balances.
+        pending = _pending_item_balances(report)
+        if pending:
+            lines = "; ".join(
+                "%s: %s %s" % (p["kind"], p["item"], format(p["balance"], "f"))
+                for p in pending)
+            return JsonResponse({
+                "error": "This batch cannot be closed while stock is still on the "
+                         "farm. " + lines + ". Consume it, return it to the "
+                         "warehouse, or transfer it to another farm first.",
+                "pending": [{"kind": p["kind"], "item": p["item"],
+                             "balance": format(p["balance"], "f")} for p in pending],
+            }, status=400)
+
         # Start from a fresh autofill (authoritative read-only figures), then
         # overlay the user's editable inputs, then recompute the running totals.
-        fields = _gc_settlement_autofill(batch, scheme)
+        fields = _gc_settlement_autofill(batch, scheme, report=report)
         for f in GC_SETTLEMENT_INPUT_FIELDS:
             if f in data and data[f] not in (None, ""):
                 fields[f] = Decimal(str(data[f]))
