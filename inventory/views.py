@@ -198,6 +198,11 @@ class ItemAPI(View):
                     "kg_per_bag": str(item.kg_per_bag) if item.kg_per_bag else None,
                     "hsn_code": item.hsn_code,
                     "is_active": item.is_active,
+                    "category_name": item.category.name,
+                    "storage_uom_label": _uom_label(item.storage_uom),
+                    "consumption_uom_label": _uom_label(item.consumption_uom),
+                    "warehouse_names": list(item.warehouse.order_by("name").values_list("name", flat=True)),
+                    "updated_at": item.updated_at.isoformat() if item.updated_at else None,
                 })
             except Item.DoesNotExist:
                 raise Http404("Item not found")
@@ -229,6 +234,8 @@ class ItemAPI(View):
                     "kg_per_bag": str(item.kg_per_bag) if item.kg_per_bag else None,
                     "hsn_code": item.hsn_code,
                     "is_active": item.is_active,
+                    "warehouse_names": [w.name for w in item_warehouses],
+                    "updated_at": item.updated_at.isoformat() if item.updated_at else None,
                 })
             return JsonResponse(items, safe=False)
 
@@ -821,9 +828,78 @@ def toggle_item_active(request, id):
         return JsonResponse({"error": "POST required"}, status=405)
     item = get_object_or_404(Item, id=id)
     item.is_active = not item.is_active
-    item.save(update_fields=["is_active"])
+    item.save(update_fields=["is_active", "updated_at"])
     state = "Active" if item.is_active else "Inactive"
     return JsonResponse({"message": f"{item.item_code} is now {state}", "is_active": item.is_active})
+
+
+@login_required
+def items_bulk_status(request):
+    """Make the ticked items Active or Inactive together."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    ids = [int(i) for i in (data.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        return JsonResponse({"error": "Tick at least one item."}, status=400)
+    active = bool(data.get("active"))
+    changed = Item.objects.filter(id__in=ids).update(is_active=active, updated_at=timezone.now())
+    state = "Active" if active else "Inactive"
+    return JsonResponse({"message": f"{changed} item{'' if changed == 1 else 's'} made {state}",
+                         "changed": changed})
+
+
+@login_required
+def items_import_preview(request):
+    """What an uploaded item sheet would create, row by row. Saves nothing."""
+    from inventory.services.item_import import ItemImportError, parse_item_upload
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    upload = request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"error": "Choose a file to upload."}, status=400)
+    try:
+        return JsonResponse(parse_item_upload(upload))
+    except ItemImportError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+
+@login_required
+def items_import_apply(request):
+    """Create the items of a previewed sheet, all of them or none."""
+    from inventory.services.item_import import ItemImportError, import_items
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    try:
+        created = import_items(data.get("rows"))
+    except ItemImportError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    n = len(created)
+    return JsonResponse({"message": f"{n} item{'' if n == 1 else 's'} imported",
+                         "created": n, "codes": [item.item_code for item in created]}, status=201)
+
+
+@login_required
+def items_import_template(request):
+    """The item sheet to fill in, with the accepted names on a second sheet."""
+    from django.http import HttpResponse
+
+    from inventory.services.item_import import item_template_workbook
+
+    response = HttpResponse(
+        item_template_workbook(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="item_import_template.xlsx"'
+    return response
 
 
 @login_required

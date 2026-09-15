@@ -246,6 +246,9 @@ class Item(models.Model):
     #: Inactive items drop out of the item pickers on new entries. Records,
     #: reports and stock that already use one are unaffected.
     is_active = models.BooleanField(default=True, db_index=True)
+    #: When the item was last saved, for the Items page's Last Updated.
+    #: Empty on items not saved since the field was added.
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     objects = ItemQuerySet.as_manager()
 

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Inventory{% endblock %}
+{% block title %}Items{% endblock %}
 
 {% block nav %}
 {% include 'main_top_navbar.html' with active_tab='inventory' %}
@@ -11,221 +11,397 @@
 {% include '_inventory_subnavbar.html' with active_tab='items' %}
 
 <style>
-  /* Narrower side padding than the design-system grid's 12px, and headings
-     that may take two lines, so all eleven columns fit without a sideways
-     scroll. The id outranks the design-system grid rule. */
-  .ds #item-table.ds-grid thead th { white-space: normal; line-height: 1.2; padding-left: 8px; padding-right: 8px; }
-  .ds #item-table.ds-grid tbody td { padding-left: 8px; padding-right: 8px; }
+  .itl-page { display: flex; flex-direction: column; gap: .85rem; }
+  .itl-head, .itl-filters, .itl-card {
+    background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem;
+  }
+  .itl-head { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; padding: .85rem 1rem; }
+  .itl-head-icon {
+    width: 42px; height: 42px; flex: 0 0 42px; border-radius: .6rem;
+    background: #16a34a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  }
+  .itl-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .itl-sub { font-size: .8rem; color: #64748b; }
+  .itl-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  .itl-filters {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .6rem; padding: .7rem;
+  }
+  .itl-filter {
+    display: flex; align-items: center; gap: .55rem; min-width: 0;
+    border: 1px solid #eef1f5; border-radius: .5rem; padding: .45rem .6rem;
+  }
+  .itl-filter-icon {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--itl-bg); color: var(--itl-fg);
+  }
+  .itl-filter-body { flex: 1; min-width: 0; }
+  .itl-filter label { display: block; font-size: .7rem; font-weight: 600; color: #475569; margin-bottom: .15rem; }
+  /* All six filters on one row where there is room, Search the widest. */
+  @media (min-width: 1100px) {
+    .itl-filters { grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.7fr); }
+  }
+
+  .itl-card { padding: .7rem; }
+  .itl-dt-top { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .itl-dt-top .dataTables_length label { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .8rem; }
+  .itl-dt-end { margin-left: auto; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .itl-card .dt-buttons .btn {
+    background: #fff; border: 1px solid #d7dde5; color: #334155; font-size: .78rem; padding: .3rem .65rem;
+  }
+  .itl-card .dt-buttons .btn:hover { background: #f1f5f9; }
+  .itl-table-wrap { overflow-x: auto; }
+  .itl-dt-bottom {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: .5rem; margin-top: .6rem; font-size: .8rem;
+  }
+  .itl-selected { font-size: .78rem; font-weight: 600; color: #1d6fe0; }
+
+  /* Narrower cells and headings that may wrap, so all fourteen columns fit.
+     The id outranks the design-system grid rule. */
+  .ds #item-table.ds-grid thead th { white-space: normal; line-height: 1.2; font-size: .7rem; padding-left: 6px; padding-right: 6px; }
+  .ds #item-table.ds-grid tbody td { font-size: .78rem; padding-left: 6px; padding-right: 6px; vertical-align: middle; }
+  /* DataTables reserves wide right padding for its sort arrows; less is enough. */
+  .ds #item-table.dataTable > thead > tr > th.sorting,
+  .ds #item-table.dataTable > thead > tr > th.sorting_asc,
+  .ds #item-table.dataTable > thead > tr > th.sorting_desc { padding-right: 16px; }
+  #item-table .itl-check { width: 30px; text-align: center; }
+  .itl-code { white-space: nowrap; color: #334155; font-variant-numeric: tabular-nums; }
+  .itl-name { display: block; font-weight: 600; color: #0f172a; }
+  .itl-subline { display: block; font-size: .68rem; color: #64748b; }
+  .itl-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .itl-pill {
+    display: inline-block; padding: .12rem .5rem; border-radius: .4rem; font-size: .7rem; font-weight: 500;
+    background: #e8f1fd; color: #1d4ed8; white-space: nowrap;
+  }
+  .itl-usage { display: inline-block; padding: .15rem .5rem; border-radius: .4rem; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+  .itl-usage.sales { background: #e7f7ee; color: #067647; }
+  .itl-usage.produced { background: #fff1db; color: #b54708; }
+  .itl-status { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+  .itl-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .itl-status.on { background: #e7f7ee; color: #067647; }
+  .itl-status.off { background: #eef1f5; color: #64748b; }
+  #item-table tr.itl-row-off .itl-name, #item-table tr.itl-row-off .itl-code { color: #94a3b8; }
+  .itl-actions { display: flex; gap: .25rem; justify-content: center; }
+  .itl-act {
+    width: 28px; height: 28px; border: 0; border-radius: .4rem;
+    display: inline-flex; align-items: center; justify-content: center; font-size: .75rem;
+  }
+  .itl-act:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .itl-act.view { background: #e8f1fd; color: #1d6fe0; }
+  .itl-act.edit { background: #fff1db; color: #b54708; }
+  .itl-act.tog { background: #e7f7ee; color: #067647; }
+  .itl-act.tog.off { background: #eef1f5; color: #64748b; }
+  .itl-act.del { background: #fde8e8; color: #c0392b; }
+
+  .itl-foot {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    background: #ecfaf1; border: 1px solid #c9eed7; border-radius: .6rem;
+    padding: .6rem .9rem; font-size: .8rem; color: #14532d;
+  }
+  .itl-foot .itl-last { margin-left: auto; color: #166534; }
+
+  .itl-view dl { display: grid; grid-template-columns: 160px 1fr; gap: .35rem .9rem; margin: 0; font-size: .85rem; }
+  .itl-view dt { color: #64748b; font-weight: 500; }
+  .itl-view dd { margin: 0; color: #0f172a; }
+  .itl-preview { max-height: 45vh; overflow: auto; border: 1px solid #e3e8ef; border-radius: .4rem; }
+  .itl-preview table { margin: 0; font-size: .78rem; }
+  .itl-preview thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+  .itl-summary { font-size: .8rem; margin: .6rem 0 .4rem; color: #334155; }
+  .itl-r-create { color: #067647; font-weight: 600; }
+  .itl-r-error { color: #b42318; font-weight: 600; }
+  .itl-r-msg { display: block; font-size: .7rem; color: #64748b; font-weight: 400; }
+  .itl-steps { font-size: .8rem; color: #334155; padding-left: 1.1rem; margin-bottom: .6rem; }
 </style>
 
-<div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title">Manage Items</div>
-      <div class="page-header-subtitle">Add and manage inventory items</div>
+<div class="itl-page" id="itl-page"
+     data-can-add="{{ page_perms.add|yesno:'1,0' }}"
+     data-can-edit="{{ page_perms.edit|yesno:'1,0' }}"
+     data-can-delete="{{ page_perms.delete|yesno:'1,0' }}">
+
+  <div class="itl-head">
+    <div class="itl-head-icon"><i class="fas fa-box-open"></i></div>
+    <div>
+      <div class="itl-title">Item List</div>
+      <div class="itl-sub">View and manage all inventory items. Add, edit or update item details.</div>
     </div>
-    <div class="page-header-right">
-      {% if page_perms.add %}<button
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#itemFormModal"
-        >
-            <i class="fas fa-plus"></i> Add New Item
-        </button>{% endif %}
+    <div class="itl-head-actions">
+      {% if page_perms.add %}
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="itl-import-btn">
+        <i class="fas fa-file-arrow-up me-1"></i>Import Excel
+      </button>
+      {% endif %}
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="itl-export-btn">
+        <i class="fas fa-download me-1"></i>Export
+      </button>
+      {% if page_perms.add %}
+      <button type="button" class="btn btn-primary btn-sm" id="itl-add-one">
+        <i class="fas fa-plus me-1"></i>Add New Item
+      </button>
+      {% endif %}
     </div>
+  </div>
+
+  <div class="itl-filters">
+    <div class="itl-filter">
+      <span class="itl-filter-icon" style="--itl-bg:#e7f7ee;--itl-fg:#067647"><i class="fas fa-circle-check"></i></span>
+      <div class="itl-filter-body">
+        <label for="itl-f-status">Status</label>
+        <select id="itl-f-status" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="itl-filter">
+      <div class="itl-filter-body">
+        <label for="itl-f-category">Category</label>
+        <select id="itl-f-category" class="form-select form-select-sm">
+          <option value="">All Categories</option>
+          {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="itl-filter">
+      <span class="itl-filter-icon" style="--itl-bg:#f1ebfd;--itl-fg:#6941c6"><i class="fas fa-warehouse"></i></span>
+      <div class="itl-filter-body">
+        <label for="itl-f-warehouse">Warehouse</label>
+        <select id="itl-f-warehouse" class="form-select form-select-sm">
+          <option value="">All Warehouses</option>
+          {% for warehouse in warehouses %}<option value="{{ warehouse.id }}">{{ warehouse.name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="itl-filter">
+      <div class="itl-filter-body">
+        <label for="itl-f-usage">Usage</label>
+        <select id="itl-f-usage" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="Produced">Produced</option>
+          <option value="Sales">Sales</option>
+        </select>
+      </div>
+    </div>
+    <div class="itl-filter">
+      <div class="itl-filter-body">
+        <label for="itl-f-valuation">Valuation Method</label>
+        <select id="itl-f-valuation" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="Weighted Average">Weighted Average</option>
+          <option value="Standard Costing">Standard Costing</option>
+          <option value="FIFO">FIFO</option>
+          <option value="LIFO">LIFO</option>
+          <option value="FEFO">FEFO</option>
+        </select>
+      </div>
+    </div>
+    <div class="itl-filter itl-search">
+      <span class="itl-filter-icon" style="--itl-bg:#eef1f5;--itl-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
+      <div class="itl-filter-body">
+        <label for="itl-f-search">Search</label>
+        <input type="search" id="itl-f-search" class="form-control form-control-sm" placeholder="Search by item code, name or description...">
+      </div>
+    </div>
+  </div>
+
+  <div class="itl-card">
+    <table class="table table-hover mb-0 ds-grid" id="item-table" style="width:100%">
+      <thead>
+        <tr>
+          <th class="itl-check"><input type="checkbox" class="form-check-input" id="itl-check-all" aria-label="Select all items shown"></th>
+          <th>#</th>
+          <th>Item Code</th>
+          <th>Description</th>
+          <th>Category</th>
+          <th>Warehouse</th>
+          <th>Valuation Method</th>
+          <th class="ds-num">Standard Cost/Unit (&#8377;)</th>
+          <th>Usage</th>
+          <th>Storage UOM</th>
+          <th>Consumption UOM</th>
+          <th>Status</th>
+          <th class="ds-mid">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="itl-toolbar-end" hidden>
+      <span class="itl-selected" id="itl-selected"></span>
+      {% if page_perms.edit %}
+      <button type="button" class="btn btn-outline-success btn-sm" id="itl-bulk-on" hidden><i class="fas fa-toggle-on me-1"></i>Make Active</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="itl-bulk-off" hidden><i class="fas fa-toggle-off me-1"></i>Make Inactive</button>
+      {% endif %}
+      <button type="button" class="btn btn-link btn-sm p-0" id="itl-clear-selection" hidden>Clear selection</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="itl-clear">
+        <i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters
+      </button>
+    </div>
+  </div>
+
+  <div class="itl-foot">
+    <i class="far fa-lightbulb"></i>
+    <span><b>Tip:</b> Use filters or search to quickly find items. You can also export the list to Excel or PDF.</span>
+    <span class="itl-last"><i class="far fa-clock me-1"></i>Last Updated: <span id="itl-last">&mdash;</span></span>
+  </div>
 </div>
 
-<div class="row g-4">    <!-- Modal Structure -->
-    <div
-        class="modal fade"
-        id="itemFormModal"
-        tabindex="-1"
-        aria-labelledby="itemFormModalLabel"
-        aria-hidden="true"
-    >
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="itemFormModalLabel">Add New Item</h5>
-                    <button
-                        type="button"
-                        class="btn-close"
-                        data-bs-dismiss="modal"
-                        aria-label="Close"
-                    ></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Form Section -->
-                    <form id="item-form">
-                        {% csrf_token %}
-                        <input type="hidden" id="item-id" />
-                        <div class="fw-semibold text-primary mb-3">Basic Information <i class="fas fa-circle-info text-muted ms-1" title="Fields marked * are required"></i></div>
-                                                
-                                                    <div class="row g-3">
-                            <div class="col-md-3">
-                            <label for="item_code" class="form-label">Item Code</label>
-                            <input
-                                type="text"
-                                id="item_code"
-                                class="form-control bg-light"
-                                readonly
-                                placeholder="Auto-generated"
-                            />
-                        </div>
-                            <div class="col-md-3">
-                            <label for="description" class="form-label">Description <span class="text-danger">*</span></label>
-                            <textarea
-                                id="description"
-                                class="form-control"
-                                placeholder="Enter item description"
-                                rows="1" required></textarea>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
-                            <select id="category" class="form-select" required>
-                                <option value="" selected disabled>Select category</option>
-                                {% for category in categories %}
-                                    <option value="{{ category.id }}">{{ category.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="hsn_code" class="form-label">HSN / SAC</label>
-                            <input type="text" id="hsn_code" class="form-control" placeholder="e.g. 01051100" maxlength="100">
-                        </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                            <label for="kg_per_bag" class="form-label">Bag Capacity (kg)</label>
-                            <input
-                                type="number"
-                                id="kg_per_bag"
-                                class="form-control"
-                                placeholder="e.g. 50"
-                                step="0.01"
-                                min="0"
-                            />
-                        </div>
-                            <div class="col-md-3">
-                            <label for="storage_uom" class="form-label">Storage UOM</label>
-                            <select id="storage_uom" class="form-select">
-                                <option value="">Select storage UOM</option>
-                                {% for uom in uoms %}
-                                    <option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="consumption_uom" class="form-label">Consumption UOM</label>
-                            <select id="consumption_uom" class="form-select">
-                                <option value="">Select consumption UOM</option>
-                                {% for uom in uoms %}
-                                    <option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
-                            <select id="valuation_method" class="form-select" required>
-                                <option value="" selected disabled>Select valuation method</option>
-                                <option value="Weighted Average">Weighted Average</option>
-                                <option value="Standard Costing">Standard Costing</option>
-                                <option value="FIFO">FIFO (First In, First Out)</option>
-                                <option value="LIFO">LIFO (Last In, First Out)</option>
-                                <option value="FEFO">FEFO (First Expiry, First Out)</option>
-                            </select>
-                        </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                            <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
-                            <input
-                                type="number"
-                                id="standard_cost_per_unit"
-                                class="form-control"
-                                placeholder="Enter standard cost per unit"
-                                step="0.01"
-                                required
-                            />
-                        </div>
-                            <div class="col-md-3">
-                            <label for="usage" class="form-label">Usage <span class="text-danger">*</span></label>
-                            <select id="usage" class="form-select" required>
-                                <option value="" selected disabled>Select usage</option>
-                                <option value="Produced">Produced</option>
-                                <option value="Sales">Sales</option>
-                            </select>
-                        </div>
-                            <div class="col-md-6">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <label for="warehouse" class="form-label mb-0">Warehouse</label>
-                                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
-                            </div>
-                            <select id="warehouse" class="form-select" multiple>
-                                <option value="__all__">-- All Warehouses --</option>
-                                {% for warehouse in warehouses %}
-                                    <option value="{{ warehouse.id }}" selected>{{ warehouse.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button
-                                type="button"
-                                class="btn btn-danger"
-                                data-bs-dismiss="modal"
-                            >
-                                <i class="fas fa-circle-xmark me-1"></i>Cancel
-                            </button>
-                            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Submit</button>
-                        </div>
-                    </form>
-                </div>
+<!-- Add New Item -->
+<div class="modal fade" id="itemFormModal" tabindex="-1" aria-labelledby="itemFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itemFormModalLabel">Add New Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="item-form">
+          {% csrf_token %}
+          <input type="hidden" id="item-id" />
+          <div class="fw-semibold text-primary mb-3">Basic Information <i class="fas fa-circle-info text-muted ms-1" title="Fields marked * are required"></i></div>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label for="item_code" class="form-label">Item Code</label>
+              <input type="text" id="item_code" class="form-control bg-light" readonly placeholder="Auto-generated" />
             </div>
-        </div>
+            <div class="col-md-3">
+              <label for="description" class="form-label">Description <span class="text-danger">*</span></label>
+              <textarea id="description" class="form-control" placeholder="Enter item description" rows="1" required></textarea>
+            </div>
+            <div class="col-md-3">
+              <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+              <select id="category" class="form-select" required>
+                <option value="" selected disabled>Select category</option>
+                {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="hsn_code" class="form-label">HSN / SAC</label>
+              <input type="text" id="hsn_code" class="form-control" placeholder="e.g. 01051100" maxlength="100">
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label for="kg_per_bag" class="form-label">Bag Capacity (kg)</label>
+              <input type="number" id="kg_per_bag" class="form-control" placeholder="e.g. 50" step="0.01" min="0" />
+            </div>
+            <div class="col-md-3">
+              <label for="storage_uom" class="form-label">Storage UOM</label>
+              <select id="storage_uom" class="form-select">
+                <option value="">Select storage UOM</option>
+                {% for uom in uoms %}<option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="consumption_uom" class="form-label">Consumption UOM</label>
+              <select id="consumption_uom" class="form-select">
+                <option value="">Select consumption UOM</option>
+                {% for uom in uoms %}<option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
+              <select id="valuation_method" class="form-select" required>
+                <option value="" selected disabled>Select valuation method</option>
+                <option value="Weighted Average">Weighted Average</option>
+                <option value="Standard Costing">Standard Costing</option>
+                <option value="FIFO">FIFO (First In, First Out)</option>
+                <option value="LIFO">LIFO (Last In, First Out)</option>
+                <option value="FEFO">FEFO (First Expiry, First Out)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
+              <input type="number" id="standard_cost_per_unit" class="form-control" placeholder="Enter standard cost per unit" step="0.01" required />
+            </div>
+            <div class="col-md-3">
+              <label for="usage" class="form-label">Usage <span class="text-danger">*</span></label>
+              <select id="usage" class="form-select" required>
+                <option value="" selected disabled>Select usage</option>
+                <option value="Produced">Produced</option>
+                <option value="Sales">Sales</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex justify-content-between align-items-center">
+                <label for="warehouse" class="form-label mb-0">Warehouse</label>
+                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
+              </div>
+              <select id="warehouse" class="form-select" multiple>
+                <option value="__all__">-- All Warehouses --</option>
+                {% for warehouse in warehouses %}<option value="{{ warehouse.id }}" selected>{{ warehouse.name }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-circle-xmark me-1"></i>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Submit</button>
+          </div>
+        </form>
+      </div>
     </div>
-    <!-- List Section -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex align-items-center gap-2 flex-wrap">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Item List</h5>
-                <div class="ms-auto d-flex align-items-center gap-2">
-                    <label for="item-status-filter" class="form-label mb-0 small text-nowrap">Status</label>
-                    <select id="item-status-filter" class="form-select form-select-sm" style="min-width: 140px;">
-                        <option value="">All</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
-                </div>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table
-                        class="table table-hover table-bordered mb-0 ds-grid"
-                        id="item-table"
-                    >
-                        <thead>
-                            <tr>
-                                <th>Item Code</th>
-                                <th>Description</th>
-                                <th>Category</th>
-                                <th>Warehouse</th>
-                                <th>Valuation Method</th>
-                                <th>Standard Cost/Unit</th>
-                                <th>Usage</th>
-                                <th>Storage UOM</th>
-                                <th>Consumption UOM</th>
-                                <th>Status</th>
-                                <th class="ds-mid">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="item-table-body">
-                            <!-- AJAX content will load here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+  </div>
+</div>
+
+<!-- View Item -->
+<div class="modal fade" id="itlViewModal" tabindex="-1" aria-labelledby="itlViewLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itlViewLabel">Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body itl-view" id="itl-view-body"></div>
     </div>
+  </div>
+</div>
+
+<!-- Import Excel -->
+<div class="modal fade" id="itlImportModal" tabindex="-1" aria-labelledby="itlImportLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itlImportLabel">Import Items from Excel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ol class="itl-steps">
+          <li>Download the template. Its second sheet lists the categories, units and warehouses it accepts.</li>
+          <li>Fill in one item per row. Description, Category, Valuation Method, Standard Cost/Unit and Usage are required; Warehouses takes names separated by commas, or All.</li>
+          <li>Upload the file and check the preview. Nothing is saved until you import, and then every item is saved or none.</li>
+        </ol>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-3 d-grid">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'items_template_data' %}">
+              <i class="fas fa-download me-1"></i>Download template
+            </a>
+          </div>
+          <div class="col-12 col-md-6">
+            <label for="itl-imp-file" class="form-label">Item file (.xlsx or .csv)</label>
+            <input type="file" id="itl-imp-file" class="form-control form-control-sm" accept=".xlsx,.csv">
+          </div>
+          <div class="col-12 col-md-3 d-grid">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="itl-imp-preview">Preview</button>
+          </div>
+        </div>
+        <div class="itl-summary" id="itl-imp-summary" tabindex="-1" aria-live="polite"></div>
+        <div class="itl-preview" id="itl-imp-wrap" hidden>
+          <table class="table table-sm table-hover">
+            <thead><tr><th>Row</th><th>Description</th><th>Category</th><th>Valuation</th><th class="text-end">Std Cost</th><th>Usage</th><th>Units</th><th>Warehouses</th><th>Result</th></tr></thead>
+            <tbody id="itl-imp-rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="itl-imp-save" disabled>Import items</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -286,83 +462,228 @@
     });
 
     $(document).ready(function () {
-        // Function to Load Item List
-        function loadItemList() {
-            $.ajax({
-                url: "{% url 'item_list' %}", // Replace with your actual endpoint
-                type: "GET",
-                success: function (response) {
-                    console.log(response, "response");
-                    const table = $("#item-table");
-                    const tableBody = $("#item-table-body");
+        const csrfToken = "{{ csrf_token }}";
+        const page = document.getElementById("itl-page");
+        const CAN = {
+            add: page.dataset.canAdd === "1",
+            edit: page.dataset.canEdit === "1",
+            del: page.dataset.canDelete === "1",
+        };
+        const URLS = {
+            list: "{% url 'item_list' %}",
+            bulk: "{% url 'items_bulk_status_update' %}",
+            importPreview: "{% url 'items_import_data' %}",
+            importApply: "{% url 'items_import_create' %}",
+        };
+        // escapeHtml() provided globally by main.js
+        const esc = (v) => escapeHtml(v === null || v === undefined ? "" : String(v));
+        const money = (v) => (v === null || v === undefined || v === "")
+            ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const dash = '<span class="text-muted">&mdash;</span>';
+        const apiError = (xhr, fallback) => (xhr.responseJSON && xhr.responseJSON.error) || fallback;
+        const VALUATION_SHORT = { "Weighted Average": "Weighted Avg.", "Standard Costing": "Standard Costing" };
+        const uomLabel = (symbol, name) => symbol || name || "";
+        const selected = new Set();
 
-                    // Clear the current table body and destroy the DataTable if initialized
-                    if ($.fn.DataTable.isDataTable(table)) {
-                        table.DataTable().clear().destroy();
-                    }
-                    tableBody.empty();
+        const filters = {
+            status: $("#itl-f-status"), category: $("#itl-f-category"), warehouse: $("#itl-f-warehouse"),
+            usage: $("#itl-f-usage"), valuation: $("#itl-f-valuation"), search: $("#itl-f-search"),
+        };
 
-                    // Populate the table dynamically
-                    response.forEach((item) => {
-                        const storageUomLabel = item.storage_uom__symbol || item.storage_uom__name || "";
-                        const consumptionUomLabel = item.consumption_uom__symbol || item.consumption_uom__name || "";
-                        const tableRow = `
-                            <tr data-active="${item.is_active ? "active" : "inactive"}">
-                                <td>${item.item_code}</td>
-                                <td>${item.description}</td>
-                                <td>${item.category__name}</td>
-                                <td>${item.warehouse__name}</td>
-                                <td>${item.valuation_method}</td>
-                                <td>${item.standard_cost_per_unit}</td>
-                                <td>${item.usage}</td>
-                                <td>${escapeHtml(storageUomLabel)}</td>
-                                <td>${escapeHtml(consumptionUomLabel)}</td>
-                                <td>${item.is_active
-                                    ? '<span class="ds-badge is-active">Active</span>'
-                                    : '<span class="ds-badge is-inactive">Inactive</span>'}</td>
-                                <td>
-                                    <div class="d-flex gap-1">
-                                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-item"
-                                        data-item_id="${item.id}">
-                                        <i class="fas fa-pen"></i>
-                                    </button>{% endif %}
-                                    {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm toggle-item-active"
-                                        data-id="${item.id}" title="${item.is_active ? "Make Inactive" : "Make Active"}"
-                                        aria-label="${item.is_active ? "Make Inactive" : "Make Active"}">
-                                        <i class="fas ${item.is_active ? "fa-toggle-on text-success" : "fa-toggle-off"}"></i>
-                                    </button>{% endif %}
-                                    {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
-                                        data-id="${item.id}">
-                                        <i class="fas fa-trash"></i>
-                                    </button>{% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                        tableBody.append(tableRow);
-                    });
-
-                    // Reinitialize DataTable
-                    table.DataTable();
-                },
-                error: function (xhr, status, error) {
-                    console.error(`Failed to load items: ${xhr.responseText}`);
-                },
-            });
-        }
-
-        // Status filter: rows carry data-active, read here on every draw.
         $.fn.dataTable.ext.search.push(function (settings, _data, index) {
             if (settings.nTable.id !== "item-table") return true;
-            const want = $("#item-status-filter").val();
-            if (!want) return true;
-            const node = settings.aoData[index].nTr;
-            return !node || node.dataset.active === want;
+            const row = settings.aoData[index]._aData;
+            const status = filters.status.val();
+            if (status === "active" && !row.is_active) return false;
+            if (status === "inactive" && row.is_active) return false;
+            const category = filters.category.val();
+            if (category && String(row.category) !== category) return false;
+            const warehouse = filters.warehouse.val();
+            if (warehouse && !(row.warehouse_ids || []).map(String).includes(warehouse)) return false;
+            if (filters.usage.val() && row.usage !== filters.usage.val()) return false;
+            if (filters.valuation.val() && row.valuation_method !== filters.valuation.val()) return false;
+            return true;
         });
-        $("#item-status-filter").on("change", function () {
-            const table = $("#item-table");
-            if ($.fn.DataTable.isDataTable(table)) table.DataTable().draw();
+
+        function actions(row) {
+            const parts = [`<button type="button" class="itl-act view view-item" data-id="${row.id}" title="View item" aria-label="View item"><i class="fas fa-eye"></i></button>`];
+            if (CAN.edit) {
+                parts.push(`<button type="button" class="itl-act edit edit-item" data-item_id="${row.id}" title="Edit item" aria-label="Edit item"><i class="fas fa-pen"></i></button>`);
+                const label = row.is_active ? "Make Inactive" : "Make Active";
+                parts.push(`<button type="button" class="itl-act tog${row.is_active ? "" : " off"} toggle-item-active" data-id="${row.id}" title="${label}" aria-label="${label}"><i class="fas ${row.is_active ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`);
+            }
+            if (CAN.del) {
+                parts.push(`<button type="button" class="itl-act del delete-item" data-id="${row.id}" title="Delete item" aria-label="Delete item"><i class="fas fa-trash"></i></button>`);
+            }
+            return `<div class="itl-actions">${parts.join("")}</div>`;
+        }
+
+        const EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
+
+        const table = $("#item-table").DataTable({
+            data: [],
+            dom: "<'itl-dt-top'<'itl-dt-length'l><'itl-dt-buttons'B><'itl-dt-end'>><'itl-table-wrap'tr><'itl-dt-bottom'ip>",
+            pageLength: 10,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            order: [[2, "asc"]],
+            createdRow: (tr, row) => tr.classList.toggle("itl-row-off", !row.is_active),
+            language: {
+                lengthMenu: "Show _MENU_ entries",
+                emptyTable: "No items yet",
+                zeroRecords: "No items match these filters",
+            },
+            buttons: [
+                { extend: "copy", exportOptions: EXPORT },
+                { extend: "csv", title: "Item List", exportOptions: EXPORT },
+                { extend: "excel", title: "Item List", exportOptions: EXPORT },
+                { extend: "pdf", title: "Item List", orientation: "landscape", exportOptions: EXPORT },
+                { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
+            ],
+            columns: [
+                {
+                    data: null, orderable: false, searchable: false, className: "itl-check no-export no-colvis",
+                    render: (_d, type, row) => type === "display"
+                        ? `<input type="checkbox" class="form-check-input itl-row-check" data-id="${row.id}" ${selected.has(row.id) ? "checked" : ""} aria-label="Select ${esc(row.item_code)}">`
+                        : "",
+                },
+                { data: null, orderable: false, searchable: false, className: "no-export", defaultContent: "" },
+                { data: "item_code", className: "itl-code" },
+                {
+                    data: "description",
+                    render: (d, type, row) => {
+                        if (type !== "display") return type === "filter" ? `${d} ${row.hsn_code || ""}` : d;
+                        const sub = row.hsn_code ? `<span class="itl-subline">HSN ${esc(row.hsn_code)}</span>` : "";
+                        return `<span class="itl-name">${esc(d)}</span>${sub}`;
+                    },
+                },
+                { data: "category__name", render: (d, type) => type === "display" ? `<span class="itl-pill">${esc(d)}</span>` : d },
+                {
+                    data: "warehouse__name",
+                    render: (d, type, row) => {
+                        const names = row.warehouse_names || [];
+                        if (type !== "display") return d === "All" ? "All Warehouses" : names.join(", ");
+                        if (!names.length) return dash;
+                        if (d === "All") return `<span title="${esc(names.join(", "))}">All Warehouses</span>`;
+                        const more = names.length > 1 ? `<span class="itl-subline">+${names.length - 1} more</span>` : "";
+                        return `<span title="${esc(names.join(", "))}">${esc(names[0])}${more}</span>`;
+                    },
+                },
+                { data: "valuation_method", render: (d, type) => type === "display" ? esc(VALUATION_SHORT[d] || d) : d },
+                {
+                    data: "standard_cost_per_unit", className: "itl-num",
+                    render: (d, type) => type === "display" ? money(d) : (type === "sort" || type === "type" ? Number(d) : d),
+                },
+                {
+                    data: "usage",
+                    render: (d, type) => type === "display" ? `<span class="itl-usage ${d === "Sales" ? "sales" : "produced"}">${esc(d)}</span>` : d,
+                },
+                { data: null, render: (_d, _type, row) => esc(uomLabel(row.storage_uom__symbol, row.storage_uom__name)) },
+                { data: null, render: (_d, _type, row) => esc(uomLabel(row.consumption_uom__symbol, row.consumption_uom__name)) },
+                {
+                    data: "is_active",
+                    render: (d, type) => {
+                        const label = d ? "Active" : "Inactive";
+                        return type === "display" ? `<span class="itl-status ${d ? "on" : "off"}">${label}</span>` : label;
+                    },
+                },
+                {
+                    data: null, orderable: false, searchable: false, className: "no-export no-colvis",
+                    render: (_d, type, row) => type === "display" ? actions(row) : "",
+                },
+            ],
         });
+
+        $(".itl-dt-end").append($("#itl-toolbar-end").children());
+
+        table.on("draw", function () {
+            const info = table.page.info();
+            table.column(1, { search: "applied", order: "applied", page: "current" }).nodes()
+                .each((cell, i) => { cell.textContent = info.start + i + 1; });
+            syncCheckAll();
+        });
+
+        function showLastUpdated(rows) {
+            const stamps = rows.map((r) => r.updated_at).filter(Boolean).sort();
+            if (!stamps.length) { $("#itl-last").html("&mdash;"); return; }
+            const when = new Date(stamps[stamps.length - 1]);
+            $("#itl-last").text(when.toLocaleString("en-IN", {
+                day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+            }));
+        }
+
+        function loadItemList() {
+            return $.getJSON(URLS.list)
+                .done(function (rows) {
+                    const known = new Set(rows.map((r) => r.id));
+                    [...selected].forEach((id) => { if (!known.has(id)) selected.delete(id); });
+                    table.clear().rows.add(rows).draw(false);
+                    showLastUpdated(rows);
+                    selectionChanged();
+                })
+                .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the items.")));
+        }
+
+        Object.values(filters).forEach((el) => { if (el !== filters.search) el.on("change", () => table.draw()); });
+        filters.search.on("input", () => table.search(filters.search.val()).draw());
+
+        $("#itl-clear").on("click", function () {
+            ["status", "category", "warehouse", "usage", "valuation"].forEach((k) => filters[k].val("").trigger("change"));
+            filters.search.val("");
+            table.search("").draw();
+        });
+
+        $("#itl-export-btn").on("click", () => table.button(".buttons-excel").trigger());
+
+        // ---- selection and bulk status ---------------------------------------
+        function syncCheckAll() {
+            const shown = table.rows({ search: "applied" }).data().toArray();
+            const picked = shown.filter((r) => selected.has(r.id)).length;
+            const box = document.getElementById("itl-check-all");
+            box.checked = shown.length > 0 && picked === shown.length;
+            box.indeterminate = picked > 0 && picked < shown.length;
+        }
+
+        function selectionChanged() {
+            const n = selected.size;
+            $("#itl-selected").text(n ? `${n} selected` : "");
+            $("#itl-clear-selection, #itl-bulk-on, #itl-bulk-off").prop("hidden", n === 0);
+            syncCheckAll();
+        }
+
+        $("#item-table tbody").on("change", ".itl-row-check", function () {
+            const id = Number(this.dataset.id);
+            if (this.checked) { selected.add(id); } else { selected.delete(id); }
+            selectionChanged();
+        });
+
+        $("#itl-check-all").on("change", function () {
+            const on = this.checked;
+            table.rows({ search: "applied" }).data().each((r) => { if (on) { selected.add(r.id); } else { selected.delete(r.id); } });
+            table.rows({ search: "applied" }).nodes().to$().find(".itl-row-check").prop("checked", on);
+            selectionChanged();
+        });
+
+        $("#itl-clear-selection").on("click", function () {
+            selected.clear();
+            table.rows().nodes().to$().find(".itl-row-check").prop("checked", false);
+            selectionChanged();
+        });
+
+        function bulkStatus(active) {
+            $.ajax({
+                url: URLS.bulk, method: "POST", contentType: "application/json",
+                headers: { "X-CSRFToken": csrfToken },
+                data: JSON.stringify({ ids: [...selected], active: active }),
+            })
+                .done(function (res) {
+                    window.showToast("success", res.message || "Items updated.");
+                    selected.clear();
+                    loadItemList();
+                })
+                .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not change the items' status.")));
+        }
+        $("#itl-bulk-on").on("click", () => bulkStatus(true));
+        $("#itl-bulk-off").on("click", () => bulkStatus(false));
 
         // Active / Inactive toggle. Inactive items drop out of the item
         // pickers on new entries; existing records keep them.
@@ -371,7 +692,7 @@
             $.ajax({
                 url: `/item/${id}/toggle-active/`,
                 method: "POST",
-                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                headers: { "X-CSRFToken": csrfToken },
                 success: function (response) {
                     window.showToast('success', response.message || "Item status updated.");
                     loadItemList();
@@ -382,10 +703,35 @@
             });
         });
 
-        // Load item list on page load
-        loadItemList();
+        // ---- view ------------------------------------------------------------
+        $(document).on("click", ".view-item", function () {
+            const id = $(this).data("id");
+            $.getJSON(`/item/${id}/`)
+                .done(function (it) {
+                    const field = (label, value) => `<dt>${label}</dt><dd>${value === null || value === undefined || value === "" ? dash : esc(value)}</dd>`;
+                    const updated = it.updated_at ? new Date(it.updated_at).toLocaleString("en-IN") : "";
+                    $("#itlViewLabel").text(`${it.item_code} - ${it.description}`);
+                    $("#itl-view-body").html(`<dl>
+                        ${field("Item Code", it.item_code)}
+                        ${field("Description", it.description)}
+                        ${field("Category", it.category_name)}
+                        ${field("HSN / SAC", it.hsn_code)}
+                        ${field("Status", it.is_active ? "Active" : "Inactive")}
+                        ${field("Valuation Method", it.valuation_method)}
+                        ${field("Standard Cost/Unit", money(it.standard_cost_per_unit))}
+                        ${field("Usage", it.usage)}
+                        ${field("Storage UOM", it.storage_uom_label)}
+                        ${field("Consumption UOM", it.consumption_uom_label)}
+                        ${field("Bag Capacity (kg)", it.kg_per_bag)}
+                        ${field("Warehouses", (it.warehouse_names || []).join(", "))}
+                        ${field("Last Updated", updated)}
+                    </dl>`);
+                    $("#itlViewModal").modal("show");
+                })
+                .fail(() => window.showToast("danger", "Could not load the item."));
+        });
 
-        // Handle edit button click
+        // ---- edit ------------------------------------------------------------
         $(document).on("click", ".edit-item", function () {
             const itemId = $(this).data("item_id");
             // Fetch fresh, clean data. Avoids fragile data-* attribute parsing that
@@ -399,7 +745,6 @@
         });
 
         function renderItemEditModal(itemData) {
-            // Remove any existing modal and create a new one dynamically
             $("#dynamicItemEditModal").remove();
 
             const modalContent = `
@@ -412,72 +757,69 @@
                             </div>
                             <div class="modal-body">
                                 <form id="dynamic-item-form">
-                                    {% csrf_token %}
                                     <input type="hidden" id="edit-item-id" value="${itemData.id}" />
                                     <div class="fw-semibold text-primary mb-3">Basic Information <i class="fas fa-circle-info text-muted ms-1" title="Fields marked * are required"></i></div>
-                                                                        
-                                                                            <div class="row g-3">
-                                        <div class="col-md-3">
-                                        <label for="dynamic-item_code" class="form-label">Item Code</label>
-                                        <input type="text" id="dynamic-item_code" class="form-control bg-light" value="${itemData.item_code}" readonly />
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-description" class="form-label">Description <span class="text-danger">*</span></label>
-                                        <textarea id="dynamic-description" class="form-control" rows="1" required>${itemData.description}</textarea>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-category" class="form-label">Category <span class="text-danger">*</span></label>
-                                        <select id="dynamic-category" class="form-select" required>${categoryOptionsHtml(itemData.category)}</select>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-hsn_code" class="form-label">HSN / SAC</label>
-                                        <input type="text" id="dynamic-hsn_code" class="form-control" maxlength="100" value="${itemData.hsn_code ?? ""}">
-                                    </div>
-                                    </div>
                                     <div class="row g-3">
                                         <div class="col-md-3">
-                                        <label for="dynamic-kg_per_bag" class="form-label">Bag Capacity (kg)</label>
-                                        <input type="number" id="dynamic-kg_per_bag" class="form-control"
-                                               value="${itemData.kg_per_bag ?? ''}" step="0.01" min="0" placeholder="e.g. 50" />
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-storage_uom" class="form-label">Storage UOM</label>
-                                        <select id="dynamic-storage_uom" class="form-select">${uomOptionsHtml(itemData.storage_uom)}</select>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-consumption_uom" class="form-label">Consumption UOM</label>
-                                        <select id="dynamic-consumption_uom" class="form-select">${uomOptionsHtml(itemData.consumption_uom)}</select>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
-                                        <select id="dynamic-valuation_method" class="form-select" required>
-                                            <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
-                                            <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
-                                            <option value="FIFO" ${itemData.valuation_method === "FIFO" ? "selected" : ""}>FIFO (First In, First Out)</option>
-                                            <option value="LIFO" ${itemData.valuation_method === "LIFO" ? "selected" : ""}>LIFO (Last In, First Out)</option>
-                                            <option value="FEFO" ${itemData.valuation_method === "FEFO" ? "selected" : ""}>FEFO (First Expiry, First Out)</option>
-                                        </select>
-                                    </div>
-                                    </div>
-                                    <div class="row g-3">
-                                        <div class="col-md-3">
-                                        <label for="dynamic-standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
-                                        <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-usage" class="form-label">Usage <span class="text-danger">*</span></label>
-                                        <select id="dynamic-usage" class="form-select" required>
-                                            <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
-                                            <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
-                                        </select>
-                                    </div>
-                                        <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
-                                            <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
+                                            <label for="dynamic-item_code" class="form-label">Item Code</label>
+                                            <input type="text" id="dynamic-item_code" class="form-control bg-light" value="${esc(itemData.item_code)}" readonly />
                                         </div>
-                                        <select id="dynamic-warehouse" class="form-select" multiple>${warehouseOptionsHtml(itemData.warehouse)}</select>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-description" class="form-label">Description <span class="text-danger">*</span></label>
+                                            <textarea id="dynamic-description" class="form-control" rows="1" required>${esc(itemData.description)}</textarea>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-category" class="form-label">Category <span class="text-danger">*</span></label>
+                                            <select id="dynamic-category" class="form-select" required>${categoryOptionsHtml(itemData.category)}</select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-hsn_code" class="form-label">HSN / SAC</label>
+                                            <input type="text" id="dynamic-hsn_code" class="form-control" maxlength="100" value="${esc(itemData.hsn_code ?? "")}">
+                                        </div>
                                     </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label for="dynamic-kg_per_bag" class="form-label">Bag Capacity (kg)</label>
+                                            <input type="number" id="dynamic-kg_per_bag" class="form-control" value="${itemData.kg_per_bag ?? ''}" step="0.01" min="0" placeholder="e.g. 50" />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-storage_uom" class="form-label">Storage UOM</label>
+                                            <select id="dynamic-storage_uom" class="form-select">${uomOptionsHtml(itemData.storage_uom)}</select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-consumption_uom" class="form-label">Consumption UOM</label>
+                                            <select id="dynamic-consumption_uom" class="form-select">${uomOptionsHtml(itemData.consumption_uom)}</select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
+                                            <select id="dynamic-valuation_method" class="form-select" required>
+                                                <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
+                                                <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
+                                                <option value="FIFO" ${itemData.valuation_method === "FIFO" ? "selected" : ""}>FIFO (First In, First Out)</option>
+                                                <option value="LIFO" ${itemData.valuation_method === "LIFO" ? "selected" : ""}>LIFO (Last In, First Out)</option>
+                                                <option value="FEFO" ${itemData.valuation_method === "FEFO" ? "selected" : ""}>FEFO (First Expiry, First Out)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label for="dynamic-standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
+                                            <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="dynamic-usage" class="form-label">Usage <span class="text-danger">*</span></label>
+                                            <select id="dynamic-usage" class="form-select" required>
+                                                <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
+                                                <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
+                                                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
+                                            </div>
+                                            <select id="dynamic-warehouse" class="form-select" multiple>${warehouseOptionsHtml(itemData.warehouse)}</select>
+                                        </div>
                                     </div>
                                     <div class="d-flex justify-content-end gap-2 mt-3">
                                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-circle-xmark me-1"></i>Cancel</button>
@@ -490,19 +832,11 @@
                 </div>
             `;
 
-            // Append modal to body
             $("body").append(modalContent);
-
-            // Show modal
             $("#dynamicItemEditModal").modal("show");
 
-            // Handle form submission
             $(document).off("submit", "#dynamic-item-form").on("submit", "#dynamic-item-form", function (event) {
                 event.preventDefault();
-
-                const csrfToken = "{{ csrf_token }}"; // Ensure this is properly passed in the template
-
-                // Collect the updated data
                 const updatedItemData = {
                     id: $("#edit-item-id").val(),
                     item_code: $("#dynamic-item_code").val(),
@@ -517,43 +851,32 @@
                     consumption_uom: $("#dynamic-consumption_uom").val() || null,
                     hsn_code: $("#dynamic-hsn_code").val() || null,
                 };
-                console.log(updatedItemData, "updatedItemData");
-
-                // Send the updated data to the server
                 $.ajax({
                     url: `/item/${updatedItemData.id}/`,
                     method: "PUT",
-                    headers: {
-                        "X-CSRFToken": csrfToken,
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
                     data: JSON.stringify(updatedItemData),
-                    success: function (response) {
+                    success: function () {
                         window.showToast('success', "Item updated successfully!");
                         $("#dynamicItemEditModal").modal("hide");
-                        loadItemList(); // Reload the item list
+                        loadItemList();
                     },
-                    error: function (xhr, status, error) {
-                        console.error("Failed to update item:", xhr.responseText);
+                    error: function (xhr) {
                         window.showToast('danger', xhr.responseJSON?.error || "An error occurred while updating the item.");
                     },
                 });
             });
 
-            // Cleanup modal after close
             $("#dynamicItemEditModal").on("hidden.bs.modal", function () {
                 $(this).remove();
             });
         }
 
+        // ---- add -------------------------------------------------------------
+        $("#itl-add-one").on("click", () => $("#itemFormModal").modal("show"));
 
-        // Handle item form submission
         $("#item-form").on("submit", function (event) {
             event.preventDefault();
-
-            const csrfToken = "{{ csrf_token }}";
-
-            // Collect form data
             const itemData = {
                 description: $("#description").val(),
                 category: $("#category").val(),
@@ -566,14 +889,10 @@
                 consumption_uom: $("#consumption_uom").val() || null,
                 hsn_code: $("#hsn_code").val() || null,
             };
-
             $.ajax({
                 url: "/create-item/",
                 method: "POST",
-                headers: {
-                    "X-CSRFToken": csrfToken,
-                    "Content-Type": "application/json",
-                },
+                headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
                 data: JSON.stringify(itemData),
                 success: function () {
                     $("#itemFormModal").modal("hide");
@@ -581,33 +900,108 @@
                     window.showToast('success', "Item added successfully!");
                     loadItemList();
                 },
-                error: function (xhr, status, error) {
-                    console.error("Failed to add item:", xhr.responseText);
-                    window.showToast('danger', "An error occurred while adding the item.");
+                error: function (xhr) {
+                    window.showToast('danger', xhr.responseJSON?.error || "An error occurred while adding the item.");
                 },
             });
         });
 
-            // Handle delete button click
+        // ---- delete ----------------------------------------------------------
         $(document).on("click", ".delete-item", async function () {
             const id = $(this).data("id");
-            const csrfToken = "{{ csrf_token }}";
-
-            if ((await window.bimsConfirm("Are you sure you want to delete this item?"))) {
-                $.ajax({
-                    url: `/item/${id}/delete/`, // Construct delete URL
-                    method: "DELETE",
-                    headers: { "X-CSRFToken": csrfToken },
-                    success: function () {
-                        loadItemList();
-                        window.showToast('success', "Item deleted successfully!");
-                    },
-                    error: function () {
-                        window.showToast('danger', "An error occurred while deleting the item.");
-                    },
-                });
-            }
+            if (!(await window.bimsConfirm("Are you sure you want to delete this item?"))) return;
+            $.ajax({
+                url: `/item/${id}/delete/`,
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function () {
+                    loadItemList();
+                    window.showToast('success', "Item deleted successfully!");
+                },
+                error: function (xhr) {
+                    // The server names what the item is used in when it cannot go.
+                    window.showToast('danger', xhr.responseJSON?.error || "An error occurred while deleting the item.");
+                },
+            });
         });
+
+        // ---- import ----------------------------------------------------------
+        let importRows = [];
+
+        function openImport() {
+            $("#itl-imp-file").val("");
+            importRows = [];
+            $("#itl-imp-rows").empty();
+            $("#itl-imp-wrap").prop("hidden", true);
+            $("#itl-imp-summary").text("");
+            $("#itl-imp-save").prop("disabled", true).text("Import items");
+            $("#itlImportModal").modal("show");
+        }
+        $("#itl-import-btn").on("click", openImport);
+        $("#itl-imp-file").on("change", function () {
+            importRows = [];
+            $("#itl-imp-wrap").prop("hidden", true);
+            $("#itl-imp-summary").text("");
+            $("#itl-imp-save").prop("disabled", true).text("Import items");
+        });
+
+        $("#itl-imp-preview").on("click", function () {
+            const file = document.getElementById("itl-imp-file").files[0];
+            if (!file) {
+                window.showToast("danger", "Choose the filled-in template (.xlsx or .csv) first.");
+                return;
+            }
+            const form = new FormData();
+            form.append("file", file);
+            $.ajax({ url: URLS.importPreview, method: "POST", headers: { "X-CSRFToken": csrfToken },
+                     data: form, processData: false, contentType: false })
+                .done(function (res) {
+                    importRows = res.rows;
+                    $("#itl-imp-rows").html(res.rows.map((r) => {
+                        const ok = r.action === "create";
+                        const units = [r.storage_uom_name, r.consumption_uom_name].filter(Boolean).join(" / ");
+                        return `<tr>
+                            <td>${esc(r.row)}</td>
+                            <td>${esc(r.description)}</td>
+                            <td>${esc(r.category_name)}</td>
+                            <td>${esc(r.valuation_method || "")}</td>
+                            <td class="text-end">${r.standard_cost_per_unit === null ? dash : money(r.standard_cost_per_unit)}</td>
+                            <td>${esc(r.usage || "")}</td>
+                            <td>${units ? esc(units) : dash}</td>
+                            <td>${r.warehouse_names.length ? esc(r.warehouse_names.length > 2 ? r.warehouse_names.length + " warehouses" : r.warehouse_names.join(", ")) : dash}</td>
+                            <td><span class="${ok ? "itl-r-create" : "itl-r-error"}">${ok ? "New item" : "Error"}</span>${r.message ? `<span class="itl-r-msg">${esc(r.message)}</span>` : ""}</td>
+                        </tr>`;
+                    }).join(""));
+                    $("#itl-imp-wrap").prop("hidden", false);
+                    const c = res.counts;
+                    $("#itl-imp-summary").text(`${c.create} ready to import${c.error ? ` · ${c.error} with errors (fix the file and preview again)` : ""}`).focus();
+                    // All or nothing: a sheet with errors is fixed and previewed again
+                    // rather than imported in part.
+                    $("#itl-imp-save").prop("disabled", c.error > 0 || c.create === 0)
+                        .text(c.create && !c.error ? `Import ${c.create} item${c.create === 1 ? "" : "s"}` : "Import items");
+                })
+                .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not read the file.")));
+        });
+
+        $("#itl-imp-save").on("click", function () {
+            const button = this;
+            const rows = importRows.filter((r) => r.action === "create");
+            if (!rows.length) return;
+            $(button).prop("disabled", true);
+            $.ajax({ url: URLS.importApply, method: "POST", contentType: "application/json",
+                     headers: { "X-CSRFToken": csrfToken }, data: JSON.stringify({ rows: rows }) })
+                .done(function (res) {
+                    $("#itlImportModal").modal("hide");
+                    window.showToast("success", res.message || "Items imported.");
+                    loadItemList();
+                })
+                .fail(function (xhr) {
+                    window.showToast("danger", apiError(xhr, "Could not import the items."));
+                    $(button).prop("disabled", false);
+                });
+        });
+
+        loadItemList();
     });
-    </script>
+</script>
 {% endblock %}
