@@ -344,6 +344,12 @@ CATALOG: tuple[RuleSpec, ...] = (
         description="A purchased batch expires within the warning window.",
     ),
     RuleSpec(
+        "inventory.item_not_priced", "Item Not Priced", Module.INVENTORY,
+        Priority.HIGH, None, (),
+        description="An active item has stock on hand but no price in the Item "
+                    "Price List, so a transfer of it would be refused.",
+    ),
+    RuleSpec(
         "inventory.transfer_pending", "Warehouse Transfer Pending",
         Module.INVENTORY, Priority.MEDIUM,
         _t("Days pending", "days", "2", Operator.GTE), WAREHOUSE,

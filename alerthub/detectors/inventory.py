@@ -235,6 +235,45 @@ def _expiry(rule, title, *, expired, item_ids=None):
             )
 
 
+@detector("inventory.item_not_priced")
+def item_not_priced(rule):
+    """Active items holding stock with no price in force today.
+
+    A transfer is valued at the Item Price List rate and refused without one,
+    so an unpriced item with stock is a transfer waiting to fail. Raised once
+    per item rather than per location: the fix is one price, not one per
+    store."""
+    from inventory.models import Item
+    from inventory.services.item_summary import positive_stock_by_item
+
+    held = positive_stock_by_item()
+    if not held:
+        return
+    today = timezone.localdate()
+    items = (Item.objects.filter(id__in=list(held), is_active=True)
+             .exclude(price_list_entries__effective_date__lte=today)
+             .order_by("item_code"))
+    for item in items:
+        stock = held[item.id]
+        places = stock["locations"]
+        raise_alert(
+            rule,
+            title="Item Not Priced",
+            message=(
+                f"{item} has {stock['quantity']} in stock at {places} "
+                f"location{'' if places == 1 else 's'} but no price in the Item Price "
+                f"List. Transfers of it will be refused until a price is added."
+            ),
+            dedupe_key=f"{rule.pk}:not-priced:{item.id}",
+            measured_value=Decimal(str(stock["quantity"])),
+            object_label="inventory.Item",
+            object_id=item.id,
+            object_display=str(item),
+            action_url=safe_url("item_price_list"),
+            metadata={"locations": places},
+        )
+
+
 @detector("inventory.item_expired")
 def item_expired(rule):
     _expiry(rule, "Item Expired", expired=True)

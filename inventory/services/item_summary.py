@@ -268,6 +268,28 @@ def item_summary(from_date=None, to_date=None, category_id=None, item_id=None,
     return groups
 
 
+def positive_stock_by_item(as_of_date=None):
+    """Items with stock on hand somewhere, as ``{item_id: {"quantity",
+    "locations"}}``: the total held across the locations whose running
+    balance is above zero, and how many such locations there are.
+
+    Read from the same movements as :func:`negative_stock`, so the two can
+    never disagree about what a location holds."""
+    moves = _collect(None, as_of_date, None, None, None, None)
+    balance = {}
+    for m in moves:
+        key = (m["loc"], m["item"])
+        bal = balance.get(key, Z)
+        balance[key] = bal + m["qty"] if m["dir"] == "in" else bal - m["qty"]
+    held = {}
+    for (_loc, item_id), bal in balance.items():
+        if bal > 0:
+            entry = held.setdefault(item_id, {"quantity": Z, "locations": 0})
+            entry["quantity"] += bal
+            entry["locations"] += 1
+    return held
+
+
 def negative_stock(as_of_date=None, item_id=None, location_type=None, location_id=None):
     """Locations/items whose running stock balance is negative as of a date.
 
