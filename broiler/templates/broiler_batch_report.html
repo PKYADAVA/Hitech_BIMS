@@ -697,34 +697,29 @@
               <td class="lbl">Culls</td><td class="val">{{ c.culls }}</td>
               <td class="lbl">Avg.Body Weight</td><td class="val">{{ c.avg_body_weight }}</td>
               <td class="lbl">Sold Amount</td><td class="val">{{ c.sold_amount }}</td>
-              <td class="lbl">Feed Cost</td><td class="val">{{ c.feed_cost }}</td>
+              <td class="lbl">Feed Transferred Out</td><td class="val">{{ c.feed_transfer_out }}</td>
               <td class="lbl">Med/Vac Cost</td><td class="val">{{ c.med_cost }}</td>
             </tr>
             <tr>
               <td class="lbl">Excess Birds</td><td class="val">{{ c.excess_birds }}</td>
               <td class="lbl">Mean Age</td><td class="val">{{ c.mean_age }}</td>
               <td class="lbl">Avg. Sale Rate</td><td class="val">{{ c.avg_sale_rate }}</td>
-              <td class="lbl">Chick Cost</td><td class="val">{{ c.chick_cost }}</td>
+              <td class="lbl">Feed Balance</td><td class="val">{{ c.feed_balance }}</td>
               <td class="lbl">Admin Cost</td><td class="val">{{ c.admin_cost }}</td>
             </tr>
             <tr>
               <td class="lbl">Shortage Birds</td><td class="val">{{ c.shortage_birds }}</td>
               <td class="lbl">Day Gain</td><td class="val">{{ c.day_gain }}</td>
               <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
-              {% comment %} Nothing follows this pair — the Med/Vac/Admin
-                 column has nothing left to show once EEF has printed — so the
-                 label and value each take the width of the two column-groups
-                 that would otherwise sit empty, rather than leaving a pair of
-                 dead cells beside them. {% endcomment %}
-              <td class="lbl" colspan="2">Total Production Cost</td>
-              <td class="hl" colspan="2">{{ c.total_production_cost }}</td>
+              <td class="lbl">Feed Cost</td><td class="val">{{ c.feed_cost }}</td>
+              <td class="lbl">Total Production Cost</td><td class="hl">{{ c.total_production_cost }}</td>
             </tr>
             <tr>
               <td class="lbl">Grade</td><td class="val">{{ c.grade }}</td>
               <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
               <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
-              <td class="lbl" colspan="2">Production Cost Per Kg</td>
-              <td class="hl" colspan="2">{{ c.production_cost_per_kg }}</td>
+              <td class="lbl">Chick Cost</td><td class="val">{{ c.chick_cost }}</td>
+              <td class="lbl">Production Cost Per Kg</td><td class="hl">{{ c.production_cost_per_kg }}</td>
             </tr>
           </tbody>
         </table>

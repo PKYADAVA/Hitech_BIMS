@@ -4843,6 +4843,8 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         "feed_consumed": Decimal(str(feed_consumed)).quantize(q2),
         "feed_return": Decimal(str(feed_return_kg)).quantize(q2),
         "feed_transfer_out": Decimal(str(feed_transfer_out_kg)).quantize(q2),
+        "feed_balance": Decimal(str(feed_in_kg - feed_consumed - feed_return_kg
+                                    - feed_transfer_out_kg)).quantize(q2),
         "feed_cost": feed_cost.quantize(q2),
         "chick_cost": Decimal(str(chick_cost)).quantize(q2),
         "med_sent": Decimal(str(med_in_qty)).quantize(q2),

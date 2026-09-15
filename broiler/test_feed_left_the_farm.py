@@ -175,6 +175,20 @@ class FeedThatLeftTheFarmTests(TestCase):
         self.assertEqual(bc["feed_return"], Decimal("500.00"))
         self.assertEqual(bc["feed_transfer_out"], Decimal("500.00"))
 
+    def test_the_costing_summary_carries_the_feed_balance(self):
+        """Shown on the Batch History report beside Feed Transferred Out: sent,
+        less consumed, less returned, less transferred out."""
+        self.a_batch_that_used_everything()
+        self.assertEqual(self.report()["batch_costing"]["feed_balance"], Decimal("0.00"))
+
+    def test_the_costing_summary_balance_shows_feed_still_held(self):
+        self.send(5500, 1)
+        self.eat(4000, 30)
+        self.pass_to_neighbour(200, 41)
+        self.return_to_store(300, 42)
+        self.assertEqual(self.report()["batch_costing"]["feed_balance"],
+                         Decimal("1000.00"))
+
 
 class ClosingDateTests(TestCase):
     """The settlement closes after everything it is settling.
