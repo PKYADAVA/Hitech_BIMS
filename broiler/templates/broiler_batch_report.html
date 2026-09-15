@@ -320,7 +320,7 @@
                 {% for r in report.chick_placement %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No chick placement transfers for this batch</td></tr>{% endfor %}
               </tbody>
@@ -339,7 +339,7 @@
                 {% for r in report.feed_purchase %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed purchases at this farm's branch during the batch window</td></tr>{% endfor %}
               </tbody>
@@ -359,7 +359,7 @@
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
                   <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td>
-                  <td class="text-end">{{ r.amount }}</td><td class="text-end">{{ r.cumulative }}</td>
+                  <td class="text-end">{{ r.amount|floatformat:2 }}</td><td class="text-end">{{ r.cumulative }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="9" class="text-center text-muted">No feed transfers for this batch</td></tr>{% endfor %}
               </tbody>
@@ -378,7 +378,7 @@
                 {% for r in report.feed_return %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed returned for this batch</td></tr>{% endfor %}
               </tbody>
@@ -397,7 +397,7 @@
                 {% for r in report.feed_transfer_out %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed transferred to other farms for this batch</td></tr>{% endfor %}
               </tbody>
@@ -416,7 +416,7 @@
                 {% for r in report.other_transfer_out %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No non-feed items transferred out of this batch</td></tr>{% endfor %}
               </tbody>
@@ -454,7 +454,7 @@
                 {% for r in report.medicine_transfer_in %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transfers for this batch</td></tr>{% endfor %}
               </tbody>
@@ -473,7 +473,7 @@
                 {% for r in report.medicine_return %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine returned for this batch</td></tr>{% endfor %}
               </tbody>
@@ -492,7 +492,7 @@
                 {% for r in report.medicine_transfer_out %}
                 <tr>
                   <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transferred to other farms for this batch</td></tr>{% endfor %}
               </tbody>
@@ -676,7 +676,7 @@
             <tr>
               <td>{{ r.date }}</td><td>{{ r.sale_no }}</td><td>{{ r.doc_no }}</td><td>{{ r.buyer_name }}</td>
               <td class="text-end">{{ r.birds }}</td><td class="text-end">{{ r.net_weight }}</td><td class="text-end">{{ r.avg_weight }}</td>
-              <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount }}</td>
+              <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
               <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td><td>{{ r.remarks }}</td>
             </tr>
             {% empty %}<tr><td colspan="13" class="text-center text-muted">No bird sales for this batch</td></tr>{% endfor %}
