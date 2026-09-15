@@ -406,3 +406,91 @@ class AccessMappingTests(TestCase):
         for name, action in expected.items():
             self.assertEqual(resolve_action(name) or derive_tab(name),
                              ("item_price_list", action), name)
+
+
+class LastPurchaseRateTests(PriceListBase):
+    """The rate on the item's most recent purchase bill, beside its price."""
+
+    def setUp(self):
+        super().setUp()
+        from account.models import AccountType, ChartOfAccount, CompanyProfile
+        from inventory.models import Warehouse
+        from purchase.models import Supplier
+
+        self.store = Warehouse.objects.create(name="Bahraich Warehouse")
+        self.mills = Supplier.objects.create(name="Maharashtra Feeds Pvt Ltd")
+        self.breeder = Supplier.objects.create(name="Ganga Breeding Farm")
+        account_type = AccountType.objects.create(
+            name="T", code_range_start=500000, code_range_end=599999, report="PL")
+        self.pay_account = ChartOfAccount.objects.create(
+            company=CompanyProfile.get_solo(), code="500001", description="X",
+            account_type=account_type)
+
+    def buy(self, item, rate, days, unit="Bag"):
+        from purchase.models import GeneralPurchase, GeneralPurchaseItem
+
+        purchase = GeneralPurchase.objects.create(date=self.day(days), supplier=self.mills)
+        GeneralPurchaseItem.objects.create(
+            purchase=purchase, item=item, farm_warehouse=self.store, unit=unit,
+            rcv_qty=Decimal("100"), rate=Decimal(str(rate)),
+            discount_percent=Decimal("0"), discount_amount=Decimal("0"),
+            gst_percent=Decimal("0"))
+        return purchase
+
+    def buy_chicks(self, item, rate, days):
+        from purchase.models import ChicksPurchase, ChicksPurchaseItem
+
+        purchase = ChicksPurchase.objects.create(date=self.day(days), supplier=self.breeder, item=item)
+        ChicksPurchaseItem.objects.create(purchase=purchase, farm_warehouse=self.store,
+                                          sent_qty=Decimal("1000"), rate=Decimal(str(rate)))
+        return purchase
+
+    def buy_eggs(self, item, rate, days):
+        from hatchery.models import EggPurchase, EggPurchaseItem
+
+        purchase = EggPurchase.objects.create(date=self.day(days), supplier=self.breeder,
+                                              warehouse=self.store, pay_account=self.pay_account)
+        EggPurchaseItem.objects.create(egg_purchase=purchase, item=item,
+                                       rcv_qty=Decimal("500"), rate=Decimal(str(rate)))
+        return purchase
+
+    def last(self, item):
+        from inventory.services.price_list import last_purchase_rates
+        return last_purchase_rates([item.id]).get(item.id)
+
+    def test_the_latest_bill_wins_with_its_own_unit(self):
+        self.buy(self.starter, 40, -30)
+        latest = self.buy(self.starter, 44, -3, unit="Kg")
+        self.assertEqual(self.last(self.starter), {
+            "rate": "44.00", "unit": "Kg", "date": self.day(-3).isoformat(),
+            "supplier": "Maharashtra Feeds Pvt Ltd", "ref": latest.purchase_no,
+            "source": "General Purchase",
+        })
+
+    def test_on_the_same_day_the_bill_entered_last_wins(self):
+        self.buy(self.starter, 40, -2)
+        self.buy(self.starter, 41, -2)
+        self.assertEqual(self.last(self.starter)["rate"], "41.00")
+
+    def test_a_bill_with_no_rate_is_passed_over(self):
+        """A free or sample delivery is not a price of nothing."""
+        self.buy(self.starter, 40, -10)
+        self.buy(self.starter, 0, -1)
+        self.assertEqual(self.last(self.starter)["rate"], "40.00")
+
+    def test_chicks_and_egg_purchases_count_too(self):
+        self.buy(self.vaccine, 5, -10)
+        self.buy_chicks(self.vaccine, 6, -5)
+        self.buy_eggs(self.tonic, "4.50", -2)
+        self.assertEqual((self.last(self.vaccine)["rate"], self.last(self.vaccine)["source"]),
+                         ("6.00", "Chicks Purchase"))
+        self.assertEqual((self.last(self.tonic)["rate"], self.last(self.tonic)["source"]),
+                         ("4.50", "Egg Purchase"))
+
+    def test_the_list_and_the_history_carry_it(self):
+        self.buy(self.starter, 44, -3)
+        rows = price_overview(today=self.today)
+        self.assertEqual(self.row_for(rows, self.starter)["last_purchase"]["rate"], "44.00")
+        self.assertIsNone(self.row_for(rows, self.tonic)["last_purchase"])
+        history = item_price_history(self.starter, today=self.today)
+        self.assertEqual(history["last_purchase"]["rate"], "44.00")

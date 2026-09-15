@@ -121,6 +121,60 @@ def _in_force(entries, on_date):
     return next((e for e in entries if e.effective_date <= on_date), None)
 
 
+def last_purchase_rates(item_ids):
+    """The rate on each item's most recent purchase bill, as
+    ``{item_id: {"rate", "unit", "date", "supplier", "ref", "source"}}``.
+
+    Read from General, Chicks and Egg purchases. The latest bill date wins,
+    and on the same date the line entered last. It is the rate typed on the
+    bill, per the unit on that line, not a landed cost. A line with no rate
+    (a free or sample delivery) is passed over rather than shown as a price of
+    nothing, and an item never bought is absent."""
+    from hatchery.models import EggPurchaseItem
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
+
+    ids = [item_id for item_id in item_ids if item_id]
+    if not ids:
+        return {}
+    best = {}
+
+    def offer(item_id, when, order, rate, unit, supplier, ref, source):
+        key = (when, order)
+        if item_id in best and best[item_id]["_key"] >= key:
+            return
+        best[item_id] = {
+            "_key": key, "rate": _text(rate), "unit": unit or "",
+            "date": _iso(when), "supplier": supplier or "", "ref": ref or "",
+            "source": source,
+        }
+
+    general = (GeneralPurchaseItem.objects.filter(item_id__in=ids, rate__gt=0)
+               .select_related("purchase__supplier")
+               .order_by("item_id", "-purchase__date", "-id").distinct("item_id"))
+    for line in general:
+        offer(line.item_id, line.purchase.date, (3, line.id), line.rate, line.unit,
+              line.purchase.supplier.name, line.purchase.purchase_no, "General Purchase")
+
+    chicks = (ChicksPurchaseItem.objects.filter(purchase__item_id__in=ids, rate__gt=0)
+              .select_related("purchase__supplier")
+              .order_by("purchase__item_id", "-purchase__date", "-id")
+              .distinct("purchase__item_id"))
+    for line in chicks:
+        offer(line.purchase.item_id, line.purchase.date, (2, line.id), line.rate, "",
+              line.purchase.supplier.name, line.purchase.purchase_no, "Chicks Purchase")
+
+    eggs = (EggPurchaseItem.objects.filter(item_id__in=ids, rate__gt=0)
+            .select_related("egg_purchase__supplier")
+            .order_by("item_id", "-egg_purchase__date", "-id").distinct("item_id"))
+    for line in eggs:
+        offer(line.item_id, line.egg_purchase.date, (1, line.id), line.rate, "",
+              line.egg_purchase.supplier.name, line.egg_purchase.transaction_no, "Egg Purchase")
+
+    for value in best.values():
+        value.pop("_key")
+    return best
+
+
 def _item_info(item):
     return {
         "item": item.id,
@@ -150,6 +204,7 @@ def price_overview(today=None, category=None, status=None, search=None):
         items = items.filter(Q(item_code__icontains=term) | Q(description__icontains=term))
     items = list(items)
     grouped = _entries_by_item([item.id for item in items])
+    purchases = last_purchase_rates([item.id for item in items])
 
     rows = []
     for item in items:
@@ -180,6 +235,7 @@ def price_overview(today=None, category=None, status=None, search=None):
             "status": state,
             "status_label": STATUS_LABELS[state],
             "entries": len(entries),
+            "last_purchase": purchases.get(item.id),
         })
         rows.append(row)
 
@@ -246,6 +302,7 @@ def item_price_history(item, today=None):
         })
     return {
         "item": _item_info(item),
+        "last_purchase": last_purchase_rates([item.id]).get(item.id),
         "today": today.isoformat(),
         "entries": rows,
         "audit": audit_rows(item_id=item.id, limit=200),
