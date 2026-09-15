@@ -4851,6 +4851,8 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         "med_consumed": Decimal(str(med_consumed)).quantize(q2),
         "med_return": Decimal(str(med_return_qty)).quantize(q2),
         "med_transfer_out": Decimal(str(med_transfer_out_qty)).quantize(q2),
+        "med_balance": Decimal(str(med_in_qty - med_consumed - med_return_qty
+                                   - med_transfer_out_qty)).quantize(q2),
         "med_cost": med_cost.quantize(q2),
         "admin_cost": admin_cost.quantize(q2),
         "total_production_cost": total_production_cost.quantize(q2),

@@ -159,6 +159,17 @@ class CloseWithStockTests(TestCase):
         self.med_use(30)
         self.assertRefused(self.close(), "Gumboro Vaccine", "20.00")
 
+    def test_the_costing_summary_carries_the_medicine_balance(self):
+        """Shown on the Batch History report as Med/Vac Balance: sent, less
+        consumed, less returned, less transferred out."""
+        from broiler.views import _build_batch_report
+
+        self.med_in(50)
+        self.med_use(30)
+        self.med_back(5)
+        bc = _build_batch_report(self.batch, fetch_type="farmer")["batch_costing"]
+        self.assertEqual(bc["med_balance"], Decimal("15.00"))
+
     def test_medicine_all_accounted_for_lets_it_close(self):
         self.med_in(50)
         self.med_use(30)
