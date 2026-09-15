@@ -79,7 +79,6 @@ def item_price_list(request):
     return render(request, 'item_price_list.html', {
         'items_json': [{'id': i.id, 'label': f"{i.item_code} - {i.description}"} for i in items],
         'categories': ItemCategory.objects.order_by('name'),
-        'item_types': Item.TYPE_CHOICES,
     })
 
 @login_required
@@ -642,7 +641,6 @@ def item_price_list_overview(request):
     from inventory.services.price_list import last_price_change, price_overview
 
     rows = price_overview(category=request.GET.get("category"),
-                          item_type=request.GET.get("item_type"),
                           search=request.GET.get("search"))
     counts = {"active": 0, "upcoming": 0, "not_priced": 0, "all": len(rows)}
     for row in rows:

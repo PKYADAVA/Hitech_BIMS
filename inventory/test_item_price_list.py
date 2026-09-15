@@ -106,7 +106,6 @@ class OverviewTests(PriceListBase):
             return {r["item"] for r in price_overview(today=self.today, **filters)}
 
         self.assertEqual(ids(category=self.medicine.id), {self.vaccine.id, self.tonic.id})
-        self.assertEqual(ids(item_type="Raw Material"), {self.starter.id})
         self.assertEqual(ids(status="upcoming"), {self.vaccine.id})
         self.assertEqual(ids(status="not_priced"), {self.tonic.id})
         self.assertEqual(ids(search="gumboro"), {self.vaccine.id})

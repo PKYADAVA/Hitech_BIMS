@@ -128,14 +128,13 @@ def _item_info(item):
         "item_name": item.description,
         "category": item.category.name if item.category_id else "",
         "category_id": item.category_id,
-        "item_type": item.type,
         "unit": _unit(item),
     }
 
 
 # --- the list ----------------------------------------------------------------
 
-def price_overview(today=None, category=None, item_type=None, status=None, search=None):
+def price_overview(today=None, category=None, status=None, search=None):
     """Every item once, with the price in force today, the one before it and
     any price already set for a later date.
 
@@ -146,8 +145,6 @@ def price_overview(today=None, category=None, item_type=None, status=None, searc
              .order_by("item_code"))
     if category and str(category).isdigit():
         items = items.filter(category_id=int(category))
-    if item_type:
-        items = items.filter(type=item_type)
     if search and search.strip():
         term = search.strip()
         items = items.filter(Q(item_code__icontains=term) | Q(description__icontains=term))

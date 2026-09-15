@@ -56,7 +56,7 @@
 
   #ipl-table td { vertical-align: middle; }
   /* Narrower side padding than the design-system grid's 12px, so all
-     thirteen columns, Actions included, fit without a sideways scroll. */
+     twelve columns, Actions included, fit without a sideways scroll. */
   .ds .ipl-card table.ds-grid thead th,
   .ds .ipl-card table.ds-grid tbody td { padding-left: 8px; padding-right: 8px; }
   #ipl-table .ipl-check { width: 34px; text-align: center; }
@@ -142,16 +142,6 @@
       </div>
     </div>
     <div class="ipl-filter">
-      <span class="ipl-filter-icon" style="--ipl-bg:#e7f7ee;--ipl-fg:#067647"><i class="fas fa-sitemap"></i></span>
-      <div class="ipl-filter-body">
-        <label for="ipl-f-type">Item Type</label>
-        <select id="ipl-f-type" class="form-select form-select-sm">
-          <option value="">All Types</option>
-          {% for value, label in item_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-    </div>
-    <div class="ipl-filter">
       <span class="ipl-filter-icon" style="--ipl-bg:#f1ebfd;--ipl-fg:#6941c6"><i class="fas fa-circle-check"></i></span>
       <div class="ipl-filter-body">
         <label for="ipl-f-status">Status</label>
@@ -181,7 +171,6 @@
           <th>Item Code</th>
           <th>Item Name</th>
           <th>Category</th>
-          <th>Item Type</th>
           <th>Unit</th>
           <th class="ds-num">Price (&#8377;)</th>
           <th class="ds-num">Previous (&#8377;)</th>
@@ -494,7 +483,6 @@ $(function () {
     const selected = new Set();
     const filters = {
         category: $("#ipl-f-category"),
-        type: $("#ipl-f-type"),
         status: $("#ipl-f-status"),
         search: $("#ipl-f-search"),
     };
@@ -503,10 +491,8 @@ $(function () {
         if (settings.nTable.id !== "ipl-table") return true;
         const row = settings.aoData[index]._aData;
         const category = filters.category.val();
-        const type = filters.type.val();
         const status = filters.status.val();
         if (category && String(row.category_id) !== category) return false;
-        if (type && row.item_type !== type) return false;
         if (status && status !== "all" && row.status !== status) return false;
         return true;
     });
@@ -558,7 +544,6 @@ $(function () {
             { data: "item_code", className: "ipl-code" },
             { data: "item_name", render: (d, type) => type === "display" ? `<span class="ipl-name">${esc(d)}</span>` : d },
             { data: "category" },
-            { data: "item_type" },
             { data: "unit", defaultContent: "" },
             {
                 data: "price", className: "ipl-price",
@@ -623,13 +608,11 @@ $(function () {
     }
 
     filters.category.on("change", () => table.draw());
-    filters.type.on("change", () => table.draw());
     filters.status.on("change", () => table.draw());
     filters.search.on("input", () => table.search(filters.search.val()).draw());
 
     $("#ipl-clear").on("click", function () {
         filters.category.val("").trigger("change");
-        filters.type.val("").trigger("change");
         filters.status.val("all").trigger("change");
         filters.search.val("");
         table.search("").draw();
@@ -713,7 +696,7 @@ $(function () {
                 const it = res.item;
                 historyItem = itemId;
                 $("#iplHistoryLabel").text(`${it.item_code} - ${it.item_name}`);
-                $("#ipl-h-meta").text([it.category, it.item_type, it.unit].filter(Boolean).join(" · "));
+                $("#ipl-h-meta").text([it.category, it.unit].filter(Boolean).join(" · "));
                 const body = res.entries.map((e) => {
                     const buttons = [];
                     if (CAN.edit) buttons.push(`<button type="button" class="ipl-act edit" data-act="edit" data-entry="${e.id}" data-item="${itemId}" data-price="${esc(e.price)}" data-date="${esc(e.effective_date)}" title="Edit this price" aria-label="Edit this price"><i class="fas fa-pen"></i></button>`);
