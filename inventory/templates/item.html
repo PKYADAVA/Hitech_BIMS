@@ -131,6 +131,12 @@
      layout through: only the fields scroll, the title and buttons stay put. */
   #itemFormModal #item-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
   #itemFormModal #item-form .modal-body { overflow-y: auto; min-height: 0; }
+  #itl-dup-warn:not([hidden]) { display: flex; }
+  /* Every control in a row the same height, text centred: the description
+     starts one line tall (it can still be dragged taller), and the searchable
+     dropdowns' text sits in the middle rather than below it. */
+  #itemFormModal #description { height: 36px; min-height: 36px; padding-top: 7px; padding-bottom: 7px; resize: vertical; }
+  #itemFormModal .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { line-height: 24px; }
   .itl-form-code { font-size: .78rem; color: #64748b; font-weight: 400; }
   .itl-section { border: 1px solid #eef1f5; border-radius: .55rem; padding: .75rem .85rem .85rem; }
   .itl-section + .itl-section { margin-top: .75rem; }
@@ -314,7 +320,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div class="alert alert-warning py-2 small d-flex align-items-center gap-2" id="itl-dup-warn" hidden>
+          <div class="alert alert-warning py-2 small align-items-center gap-2" id="itl-dup-warn" hidden>
             <i class="fas fa-triangle-exclamation"></i><span></span>
           </div>
 
@@ -323,7 +329,7 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label for="description" class="form-label">Description <span class="itl-req">*</span></label>
-                <textarea id="description" class="form-control" rows="2" placeholder="e.g. Broiler Starter Feed (Crumbs)"></textarea>
+                <textarea id="description" class="form-control" rows="1" placeholder="e.g. Broiler Starter Feed (Crumbs)"></textarea>
                 <div class="itl-err" data-error-for="description" hidden></div>
               </div>
               <div class="col-md-3">
