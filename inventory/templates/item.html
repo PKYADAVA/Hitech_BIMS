@@ -65,7 +65,17 @@
   /* Figures take only the width they need, so spare width goes to the text
      columns; Description never gets squeezed to a sliver. */
   #item-table td.itl-num { white-space: nowrap; }
-  #item-table th.ds-num { min-width: 84px; }
+  #item-table th.ds-num { min-width: 74px; }
+  /* Headings over figures sit on the right like the figures, and Actions is
+     centred over its buttons. The grid rule sets every heading left, so these
+     need the id to win; the right padding keeps them clear of the arrows. */
+  .ds #item-table.ds-grid thead th.ds-num { text-align: right; }
+  /* A right-aligned heading ends where the sort arrows start, so it needs
+     more room on the right than a left-aligned one. */
+  .ds #item-table.dataTable > thead > tr > th.ds-num.sorting,
+  .ds #item-table.dataTable > thead > tr > th.ds-num.sorting_asc,
+  .ds #item-table.dataTable > thead > tr > th.ds-num.sorting_desc { padding-right: 24px; }
+  .ds #item-table.ds-grid thead th.ds-mid { text-align: center; }
   #item-table td.itl-desc { min-width: 140px; }
   .ds #item-table.ds-grid tbody td { font-size: .76rem; padding-left: 5px; padding-right: 5px; vertical-align: middle; }
   /* DataTables reserves wide right padding for its sort arrows; less is enough. */
