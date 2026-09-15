@@ -112,19 +112,26 @@
 
   .gc-layout { display: flex; gap: 1rem; align-items: flex-start; }
   .gc-col-left { flex: 1.6; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+  /* A fixed, narrow side column so the transaction tables on the left get the
+     width back and fit without a sideways scroll. */
   .gc-col-right {
-    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem;
+    flex: 0 0 360px; min-width: 0; display: flex; flex-direction: column; gap: 1rem;
     position: sticky; top: 1rem; align-self: flex-start;
     max-height: calc(100vh - 2rem); overflow-y: auto;
   }
   @media (max-width: 1100px) {
     .gc-layout { flex-direction: column; }
-    .gc-col-right { position: static; max-height: none; overflow-y: visible; }
+    .gc-col-right { flex: none; position: static; max-height: none; overflow-y: visible; }
   }
   @media print {
     .gc-col-right { position: static; max-height: none; overflow-y: visible; }
   }
   .gc-full { margin-top: 1rem; }
+  /* Left-column tables: headings and the location / item names may wrap onto a
+     second line; dates, codes and figures stay on one line. */
+  .gc-col-left .report-table:not(.report-dense) th { white-space: normal; padding-left: .4rem; padding-right: .4rem; }
+  .gc-col-left .report-table:not(.report-dense) td { padding-left: .4rem; padding-right: .4rem; }
+  .gc-col-left .report-table:not(.report-dense) td:is(:nth-child(4), :nth-child(5)):not(.text-end) { white-space: normal; min-width: 90px; }
   /* Thin vertical scrollbars on the right-hand column and the table boxes, so
      the bar takes less width beside the cards and tables. */
   .gc-col-right, .report-scroll, .gc-page .table-responsive {
@@ -169,7 +176,8 @@
   .gc-legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: .4rem; flex: 0 0 9px; }
   .gc-legend li b { font-weight: 700; white-space: nowrap; }
 
-  .gc-perf-table th, .gc-perf-table td { font-size: .74rem; padding: .3rem .45rem; white-space: nowrap; }
+  .gc-perf-table th, .gc-perf-table td { font-size: .74rem; padding: .3rem .3rem; white-space: nowrap; }
+  .gc-perf-table td:first-child { white-space: normal; }
   .gc-status { font-size: .68rem; font-weight: 700; padding: .1rem .45rem; border-radius: .8rem; }
   .gc-status-good { background: rgba(12,163,12,.12); color: #0ca30c; }
   .gc-status-medium { background: rgba(250,178,25,.2); color: #8a5f00; }
