@@ -61,7 +61,12 @@
 
   /* Narrow cells and headings that may wrap, so every column fits. The id
      outranks the design-system grid rule. */
-  .ds #item-table.ds-grid thead th { white-space: normal; line-height: 1.2; font-size: .68rem; padding-left: 5px; padding-right: 5px; }
+  .ds #item-table.ds-grid thead th { white-space: normal; line-height: 1.2; font-size: .68rem; padding-left: 5px; padding-right: 5px; vertical-align: middle; }
+  /* Figures take only the width they need, so spare width goes to the text
+     columns; Description never gets squeezed to a sliver. */
+  #item-table td.itl-num { white-space: nowrap; }
+  #item-table th.ds-num { min-width: 84px; }
+  #item-table td.itl-desc { min-width: 140px; }
   .ds #item-table.ds-grid tbody td { font-size: .76rem; padding-left: 5px; padding-right: 5px; vertical-align: middle; }
   /* DataTables reserves wide right padding for its sort arrows; less is enough. */
   .ds #item-table.dataTable > thead > tr > th.sorting,
@@ -602,6 +607,9 @@
 
         const table = $("#item-table").DataTable({
             data: [],
+            // The table is created empty, so widths DataTables fixed then would
+            // not fit the items; the browser sizes the columns to their content.
+            autoWidth: false,
             dom: "<'itl-dt-top'<'itl-dt-length'l><'itl-dt-buttons'B><'itl-dt-end'>><'itl-table-wrap'tr><'itl-dt-bottom'ip>",
             pageLength: [10, 25, 50, 100, -1].includes(saved.length) ? saved.length : 10,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
@@ -638,7 +646,7 @@
                         : d,
                 },
                 {
-                    data: "description",
+                    data: "description", className: "itl-desc",
                     render: (d, type, row) => {
                         if (type !== "display") return type === "filter" ? `${d} ${row.hsn_code || ""}` : d;
                         const sub = row.hsn_code ? `<span class="itl-subline">HSN ${esc(row.hsn_code)}</span>` : "";
