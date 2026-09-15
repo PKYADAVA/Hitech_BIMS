@@ -125,6 +125,17 @@
     .gc-col-right { position: static; max-height: none; overflow-y: visible; }
   }
   .gc-full { margin-top: 1rem; }
+  /* Thin vertical scrollbars on the right-hand column and the table boxes, so
+     the bar takes less width beside the cards and tables. */
+  .gc-col-right, .report-scroll, .gc-page .table-responsive {
+    scrollbar-width: thin; scrollbar-color: #b8c2cc transparent;
+  }
+  .gc-col-right::-webkit-scrollbar, .report-scroll::-webkit-scrollbar,
+  .gc-page .table-responsive::-webkit-scrollbar { width: 8px; height: 8px; }
+  .gc-col-right::-webkit-scrollbar-thumb, .report-scroll::-webkit-scrollbar-thumb,
+  .gc-page .table-responsive::-webkit-scrollbar-thumb { background: #b8c2cc; border-radius: 4px; }
+  .gc-col-right::-webkit-scrollbar-track, .report-scroll::-webkit-scrollbar-track,
+  .gc-page .table-responsive::-webkit-scrollbar-track { background: transparent; }
 
   .gc-card { background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem; padding: .85rem 1rem; }
   .gc-card-header {
