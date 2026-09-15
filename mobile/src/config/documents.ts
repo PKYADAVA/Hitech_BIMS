@@ -136,7 +136,9 @@ const loc = (v: Dict, name: string) => ({
 const WAREHOUSE_PATH = "/inventory/warehouses/";
 const FARM_PATH = "/broiler/farms/";
 const BATCH_PATH = "/broiler/batches/";
-const ITEM_PATH = "/items/";
+// Active items only: an inactive item drops out of the pickers on new
+// entries. A document that already uses one keeps its value.
+const ITEM_PATH = "/items/?is_active=true";
 const ACCOUNT_PATH = "/accounts/";
 
 const fLoc = (name: string, label: string, opts?: { withBatch?: boolean }): DocField => ({

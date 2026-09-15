@@ -855,7 +855,8 @@ export const FORMS: Record<string, FormSchema> = {
   },
   "inventory-price-list": {
     fields: [
-      sel("item", "Item", "/inventory/items/", ["description", "item_code"], true),
+      // Active items only: an inactive item is not offered on a new entry.
+      sel("item", "Item", "/inventory/items/?is_active=true", ["description", "item_code"], true),
       dec("price", "Price", true),
       date("effective_date", "Effective Date", true),
     ],

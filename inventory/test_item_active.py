@@ -171,3 +171,18 @@ class PriceListTests(ItemActiveBase):
         sheet = openpyxl.load_workbook(io.BytesIO(price_template_workbook(today=self.today))).active
         codes = [r[0] for r in sheet.iter_rows(min_row=2, values_only=True)]
         self.assertEqual(codes, [self.starter.item_code])
+
+
+class PhonePickerTests(ItemActiveBase):
+    """The phone's item pickers ask for active items only."""
+
+    def test_the_item_resource_leaves_out_inactive_items_when_asked(self):
+        from rest_framework.test import APIClient
+
+        self.retire(self.finisher)
+        client = APIClient()
+        client.force_authenticate(self.user)
+        every = client.get("/api/v1/items/?page_size=200").json()["data"]
+        active = client.get("/api/v1/items/?is_active=true&page_size=200").json()["data"]
+        self.assertEqual({r["id"] for r in every}, {self.starter.id, self.finisher.id})
+        self.assertEqual([r["id"] for r in active], [self.starter.id])

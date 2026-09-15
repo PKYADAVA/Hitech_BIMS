@@ -1155,7 +1155,7 @@ const inventoryResources: ResourceConfig[] = [
     searchKeys: ["item_code", "description", "hsn_code"],
     card: (r) => ({
       title: pick(r, ["description", "item_code"], `Item #${r.id}`),
-      subtitle: joinParts([pick(r, ["item_code"]), pick(r, ["category_label"]), pick(r, ["type"])]),
+      subtitle: joinParts([pick(r, ["item_code"]), pick(r, ["category_label"]), r.is_active === false ? "Inactive" : pick(r, ["type"])]),
       trailing: !isBlank(r.standard_cost_per_unit)
         ? { value: formatMoney(r.standard_cost_per_unit), caption: "std cost" }
         : undefined,
