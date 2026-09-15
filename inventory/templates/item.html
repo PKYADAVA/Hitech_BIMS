@@ -178,8 +178,16 @@
     <!-- List Section -->
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex align-items-center gap-2 flex-wrap">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Item List</h5>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <label for="item-status-filter" class="form-label mb-0 small text-nowrap">Status</label>
+                    <select id="item-status-filter" class="form-select form-select-sm" style="min-width: 140px;">
+                        <option value="">All</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -198,6 +206,7 @@
                                 <th>Usage</th>
                                 <th>Storage UOM</th>
                                 <th>Consumption UOM</th>
+                                <th>Status</th>
                                 <th class="ds-mid">Actions</th>
                             </tr>
                         </thead>
@@ -290,7 +299,7 @@
                         const storageUomLabel = item.storage_uom__symbol || item.storage_uom__name || "";
                         const consumptionUomLabel = item.consumption_uom__symbol || item.consumption_uom__name || "";
                         const tableRow = `
-                            <tr>
+                            <tr data-active="${item.is_active ? "active" : "inactive"}">
                                 <td>${item.item_code}</td>
                                 <td>${item.description}</td>
                                 <td>${item.category__name}</td>
@@ -300,11 +309,19 @@
                                 <td>${item.usage}</td>
                                 <td>${escapeHtml(storageUomLabel)}</td>
                                 <td>${escapeHtml(consumptionUomLabel)}</td>
+                                <td>${item.is_active
+                                    ? '<span class="ds-badge is-active">Active</span>'
+                                    : '<span class="ds-badge is-inactive">Inactive</span>'}</td>
                                 <td>
                                     <div class="d-flex gap-1">
                                     {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-item"
                                         data-item_id="${item.id}">
                                         <i class="fas fa-pen"></i>
+                                    </button>{% endif %}
+                                    {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm toggle-item-active"
+                                        data-id="${item.id}" title="${item.is_active ? "Make Inactive" : "Make Active"}"
+                                        aria-label="${item.is_active ? "Make Inactive" : "Make Active"}">
+                                        <i class="fas ${item.is_active ? "fa-toggle-on text-success" : "fa-toggle-off"}"></i>
                                     </button>{% endif %}
                                     {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
                                         data-id="${item.id}">
@@ -325,6 +342,37 @@
                 },
             });
         }
+
+        // Status filter: rows carry data-active, read here on every draw.
+        $.fn.dataTable.ext.search.push(function (settings, _data, index) {
+            if (settings.nTable.id !== "item-table") return true;
+            const want = $("#item-status-filter").val();
+            if (!want) return true;
+            const node = settings.aoData[index].nTr;
+            return !node || node.dataset.active === want;
+        });
+        $("#item-status-filter").on("change", function () {
+            const table = $("#item-table");
+            if ($.fn.DataTable.isDataTable(table)) table.DataTable().draw();
+        });
+
+        // Active / Inactive toggle. Inactive items drop out of the item
+        // pickers on new entries; existing records keep them.
+        $(document).on("click", ".toggle-item-active", function () {
+            const id = $(this).data("id");
+            $.ajax({
+                url: `/item/${id}/toggle-active/`,
+                method: "POST",
+                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                success: function (response) {
+                    window.showToast('success', response.message || "Item status updated.");
+                    loadItemList();
+                },
+                error: function (xhr) {
+                    window.showToast('danger', xhr.responseJSON?.error || "Could not change the item's status.");
+                },
+            });
+        });
 
         // Load item list on page load
         loadItemList();

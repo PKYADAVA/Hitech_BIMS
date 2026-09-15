@@ -82,6 +82,10 @@
   .ipl-act.edit { background: #fff1db; color: #b54708; }
   .ipl-act.copy { background: #eef1f5; color: #475569; }
   .ipl-act.del { background: #fde8e8; color: #c0392b; }
+  .ipl-act.tog { background: #e7f7ee; color: #067647; }
+  #ipl-table tr.ipl-row-off .ipl-name,
+  #ipl-table tr.ipl-row-off .ipl-price { color: #94a3b8; }
+  .ipl-act.tog.off { background: #eef1f5; color: #64748b; }
 
   .ipl-foot {
     display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
@@ -108,7 +112,8 @@
 <div class="ipl-page" id="ipl-page"
      data-can-add="{{ page_perms.add|yesno:'1,0' }}"
      data-can-edit="{{ page_perms.edit|yesno:'1,0' }}"
-     data-can-delete="{{ page_perms.delete|yesno:'1,0' }}">
+     data-can-delete="{{ page_perms.delete|yesno:'1,0' }}"
+     data-can-toggle="{{ can_toggle_items|yesno:'1,0' }}">
 
   <div class="ipl-head">
     <div class="ipl-head-icon"><i class="fas fa-tags"></i></div>
@@ -150,8 +155,9 @@
       <div class="ipl-filter-body">
         <label for="ipl-f-status">Status</label>
         <select id="ipl-f-status" class="form-select form-select-sm">
-          <option value="all">All Statuses</option>
-          <option value="active" selected>Active</option>
+          <option value="all" selected>All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
           <option value="upcoming">Upcoming</option>
           <option value="not_priced">Not Priced</option>
         </select>
@@ -450,6 +456,7 @@ $(function () {
         add: page.dataset.canAdd === "1",
         edit: page.dataset.canEdit === "1",
         del: page.dataset.canDelete === "1",
+        toggle: page.dataset.canToggle === "1",
     };
     const URLS = {
         overview: "{% url 'item_price_list_overview_data' %}",
@@ -470,7 +477,7 @@ $(function () {
     const money = (v) => (v === null || v === undefined || v === "")
         ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const dash = '<span class="ipl-muted">&mdash;</span>';
-    const BADGE = { active: "is-active", upcoming: "is-pending", not_priced: "is-inactive", superseded: "is-closed" };
+    const BADGE = { active: "is-active", upcoming: "is-pending", not_priced: "is-inactive", superseded: "is-closed", inactive: "is-cancelled" };
     const badge = (status, label) => `<span class="ds-badge ${BADGE[status] || "is-info"}">${esc(label)}</span>`;
     const apiError = (xhr, fallback) => (xhr.responseJSON && xhr.responseJSON.error) || fallback;
     const jsonHeaders = { "X-CSRFToken": csrfToken };
@@ -513,6 +520,10 @@ $(function () {
         if (CAN.del && row.entry) {
             parts.push(`<button type="button" class="ipl-act del" data-act="delete" data-entry="${row.entry}" data-item="${row.item}" title="Delete this price" aria-label="Delete this price"><i class="fas fa-trash"></i></button>`);
         }
+        if (CAN.toggle) {
+            const label = row.is_active ? "Make item inactive" : "Make item active";
+            parts.push(`<button type="button" class="ipl-act tog${row.is_active ? "" : " off"}" data-act="toggle" data-item="${row.item}" title="${label}" aria-label="${label}"><i class="fas ${row.is_active ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`);
+        }
         return `<div class="ipl-actions">${parts.join("")}</div>`;
     }
 
@@ -525,6 +536,7 @@ $(function () {
         pageLength: 25,
         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
         order: [[2, "asc"]],
+        createdRow: (tr, row) => tr.classList.toggle("ipl-row-off", !row.is_active),
         language: {
             lengthMenu: "Show _MENU_",
             emptyTable: "No items match these filters",
@@ -602,7 +614,7 @@ $(function () {
     });
 
     function updateCounts(counts) {
-        const labels = { all: "All Statuses", active: "Active", upcoming: "Upcoming", not_priced: "Not Priced" };
+        const labels = { all: "All Statuses", active: "Active", inactive: "Inactive", upcoming: "Upcoming", not_priced: "Not Priced" };
         Object.keys(labels).forEach((key) => {
             filters.status.find(`option[value="${key}"]`).text(`${labels[key]} (${counts[key] || 0})`);
         });
@@ -677,7 +689,17 @@ $(function () {
         if (d.act === "edit") openEdit(Number(d.entry), Number(d.item), d.price, d.date);
         if (d.act === "copy") openAdd({ item: d.item, price: d.price });
         if (d.act === "delete") deleteEntry(Number(d.entry), Number(d.item));
+        if (d.act === "toggle") toggleItem(Number(d.item));
     });
+
+    function toggleItem(itemId) {
+        $.ajax({ url: `/item/${itemId}/toggle-active/`, method: "POST", headers: jsonHeaders })
+            .done(function (res) {
+                window.showToast("success", res.message || "Item updated.");
+                load();
+            })
+            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not change the item's status.")));
+    }
 
     const ACTION_BADGE = { create: "is-active", update: "is-pending", delete: "is-cancelled" };
 

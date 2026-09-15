@@ -75,8 +75,11 @@ def item_category(request):
 
 @login_required
 def item_price_list(request):
-    items = Item.objects.order_by('item_code')
+    from user.access import user_can
+
+    items = Item.objects.active().order_by('item_code')
     return render(request, 'item_price_list.html', {
+        'can_toggle_items': user_can(request.user, 'items', 'edit'),
         'items_json': [{'id': i.id, 'label': f"{i.item_code} - {i.description}"} for i in items],
         'categories': ItemCategory.objects.order_by('name'),
     })
@@ -194,6 +197,7 @@ class ItemAPI(View):
                     "lot_serial_control": item.lot_serial_control,
                     "kg_per_bag": str(item.kg_per_bag) if item.kg_per_bag else None,
                     "hsn_code": item.hsn_code,
+                    "is_active": item.is_active,
                 })
             except Item.DoesNotExist:
                 raise Http404("Item not found")
@@ -224,6 +228,7 @@ class ItemAPI(View):
                     "item_account": item.item_account, "lot_serial_control": item.lot_serial_control,
                     "kg_per_bag": str(item.kg_per_bag) if item.kg_per_bag else None,
                     "hsn_code": item.hsn_code,
+                    "is_active": item.is_active,
                 })
             return JsonResponse(items, safe=False)
 
@@ -642,7 +647,7 @@ def item_price_list_overview(request):
 
     rows = price_overview(category=request.GET.get("category"),
                           search=request.GET.get("search"))
-    counts = {"active": 0, "upcoming": 0, "not_priced": 0, "all": len(rows)}
+    counts = {"active": 0, "upcoming": 0, "not_priced": 0, "inactive": 0, "all": len(rows)}
     for row in rows:
         counts[row["status"]] += 1
     status = (request.GET.get("status") or "").strip()
@@ -748,6 +753,19 @@ def item_price_list_template(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = 'attachment; filename="item_price_list_template.xlsx"'
     return response
+
+
+@login_required
+def toggle_item_active(request, id):
+    """Make an item Active or Inactive. Inactive items drop out of the item
+    pickers on new entries; nothing already recorded against one changes."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    item = get_object_or_404(Item, id=id)
+    item.is_active = not item.is_active
+    item.save(update_fields=["is_active"])
+    state = "Active" if item.is_active else "Inactive"
+    return JsonResponse({"message": f"{item.item_code} is now {state}", "is_active": item.is_active})
 
 
 @login_required
@@ -1202,7 +1220,7 @@ class StockTransferListTemplateView(View):
 class StockTransferFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_transfer_form.html", {
-            "items": Item.objects.select_related("category", "storage_uom").order_by("item_code"),
+            "items": Item.objects.active().select_related("category", "storage_uom").order_by("item_code"),
             "categories": ItemCategory.objects.order_by("name"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
@@ -1586,7 +1604,7 @@ class MedicineTransferListTemplateView(View):
 class MedicineTransferFormTemplateView(View):
     def get(self, request):
         return render(request, "medicine_transfer_form.html", {
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.active().order_by("item_code"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
@@ -2021,7 +2039,7 @@ class InventoryAdjustmentListTemplateView(View):
 class InventoryAdjustmentFormTemplateView(View):
     def get(self, request):
         return render(request, "inventory_adjustment_form.html", {
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.active().order_by("item_code"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
@@ -2334,7 +2352,7 @@ class StockIssueListTemplateView(View):
 class StockIssueFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_issued_form.html", {
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.active().order_by("item_code"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
@@ -2597,7 +2615,7 @@ class StockReceiveListTemplateView(View):
 class StockReceiveFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_received_form.html", {
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.active().order_by("item_code"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),

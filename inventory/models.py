@@ -171,6 +171,23 @@ class Mapping(models.Model):
         return f"{self.get_type_display()}: {self.from_id} -> {self.to_id}"
 
 
+class ItemQuerySet(models.QuerySet):
+
+    def active(self):
+        return self.filter(is_active=True)
+
+    def for_entry(self, keep=()):
+        """The items a new entry may pick: the active ones, plus any in keep.
+
+        keep is the items a record being edited already uses, so an item made
+        inactive since still shows on that record instead of vanishing from
+        its own dropdown."""
+        keep = [item_id for item_id in keep if item_id]
+        if not keep:
+            return self.active()
+        return self.filter(models.Q(is_active=True) | models.Q(id__in=keep))
+
+
 class Item(models.Model):
     VALUATION_METHODS = [
         ('Weighted Average', 'Weighted Average'),
@@ -226,6 +243,11 @@ class Item(models.Model):
     lot_serial_control = models.CharField(max_length=50, choices=LOT_SERIAL_CONTROL_CHOICES, default='None')
     kg_per_bag = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     hsn_code = models.CharField(max_length=100, null=True, blank=True)
+    #: Inactive items drop out of the item pickers on new entries. Records,
+    #: reports and stock that already use one are unaffected.
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    objects = ItemQuerySet.as_manager()
 
     def __str__(self):
         return f"{self.item_code} - {self.description}"

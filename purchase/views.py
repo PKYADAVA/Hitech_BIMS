@@ -470,7 +470,9 @@ def _general_purchase_form_context(user, gp=None):
         "general_purchase": gp,
         "next_purchase_no": GeneralPurchase._next_purchase_no() if not gp else None,
         "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
-        "items": Item.objects.order_by("item_code"),
+        # Active items, plus any this purchase already uses.
+        "items": Item.objects.for_entry(
+            keep=list(gp.items.values_list("item_id", flat=True)) if gp else []).order_by("item_code"),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         # Feed also goes straight to a farm, so the destination picker offers
         # both. Scoped like the warehouses are — a user only sees the farms
@@ -865,7 +867,7 @@ def _chicks_purchase_form_context(user, cp=None):
         "chicks_purchase": cp,
         "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
         "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
-        "items": Item.objects.order_by("item_code"),
+        "items": Item.objects.for_entry(keep=[cp.item_id] if cp else []).order_by("item_code"),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only

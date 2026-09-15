@@ -301,6 +301,21 @@ class HatchSettingAPI(BaseAPIView):
         return hs
 
 
+def _items_for_form(record_id, *lookups, extra=()):
+    """Items an add/edit form may offer: the active ones, plus those the
+    record being edited already uses, so an item made inactive since does not
+    vanish from its own row. lookups are (model label, parent field, item
+    field) triples naming where the record keeps its items."""
+    from django.apps import apps
+
+    keep = list(extra)
+    if record_id:
+        for label, parent, field in lookups:
+            keep += list(apps.get_model(label).objects
+                         .filter(**{parent: record_id}).values_list(field, flat=True))
+    return Item.objects.for_entry(keep=keep).order_by("item_code")
+
+
 @method_decorator(login_required, name="dispatch")
 class EggPurchaseListTemplateView(View):
     """Renders the egg purchase list page."""
@@ -321,7 +336,7 @@ class EggPurchaseFormTemplateView(View):
             "suppliers": suppliers_for(request.user,
                                        Supplier.objects.all().order_by("name")),
             "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.EggPurchaseItem", "egg_purchase_id", "item_id")),
             "pay_accounts": ChartOfAccount.objects.filter(status="Active").order_by("code"),
             "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
             "next_transaction_no": EggPurchase._next_transaction_no() if id is None else None,
@@ -512,7 +527,8 @@ class EggGradingFormTemplateView(View):
             "suppliers": suppliers_for(request.user,
                                        Supplier.objects.all().order_by("name")),
             "storage_locations": Warehouse.objects.all().order_by("name"),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.EggGrading", "id", "item_id"),
+                                     ("hatchery.EggGradingHatchItem", "egg_grading_id", "hatch_item_id")),
             "next_transaction_no": EggGrading._next_transaction_no() if id is None else None,
         }
         return render(request, "egg_grading_form.html", context)
@@ -677,7 +693,7 @@ class DeliveryChallanFormTemplateView(View):
             "delivery_challan_id": id,
             "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.DeliveryChallanItem", "challan_id", "item_id")),
             "next_challan_no": DeliveryChallan.next_challan_no() if id is None else None,
             "states_and_union_territories": STATES_AND_TERRITORIES,
             "company": CompanyProfile.get_solo(),
@@ -1134,7 +1150,7 @@ class TraySetFormTemplateView(View):
             "suppliers": suppliers_for(request.user,
                                        Supplier.objects.all().order_by("name")),
             "setters": Setter.objects.filter(is_active=True).select_related("hatchery").order_by("setter_no"),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.TraySettingLine", "tray_setting_id", "item_id")),
             "next_setting_no": TraySetting.next_setting_no() if id is None else None,
         })
 
@@ -1296,7 +1312,7 @@ class HatchEntryFormTemplateView(View):
                     "setter_no": line.setter.setter_no, "eggs_set": str(line.eggs_set),
                 } for line in ts.lines.all()],
             } for ts in tray_settings]),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.HatchEntryVaccine", "hatch_entry_id", "item_id")),
             "hatchers": Hatcher.objects.filter(is_active=True).select_related("hatchery").order_by("hatcher_no"),
             "next_transaction_no": HatchEntry.next_transaction_no() if id is None else None,
         })
@@ -1454,7 +1470,8 @@ class ChickSaleFormTemplateView(View):
             "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
             "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
-            "items": Item.objects.all().order_by("item_code"),
+            "items": _items_for_form(id, ("hatchery.ChickSaleItem", "sale_id", "item_id"),
+                                     extra=[row["item"] for row in (from_challan or {}).get("items", [])]),
             "accounts": ChartOfAccount.objects.all().order_by("code"),
             "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
             "states_and_union_territories": STATES_AND_TERRITORIES,

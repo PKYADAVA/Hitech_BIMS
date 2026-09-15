@@ -2291,7 +2291,7 @@ class SingleBatchDailyEntryFormTemplateView(View):
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
             # Feed only: the Feed-1/Feed-2 columns are the only pickers on this
             # page, and the whole master offered Day Old Chicks among them.
-            "items": feed_items(),
+            "items": feed_items().filter(is_active=True),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -2304,7 +2304,7 @@ class DailyEntryFormTemplateView(View):
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
             # Feed only: the Feed-1/Feed-2 columns are the only pickers on this
             # page, and the whole master offered Day Old Chicks among them.
-            "items": feed_items(),
+            "items": feed_items().filter(is_active=True),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -3075,7 +3075,7 @@ class MedicineEntryFormTemplateView(View):
         return render(request, "medicine_entry_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.active().order_by("item_code"),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -8163,7 +8163,7 @@ class ChicksPlacementFormTemplateView(View):
         return render(request, "chicks_placement_form.html", {
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
-            "chick_items": chick_items(),
+            "chick_items": chick_items().filter(is_active=True),
             "sources": _chicks_sources(request.user),
             "today": timezone.localdate().isoformat(),
         })
@@ -9374,7 +9374,9 @@ class FeedPhaseMasterFormTemplateView(View):
             "bird_categories": BirdCategory.objects.filter(is_active=True).order_by("sort_order", "name"),
             "categories": ItemCategory.objects.order_by("name"),
             # every item with its category, so the form can filter items by the chosen category
-            "items_json": json.dumps(list(Item.objects.order_by("description")
+            "items_json": json.dumps(list(Item.objects.for_entry(
+                keep=[line.feed_item_id for line in instance.lines.all()] if instance else [])
+                                          .order_by("description")
                                           .values("id", "description", "category_id", "item_code"))),
             "programs": list(FeedPhaseMaster.objects.order_by("program")
                              .values_list("program", flat=True).distinct()),

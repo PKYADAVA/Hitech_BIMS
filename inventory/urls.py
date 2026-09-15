@@ -22,6 +22,7 @@ urlpatterns = [
     path('linked-tree/', views.linked_tree, name='linked_tree'),
     path('linked-tree/data/', views.linked_tree_data, name='linked_tree_data'),
     path('items/', views.items, name='items'),
+    path('item/<int:id>/toggle-active/', views.toggle_item_active, name='items_toggle_active'),
     path('item_category/', views.item_category, name='item_category'),
     path('item-price-list/', views.item_price_list, name='item_price_list'),
     path('item-price-lists/', views.ItemPriceListAPI.as_view(), name='item_price_list_list'),

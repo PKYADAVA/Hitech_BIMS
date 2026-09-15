@@ -117,7 +117,8 @@ class OverviewTests(PriceListBase):
         res = self.client.get(reverse("item_price_list_overview_data"),
                               {"status": "active"}).json()
         self.assertEqual([r["item"] for r in res["rows"]], [self.starter.id])
-        self.assertEqual(res["counts"], {"active": 1, "upcoming": 1, "not_priced": 1, "all": 3})
+        self.assertEqual(res["counts"], {"active": 1, "upcoming": 1, "not_priced": 1,
+                                         "inactive": 0, "all": 3})
         self.assertTrue(res["last_updated"])
 
     def test_the_page_renders(self):

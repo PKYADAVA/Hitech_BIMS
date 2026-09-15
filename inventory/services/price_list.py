@@ -26,7 +26,9 @@ STATUS_ACTIVE = "active"
 STATUS_UPCOMING = "upcoming"
 STATUS_NOT_PRICED = "not_priced"
 STATUS_SUPERSEDED = "superseded"
+STATUS_INACTIVE = "inactive"
 STATUS_LABELS = {
+    STATUS_INACTIVE: "Inactive",
     STATUS_ACTIVE: "Active",
     STATUS_UPCOMING: "Upcoming",
     STATUS_NOT_PRICED: "Not Priced",
@@ -183,6 +185,7 @@ def _item_info(item):
         "category": item.category.name if item.category_id else "",
         "category_id": item.category_id,
         "unit": _unit(item),
+        "is_active": item.is_active,
     }
 
 
@@ -221,6 +224,10 @@ def price_overview(today=None, category=None, status=None, search=None):
             state, shown = STATUS_UPCOMING, upcoming
         else:
             state, shown = STATUS_NOT_PRICED, None
+        if not item.is_active:
+            # One status per row: an item out of use reads Inactive, whatever
+            # its price. The price itself still shows.
+            state = STATUS_INACTIVE
 
         row = _item_info(item)
         row.update({
@@ -353,7 +360,9 @@ def revise_preview(item_ids, mode, value, effective_date):
             "action": "skip",
             "message": "",
         })
-        if base is None:
+        if not item.is_active:
+            row["message"] = "Item is inactive"
+        elif base is None:
             row["message"] = "No price in force on %s to revise" % on_date.strftime("%d.%m.%Y")
         else:
             if mode == "percent":
@@ -474,6 +483,8 @@ def parse_price_upload(upload, default_date=None):
             row["message"] = "Item code is missing"
         elif item is None:
             row["message"] = "No item with code %s" % code
+        elif not item.is_active:
+            row["message"] = "Item is inactive"
         elif not price_ok:
             row["message"] = "Price is not a number"
         elif price <= 0:
@@ -596,6 +607,8 @@ def price_template_workbook(today=None):
         sheet["%s1" % col].fill = PatternFill("solid", fgColor="FFF4CC")
 
     for row in price_overview(today=today):
+        if not row["is_active"]:
+            continue
         active = row["status"] == STATUS_ACTIVE
         sheet.append([
             row["item_code"], row["item_name"], row["category"], row["unit"],

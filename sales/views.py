@@ -479,7 +479,9 @@ def _sales_invoice_item_dict(row):
 
 def _sales_invoice_form_context(user, inv=None):
     from account.models import TermsConditions, BankCashMaster, CompanyProfile
-    items = list(Item.objects.order_by("item_code").values(
+    items = list(Item.objects.for_entry(
+        keep=list(inv.items.values_list("item_id", flat=True)) if inv else [])
+                 .order_by("item_code").values(
         "id", "item_code", "description", "hsn_code", "storage_uom", "standard_cost_per_unit"))
     return {
         "invoice": inv,

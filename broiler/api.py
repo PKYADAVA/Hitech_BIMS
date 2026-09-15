@@ -745,7 +745,7 @@ class ChickItemListView(V1ViewMixin, APIView):
     def get(self, request):
         from .views import chick_items
 
-        return Response(_item_options(chick_items()))
+        return Response(_item_options(chick_items().filter(is_active=True)))
 
 
 class FeedItemListView(V1ViewMixin, APIView):
@@ -761,7 +761,7 @@ class FeedItemListView(V1ViewMixin, APIView):
     def get(self, request):
         from .views import feed_items
 
-        return Response(_item_options(feed_items()))
+        return Response(_item_options(feed_items().filter(is_active=True)))
 
 
 class DailyEntryLookupView(V1ViewMixin, APIView):
