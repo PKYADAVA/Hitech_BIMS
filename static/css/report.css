@@ -67,7 +67,10 @@
 /* Sticky head/foot only inside a scroll box — a report table rendered straight
    on the page would otherwise pin its header/totals against the viewport. */
 .rpt-scroll .rpt-table thead th { position:sticky; top:0; z-index:3; }
-.rpt-scroll .rpt-table thead tr:nth-child(2) th { top:30px; }
+/* Two heading rows stick as one block rather than each row at a typed
+   offset that did not match the real row height. */
+.rpt-scroll .rpt-table thead:has(tr + tr) { position:sticky; top:0; z-index:3; }
+.rpt-scroll .rpt-table thead:has(tr + tr) th { top:auto; }
 .rpt-table td.num { text-align:right; }
 /* every heading is centred, including numeric columns */
 .rpt-table thead th, .rpt-table thead th.num { text-align:center; }

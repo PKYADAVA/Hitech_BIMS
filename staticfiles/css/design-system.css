@@ -790,6 +790,25 @@ body.ds-shell .content > footer { display: none; }
   background: var(--ds-card);
 }
 .ds table.ds-grid.freeze-2 thead th:nth-child(2) { z-index: 3; background: var(--ds-header-bg); }
+/* A frozen heading cell must sit above every other heading cell. The body
+   rule above (th:first-child:not([colspan])) is more specific than the
+   thead:first-child rule and set these to z-index 1, below the z-index 2-3 the
+   other sticky heading cells carry — so scrolling sideways slid the next
+   heading over the frozen one while the frozen data stayed put, and dates
+   read under "Age" or "Opening Birds". */
+.ds .rpt-table thead th:first-child:not([colspan]),
+.ds table.ds-grid.freeze-1 thead th:first-child:not([colspan]),
+.ds table.ds-grid.freeze-2 thead th:nth-child(2) {
+  z-index: 4;
+}
+/* Two or more heading rows stick as one block. Each row used to stick on its
+   own at a hand-typed offset that never matched the real row height, so the
+   second row slid up over the first and cut its labels in half. Sticking the
+   whole thead keeps the rows stacked at their true heights. */
+.ds table.ds-grid thead:has(tr + tr) {
+  position: sticky; top: 0; z-index: 3;
+}
+.ds table.ds-grid thead:has(tr + tr) th { top: auto; }
 /* The shadow is what tells you a column is frozen rather than just first. */
 .ds .rpt-table th:first-child:not([colspan])::after,
 .ds .rpt-table td:first-child:not([colspan])::after,
