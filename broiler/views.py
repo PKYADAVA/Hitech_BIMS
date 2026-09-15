@@ -8627,16 +8627,16 @@ def _pending_item_balances(report):
     both ways stock leaves a farm. Medicine has no summary, so it is balanced
     here the same way: in, less used, less returned, less transferred out.
 
-    Only a positive balance is stock left. A negative one is a recording
-    problem — more used than was ever received — and not something that can
-    be returned or moved on.
+    A negative balance holds the close too. It means more was recorded as used
+    or sent out than was ever received, so the records are wrong somewhere, and
+    a batch should not be settled on figures that do not add up.
     """
     q2 = Decimal("0.01")
     pending = []
 
     for row in report.get("feed_summary") or []:
         balance = Decimal(str(row.get("balance") or 0)).quantize(q2)
-        if balance > 0:
+        if balance != 0:
             pending.append({"kind": "Feed", "item": row.get("item") or "",
                             "balance": balance})
 
@@ -8655,7 +8655,7 @@ def _pending_item_balances(report):
 
     for key, b in medicine.items():
         balance = b["balance"].quantize(q2)
-        if key is not None and balance > 0:
+        if key is not None and balance != 0:
             pending.append({"kind": "Medicine", "item": b["item"], "balance": balance})
 
     return pending
@@ -9016,13 +9016,25 @@ class GCSettlementAPI(View):
         # transferred out — see _pending_item_balances.
         pending = _pending_item_balances(report)
         if pending:
-            lines = "; ".join(
-                "%s: %s %s" % (p["kind"], p["item"], format(p["balance"], "f"))
-                for p in pending)
+            left = [p for p in pending if p["balance"] > 0]
+            short = [p for p in pending if p["balance"] < 0]
+            parts = []
+            if left:
+                parts.append(
+                    "Stock still on the farm: " + "; ".join(
+                        "%s %s %s" % (p["kind"], p["item"], format(p["balance"], "f"))
+                        for p in left)
+                    + ". Consume it, return it to the warehouse, or transfer "
+                      "it to another farm.")
+            if short:
+                parts.append(
+                    "More used or sent out than received: " + "; ".join(
+                        "%s %s %s" % (p["kind"], p["item"], format(p["balance"], "f"))
+                        for p in short)
+                    + ". Correct the entries or transfers so the balance is zero.")
             return JsonResponse({
-                "error": "This batch cannot be closed while stock is still on the "
-                         "farm. " + lines + ". Consume it, return it to the "
-                         "warehouse, or transfer it to another farm first.",
+                "error": "This batch cannot be closed until every item balances "
+                         "to zero. " + " ".join(parts),
                 "pending": [{"kind": p["kind"], "item": p["item"],
                              "balance": format(p["balance"], "f")} for p in pending],
             }, status=400)

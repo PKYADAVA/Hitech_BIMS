@@ -1,4 +1,4 @@
-"""A batch cannot be closed while stock is still on the farm.
+"""A batch cannot be closed until every item balances to zero.
 
 Closing a batch settles it, and settling it with feed or medicine still on hand
 leaves that stock belonging to nothing: the flock is finished, the next one has
@@ -178,10 +178,25 @@ class CloseWithStockTests(TestCase):
     def test_a_batch_with_nothing_on_it_closes(self):
         self.assertClosed(self.close())
 
-    def test_more_used_than_received_is_not_stock_left(self):
-        """A negative balance is a recording problem, not stock that can be
-        returned or moved on, so it does not hold the close."""
+    def test_more_used_than_received_also_stops_the_close(self):
+        """A negative balance means the records do not add up, and a batch is
+        not settled on figures that do not add up."""
         self.feed_in(self.finisher, 100)
         self.eat(self.finisher, 150)
+        self.assertRefused(self.close(), "Finisher Feed", "-50.00", "Correct the entries")
+
+    def test_negative_medicine_also_stops_the_close(self):
+        self.med_in(10)
+        self.med_use(15)
+        self.assertRefused(self.close(), "Gumboro Vaccine", "-5.00")
+
+    def test_the_helper_reports_a_negative_balance(self):
         self.assertEqual(_pending_item_balances(
-            {"feed_summary": [{"item": "Finisher Feed", "balance": Decimal("-50")}]}), [])
+            {"feed_summary": [{"item": "Finisher Feed", "balance": Decimal("-50")}]}),
+            [{"kind": "Feed", "item": "Finisher Feed", "balance": Decimal("-50.00")}])
+
+    def test_the_per_item_case_names_the_short_item_too(self):
+        """Starter over and Finisher short: both need fixing, so both are named."""
+        self.feed_in(self.starter, 100)
+        self.eat(self.finisher, 100)
+        self.assertRefused(self.close(), "Starter Feed", "Finisher Feed")
