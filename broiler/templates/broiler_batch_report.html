@@ -105,9 +105,9 @@
     display: flex; align-items: center; justify-content: center;
     background: var(--kpi-bg); color: var(--kpi-accent); font-size: .95rem;
   }
-  .gc-kpi-label { font-size: .68rem; color: #52514e; font-weight: 600; }
+  .gc-kpi-label { font-size: .62rem; color: #52514e; font-weight: 600; }
   .gc-kpi-value { font-size: 1.05rem; font-weight: 700; color: #0b0b0b; line-height: 1.2; }
-  .gc-kpi-sub { font-size: .62rem; color: #898781; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  .gc-kpi-sub { font-size: .56rem; color: #898781; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
   .gc-kpi-sub .gc-status { font-size: .58rem; padding: .05rem .35rem; }
 
   .gc-layout { display: flex; gap: 1rem; align-items: flex-start; }
@@ -129,8 +129,17 @@
   .gc-full { margin-top: 1rem; }
   /* Left-column tables: headings and the location / item names may wrap onto a
      second line; dates, codes and figures stay on one line. */
-  .gc-col-left .report-table:not(.report-dense) th { white-space: normal; padding-left: .4rem; padding-right: .4rem; }
-  .gc-col-left .report-table:not(.report-dense) td { padding-left: .4rem; padding-right: .4rem; }
+  .gc-col-left .report-table:not(.report-dense) th { white-space: normal; font-size: .7rem; padding-left: .32rem; padding-right: .32rem; }
+  .gc-col-left .report-table:not(.report-dense) td { font-size: .7rem; padding-left: .32rem; padding-right: .32rem; }
+  /* Smaller text where the data would otherwise not fit the width. The .ds
+     prefix is needed: design-system.css sets every .ds-grid cell to 12px with
+     12px side padding, which out-ranked the compact sizes set above. */
+  .ds .gc-page table.ds-grid.report-dense thead th,
+  .ds .gc-page table.ds-grid.report-dense tbody td { font-size: .62rem; padding: .15rem .2rem; height: auto; }
+  .ds .gc-page .gc-full table.ds-grid.report-table:not(.report-dense) thead th,
+  .ds .gc-page .gc-full table.ds-grid.report-table:not(.report-dense) tbody td { font-size: .72rem; padding-left: .35rem; padding-right: .35rem; }
+  .ds .gc-col-right table.ds-grid.gc-perf-table thead th,
+  .ds .gc-col-right table.ds-grid.gc-perf-table tbody td { font-size: .68rem; padding: .3rem .3rem; }
   .gc-col-left .report-table:not(.report-dense) td:is(:nth-child(4), :nth-child(5)):not(.text-end) { white-space: normal; min-width: 90px; }
   /* Thin vertical scrollbars on the right-hand column and the table boxes, so
      the bar takes less width beside the cards and tables. */
@@ -170,7 +179,7 @@
   }
   .gc-donut-total-label { font-size: .62rem; color: #898781; }
   .gc-donut-total-value { font-size: .8rem; font-weight: 700; color: #0b0b0b; }
-  .gc-legend { list-style: none; margin: 0; padding: 0; font-size: .74rem; flex: 1; min-width: 0; }
+  .gc-legend { list-style: none; margin: 0; padding: 0; font-size: .66rem; flex: 1; min-width: 0; }
   .gc-legend li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .2rem 0; }
   .gc-legend li .name { display: flex; align-items: center; min-width: 0; }
   .gc-legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: .4rem; flex: 0 0 9px; }
