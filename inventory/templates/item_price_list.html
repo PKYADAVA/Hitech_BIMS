@@ -176,8 +176,8 @@
           <th>Item Name</th>
           <th>Category</th>
           <th>Unit</th>
-          <th class="ds-num">Price (&#8377;)</th>
           <th class="ds-num">Last Purchase (&#8377;)</th>
+          <th class="ds-num">Price (&#8377;)</th>
           <th class="ds-num">Previous (&#8377;)</th>
           <th class="ds-num">Change</th>
           <th>Effective Date</th>
@@ -551,6 +551,16 @@ $(function () {
             { data: "category" },
             { data: "unit", defaultContent: "" },
             {
+                data: "last_purchase", className: "ipl-num", defaultContent: "",
+                render: (d, type) => {
+                    if (type !== "display") return d ? Number(d.rate) : (type === "sort" || type === "type" ? -1 : "");
+                    if (!d) return '<span class="ipl-muted" title="No purchase recorded for this item">&mdash;</span>';
+                    const tip = [d.source, d.ref, d.supplier, d.date].filter(Boolean).join(" · ");
+                    const per = d.unit ? `<span class="ipl-per"> / ${esc(d.unit)}</span>` : "";
+                    return `<span title="${esc(tip)}">${money(d.rate)}${per}<span class="ipl-sub">${esc(d.date)}</span></span>`;
+                },
+            },
+            {
                 data: "price", className: "ipl-price",
                 render: (d, type, row) => {
                     if (type !== "display") return numeric(d, type, -1);
@@ -559,16 +569,6 @@ $(function () {
                         ? `<span class="ipl-next" title="Price already set for a later date">&rarr; ${money(row.next_price)} from ${esc(row.next_date)}</span>`
                         : "";
                     return money(d) + next;
-                },
-            },
-            {
-                data: "last_purchase", className: "ipl-num", defaultContent: "",
-                render: (d, type) => {
-                    if (type !== "display") return d ? Number(d.rate) : (type === "sort" || type === "type" ? -1 : "");
-                    if (!d) return '<span class="ipl-muted" title="No purchase recorded for this item">&mdash;</span>';
-                    const tip = [d.source, d.ref, d.supplier, d.date].filter(Boolean).join(" · ");
-                    const per = d.unit ? `<span class="ipl-per"> / ${esc(d.unit)}</span>` : "";
-                    return `<span title="${esc(tip)}">${money(d.rate)}${per}<span class="ipl-sub">${esc(d.date)}</span></span>`;
                 },
             },
             {
