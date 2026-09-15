@@ -78,7 +78,8 @@
      one consistent card-based layout — a light gray canvas (body bg) with
      white rounded-card sections, rather than a single flat printed sheet. ---- */
   .gc-info-bar {
-    display: flex; flex-wrap: wrap; gap: .5rem 1.25rem;
+    /* Spread across the full width rather than packed to the left. */
+    display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; justify-content: space-between;
     background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem;
     padding: .75rem 1rem; margin-bottom: 1rem;
   }
