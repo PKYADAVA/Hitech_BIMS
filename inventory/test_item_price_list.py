@@ -95,6 +95,7 @@ class OverviewTests(PriceListBase):
         """Worth seeing: a transfer of it would be refused."""
         row = self.row_for(price_overview(today=self.today), self.tonic)
         self.assertEqual(row["status"], "not_priced")
+        self.assertEqual(row["status_label"], "Not Defined")
         self.assertIsNone(row["price"])
         self.assertIsNone(row["entry"])
 

@@ -70,6 +70,7 @@
   .ipl-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ipl-next { display: block; font-size: .68rem; font-weight: 600; color: #b54708; }
   .ipl-muted { color: #94a3b8; }
+  .ipl-undefined { font-size: .72rem; font-weight: 600; color: #b42318; white-space: nowrap; }
   .ipl-up { color: #b42318; font-weight: 600; }
   .ipl-down { color: #067647; font-weight: 600; }
   .ipl-actions { display: flex; gap: .3rem; justify-content: center; }
@@ -159,7 +160,7 @@
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="upcoming">Upcoming</option>
-          <option value="not_priced">Not Priced</option>
+          <option value="not_priced">Not Defined</option>
         </select>
       </div>
     </div>
@@ -575,8 +576,11 @@ $(function () {
             {
                 data: "price", className: "ipl-price",
                 render: (d, type, row) => {
+                    // An item saved with no price reads Not Defined, on screen
+                    // and in exports, rather than a blank.
+                    if (type === "export" && d === null) return "Not Defined";
                     if (type !== "display") return numeric(d, type, -1);
-                    if (d === null) return dash;
+                    if (d === null) return '<span class="ipl-undefined">Not Defined</span>';
                     const next = row.next_price !== null
                         ? `<span class="ipl-next" title="Price already set for a later date">&rarr; ${money(row.next_price)} from ${esc(row.next_date)}</span>`
                         : "";
@@ -614,7 +618,7 @@ $(function () {
     });
 
     function updateCounts(counts) {
-        const labels = { all: "All Statuses", active: "Active", inactive: "Inactive", upcoming: "Upcoming", not_priced: "Not Priced" };
+        const labels = { all: "All Statuses", active: "Active", inactive: "Inactive", upcoming: "Upcoming", not_priced: "Not Defined" };
         Object.keys(labels).forEach((key) => {
             filters.status.find(`option[value="${key}"]`).text(`${labels[key]} (${counts[key] || 0})`);
         });

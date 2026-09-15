@@ -31,7 +31,7 @@ STATUS_LABELS = {
     STATUS_INACTIVE: "Inactive",
     STATUS_ACTIVE: "Active",
     STATUS_UPCOMING: "Upcoming",
-    STATUS_NOT_PRICED: "Not Priced",
+    STATUS_NOT_PRICED: "Not Defined",
     STATUS_SUPERSEDED: "Superseded",
 }
 
@@ -195,7 +195,7 @@ def price_overview(today=None, category=None, status=None, search=None):
     """Every item once, with the price in force today, the one before it and
     any price already set for a later date.
 
-    Active: priced today. Upcoming: only priced from a later date. Not Priced:
+    Active: priced today. Upcoming: only priced from a later date. Not Defined:
     no price at all, so a transfer of it would be refused."""
     today = today or timezone.localdate()
     items = (Item.objects.select_related("category", "storage_uom", "consumption_uom")
