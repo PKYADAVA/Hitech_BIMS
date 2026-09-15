@@ -122,6 +122,23 @@ class OverviewTests(PriceListBase):
                                          "inactive": 0, "all": 3})
         self.assertTrue(res["last_updated"])
 
+    def test_a_new_item_shows_up_at_once_as_not_priced(self):
+        """Nothing to do on the price list: an item created on the Items page
+        is listed straight away, waiting for its price."""
+        response = self.client.post(reverse("item_create"), json.dumps({
+            "description": "Grower Feed", "category": self.feed.id,
+            "valuation_method": "Weighted Average", "standard_cost_per_unit": "0",
+            "usage": "Produced",
+        }), content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.content)
+        grower = Item.objects.get(description="Grower Feed")
+
+        rows = self.client.get(reverse("item_price_list_overview_data")).json()["rows"]
+        row = self.row_for(rows, grower)
+        self.assertEqual((row["status"], row["price"], row["is_active"]), ("not_priced", None, True))
+        page = self.client.get(reverse("item_price_list"))
+        self.assertIn(grower.id, [i["id"] for i in page.context["items_json"]])
+
     def test_the_page_renders(self):
         response = self.client.get(reverse("item_price_list"))
         self.assertEqual(response.status_code, 200)

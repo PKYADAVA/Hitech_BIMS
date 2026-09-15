@@ -470,7 +470,12 @@ $(function () {
         entry: (id) => `/item-price-list/${id}/`,
         remove: (id) => `/item-price-list/${id}/delete/`,
     };
-    const items = JSON.parse(document.getElementById("ipl-items").textContent);
+    // Active items for the Add Prices dropdown, and every item's name for the
+    // edit dialog. Both are refreshed from the list data on every load, so an
+    // item created since the page opened is offered too.
+    let items = JSON.parse(document.getElementById("ipl-items").textContent);
+    const itemLabels = new Map(items.map((i) => [i.id, i.label]));
+    let lastLoaded = 0;
     const today = localDay();
 
     // escapeHtml() provided globally by main.js
@@ -631,6 +636,10 @@ $(function () {
                 const known = new Set(res.rows.map((r) => r.item));
                 [...selected].forEach((id) => { if (!known.has(id)) selected.delete(id); });
                 table.clear().rows.add(res.rows).draw(false);
+                res.rows.forEach((r) => itemLabels.set(r.item, `${r.item_code} - ${r.item_name}`));
+                items = res.rows.filter((r) => r.is_active)
+                    .map((r) => ({ id: r.item, label: `${r.item_code} - ${r.item_name}` }));
+                lastLoaded = Date.now();
                 $("#ipl-last").text(res.last_updated || "—");
                 updateCounts(res.counts);
                 selectionChanged();
@@ -769,8 +778,7 @@ $(function () {
     let editing = null;
     function openEdit(entryId, itemId, price, date) {
         editing = { entry: entryId, item: itemId };
-        const it = items.find((i) => i.id === itemId);
-        $("#ipl-e-item").text(it ? it.label : "");
+        $("#ipl-e-item").text(itemLabels.get(itemId) || "");
         $("#ipl-e-price").val(price);
         $("#ipl-e-date").val(date);
         $("#iplEditModal").modal("show");
@@ -806,13 +814,13 @@ $(function () {
     }
 
     // ---- add prices (one date, many rows) ----------------------------------
-    const itemOptionsHtml = '<option value="" selected disabled>select</option>'
+    const itemOptions = () => '<option value="" selected disabled>select</option>'
         + items.map((i) => `<option value="${i.id}">${esc(i.label)}</option>`).join("");
 
     function plRow() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <td><select class="form-select pl-item" required>${itemOptionsHtml}</select></td>
+            <td><select class="form-select pl-item" required>${itemOptions()}</select></td>
             <td><input type="number" class="form-control pl-price" step="0.01" min="0.01" required></td>
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-primary pl-add-row me-1" title="Add Row"><i class="fas fa-plus"></i></button>
@@ -1048,6 +1056,15 @@ $(function () {
                 $("#iplLogModal").modal("show");
             })
             .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the change log.")));
+    });
+
+    // A new item made on the Items page shows up here without a manual
+    // reload: the list refreshes whenever this tab is brought back into view,
+    // unless a dialog is open with work in it.
+    document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState !== "visible") return;
+        if (Date.now() - lastLoaded < 3000 || $(".modal.show").length) return;
+        load();
     });
 
     load();
