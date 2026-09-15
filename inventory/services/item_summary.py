@@ -268,6 +268,18 @@ def item_summary(from_date=None, to_date=None, category_id=None, item_id=None,
     return groups
 
 
+def stock_on_hand_by_item(item_id=None, as_of_date=None):
+    """Net quantity on hand per item across every location, warehouses and
+    farms: everything booked in less everything booked out. Read from the same
+    movements as the stock reports, so the Items page cannot disagree with
+    them."""
+    totals = {}
+    for m in _collect(None, as_of_date, None, item_id, None, None):
+        change = m["qty"] if m["dir"] == "in" else -m["qty"]
+        totals[m["item"]] = totals.get(m["item"], Z) + change
+    return totals
+
+
 def positive_stock_by_item(as_of_date=None):
     """Items with stock on hand somewhere, as ``{item_id: {"quantity",
     "locations"}}``: the total held across the locations whose running

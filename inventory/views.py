@@ -53,6 +53,13 @@ from account.models import BankCashMaster, ChartOfAccount, OrganizationCentre
 import json
 
 
+def _flag(value, default=True):
+    """A JSON or form value read as a yes/no, with a default for missing."""
+    if value is None:
+        return default
+    return str(value).strip().lower() not in ("false", "0", "no", "off", "")
+
+
 def _uom_label(uom):
     """Display text for a UnitOfMeasurement FK (symbol if set, else name)."""
     if not uom:
@@ -66,7 +73,11 @@ def items(request):
     categories  = ItemCategory.objects.all()
     warehouses = Warehouse.objects.all()
     uoms = UnitOfMeasurement.objects.order_by('name')
-    return render(request, 'item.html', {'categories': categories, 'warehouses': warehouses, 'uoms': uoms})
+    return render(request, 'item.html', {
+        'categories': categories, 'warehouses': warehouses, 'uoms': uoms,
+        'source_choices': Item.SOURCE_CHOICES,
+        'item_account_choices': Item.ITEM_AC_CHOICES,
+    })
 
 
 @login_required
@@ -180,6 +191,11 @@ class ItemAPI(View):
         if id:
             try:
                 item = Item.objects.get(id=id)
+                from inventory.services.item_summary import stock_on_hand_by_item
+                from inventory.services.price_list import current_prices
+
+                price_now = current_prices([item.id]).get(item.id) or {}
+                on_hand = stock_on_hand_by_item(item_id=item.id).get(item.id, Decimal("0"))
                 return JsonResponse({
                     "id": item.id,
                     "item_code": item.item_code,
@@ -203,12 +219,20 @@ class ItemAPI(View):
                     "consumption_uom_label": _uom_label(item.consumption_uom),
                     "warehouse_names": list(item.warehouse.order_by("name").values_list("name", flat=True)),
                     "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+                    "current_price": price_now.get("price"),
+                    "price_date": price_now.get("date"),
+                    "stock_on_hand": str(on_hand.quantize(Decimal("0.01"))),
                 })
             except Item.DoesNotExist:
                 raise Http404("Item not found")
         else:
             items = []
             total_warehouses = Warehouse.objects.count()
+            from inventory.services.item_summary import stock_on_hand_by_item
+            from inventory.services.price_list import current_prices
+
+            prices = current_prices(Item.objects.values_list("id", flat=True))
+            stock = stock_on_hand_by_item()
             for item in (Item.objects.select_related("category", "storage_uom", "consumption_uom")
                          .prefetch_related("warehouse")):
                 item_warehouses = list(item.warehouse.all())
@@ -235,6 +259,9 @@ class ItemAPI(View):
                     "hsn_code": item.hsn_code,
                     "is_active": item.is_active,
                     "warehouse_names": [w.name for w in item_warehouses],
+                    "current_price": (prices.get(item.id) or {}).get("price"),
+                    "price_date": (prices.get(item.id) or {}).get("date"),
+                    "stock_on_hand": str(stock.get(item.id, Decimal("0")).quantize(Decimal("0.01"))),
                     "updated_at": item.updated_at.isoformat() if item.updated_at else None,
                 })
             return JsonResponse(items, safe=False)
@@ -245,10 +272,20 @@ class ItemAPI(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+        # Named per field, so the form can show the message under the field
+        # rather than a missing key failing the whole request.
+        required = (("description", "Enter a description."), ("category", "Choose a category."),
+                    ("valuation_method", "Choose a valuation method."),
+                    ("standard_cost_per_unit", "Enter the standard cost."),
+                    ("usage", "Choose the usage."))
+        for field, message in required:
+            if data.get(field) is None or str(data.get(field)).strip() == "":
+                return JsonResponse({"error": message, "field": field}, status=400)
+
         try:
             category = ItemCategory.objects.get(id=data["category"])
-        except ItemCategory.DoesNotExist:
-            return JsonResponse({"error": "Invalid category ID"}, status=400)
+        except (ItemCategory.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid category ID", "field": "category"}, status=400)
 
         warehouses, error = self._resolve_warehouses(data.get("warehouse"))
         if error:
@@ -267,9 +304,13 @@ class ItemAPI(View):
             # the Add form was dropped and only stuck if the item was edited
             # afterwards — which silently zeroed the bag-denominated reports.
             kg_per_bag=data.get("kg_per_bag") or None,
+            source=data.get("source") or "",
+            item_account=data.get("item_account") or "",
+            is_active=_flag(data.get("is_active"), default=True),
         )
         item.warehouse.set(warehouses)
-        return JsonResponse({"message": "Item created"}, status=201)
+        return JsonResponse({"message": "Item created", "id": item.id,
+                             "item_code": item.item_code}, status=201)
 
     def put(self, request, id):
         try:
@@ -290,6 +331,8 @@ class ItemAPI(View):
             if field in data:
                 setattr(item, field, data[field])
 
+        if "is_active" in data:
+            item.is_active = _flag(data["is_active"], default=item.is_active)
         if "storage_uom" in data:
             item.storage_uom_id = data["storage_uom"] or None
         if "consumption_uom" in data:

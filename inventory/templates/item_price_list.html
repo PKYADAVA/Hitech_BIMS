@@ -573,6 +573,8 @@ $(function () {
     }
 
     // ---- the list ----------------------------------------------------------
+    // ?search= opens the list already searched: the Items page links here.
+    const INITIAL_SEARCH = new URLSearchParams(window.location.search).get("search") || "";
     const selected = new Set();
     const filters = {
         category: $("#ipl-f-category"),
@@ -642,6 +644,7 @@ $(function () {
 
     const table = $("#ipl-table").DataTable({
         serverSide: true,
+        search: { search: INITIAL_SEARCH },
         processing: true,
         searchDelay: 350,
         ajax: {
@@ -743,6 +746,7 @@ $(function () {
     });
 
     $(".ipl-dt-end").append($("#ipl-toolbar-end").children());
+    filters.search.val(INITIAL_SEARCH);
 
     table.on("draw", function () {
         const info = table.page.info();

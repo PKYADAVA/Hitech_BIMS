@@ -162,6 +162,18 @@ def _in_force(entries, on_date):
     return next((e for e in entries if e.effective_date <= on_date), None)
 
 
+def current_prices(item_ids, today=None):
+    """Each item's price in force today, as ``{item_id: {"price", "date"}}``.
+    Items with no price in force are absent."""
+    today = today or timezone.localdate()
+    prices = {}
+    for item_id, entries in _entries_by_item(list(item_ids)).items():
+        entry = _in_force(entries, today)
+        if entry:
+            prices[item_id] = {"price": _text(entry.price), "date": _iso(entry.effective_date)}
+    return prices
+
+
 def last_purchase_rates(item_ids):
     """The rate on each item's most recent purchase bill, as
     ``{item_id: {"rate", "unit", "date", "supplier", "ref", "source"}}``.
