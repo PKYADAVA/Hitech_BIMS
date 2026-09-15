@@ -10,6 +10,14 @@
 
 {% include '_inventory_subnavbar.html' with active_tab='items' %}
 
+<style>
+  /* Narrower side padding than the design-system grid's 12px, and headings
+     that may take two lines, so all eleven columns fit without a sideways
+     scroll. The id outranks the design-system grid rule. */
+  .ds #item-table.ds-grid thead th { white-space: normal; line-height: 1.2; padding-left: 8px; padding-right: 8px; }
+  .ds #item-table.ds-grid tbody td { padding-left: 8px; padding-right: 8px; }
+</style>
+
 <div class="page-header">
     <div class="page-header-main">
       <div class="page-header-title">Manage Items</div>
