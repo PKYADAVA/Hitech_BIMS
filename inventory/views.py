@@ -642,8 +642,44 @@ def _price_list_json(request):
 
 @login_required
 def item_price_list_overview(request):
-    """Every item once, with the price in force today: the page's main table."""
+    """Every item once, with the price in force today: the page's main table.
+
+    Asked by DataTables (a draw parameter) it answers one page at a time;
+    with ids=1 it lists every matching item id; otherwise the whole list."""
     from inventory.services.price_list import last_price_change, price_overview
+    from inventory.services.price_list import matching_item_ids, price_overview_page
+
+    params = request.GET
+    below_cost = params.get("below_cost") == "1"
+    if "draw" in params:
+        try:
+            start = int(params.get("start") or 0)
+            length = int(params.get("length") or 25)
+            draw = int(params.get("draw") or 0)
+        except ValueError:
+            start, length, draw = 0, 25, 0
+        if length == 0 or length > 1000:
+            length = 1000
+        column = params.get("order[0][column]")
+        result = price_overview_page(
+            category=params.get("category"), status=params.get("status"),
+            search=params.get("search[value]"), below_cost=below_cost,
+            start=start, length=length,
+            order_by=params.get(f"columns[{column}][data]") if column else "item_code",
+            descending=params.get("order[0][dir]") == "desc")
+        last = last_price_change()
+        return JsonResponse({
+            "draw": draw,
+            "recordsTotal": result["records_total"],
+            "recordsFiltered": result["records_filtered"],
+            "data": result["rows"],
+            "counts": result["counts"],
+            "last_updated": last.strftime("%d %b %Y %I:%M %p") if last else None,
+        })
+    if params.get("ids") == "1":
+        return JsonResponse({"ids": matching_item_ids(
+            category=params.get("category"), status=params.get("status"),
+            search=params.get("search"), below_cost=below_cost)})
 
     rows = price_overview(category=request.GET.get("category"),
                           search=request.GET.get("search"))
@@ -660,6 +696,14 @@ def item_price_list_overview(request):
         "counts": counts,
         "last_updated": last.strftime("%d %b %Y %I:%M %p") if last else None,
     })
+
+
+@login_required
+def item_price_list_items(request):
+    """The active items, for the Add Prices dropdown."""
+    from inventory.services.price_list import active_item_options
+
+    return JsonResponse({"items": active_item_options()})
 
 
 @login_required

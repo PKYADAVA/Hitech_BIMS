@@ -507,6 +507,7 @@ $(function () {
     };
     const URLS = {
         overview: "{% url 'item_price_list_overview_data' %}",
+        items: "{% url 'item_price_list_items_data' %}",
         audit: "{% url 'item_price_list_audit_data' %}",
         revise: "{% url 'item_price_list_revise_data' %}",
         upload: "{% url 'item_price_list_upload_data' %}",
@@ -579,16 +580,34 @@ $(function () {
         search: $("#ipl-f-search"),
     };
 
-    $.fn.dataTable.ext.search.push(function (settings, _data, index) {
-        if (settings.nTable.id !== "ipl-table") return true;
-        const row = settings.aoData[index]._aData;
-        const category = filters.category.val();
-        const status = filters.status.val();
-        if (category && String(row.category_id) !== category) return false;
-        if (status && status !== "all" && row.status !== status) return false;
-        if (document.getElementById("ipl-below-cost").checked && !row.below_cost) return false;
-        return true;
-    });
+    function filterParams() {
+        return {
+            category: filters.category.val() || "",
+            status: filters.status.val() || "all",
+            below_cost: document.getElementById("ipl-below-cost").checked ? "1" : "0",
+        };
+    }
+
+    // Every item the filters match across all pages, for Select all and for a
+    // Bulk Revise with nothing ticked.
+    function matchingIds() {
+        return $.getJSON(URLS.overview, Object.assign({ ids: "1", search: filters.search.val() || "" }, filterParams()))
+            .then((res) => res.ids);
+    }
+
+    // One page is loaded at a time, so an export first fetches every matching
+    // row and exports those, then returns to the page that was on screen.
+    function exportAll(e, dt, button, config) {
+        const self = this;
+        const start = dt.page.info().start;
+        dt.one("preXhr", (_ev, _settings, data) => { data.start = 0; data.length = -1; });
+        dt.one("draw", function () {
+            $.fn.dataTable.ext.buttons[config.baseKind].action.call(self, e, dt, button, config);
+            dt.one("preXhr", (_ev, settings, data) => { data.start = start; settings._iDisplayStart = start; });
+            setTimeout(() => dt.ajax.reload(null, false), 0);
+        });
+        dt.ajax.reload(null, false);
+    }
 
     function actions(row) {
         const parts = [`<button type="button" class="ipl-act view" data-act="history" data-item="${row.item}" title="View price history" aria-label="View price history"><i class="fas fa-eye"></i></button>`];
@@ -622,7 +641,21 @@ $(function () {
     const numeric = (d, type, blankSort) => d === null ? (type === "sort" || type === "type" ? blankSort : "") : d;
 
     const table = $("#ipl-table").DataTable({
-        data: [],
+        serverSide: true,
+        processing: true,
+        searchDelay: 350,
+        ajax: {
+            url: URLS.overview,
+            data: (d) => Object.assign(d, filterParams()),
+            dataSrc: (json) => {
+                lastLoaded = Date.now();
+                $("#ipl-last").text(json.last_updated || "\u2014");
+                updateCounts(json.counts);
+                json.data.forEach((r) => itemLabels.set(r.item, `${r.item_code} - ${r.item_name}`));
+                return json.data;
+            },
+            error: () => window.showToast("danger", "Could not load the price list."),
+        },
         dom: "<'ipl-dt-top'<'ipl-dt-length'l><'ipl-dt-buttons'B><'ipl-dt-end'>><'ipl-table-wrap'tr><'ipl-dt-bottom'ip>",
         pageLength: 25,
         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
@@ -634,11 +667,11 @@ $(function () {
             zeroRecords: "No items match these filters",
         },
         buttons: [
-            { extend: "copy", exportOptions: EXPORT },
-            { extend: "csv", title: "Item Price List", exportOptions: EXPORT },
-            { extend: "excel", title: "Item Price List", messageTop: excelTop, exportOptions: EXPORT },
-            { extend: "pdf", title: "Item Price List", orientation: "landscape", exportOptions: EXPORT, customize: pdfLetterhead },
-            { extend: "print", title: "Item Price List", exportOptions: EXPORT, customize: printLetterhead },
+            { extend: "copyHtml5", text: "Copy", baseKind: "copyHtml5", action: exportAll, exportOptions: EXPORT },
+            { extend: "csvHtml5", text: "CSV", baseKind: "csvHtml5", action: exportAll, title: "Item Price List", exportOptions: EXPORT },
+            { extend: "excelHtml5", text: "Excel", baseKind: "excelHtml5", action: exportAll, title: "Item Price List", messageTop: excelTop, exportOptions: EXPORT },
+            { extend: "pdfHtml5", text: "PDF", baseKind: "pdfHtml5", action: exportAll, title: "Item Price List", orientation: "landscape", exportOptions: EXPORT, customize: pdfLetterhead },
+            { extend: "print", text: "Print", baseKind: "print", action: exportAll, title: "Item Price List", exportOptions: EXPORT, customize: printLetterhead },
             { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
         ],
         columns: [
@@ -654,7 +687,7 @@ $(function () {
             { data: "category" },
             { data: "unit", defaultContent: "" },
             {
-                data: "last_purchase", className: "ipl-num", defaultContent: "",
+                data: "last_purchase", className: "ipl-num", defaultContent: "", orderable: false,
                 render: (d, type) => {
                     if (type !== "display") return d ? Number(d.rate) : (type === "sort" || type === "type" ? -1 : "");
                     if (!d) return '<span class="ipl-muted" title="No purchase recorded for this item">&mdash;</span>';
@@ -687,11 +720,11 @@ $(function () {
                 },
             },
             {
-                data: "previous_price", className: "ipl-num",
+                data: "previous_price", className: "ipl-num", orderable: false,
                 render: (d, type) => type === "display" ? (d === null ? dash : money(d)) : numeric(d, type, -1),
             },
             {
-                data: "change_pct", className: "ipl-num",
+                data: "change_pct", className: "ipl-num", orderable: false,
                 render: (d, type) => {
                     if (type === "display") return change(d);
                     if (d === null) return type === "sort" || type === "type" ? -1e9 : "";
@@ -704,7 +737,7 @@ $(function () {
                 data: null, orderable: false, searchable: false, className: "no-export no-colvis",
                 render: (_d, type, row) => type === "display" ? actions(row) : "",
             },
-            { data: "margin_pct", visible: false, searchable: false, className: "ipl-export-extra no-colvis",
+            { data: "margin_pct", visible: false, searchable: false, orderable: false, className: "ipl-export-extra no-colvis",
               render: (d) => d === null ? "" : d },
         ],
     });
@@ -726,27 +759,26 @@ $(function () {
         filters.status.trigger("change.select2");
     }
 
+    function refreshItems() {
+        return $.getJSON(URLS.items).done(function (res) {
+            items = res.items;
+            res.items.forEach((i) => itemLabels.set(i.id, i.label));
+        });
+    }
+
     function load() {
-        return $.getJSON(URLS.overview)
-            .done(function (res) {
-                const known = new Set(res.rows.map((r) => r.item));
-                [...selected].forEach((id) => { if (!known.has(id)) selected.delete(id); });
-                table.clear().rows.add(res.rows).draw(false);
-                res.rows.forEach((r) => itemLabels.set(r.item, `${r.item_code} - ${r.item_name}`));
-                items = res.rows.filter((r) => r.is_active)
-                    .map((r) => ({ id: r.item, label: `${r.item_code} - ${r.item_name}` }));
-                lastLoaded = Date.now();
-                $("#ipl-last").text(res.last_updated || "—");
-                updateCounts(res.counts);
-                selectionChanged();
-            })
-            .fail((xhr) => window.showToast("danger", apiError(xhr, "Could not load the price list.")));
+        refreshItems();
+        table.ajax.reload(null, false);
     }
 
     filters.category.on("change", () => table.draw());
     filters.status.on("change", () => table.draw());
     $("#ipl-below-cost").on("change", () => table.draw());
-    filters.search.on("input", () => table.search(filters.search.val()).draw());
+    let searchTimer = null;
+    filters.search.on("input", function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => table.search(filters.search.val()).draw(), 350);
+    });
 
     $("#ipl-clear").on("click", function () {
         filters.category.val("").trigger("change");
@@ -758,7 +790,7 @@ $(function () {
 
     // ---- selection ---------------------------------------------------------
     function syncCheckAll() {
-        const shown = table.rows({ search: "applied" }).data().toArray();
+        const shown = table.rows({ page: "current" }).data().toArray();
         const picked = shown.filter((r) => selected.has(r.item)).length;
         const box = document.getElementById("ipl-check-all");
         box.checked = shown.length > 0 && picked === shown.length;
@@ -778,11 +810,15 @@ $(function () {
         selectionChanged();
     });
 
+    // Selects every item the filters match, on every page, not just this one.
     $("#ipl-check-all").on("change", function () {
         const on = this.checked;
-        table.rows({ search: "applied" }).data().each((r) => { if (on) { selected.add(r.item); } else { selected.delete(r.item); } });
-        table.rows({ search: "applied" }).nodes().to$().find(".ipl-row-check").prop("checked", on);
-        selectionChanged();
+        matchingIds().done(function (ids) {
+            ids.forEach((id) => { if (on) { selected.add(id); } else { selected.delete(id); } });
+            table.rows({ page: "current" }).nodes().to$().find(".ipl-row-check")
+                .each(function () { this.checked = selected.has(Number(this.dataset.item)); });
+            selectionChanged();
+        });
     });
 
     $("#ipl-clear-selection").on("click", function () {
@@ -1092,14 +1128,14 @@ $(function () {
     let reviseIds = [];
     let reviseRows = [];
 
-    $("#ipl-revise-btn").on("click", function () {
+    $("#ipl-revise-btn").on("click", async function () {
         let text;
         if (selected.size) {
             reviseIds = [...selected];
             text = `${reviseIds.length} selected item${reviseIds.length === 1 ? "" : "s"}`;
         } else {
-            reviseIds = table.rows({ search: "applied" }).data().toArray().map((r) => r.item);
-            text = `${reviseIds.length} item${reviseIds.length === 1 ? "" : "s"} shown by the current filters`;
+            try { reviseIds = await matchingIds(); } catch (e) { reviseIds = []; }
+            text = `${reviseIds.length} item${reviseIds.length === 1 ? "" : "s"} matching the current filters`;
         }
         if (!reviseIds.length) {
             window.showToast("danger", "No items to revise. Tick items in the list or change the filters.");
@@ -1232,7 +1268,7 @@ $(function () {
         load();
     });
 
-    load();
+    refreshItems();
 });
 </script>
 {% endblock %}

@@ -230,7 +230,7 @@ def _item_info(item):
 
 # --- the list ----------------------------------------------------------------
 
-def price_overview(today=None, category=None, status=None, search=None):
+def price_overview(today=None, category=None, status=None, search=None, item_ids=None):
     """Every item once, with the price in force today, the one before it and
     any price already set for a later date.
 
@@ -239,6 +239,8 @@ def price_overview(today=None, category=None, status=None, search=None):
     today = today or timezone.localdate()
     items = (Item.objects.select_related("category", "storage_uom", "consumption_uom")
              .order_by("item_code"))
+    if item_ids is not None:
+        items = items.filter(id__in=list(item_ids))
     if category and str(category).isdigit():
         items = items.filter(category_id=int(category))
     if search and search.strip():
@@ -302,6 +304,119 @@ def price_overview(today=None, category=None, status=None, search=None):
     if status and status != "all":
         rows = [row for row in rows if row["status"] == status]
     return rows
+
+
+# --- server-side paging ------------------------------------------------------
+
+#: The list columns the database can sort by, keyed by the column's data name.
+#: Last purchase, previous price, change and margin are worked out per row and
+#: cannot be sorted in the query, so they are not offered.
+ORDERABLE = {
+    "item_code": "item_code",
+    "item_name": "description",
+    "category": "category__name",
+    "unit": "storage_uom__symbol",
+    "price": "shown_price",
+    "effective_date": "shown_date",
+    "status": "state",
+}
+
+
+def _annotated_items(today, category=None, search=None):
+    """Items with their shown price, date and status worked out in the query,
+    so the list can be filtered, counted, sorted and paged by the database."""
+    from django.db.models import CharField, OuterRef, Subquery, Value, When, Case
+    from django.db.models.functions import Coalesce
+
+    entries = ItemPriceList.objects.filter(item=OuterRef("pk"))
+    current = entries.filter(effective_date__lte=today).order_by("-effective_date", "-id")
+    upcoming = entries.filter(effective_date__gt=today).order_by("effective_date", "id")
+    items = (Item.objects
+             .annotate(cur_price=Subquery(current.values("price")[:1]),
+                       cur_date=Subquery(current.values("effective_date")[:1]),
+                       up_price=Subquery(upcoming.values("price")[:1]),
+                       up_date=Subquery(upcoming.values("effective_date")[:1]))
+             .annotate(shown_price=Coalesce("cur_price", "up_price"),
+                       shown_date=Coalesce("cur_date", "up_date"),
+                       state=Case(
+                           When(is_active=False, then=Value(STATUS_INACTIVE)),
+                           When(cur_date__isnull=False, then=Value(STATUS_ACTIVE)),
+                           When(up_date__isnull=False, then=Value(STATUS_UPCOMING)),
+                           default=Value(STATUS_NOT_PRICED),
+                           output_field=CharField())))
+    if category and str(category).isdigit():
+        items = items.filter(category_id=int(category))
+    if search and search.strip():
+        term = search.strip()
+        items = items.filter(Q(item_code__icontains=term) | Q(description__icontains=term))
+    return items
+
+
+def _rows_in_order(ids, today):
+    if not ids:
+        return []
+    by_id = {row["item"]: row for row in price_overview(today=today, item_ids=ids)}
+    return [by_id[item_id] for item_id in ids if item_id in by_id]
+
+
+def _filtered(today, category, status, search, order_by="item_code", descending=False):
+    from django.db.models import F
+
+    base = _annotated_items(today, category, search)
+    filtered = base if not status or status == "all" else base.filter(state=status)
+    field = ORDERABLE.get(order_by, "item_code")
+    ordering = F(field).desc(nulls_last=True) if descending else F(field).asc(nulls_last=True)
+    return base, filtered.order_by(ordering, "item_code")
+
+
+def price_overview_page(today=None, category=None, status=None, search=None, below_cost=False,
+                        start=0, length=25, order_by="item_code", descending=False):
+    """One page of the list, with the totals DataTables needs.
+
+    Only the page's rows are built in full (last purchase, margin, previous
+    price), so the work per request follows the page size, not the size of
+    the item master. Below cost is the one filter the database cannot answer,
+    as it needs the restated purchase rate, so with it on the rows are built
+    for everything matching and filtered here."""
+    from django.db.models import Count
+
+    today = today or timezone.localdate()
+    base, filtered = _filtered(today, category, status, search, order_by, descending)
+    counts = base.aggregate(
+        all=Count("id"),
+        active=Count("id", filter=Q(state=STATUS_ACTIVE)),
+        inactive=Count("id", filter=Q(state=STATUS_INACTIVE)),
+        upcoming=Count("id", filter=Q(state=STATUS_UPCOMING)),
+        not_priced=Count("id", filter=Q(state=STATUS_NOT_PRICED)))
+    start = max(int(start or 0), 0)
+    ids = filtered.values_list("id", flat=True)
+    if below_cost:
+        rows = [row for row in _rows_in_order(list(ids), today) if row["below_cost"]]
+        matching = len(rows)
+        page = rows[start:] if length < 0 else rows[start:start + length]
+    else:
+        matching = filtered.count()
+        page_ids = list(ids[start:] if length < 0 else ids[start:start + length])
+        page = _rows_in_order(page_ids, today)
+    return {"records_total": Item.objects.count(), "records_filtered": matching,
+            "rows": page, "counts": counts}
+
+
+def matching_item_ids(today=None, category=None, status=None, search=None, below_cost=False):
+    """Every item id the current filters match, across all pages: what Select
+    all and a Bulk Revise with nothing ticked work on."""
+    today = today or timezone.localdate()
+    _base, filtered = _filtered(today, category, status, search)
+    ids = list(filtered.values_list("id", flat=True))
+    if below_cost:
+        return [row["item"] for row in _rows_in_order(ids, today) if row["below_cost"]]
+    return ids
+
+
+def active_item_options():
+    """The active items, for the Add Prices dropdown."""
+    return [{"id": item.id, "label": f"{item.item_code} - {item.description}"}
+            for item in Item.objects.active().order_by("item_code")]
 
 
 def last_price_change():

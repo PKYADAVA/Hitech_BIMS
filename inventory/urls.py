@@ -30,6 +30,7 @@ urlpatterns = [
     path('item-price-list/<int:id>/', views.ItemPriceListAPI.as_view(), name='item_price_list_update'),
     path('item-price-list/<int:id>/delete/', views.ItemPriceListAPI.as_view(), name='item_price_list_delete'),
     path('item-price-list/overview/', views.item_price_list_overview, name='item_price_list_overview_data'),
+    path('item-price-list/items/', views.item_price_list_items, name='item_price_list_items_data'),
     path('item-price-list/item/<int:item_id>/history/', views.item_price_list_history, name='item_price_list_history_data'),
     path('item-price-list/audit/', views.item_price_list_audit, name='item_price_list_audit_data'),
     path('item-price-list/<int:id>/usage/', views.item_price_list_usage, name='item_price_list_usage_data'),
