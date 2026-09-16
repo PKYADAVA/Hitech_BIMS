@@ -491,10 +491,14 @@ class ItemBagWeightFieldTests(TestCase):
         self.category = ItemCategory.objects.create(name="Feed")
 
     def test_form_offers_the_field_on_add_and_edit(self):
+        # One dialog now serves both adding and editing, so there is a single
+        # kg_per_bag input rather than the old pair (the edit copy was
+        # "dynamic-kg_per_bag"). What has to stay true is that the field is on
+        # the form, that opening an existing item fills it, and that it is sent.
         html = self.client.get("/items/").content.decode()
-        self.assertIn('id="kg_per_bag"', html)          # add form
-        self.assertIn('id="dynamic-kg_per_bag"', html)  # edit modal
-        self.assertIn("kg_per_bag:", html)              # posted in the payload
+        self.assertIn('id="kg_per_bag"', html)                      # on the form
+        self.assertIn('$("#kg_per_bag").val(it.kg_per_bag', html)   # filled when editing
+        self.assertIn("kg_per_bag:", html)                          # posted in the payload
 
     def test_value_round_trips_through_the_api(self):
         import json
@@ -519,12 +523,12 @@ class ItemBagWeightFieldTests(TestCase):
         b = Warehouse.objects.create(name="Akbarpur Warehouse")
         html = self.client.get("/items/").content.decode()
         import re
-        add_form = html[html.index('id="item-form"'):html.index("</form>", html.index('id="item-form"'))]
-        chosen = re.findall(r'<option value="(\d+)" selected>', add_form)
+        # The warehouses are a tick list now rather than a multi-select, so
+        # "chosen" is a checked box rather than a selected option. The rule it
+        # is checking is unchanged: every warehouse starts ticked.
+        wh_list = html[html.index('id="itl-wh-list"'):html.index("</div>", html.index('id="itl-wh-list"'))]
+        chosen = re.findall(r'class="form-check-input itl-wh" value="(\d+)" checked', wh_list)
         print("RESULT preselected warehouse ids: %s of %s"
               % (sorted(chosen), sorted([str(a.id), str(b.id)])))
         self.assertEqual(sorted(chosen), sorted([str(a.id), str(b.id)]))
-        # the "All" sentinel itself stays unselected — it is a trigger, and the
-        # API expects real ids, not the sentinel
-        self.assertNotIn('<option value="__all__" selected>', add_form)
 
