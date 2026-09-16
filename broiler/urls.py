@@ -46,6 +46,8 @@ urlpatterns = [
     path('branch-farm/', BroilerFarmTemplateView.as_view(), name='branch_farm'),
     path('farmer/<int:id>/toggle-active/', views.farmer_toggle_active, name='farmer_toggle_active'),
     path('farmers/bulk-status/', views.farmers_bulk_status, name='farmers_bulk_status'),
+    path('broiler_farm/<int:id>/toggle-active/', views.broiler_farm_toggle_active,
+         name='broiler_farm_toggle_active'),
     path('farmer-duplicate-check/', views.farmer_duplicate_check, name='farmer_duplicate_check'),
     path('farms/bulk-supervisor/', views.farms_bulk_supervisor, name='farms_bulk_supervisor'),
     path('farmer_list/', FarmerAPI.as_view(), name='farmer_list'),  # For listing all farmers

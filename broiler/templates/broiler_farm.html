@@ -27,19 +27,35 @@
   .bf-count { font-size: .7rem; font-weight: 700; padding: .05rem .45rem; border-radius: 999px; background: #eef1f5; color: #475569; }
   .bf-tabs .nav-link.active .bf-count { background: rgba(255,255,255,.25); color: #fff; }
 
-  .bf-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .6rem; padding: .7rem; margin-bottom: .85rem; }
-  .bf-filter { display: flex; align-items: center; gap: .55rem; min-width: 0; border: 1px solid #eef1f5; border-radius: .5rem; padding: .45rem .6rem; }
+  .bf-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: .4rem; padding: .45rem; margin-bottom: .6rem; }
+  .bf-filter { display: flex; align-items: center; gap: .4rem; min-width: 0; border: 1px solid #eef1f5; border-radius: .45rem; padding: .25rem .4rem; }
   .bf-filter-icon {
-    width: 32px; height: 32px; flex: 0 0 32px; border-radius: .5rem; display: flex; align-items: center;
-    justify-content: center; background: var(--bf-bg); color: var(--bf-fg);
+    width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem; display: flex; align-items: center;
+    justify-content: center; background: var(--bf-bg); color: var(--bf-fg); font-size: .7rem;
   }
   .bf-filter-body { flex: 1; min-width: 0; }
-  .bf-filter label { display: block; font-size: .7rem; font-weight: 600; color: #475569; margin-bottom: .15rem; }
+  .bf-filter label { display: block; font-size: .62rem; font-weight: 600; color: #475569; margin-bottom: 0; line-height: 1.2; }
+  /* The controls themselves, native and Select2 alike — the page upgrades
+     every .form-select, so styling only the native one leaves it tall. */
+  #bf-page .bf-filter .form-select, #bf-page .bf-filter .form-control {
+    font-size: .76rem; padding: .1rem 1.3rem .1rem .4rem; height: auto; min-height: 0; line-height: 1.35;
+  }
+  #bf-page .bf-filter .form-control { padding-right: .4rem; }
+  #bf-page .bf-filter .select2-container { width: 100% !important; }
+  #bf-page .bf-filter .select2-container--default .select2-selection--single { height: 24px; border-color: #dee2e6; }
+  #bf-page .bf-filter .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 22px; font-size: .76rem; padding-left: .4rem; padding-right: 1.3rem;
+  }
+  #bf-page .bf-filter .select2-container--default .select2-selection--single .select2-selection__arrow { height: 22px; }
   @media (min-width: 1100px) {
     /* Both panes gained filters; these counts keep each pane's rows full
        rather than leaving a short second row. */
     #add-farmer-pane .bf-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); }
     #add-farm-pane .bf-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1240px) {
+    /* Wide enough for all eight on one row, which halves the bar's height. */
+    #add-farm-pane .bf-filters { grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.2fr); }
   }
 
   .bf-card { padding: .7rem; }
@@ -86,6 +102,8 @@
   .bf-actions { display: flex; gap: .25rem; justify-content: center; }
   .bf-act { width: 28px; height: 28px; border: 0; border-radius: .4rem; display: inline-flex; align-items: center; justify-content: center; font-size: .75rem; }
   .bf-act:focus-visible, .bf-link:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .bf-act.tog { background: #e7f7ee; color: #067647; }
+  .bf-act.tog.off { background: #eef1f5; color: #64748b; }
   .bf-act.view { background: #e8f1fd; color: #1d6fe0; }
   .bf-act.edit { background: #fff1db; color: #b54708; }
   .bf-act.del { background: #fde8e8; color: #c0392b; }
@@ -249,7 +267,7 @@
           <div class="bf-filter-body">
             <label for="bf-fr-group">Farmer Group</label>
             <select id="bf-fr-group" class="form-select form-select-sm">
-              <option value="">All Groups</option>
+              <option value="">All</option>
               {% for group in farmer_groups %}<option value="{{ group.description }}">{{ group.description }}</option>{% endfor %}
             </select>
           </div>
@@ -269,7 +287,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fr-search">Search</label>
-            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Code, name, mobile, USC...">
+            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Search farmers...">
           </div>
         </div>
       </div>
@@ -335,7 +353,7 @@
           <div class="bf-filter-body">
             <label for="bf-fm-type">Farm Type</label>
             <select id="bf-fm-type" class="form-select form-select-sm">
-              <option value="">All Types</option>
+              <option value="">All</option>
               <option value="own">Own</option>
               <option value="ec_shed">Ec Shed</option>
               <option value="integration">Integration</option>
@@ -393,7 +411,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-search">Search</label>
-            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Code, farm, farmer, district...">
+            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search farms...">
           </div>
         </div>
       </div>
@@ -1557,12 +1575,18 @@ $(document).ready(function () {
     }
     function bfActions(kind, row) {
         const parts = [`<button type="button" class="bf-act view bf-view-${kind}" data-id="${row.id}" title="View details" aria-label="View details"><i class="fas fa-eye"></i></button>`];
-        if (kind === "farmer" && BF_CAN.edit) {
-            const off = row.status === "inactive";
-            parts.push(`<button type="button" class="bf-act ${off ? "del" : "edit"} toggle-farmer" data-id="${row.id}" title="${off ? "Make Active" : "Make Inactive"}" aria-label="${off ? "Make Active" : "Make Inactive"}"><i class="fas fa-power-off"></i></button>`);
-        }
         if (BF_CAN.edit) parts.push(`<button type="button" class="bf-act edit edit-${kind}" data-id="${row.id}" title="Edit" aria-label="Edit"><i class="fas fa-pen"></i></button>`);
         if (BF_CAN.del) parts.push(`<button type="button" class="bf-act del delete-${kind}" data-id="${row.id}" title="Delete" aria-label="Delete"><i class="fas fa-trash"></i></button>`);
+        if (BF_CAN.edit) {
+            // The same control the Item Price List uses, in the same place:
+            // last in the row, green while on and grey once off. A farm has a
+            // third state, closed, which reads as off and switches back to
+            // Active.
+            const state = kind === "farmer" ? (row.status || "active") : (row.farm_status || "active");
+            const on = state === "active";
+            const label = on ? `Make ${kind} inactive` : `Make ${kind} active`;
+            parts.push(`<button type="button" class="bf-act tog${on ? "" : " off"} toggle-${kind}" data-id="${row.id}" title="${label}" aria-label="${label}"><i class="fas ${on ? "fa-toggle-on" : "fa-toggle-off"}"></i></button>`);
+        }
         return `<div class="bf-actions">${parts.join("")}</div>`;
     }
     const bfStatus = (value) => {
@@ -2004,18 +2028,22 @@ $(document).ready(function () {
     $("#bf-fr-bulk-on").on("click", () => bfBulkStatus(true));
     $("#bf-fr-bulk-off").on("click", () => bfBulkStatus(false));
 
-    // One farmer at a time, from the row.
-    $(document).on("click", ".toggle-farmer", function (e) {
-        e.stopPropagation();
-        const id = Number(this.dataset.id);
-        $.ajax({
-            url: `/farmer/${id}/toggle-active/`,
-            type: "POST",
-            headers: { "X-CSRFToken": getCSRFToken() },
-            success: function (res) { loadFarmers(); window.showToast("success", res.message); },
-            error: function () { window.showToast("danger", "Could not change that farmer."); },
+    // One row at a time, from the toggle in its Actions column. The list is
+    // reloaded from the server on success, so what the row shows is never
+    // ahead of what was stored.
+    [["farmer", "/farmer/", () => loadFarmers()], ["farm", "/broiler_farm/", () => loadFarms()]]
+        .forEach(([kind, base, reload]) => {
+            $(document).on("click", `.toggle-${kind}`, function (e) {
+                e.stopPropagation();
+                $.ajax({
+                    url: `${base}${Number(this.dataset.id)}/toggle-active/`,
+                    type: "POST",
+                    headers: { "X-CSRFToken": getCSRFToken() },
+                    success: function (res) { reload(); window.showToast("success", res.message); },
+                    error: function () { window.showToast("danger", `Could not change that ${kind}.`); },
+                });
+            });
         });
-    });
 
     /* Change supervisor on the ticked farms. */
     $("#bf-fm-bulk-sup").on("click", function () {

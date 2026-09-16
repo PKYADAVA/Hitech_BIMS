@@ -61,7 +61,7 @@ MODULE_REGISTRY = [
                      ("broiler_farm_list", "broiler_farm_detail",
                       "farmer_list", "farmer_detail", "farmer_duplicate_check",
                       "farmer_toggle_active", "farmers_bulk_status",
-                      "farms_bulk_supervisor")),
+                      "broiler_farm_toggle_active", "farms_bulk_supervisor")),
                     ("broiler_farm_shed", "Broiler Farm Shed",
                      ("broiler_farm_shed_list",)),
                     ("broiler_batch", "Broiler Batch", ("broiler_batch_list",)),
@@ -859,6 +859,7 @@ _ACTION_URL_OVERRIDES = {
     # reach them from the name alone — they are spelled out instead of renamed,
     # because the names are what the page's JS already calls.
     "farmer_toggle_active": ("branch_farm", "edit"),
+    "broiler_farm_toggle_active": ("branch_farm", "edit"),
     "farmers_bulk_status": ("branch_farm", "edit"),
     "farms_bulk_supervisor": ("branch_farm", "edit"),
     "farmer_duplicate_check": ("branch_farm", "view"),

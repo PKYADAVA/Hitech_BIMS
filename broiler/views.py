@@ -1281,6 +1281,27 @@ def farmer_toggle_active(request, id):
 
 @login_required
 @require_POST
+def broiler_farm_toggle_active(request, id):
+    """Make a farm Active or Inactive.
+
+    Mirrors the farmer toggle, with one difference the farm has and the farmer
+    does not: a third state. A farm that was *closed* reopens as Active rather
+    than flipping to Inactive — closed is where a farm ends up deliberately, so
+    the only useful thing a toggle can do to one is bring it back.
+
+    Nothing recorded against the farm changes; it simply stops being offered
+    for new work.
+    """
+    farm = get_object_or_404(BroilerFarm, id=id)
+    farm.farm_status = "inactive" if farm.farm_status == "active" else "active"
+    farm.save(update_fields=["farm_status", "updated_at"])
+    state = "Active" if farm.farm_status == "active" else "Inactive"
+    return JsonResponse({"message": f"{farm.farm_name} is now {state}",
+                         "farm_status": farm.farm_status})
+
+
+@login_required
+@require_POST
 def farmers_bulk_status(request):
     """Make the ticked farmers Active or Inactive together."""
     try:
