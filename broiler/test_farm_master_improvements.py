@@ -316,6 +316,40 @@ class BulkSupervisorTests(FarmMasterBase):
                                           content_type="application/json").status_code, 400)
 
 
+class NextFarmCodeTests(FarmMasterBase):
+
+    def preview(self, **params):
+        return self.client.get(reverse("broiler_farm_next_code"), params).json()["code"]
+
+    def test_the_preview_is_the_code_the_next_farm_actually_gets(self):
+        shown = self.preview(branch_id=self.branch.id)
+        self.assertTrue(shown)
+        made = BroilerFarm.objects.create(
+            farm_name="New Farm", branch=self.branch, supervisor=self.supervisor,
+            farmer=self.ready, region="East", line="Baskhari", farm_capacity=1000)
+        self.assertEqual(made.farm_code, shown)
+
+    def test_the_preview_moves_up_once_that_code_is_taken(self):
+        first = self.preview(branch_id=self.branch.id)
+        BroilerFarm.objects.create(
+            farm_name="New Farm", branch=self.branch, supervisor=self.supervisor,
+            farmer=self.ready, region="East", line="Baskhari", farm_capacity=1000)
+        self.assertNotEqual(self.preview(branch_id=self.branch.id), first)
+
+    def test_each_branch_has_its_own_run_of_codes(self):
+        self.assertNotEqual(self.preview(branch_id=self.branch.id),
+                            self.preview(branch_id=self.other_branch.id))
+
+    def test_no_branch_means_no_code(self):
+        self.assertEqual(self.preview(), "")
+        self.assertEqual(self.preview(branch_id=""), "")
+        self.assertEqual(self.preview(branch_id="abc"), "")
+        self.assertEqual(self.preview(branch_id=999999), "")
+
+    def test_the_form_has_somewhere_to_say_it(self):
+        self.assertContains(self.client.get(reverse("branch_farm")), 'id="farm-code-hint"')
+
+
 class PageTests(FarmMasterBase):
 
     def test_the_page_offers_the_new_controls(self):
@@ -324,6 +358,14 @@ class PageTests(FarmMasterBase):
                      'id="bf-fm-agreement"', 'id="bf-fr-bulk"', 'id="bf-fm-bulk"',
                      'id="bfSupModal"', 'id="bf-dup-warn"', 'id="bf-fr-all"', 'id="bf-fm-all"'):
             self.assertContains(response, text)
+
+    def test_the_farm_forms_farmer_picker_names_the_code_too(self):
+        response = self.client.get(reverse("branch_farm"))
+        self.assertContains(response, 'data-name="Vishvanath">FRM-0001 - Vishvanath')
+        # The plain name rides along because the farm-name auto-fill reads it:
+        # a farm should not end up called "FRM-0001 - Vishvanath".
+        self.assertEqual([f["farmer_code"] for f in response.context["farmers"]],
+                         ["FRM-0002", "FRM-0001"])
 
     def test_the_setup_request_queue_is_only_shown_when_something_waits(self):
         self.assertEqual(self.client.get(reverse("branch_farm")).context["pending_setup_requests"], 0)

@@ -48,6 +48,7 @@ urlpatterns = [
     path('farmers/bulk-status/', views.farmers_bulk_status, name='farmers_bulk_status'),
     path('broiler_farm/<int:id>/toggle-active/', views.broiler_farm_toggle_active,
          name='broiler_farm_toggle_active'),
+    path('broiler-farm-next-code/', views.broiler_farm_next_code, name='broiler_farm_next_code'),
     path('farmer-duplicate-check/', views.farmer_duplicate_check, name='farmer_duplicate_check'),
     path('farms/bulk-supervisor/', views.farms_bulk_supervisor, name='farms_bulk_supervisor'),
     path('farmer_list/', FarmerAPI.as_view(), name='farmer_list'),  # For listing all farmers

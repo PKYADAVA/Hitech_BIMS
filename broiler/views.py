@@ -842,7 +842,10 @@ class BroilerFarmTemplateView(View):
     """View for rendering the broiler farm template (Add Farmer + Add Farm tabs)."""
 
     def get(self, request):
-        farmers = list(Farmer.objects.values("id", "farmer_name"))
+        # Ordered by name and carrying the code, so the Farm form's Farmer
+        # picker can name a farmer the same way the rest of the page does.
+        farmers = list(Farmer.objects.order_by("farmer_name")
+                       .values("id", "farmer_name", "farmer_code"))
         context = {
             "regions": Region.objects.filter(is_active=True),
             "farmers": farmers,
@@ -1277,6 +1280,27 @@ def farmer_toggle_active(request, id):
     state = "Active" if farmer.status == "active" else "Inactive"
     return JsonResponse({"message": f"{farmer.farmer_name} is now {state}",
                          "status": farmer.status})
+
+
+@login_required
+def broiler_farm_next_code(request):
+    """The code the next farm at a branch would be given.
+
+    A preview, not a reservation. The code is minted when the farm is saved,
+    and if another farm at the same branch is saved first this one takes the
+    following number instead — BroilerFarm.save retries for exactly that.
+    Shown so the form can say what the code will be rather than leaving the
+    field reading "Auto-generated" until after the save.
+    """
+    branch_id = request.GET.get("branch_id")
+    if not str(branch_id or "").isdigit():
+        return JsonResponse({"code": ""})
+    # Scoped like the supervisor picker: a branch the person cannot see has no
+    # code to offer them.
+    branch = branches_for(request.user).filter(id=int(branch_id)).first()
+    if not branch:
+        return JsonResponse({"code": ""})
+    return JsonResponse({"code": BroilerFarm.next_farm_code(branch)})
 
 
 @login_required

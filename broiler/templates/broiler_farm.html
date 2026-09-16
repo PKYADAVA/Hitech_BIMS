@@ -709,13 +709,14 @@
                     <div class="col-md-3">
                         <label for="farm_code" class="form-label">Farm Code</label>
                         <input type="text" id="farm_code" class="form-control bg-light" readonly placeholder="Auto-generated" />
+                        <div class="form-text" id="farm-code-hint"></div>
                     </div>
                     <div class="col-md-3">
                         <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
                         <select id="farmer" class="form-control" required>
                             <option value="" selected disabled>-Select-</option>
                             {% for farmer in farmers %}
-                            <option value="{{ farmer.id }}">{{ farmer.farmer_name }}</option>
+                            <option value="{{ farmer.id }}" data-name="{{ farmer.farmer_name }}">{% if farmer.farmer_code %}{{ farmer.farmer_code }} - {% endif %}{{ farmer.farmer_name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -1069,6 +1070,7 @@ $(document).ready(function () {
         const lineSelect = $("#line");
         supervisorSelect.empty().append('<option value="" selected disabled>Select a supervisor</option>');
         lineSelect.empty().append('<option value="" selected disabled>-Select-</option>');
+        showNextFarmCode(branchId);
         if (!branchId) return;
         window.loadOptions(supervisorSelect, "{% url 'get_supervisors' %}",
             { branch_id: branchId },
@@ -1084,7 +1086,10 @@ $(document).ready(function () {
     /* ---------------------------------------------------------------- */
     let lastAutoFilledFarmName = "";
     $("#farmer").on("change", function () {
-        const farmerName = $(this).find("option:selected").text().trim();
+        const chosen = $(this).find("option:selected");
+        // data-name, not the label: the label is prefixed with the farmer code
+        // and a farm should not be named "FRM-0001 - Ramesh".
+        const farmerName = (chosen.data("name") || chosen.text()).toString().trim();
         const current = $("#farm_name").val().trim();
         if (!current || current === lastAutoFilledFarmName) {
             $("#farm_name").val(farmerName);
@@ -1103,7 +1108,9 @@ $(document).ready(function () {
                 const select = $("#farmer");
                 select.empty().append('<option value="" selected disabled>-Select-</option>');
                 farmers.forEach(function (farmer) {
-                    select.append(`<option value="${farmer.id}">${farmer.farmer_name}</option>`);
+                    const label = farmer.farmer_code
+                        ? `${farmer.farmer_code} - ${farmer.farmer_name}` : farmer.farmer_name;
+                    select.append(`<option value="${farmer.id}" data-name="${escapeHtml(farmer.farmer_name)}">${escapeHtml(label)}</option>`);
                 });
                 if (selectId) select.val(selectId);
             }
@@ -1310,8 +1317,26 @@ $(document).ready(function () {
     /* ---------------------------------------------------------------- */
     /* Farm: form reset / cancel / show                                  */
     /* ---------------------------------------------------------------- */
+    /* The code this farm will be given. Only while adding: an existing farm
+       already has one, and it never changes. Labelled as the next one rather
+       than a reservation — the number is issued at save, so a farm saved at
+       the same branch in between takes it and this one moves up. */
+    function showNextFarmCode(branchId) {
+        const field = $("#farm_code");
+        const hint = $("#farm-code-hint");
+        if ($("#farm_id").val()) return;
+        if (!branchId) { field.val(""); hint.text(""); return; }
+        $.getJSON("{% url 'broiler_farm_next_code' %}", { branch_id: branchId })
+            .done(function (res) {
+                field.val(res.code || "");
+                hint.text(res.code ? "Next code for this branch — issued when you save." : "");
+            })
+            .fail(() => { field.val(""); hint.text(""); });
+    }
+
     function resetFarmForm() {
         $("#farm-form")[0].reset();
+        $("#farm-code-hint").text("");
         $("#farm_id").val("");
         $("#farm-form .form-text").text("");
         $("#branch").empty().append('<option value="" selected disabled>-Select-</option>');
@@ -1484,6 +1509,7 @@ $(document).ready(function () {
                 });
 
                 $("#farm_code").val(farm.farm_code);
+                $("#farm-code-hint").text("");
                 $("#farm_name").val(farm.farm_name);
                 $("#farm_pincode").val(farm.farm_pincode);
                 $("#farm_capacity").val(farm.farm_capacity);
