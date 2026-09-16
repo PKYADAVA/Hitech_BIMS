@@ -370,6 +370,44 @@ class NextFarmerCodeTests(FarmMasterBase):
         self.assertContains(response, 'id="farmer-code-hint"')
 
 
+class OptionalCapacityTests(FarmMasterBase):
+    """Capacity is surveyed on a visit, so a farm can be entered without it."""
+
+    def form_body(self, **overrides):
+        body = {"branch_id": self.branch.id, "supervisor_id": self.supervisor.id,
+                "farmer_id": self.ready.id, "farm_name": "Nameless Capacity Farm",
+                "region": "East", "line": "Baskhari", "farm_capacity": "",
+                "farm_type": "own"}
+        body.update(overrides)
+        return body
+
+    def test_a_farm_saves_with_the_capacity_left_blank(self):
+        response = self.client.post(reverse("broiler_farm_create"), self.form_body())
+        self.assertEqual(response.status_code, 201, response.content)
+        farm = BroilerFarm.objects.get(farm_name="Nameless Capacity Farm")
+        self.assertIsNone(farm.farm_capacity)
+
+    def test_the_list_copes_with_a_farm_that_has_no_capacity(self):
+        self.busy.farm_capacity = None
+        self.busy.save()
+        self.place(self.busy, 500)
+        row = self.farms()["Vishvanath Farm"]
+        self.assertIsNone(row["farm_capacity"])
+        # Unknown capacity is not 0% used — there is nothing to be a share of.
+        self.assertIsNone(row["utilisation"])
+        self.assertEqual(row["flags"], [])
+
+    def test_a_capacity_still_saves_when_it_is_given(self):
+        response = self.client.post(reverse("broiler_farm_create"), self.form_body(farm_capacity="7500"))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(BroilerFarm.objects.get(farm_name="Nameless Capacity Farm").farm_capacity, 7500)
+
+    def test_the_form_no_longer_demands_it(self):
+        html = self.client.get(reverse("branch_farm")).content.decode()
+        field = html[html.index('id="farm_capacity"') - 120:html.index('id="farm_capacity"') + 120]
+        self.assertNotIn("required", field)
+
+
 class PageTests(FarmMasterBase):
 
     def test_the_page_offers_the_new_controls(self):

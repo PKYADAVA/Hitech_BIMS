@@ -624,6 +624,8 @@ class BroilerFarm(models.Model):
         help_text=_("Pincode of the farm")
     )
     farm_capacity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
         help_text=_("Bird capacity of the farm")
     )
     farm_type = models.CharField(
