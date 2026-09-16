@@ -480,6 +480,7 @@ MODULE_REGISTRY = [
                     ("offline_sync_monitor", "Offline Sync Monitor"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
+                    ("duplicate_analyser", "Duplicate Entries"),
                     ("picklists", "Picklists"),
                     ("field_bindings", "Field Bindings"),
                 ],

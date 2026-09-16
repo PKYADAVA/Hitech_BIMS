@@ -1,0 +1,322 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Duplicate Entries{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='duplicate_analyser' %}
+
+<style>
+  .dup-page { display: flex; flex-direction: column; gap: .85rem; }
+  .dup-head, .dup-card, .dup-band { background: #fff; border: 1px solid #e3e8ef; border-radius: .7rem; }
+  .dup-head { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; padding: .85rem 1rem; }
+  .dup-head-icon {
+    width: 46px; height: 46px; flex: 0 0 46px; border-radius: .7rem; background: #ea7c1f; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+  }
+  .dup-title { font-size: 1.3rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .dup-sub { font-size: .8rem; color: #64748b; }
+  .dup-head-actions { margin-left: auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  .dup-ran { font-size: .72rem; color: #64748b; white-space: nowrap; }
+
+  /* Tiles ---------------------------------------------------------------- */
+  .dup-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .7rem; }
+  .dup-tile { display: flex; align-items: center; gap: .7rem; border: 1px solid #e3e8ef; border-radius: .7rem; padding: .7rem .8rem; background: #fff; }
+  .dup-tile-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: .6rem; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+  .dup-tile-val { font-size: 1.4rem; font-weight: 700; line-height: 1.05; color: #0f172a; font-variant-numeric: tabular-nums; }
+  .dup-tile-lab { font-size: .72rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .02em; }
+  .dup-tile-note { font-size: .68rem; color: #94a3b8; }
+  .dup-tile.blue { background: #f4f8ff; border-color: #dbe7fb; }
+  .dup-tile.blue .dup-tile-icon { background: #e3edfd; color: #1d6fe0; }
+  .dup-tile.red { background: #fff6f6; border-color: #fadcdc; }
+  .dup-tile.red .dup-tile-icon { background: #fde8e8; color: #d92d20; }
+  .dup-tile.red .dup-tile-val { color: #d92d20; }
+  .dup-tile.amber { background: #fffaf0; border-color: #f6e3c3; }
+  .dup-tile.amber .dup-tile-icon { background: #fff1db; color: #b54708; }
+  .dup-tile.amber .dup-tile-val { color: #b54708; }
+  .dup-tile.green { background: #f4fbf7; border-color: #cfeddd; }
+  .dup-tile.green .dup-tile-icon { background: #e7f7ee; color: #067647; }
+  .dup-tile.green .dup-tile-val { color: #067647; }
+
+  /* Tabs + filters ------------------------------------------------------- */
+  .dup-bar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .dup-tabs { display: flex; gap: .3rem; }
+  .dup-tab {
+    border: 1px solid #e3e8ef; border-bottom-color: transparent; background: #f8fafc; color: #475569;
+    font-weight: 600; font-size: .85rem; padding: .5rem 1rem; border-radius: .6rem .6rem 0 0;
+  }
+  .dup-tab.active { background: #fff; color: #1d6fe0; border-color: #e3e8ef; border-bottom-color: #fff; }
+  .dup-filters { margin-left: auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  .dup-filters .form-control { font-size: .8rem; padding: .25rem .5rem; height: 32px; min-height: 32px; }
+  .dup-select {
+    font-size: .8rem; height: 32px; padding: .25rem 1.7rem .25rem .6rem; width: auto; max-width: 170px;
+    border: 1px solid #dee2e6; border-radius: .375rem; background-color: #fff; color: #212529;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat; background-position: right .55rem center; background-size: 14px 11px;
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  }
+  .dup-select:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .dup-search { position: relative; }
+  .dup-search input { padding-left: 1.9rem !important; min-width: 210px; }
+  .dup-search i { position: absolute; left: .6rem; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: .78rem; }
+
+  /* Section band --------------------------------------------------------- */
+  .dup-band { display: flex; align-items: center; gap: .7rem; padding: .6rem .8rem; background: #f7f5ff; border-color: #e4defb; }
+  .dup-band-icon { width: 36px; height: 36px; flex: 0 0 36px; border-radius: .55rem; background: #6941c6; color: #fff; display: flex; align-items: center; justify-content: center; }
+  .dup-band-title { font-size: .9rem; font-weight: 700; color: #0f172a; }
+  .dup-band-note { font-size: .74rem; color: #64748b; }
+  .dup-band .btn { margin-left: auto; }
+
+  /* One check ------------------------------------------------------------ */
+  .dup-card { padding: 0; overflow: hidden; }
+  .dup-card-head { display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem; cursor: pointer; }
+  .dup-num { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+             font-size: .72rem; font-weight: 700; background: #eef1f5; color: #64748b; }
+  .dup-card.found .dup-num { background: #fde8e8; color: #d92d20; }
+  .dup-card-title { font-size: .85rem; font-weight: 700; color: #0f172a; margin: 0; }
+  .dup-card-meta { font-size: .72rem; color: #64748b; }
+  .dup-badge { font-size: .68rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .dup-badge.found { background: #fde8e8; color: #d92d20; }
+  .dup-badge.clean { background: #e7f7ee; color: #067647; }
+  .dup-badge.failed { background: #fde8e8; color: #b42318; }
+  .dup-badge.review { background: #fff1db; color: #b54708; }
+  .dup-card-right { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+  .dup-chev { color: #94a3b8; font-size: .8rem; transition: transform .15s; }
+  .dup-card.open .dup-chev { transform: rotate(180deg); }
+  .dup-body { display: none; padding: 0 .8rem .7rem; }
+  .dup-card.open .dup-body { display: block; }
+  .dup-why { font-size: .75rem; color: #b54708; margin: .1rem 0 .5rem; }
+
+  .dup-group { border: 1px solid #eef1f5; border-radius: .5rem; margin-bottom: .55rem; overflow: hidden; }
+  .dup-matched { font-size: .73rem; font-weight: 700; color: #0f172a; background: #f8fafc; padding: .35rem .6rem; border-bottom: 1px solid #eef1f5; }
+  .dup-matched span { font-weight: 500; color: #64748b; }
+  .dup-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .dup-table th { text-align: left; font-size: .68rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+                  letter-spacing: .02em; padding: .35rem .6rem; background: #fcfdfe; border-bottom: 1px solid #eef1f5; white-space: nowrap; }
+  .dup-table td { padding: .35rem .6rem; border-bottom: 1px solid #f4f7fa; color: #0f172a; }
+  .dup-table tr:last-child td { border-bottom: 0; }
+  .dup-table-wrap { overflow-x: auto; }
+  .dup-error { font-size: .78rem; color: #b42318; padding: 0 0 .5rem; }
+
+  .dup-note { display: flex; align-items: flex-start; gap: .7rem; background: #f4f8ff; border: 1px solid #dbe7fb;
+              border-radius: .7rem; padding: .7rem .9rem; font-size: .78rem; color: #1e3a5f; }
+  .dup-note b { display: block; margin-bottom: .2rem; }
+  .dup-note ul { margin: 0; padding-left: 1.1rem; }
+  .dup-clear { font-size: .78rem; color: #067647; font-weight: 600; padding: .2rem 0; }
+  .dup-page.hide-clean .dup-card.clean { display: none; }
+  /* Only while the clean checks are folded away: with them showing, the cards
+     say it themselves and this would be saying it twice. */
+  .dup-page:not(.hide-clean) .dup-clear { display: none; }
+  .dup-pane { display: none; flex-direction: column; gap: .6rem; }
+  .dup-pane.active { display: flex; }
+  .dup-hidden { display: none !important; }
+
+  @media (max-width: 640px) {
+    .dup-filters { margin-left: 0; width: 100%; }
+    .dup-search input { min-width: 0; width: 100%; }
+  }
+</style>
+
+<div class="container-fluid px-3 py-3">
+  <div class="dup-page hide-clean" id="dup-page">
+
+    <div class="dup-head">
+      <div class="dup-head-icon"><i class="fas fa-clone"></i></div>
+      <div>
+        <div class="dup-title">Duplicate Entries</div>
+        <div class="dup-sub">Find duplicate or similar records in your system. Nothing is changed automatically.</div>
+      </div>
+      <div class="dup-head-actions">
+        <div class="form-check form-switch mb-0 me-2">
+          <input class="form-check-input" type="checkbox" role="switch" id="dup-hide-clean" checked>
+          <label class="form-check-label small" for="dup-hide-clean">Hide clean checks</label>
+        </div>
+        <a class="btn btn-primary btn-sm" href="{% url 'duplicate_analyser' %}{% if module %}?module={{ module }}{% endif %}">
+          <i class="fas fa-play me-1"></i>Run All Checks</a>
+        <span class="dup-ran"><i class="far fa-clock me-1"></i>Last run: {{ ran_at|date:"d M Y H:i" }}</span>
+      </div>
+    </div>
+
+    <div class="dup-sum">
+      <div class="dup-tile blue">
+        <span class="dup-tile-icon"><i class="fas fa-list-check"></i></span>
+        <div>
+          <div class="dup-tile-val">{{ totals.checks }}</div>
+          <div class="dup-tile-lab">Checks run</div>
+          <div class="dup-tile-note">{% if module %}{{ module }} only{% else %}Across all modules{% endif %}</div>
+        </div>
+      </div>
+      <div class="dup-tile {% if totals.groups %}red{% else %}green{% endif %}">
+        <span class="dup-tile-icon"><i class="fas fa-triangle-exclamation"></i></span>
+        <div>
+          <div class="dup-tile-val">{{ totals.groups }}</div>
+          <div class="dup-tile-lab">Possible duplicates</div>
+          <div class="dup-tile-note">Need review</div>
+        </div>
+      </div>
+      <div class="dup-tile {% if totals.entry_groups %}amber{% else %}green{% endif %}">
+        <span class="dup-tile-icon"><i class="fas fa-file-invoice"></i></span>
+        <div>
+          <div class="dup-tile-val">{{ totals.entry_groups }}</div>
+          <div class="dup-tile-lab">Entry duplicates</div>
+          <div class="dup-tile-note">Double-count figures</div>
+        </div>
+      </div>
+      <div class="dup-tile green">
+        <span class="dup-tile-icon"><i class="fas fa-layer-group"></i></span>
+        <div>
+          <div class="dup-tile-val">{{ totals.records }}</div>
+          <div class="dup-tile-lab">Records involved</div>
+          <div class="dup-tile-note">Across every group</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dup-bar">
+      <div class="dup-tabs">
+        <button type="button" class="dup-tab active" data-pane="entries">
+          Transactional Entries ({{ totals.entry_checks }})</button>
+        <button type="button" class="dup-tab" data-pane="masters">
+          Master Records ({{ totals.master_checks }})</button>
+      </div>
+      <div class="dup-filters">
+        <select class="dup-select" id="dup-module" aria-label="Module">
+          <option value="">All Modules</option>
+          {% for m in modules %}<option value="{{ m }}" {% if m == module %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <div class="dup-search">
+          <i class="fas fa-magnifying-glass"></i>
+          <input type="search" class="form-control form-control-sm" id="dup-search"
+                 placeholder="Search by number, party, date...">
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" id="dup-export"
+           href="?export=csv{% if module %}&module={{ module }}{% endif %}">
+          <i class="fas fa-download me-1"></i>Export</a>
+      </div>
+    </div>
+
+    {% comment %}
+    Entries first: a double-counted day moves money now, where a duplicated
+    master is a mess that has to be untangled but is not silently changing a
+    figure this week.
+    {% endcomment %}
+    <div class="dup-pane active" id="dup-pane-entries">
+      <div class="dup-band">
+        <div class="dup-band-icon"><i class="fas fa-layer-group"></i></div>
+        <div>
+          <div class="dup-band-title">Transactional Entries</div>
+          <div class="dup-band-note">The same business event may have been recorded twice. These double-count what was measured.</div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm dup-expand" data-pane="entries">
+          <i class="fas fa-angles-down me-1"></i>Expand All</button>
+      </div>
+      {% if entry_clean %}<div class="dup-clear"><i class="fas fa-circle-check me-1"></i>Nothing found in {{ entry_checks|length }} checks.</div>{% endif %}
+      {% for check in entry_checks %}{% include "_duplicate_check.html" with check=check counter=forloop.counter %}{% endfor %}
+    </div>
+
+    <div class="dup-pane" id="dup-pane-masters">
+      <div class="dup-band">
+        <div class="dup-band-icon"><i class="fas fa-address-card"></i></div>
+        <div>
+          <div class="dup-band-title">Master Records</div>
+          <div class="dup-band-note">One real thing may have been created more than once. These split history between two records.</div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm dup-expand" data-pane="masters">
+          <i class="fas fa-angles-down me-1"></i>Expand All</button>
+      </div>
+      {% if master_clean %}<div class="dup-clear"><i class="fas fa-circle-check me-1"></i>Nothing found in {{ master_checks|length }} checks.</div>{% endif %}
+      {% for check in master_checks %}{% include "_duplicate_check.html" with check=check counter=forloop.counter %}{% endfor %}
+    </div>
+
+    <div class="dup-note">
+      <i class="fas fa-circle-info mt-1"></i>
+      <div>
+        <b>Before you act</b>
+        <ul>
+          <li>This tool only finds possible duplicates. Check the records themselves before changing anything.</li>
+          <li>A repeat is not always a mistake: two farmers can share a name, a supplier can reuse a bill number in a later year, and a flock can genuinely be treated twice in one day.</li>
+          <li>Deleting an entry moves every figure it fed — the flock count, the FCR and any settlement already run on it.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var page = document.getElementById("dup-page");
+
+    // Clean checks folded away by default; the switch brings them back.
+    var hideClean = document.getElementById("dup-hide-clean");
+    function applyClean() { page.classList.toggle("hide-clean", hideClean.checked); }
+    hideClean.addEventListener("change", applyClean);
+    applyClean();
+
+    // Tabs
+    page.querySelectorAll(".dup-tab").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        page.querySelectorAll(".dup-tab").forEach(function (t) { t.classList.remove("active"); });
+        page.querySelectorAll(".dup-pane").forEach(function (p) { p.classList.remove("active"); });
+        tab.classList.add("active");
+        document.getElementById("dup-pane-" + tab.dataset.pane).classList.add("active");
+      });
+    });
+
+    // A check opens on click; one with findings starts open, since hiding what
+    // was found behind a chevron is the opposite of the point.
+    page.querySelectorAll(".dup-card-head").forEach(function (head) {
+      head.addEventListener("click", function () { head.closest(".dup-card").classList.toggle("open"); });
+    });
+    page.querySelectorAll(".dup-expand").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var pane = document.getElementById("dup-pane-" + button.dataset.pane);
+        var cards = [...pane.querySelectorAll(".dup-card")];
+        var opening = cards.some(function (c) { return !c.classList.contains("open"); });
+        cards.forEach(function (c) { c.classList.toggle("open", opening); });
+        button.innerHTML = opening
+          ? '<i class="fas fa-angles-up me-1"></i>Collapse All'
+          : '<i class="fas fa-angles-down me-1"></i>Expand All';
+      });
+    });
+
+    // The module filter reloads, because it changes which checks are run at
+    // all rather than which of the answers are shown.
+    var moduleSelect = document.getElementById("dup-module");
+    moduleSelect.addEventListener("change", function () {
+      var value = moduleSelect.value;
+      window.location.search = value ? "?module=" + encodeURIComponent(value) : "";
+    });
+
+    // Search filters what is already on the page: it hides rows that do not
+    // match, then any group and any check left with nothing to show.
+    var search = document.getElementById("dup-search");
+    search.addEventListener("input", function () {
+      var term = search.value.trim().toLowerCase();
+      page.querySelectorAll(".dup-card").forEach(function (card) {
+        var anyGroup = false;
+        card.querySelectorAll(".dup-group").forEach(function (group) {
+          var anyRow = false;
+          group.querySelectorAll("tbody tr").forEach(function (tr) {
+            var hit = !term || tr.textContent.toLowerCase().indexOf(term) !== -1;
+            tr.classList.toggle("dup-hidden", !hit);
+            if (hit) anyRow = true;
+          });
+          group.classList.toggle("dup-hidden", !anyRow);
+          if (anyRow) anyGroup = true;
+        });
+        if (term) {
+          card.classList.toggle("dup-hidden", !anyGroup);
+          if (anyGroup) card.classList.add("open");
+        } else {
+          card.classList.remove("dup-hidden");
+        }
+      });
+    });
+  })();
+</script>
+{% endblock content %}

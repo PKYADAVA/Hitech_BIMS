@@ -51,5 +51,6 @@ urlpatterns = [
     path('mobile-login/', views.mobile_login_link, name='mobile_login_link'),
     path('ui-settings/', views.ui_settings, name='ui_settings'),
     path('ui-settings/toggle-nav-layout/', views.toggle_nav_layout, name='toggle_nav_layout'),
+    path('duplicate-entries/', views.duplicate_analyser, name='duplicate_analyser'),
 
 ]

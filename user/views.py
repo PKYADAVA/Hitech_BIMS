@@ -1799,3 +1799,70 @@ def mobile_login_link(request):
         return redirect("login")
     auth_login(request, user)
     return redirect(next_url)
+
+
+@login_required
+def duplicate_analyser(request):
+    """User > Duplicate Entries — records that look like they were entered twice.
+
+    Two problems, one question. A duplicated transaction double-counts
+    something measured: two daily entries for a flock on one day book the
+    mortality, culls and feed twice, and those run into the flock count, the
+    FCR and the settlement. A duplicated master splits one real thing across
+    two records, so half a farmer's history sits under one code and half under
+    another.
+
+    Reports only. Names legitimately repeat and a supplier can reuse a bill
+    number across years, so every group is a question for somebody who knows
+    the business rather than something to act on automatically — and merging
+    records is not an operation this system has.
+    """
+    from django.utils import timezone
+
+    from user.services import duplicate_scan
+
+    only = (request.GET.get("only") or "").strip() or None
+    module = (request.GET.get("module") or "").strip() or None
+    checks = duplicate_scan.run(only=only, module=module)
+    totals = duplicate_scan.summary(checks)
+    entry_checks = [c for c in checks if c.kind == "entry"]
+    master_checks = [c for c in checks if c.kind == "master"]
+
+    if (request.GET.get("export") or "").strip() == "csv":
+        return _duplicate_csv(checks)
+
+    return render(request, "duplicate_analyser.html", {
+        "entry_checks": entry_checks,
+        "master_checks": master_checks,
+        # So a section whose checks all came back clean can say so, rather than
+        # leaving a heading with nothing under it once they are folded away.
+        "entry_clean": not any(c.groups or c.error for c in entry_checks),
+        "master_clean": not any(c.groups or c.error for c in master_checks),
+        "totals": totals,
+        "only": only,
+        "module": module,
+        "modules": duplicate_scan.modules(duplicate_scan.run()) if module else duplicate_scan.modules(checks),
+        # The scan runs when the page is opened, so "last run" is now. Stated
+        # rather than implied, because a stale figure on a data-health page is
+        # worse than none.
+        "ran_at": timezone.localtime(),
+    })
+
+
+def _duplicate_csv(checks):
+    """The findings as a file, one row per record, so they can be worked
+    through away from the screen or handed to somebody else."""
+    import csv
+
+    from django.http import HttpResponse
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="duplicate-entries.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Check", "Module", "Kind", "Matched on", "Group", "Record"])
+    for check in checks:
+        for group in check.groups:
+            for row in group.rows:
+                writer.writerow([check.title, check.module, check.kind, check.matched_on,
+                                 group.matched, " | ".join(row.cells)])
+    return response

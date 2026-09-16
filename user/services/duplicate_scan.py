@@ -1,0 +1,422 @@
+"""Find records that look like they were entered twice.
+
+Two different problems share one page, because the question people ask is the
+same — "is this in here more than once?" — even though the consequences differ.
+
+A duplicated **entry** double-counts something that was measured: two daily
+entries for one flock on one day book the mortality, culls and feed twice, and
+those figures run straight into the flock count, the FCR and the settlement. A
+duplicated **master** splits one real thing across two records: half a farmer's
+history under one code and half under another, payments against whichever was
+open at the time.
+
+Nothing here decides anything. Names legitimately repeat, a supplier can bill
+the same number twice in different years, and a flock really can be fed twice
+in a day by two supervisors. Every group is a question for somebody who knows
+the business, so this reports and never merges, edits or deletes.
+
+Read-only by construction: the module imports models and runs queries, and has
+no write path at all.
+"""
+from dataclasses import dataclass, field
+from typing import Callable, Optional
+
+from django.db.models import Count, Q
+from django.db.models.functions import Lower
+
+# Modules a check belongs to, for the page's filter.
+BROILER, PURCHASE, INVENTORY, ACCOUNT, SALES = (
+    "Broiler", "Purchase", "Inventory", "Account", "Sales")
+
+
+@dataclass
+class Row:
+    """One record inside a suspected duplicate group, as table cells."""
+    id: int
+    cells: list[str] = field(default_factory=list)
+
+    @property
+    def searchable(self) -> str:
+        return " ".join(str(c) for c in self.cells)
+
+
+@dataclass
+class Group:
+    """Records that matched each other."""
+    matched: str
+    rows: list[Row] = field(default_factory=list)
+
+
+@dataclass
+class Check:
+    """One question asked of one model."""
+    code: str
+    title: str
+    kind: str                                    # "entry" or "master"
+    module: str
+    matched_on: str                              # what had to be equal
+    why: str                                     # what a duplicate here costs
+    columns: list[str] = field(default_factory=list)
+    groups: list[Group] = field(default_factory=list)
+    error: str = ""                              # set when the check could not run
+
+    @property
+    def count(self) -> int:
+        return len(self.groups)
+
+    @property
+    def records(self) -> int:
+        return sum(len(g.rows) for g in self.groups)
+
+
+def _duplicate_keys(queryset, fields):
+    """The values of ``fields`` that appear on more than one row."""
+    rows = (queryset.values(*fields).annotate(n=Count("id")).filter(n__gt=1).order_by())
+    return [{f: row[f] for f in fields} for row in rows]
+
+
+def _collect(queryset, fields, keys, cells, matched=None, limit=200):
+    """Turn duplicate keys back into groups of real rows.
+
+    One query for all of them rather than one per group: a master with a long
+    tail of repeats would otherwise cost hundreds of round trips.
+    """
+    if not keys:
+        return []
+    match = Q()
+    for key in keys[:limit]:
+        match |= Q(**key)
+    grouped: dict[tuple, Group] = {}
+    for obj in queryset.filter(match):
+        signature = tuple(_value(obj, f) for f in fields)
+        group = grouped.get(signature)
+        if group is None:
+            group = Group(matched=(matched(obj) if matched else " · ".join(
+                str(v) for v in signature if v not in (None, ""))))
+            grouped[signature] = group
+        group.rows.append(Row(id=obj.pk, cells=[_text(c) for c in cells(obj)]))
+    # A key that ends up with one row came from a filter the re-query narrowed;
+    # it is not a duplicate, so it does not belong in the answer.
+    return [g for g in grouped.values() if len(g.rows) > 1]
+
+
+def _value(obj, field_path):
+    """Read a grouping key off a row.
+
+    Annotations land on the instance as plain attributes, so the lower-cased
+    name the query grouped by is read exactly like a real column. Skipping it
+    here — the first version did — gave every row a signature of its own, so
+    nothing ever grouped and every case-insensitive check reported clean.
+    """
+    value = obj
+    for part in field_path.split("__"):
+        value = getattr(value, part, None)
+        if value is None:
+            return None
+    return value
+
+
+def _text(value):
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%d %b %Y")
+    return str(value)
+
+
+def _date(obj):
+    return _text(getattr(obj, "date", None))
+
+
+# ---------------------------------------------------------------------------
+# Transaction entries
+# ---------------------------------------------------------------------------
+
+def _entry_checks():
+    from broiler.models import BirdSale, DailyEntry, MedicineVaccineEntry
+
+    daily = DailyEntry.objects.select_related("farm", "batch", "supervisor").exclude(batch__isnull=True)
+    yield Check(
+        code="daily_entry", kind="entry", module=BROILER,
+        title="Two daily entries for one flock on one day",
+        matched_on="Farm + Batch + Date",
+        why="Mortality, culls and feed are counted twice, which moves the FCR and the settlement.",
+        columns=["Entry No", "Date", "Farm", "Batch", "Mortality", "Culls", "Entered by"],
+        groups=_collect(
+            daily, ["batch_id", "date"], _duplicate_keys(daily, ["batch_id", "date"]),
+            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date,
+                             e.farm.farm_name if e.farm_id else "",
+                             e.batch.batch_name if e.batch_id else "",
+                             e.mortality, e.culls,
+                             e.supervisor.name if e.supervisor_id else ""],
+            matched=lambda e: f"{e.batch.batch_name if e.batch_id else ''} on {_date(e)}"))
+
+    medicine = MedicineVaccineEntry.objects.select_related("farm", "item").exclude(item__isnull=True)
+    yield Check(
+        code="medicine_entry", kind="entry", module=BROILER,
+        title="Same medicine booked twice on one day",
+        matched_on="Farm + Item + Date",
+        why="The farm is charged twice and its medicine stock is understated.",
+        columns=["Entry No", "Date", "Farm", "Item", "Qty"],
+        groups=_collect(
+            medicine, ["farm_id", "item_id", "date"],
+            _duplicate_keys(medicine, ["farm_id", "item_id", "date"]),
+            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date,
+                             e.farm.farm_name if e.farm_id else "",
+                             e.item.description if e.item_id else "", e.qty],
+            matched=lambda e: f"{e.item.description if e.item_id else ''} on {_date(e)}"))
+
+    sales = BirdSale.objects.select_related("farm", "batch", "customer", "farmer").exclude(batch__isnull=True)
+    yield Check(
+        code="bird_sale", kind="entry", module=BROILER,
+        title="Identical bird sales on one day",
+        matched_on="Batch + Date + Birds",
+        why="Birds are taken off the flock twice, so what is left reads low.",
+        columns=["Sale No", "Date", "Farm", "Batch", "Birds", "Sold to"],
+        groups=_collect(
+            sales, ["batch_id", "date", "birds"],
+            _duplicate_keys(sales, ["batch_id", "date", "birds"]),
+            cells=lambda s: [s.sale_no or f"#{s.pk}", s.date,
+                             s.farm.farm_name if s.farm_id else "",
+                             s.batch.batch_name if s.batch_id else "", s.birds,
+                             (s.customer.name if s.customer_id else
+                              s.farmer.farmer_name if s.farmer_id else "")],
+            matched=lambda s: f"{s.birds} birds on {_date(s)}"))
+
+
+def _purchase_checks():
+    from purchase.models import GeneralPurchase, GeneralPurchaseItem
+
+    bills = (GeneralPurchase.objects.select_related("supplier")
+             .exclude(Q(bill_no__isnull=True) | Q(bill_no="")))
+    yield Check(
+        code="purchase_bill", kind="entry", module=PURCHASE,
+        title="One supplier bill entered twice",
+        matched_on="Supplier + Bill No",
+        why="The same invoice is paid and stocked twice.",
+        columns=["Purchase No", "Date", "Supplier", "Bill No"],
+        groups=_collect(
+            bills, ["supplier_id", "bill_no"], _duplicate_keys(bills, ["supplier_id", "bill_no"]),
+            cells=lambda p: [p.purchase_no or f"#{p.pk}", p.date,
+                             p.supplier.name if p.supplier_id else "", p.bill_no],
+            matched=lambda p: f"bill {p.bill_no}"))
+
+    lines = GeneralPurchaseItem.objects.select_related("purchase", "purchase__supplier", "item")
+    fields = ["purchase__supplier_id", "item_id", "purchase__date", "rcv_qty", "rate"]
+    yield Check(
+        code="purchase_line", kind="entry", module=PURCHASE,
+        title="Same purchase line entered twice",
+        matched_on="Supplier + Item + Date + Qty + Rate",
+        why="The same delivery is stocked and costed twice, even under different bill numbers.",
+        columns=["Purchase No", "Date", "Supplier", "Item", "Qty", "Rate"],
+        groups=_collect(
+            lines, fields, _duplicate_keys(lines, fields),
+            cells=lambda l: [l.purchase.purchase_no if l.purchase_id else f"#{l.pk}",
+                             l.purchase.date if l.purchase_id else "",
+                             l.purchase.supplier.name if l.purchase_id and l.purchase.supplier_id else "",
+                             l.item.description if l.item_id else "", l.rcv_qty, l.rate],
+            matched=lambda l: f"{l.item.description if l.item_id else ''} × {l.rcv_qty}"))
+
+
+def _transfer_checks():
+    from inventory.models import StockTransfer
+
+    transfers = StockTransfer.objects.select_related(
+        "item", "from_warehouse", "to_warehouse", "from_farm", "to_farm")
+    fields = ["item_id", "date", "quantity", "to_warehouse_id", "to_farm_id"]
+
+    def where(t):
+        for obj in (t.to_warehouse, t.to_farm):
+            if obj is not None:
+                return getattr(obj, "name", None) or getattr(obj, "farm_name", "")
+        return ""
+
+    yield Check(
+        code="stock_transfer", kind="entry", module=INVENTORY,
+        title="Same stock transfer entered twice",
+        matched_on="Item + Destination + Date + Quantity",
+        why="Stock is moved twice on paper, so the source reads low and the destination high.",
+        columns=["Transfer No", "Date", "Item", "To", "Quantity"],
+        groups=_collect(
+            transfers, fields, _duplicate_keys(transfers, fields),
+            cells=lambda t: [t.trnum or f"#{t.pk}", t.date,
+                             t.item.description if t.item_id else "", where(t), t.quantity],
+            matched=lambda t: f"{t.item.description if t.item_id else ''} × {t.quantity} on {_date(t)}"))
+
+
+def _voucher_checks():
+    from account.models import Voucher
+
+    vouchers = Voucher.objects.exclude(Q(narration__isnull=True) | Q(narration=""))
+    fields = ["voucher_type", "date", "narration"]
+    yield Check(
+        code="voucher_narration", kind="entry", module=ACCOUNT,
+        title="Same voucher entered twice",
+        matched_on="Type + Date + Narration",
+        why="The same expense or payment is posted twice to the ledger.",
+        columns=["Voucher No", "Date", "Type", "Narration"],
+        groups=_collect(
+            vouchers, fields, _duplicate_keys(vouchers, fields),
+            cells=lambda v: [v.voucher_no or f"#{v.pk}", v.date, v.voucher_type,
+                             (v.narration or "")[:80]],
+            matched=lambda v: f"{v.voucher_type} on {_date(v)}"))
+
+
+# ---------------------------------------------------------------------------
+# Master records
+# ---------------------------------------------------------------------------
+
+FARMER_COLUMNS = ["Code", "Farmer", "Mobile", "Group", "Status"]
+
+
+def _farmer_cells(f):
+    return [f.farmer_code, f.farmer_name, f.mobile_no or "",
+            f.farmer_group.description if f.farmer_group_id else "",
+            "Inactive" if f.status == "inactive" else "Active"]
+
+
+def _farmer_checks():
+    from broiler.models import Farmer
+
+    base = Farmer.objects.select_related("farmer_group")
+    named = base.annotate(lower=Lower("farmer_name")).exclude(farmer_name="")
+    yield Check(
+        code="farmer_name", kind="master", module=BROILER,
+        title="Farmers with the same name", matched_on="Name, ignoring case",
+        why="Two records for one farmer split their farms, settlements and payments.",
+        columns=FARMER_COLUMNS,
+        groups=_collect(named, ["lower"], _duplicate_keys(named, ["lower"]), _farmer_cells))
+
+    for fieldname, human in (("mobile_no", "mobile number"), ("pan_no", "PAN"),
+                             ("aadhar_no", "Aadhaar number")):
+        rows = base.exclude(**{f"{fieldname}__isnull": True}).exclude(**{fieldname: ""})
+        yield Check(
+            code=f"farmer_{fieldname}", kind="master", module=BROILER,
+            title=f"Farmers sharing a {human}", matched_on=human.capitalize(),
+            why=f"A {human} belongs to one person, so this is usually the same farmer twice.",
+            columns=FARMER_COLUMNS,
+            groups=_collect(rows, [fieldname], _duplicate_keys(rows, [fieldname]), _farmer_cells))
+
+
+def _farm_checks():
+    from broiler.models import BroilerFarm
+
+    rows = (BroilerFarm.objects.select_related("branch", "farmer")
+            .annotate(lower=Lower("farm_name")).exclude(farm_name=""))
+    yield Check(
+        code="farm_name", kind="master", module=BROILER,
+        title="Farms with the same name at one branch",
+        matched_on="Farm name + Branch",
+        why="Entries and placements can land on the wrong one, splitting a flock's history.",
+        columns=["Code", "Farm", "Branch", "Farmer", "District"],
+        groups=_collect(
+            rows, ["lower", "branch_id"], _duplicate_keys(rows, ["lower", "branch_id"]),
+            cells=lambda f: [f.farm_code, f.farm_name,
+                             f.branch.branch_name if f.branch_id else "",
+                             f.farmer.farmer_name if f.farmer_id else "", f.district or ""]))
+
+
+def _item_checks():
+    from inventory.models import Item
+
+    rows = (Item.objects.select_related("category")
+            .annotate(lower=Lower("description")).exclude(description=""))
+    yield Check(
+        code="item_description", kind="master", module=INVENTORY,
+        title="Items with the same name in one category",
+        matched_on="Description + Category",
+        why="Stock and cost for one thing end up spread over two codes.",
+        columns=["Code", "Item", "Category", "Unit", "Status"],
+        groups=_collect(
+            rows, ["lower", "category_id"], _duplicate_keys(rows, ["lower", "category_id"]),
+            cells=lambda i: [i.item_code, i.description,
+                             i.category.name if i.category_id else "",
+                             i.storage_uom or "", "Active" if i.is_active else "Inactive"]))
+
+
+SUPPLIER_COLUMNS = ["Code", "Supplier", "Mobile", "GSTIN", "Place"]
+
+
+def _supplier_cells(s):
+    return [s.code or "", s.name or "", s.mobile or "", s.gstin or "", s.place or ""]
+
+
+def _party_checks():
+    from purchase.models import Supplier
+    from sales.models import Customer
+
+    suppliers = Supplier.objects.annotate(lower=Lower("name")).exclude(
+        Q(name__isnull=True) | Q(name=""))
+    yield Check(
+        code="supplier_name", kind="master", module=PURCHASE,
+        title="Suppliers with the same name", matched_on="Name, ignoring case",
+        why="Purchases and balances split between two records for one supplier.",
+        columns=SUPPLIER_COLUMNS,
+        groups=_collect(suppliers, ["lower"], _duplicate_keys(suppliers, ["lower"]), _supplier_cells))
+
+    for fieldname, human in (("mobile", "mobile number"), ("gstin", "GSTIN")):
+        rows = Supplier.objects.exclude(**{f"{fieldname}__isnull": True}).exclude(**{fieldname: ""})
+        yield Check(
+            code=f"supplier_{fieldname}", kind="master", module=PURCHASE,
+            title=f"Suppliers sharing a {human}", matched_on=human.upper() if fieldname == "gstin" else human.capitalize(),
+            why=f"A {human} belongs to one business, so this is usually one supplier entered twice.",
+            columns=SUPPLIER_COLUMNS,
+            groups=_collect(rows, [fieldname], _duplicate_keys(rows, [fieldname]), _supplier_cells))
+
+    customers = Customer.objects.annotate(lower=Lower("name")).exclude(name="")
+    yield Check(
+        code="customer_name", kind="master", module=SALES,
+        title="Customers with the same name", matched_on="Name, ignoring case",
+        why="Sales and receipts split between two records for one customer.",
+        columns=["Code", "Customer", "Mobile", "Place", "State"],
+        groups=_collect(customers, ["lower"], _duplicate_keys(customers, ["lower"]),
+                        cells=lambda c: [c.code or "", c.name, c.mobile or "",
+                                         c.place or "", c.state or ""]))
+
+
+CHECK_SOURCES: list[Callable] = [
+    _entry_checks, _purchase_checks, _transfer_checks, _voucher_checks,
+    _farmer_checks, _farm_checks, _item_checks, _party_checks,
+]
+
+
+def run(only: Optional[str] = None, module: Optional[str] = None) -> list[Check]:
+    """Every check, in the order they are shown.
+
+    A check that raises is reported as a failed check rather than taking the
+    page down with it: a scan that answers eleven questions and admits it could
+    not answer the twelfth is worth more than an error screen.
+    """
+    checks: list[Check] = []
+    for source in CHECK_SOURCES:
+        try:
+            produced = list(source())
+        except Exception as exc:                      # noqa: BLE001 — reported, not swallowed
+            checks.append(Check(code=source.__name__.strip("_"), title=source.__name__,
+                                kind="entry", module="", matched_on="", why="",
+                                error=f"{type(exc).__name__}: {exc}"))
+            continue
+        checks.extend(produced)
+    if only:
+        checks = [c for c in checks if c.code == only]
+    if module:
+        checks = [c for c in checks if c.module == module]
+    return checks
+
+
+def modules(checks: list[Check]) -> list[str]:
+    return sorted({c.module for c in checks if c.module})
+
+
+def summary(checks: list[Check]) -> dict:
+    return {
+        "checks": len(checks),
+        "with_findings": sum(1 for c in checks if c.count),
+        "groups": sum(c.count for c in checks),
+        "records": sum(c.records for c in checks),
+        "entry_groups": sum(c.count for c in checks if c.kind == "entry"),
+        "master_groups": sum(c.count for c in checks if c.kind == "master"),
+        "entry_checks": sum(1 for c in checks if c.kind == "entry"),
+        "master_checks": sum(1 for c in checks if c.kind == "master"),
+        "failed": [c for c in checks if c.error],
+    }

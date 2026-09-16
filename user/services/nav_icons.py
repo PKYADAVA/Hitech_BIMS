@@ -60,6 +60,7 @@ TAB_ICONS = {
     "dashboard_access": "fas fa-gauge-high",
     "day_record_report": "fas fa-calendar-day",
     "debit_note_list": "fas fa-file-invoice",
+    "duplicate_analyser": "fas fa-clone",
     "delivery_challan_list": "fas fa-truck",
     "delivery_challan_report": "fas fa-truck",
     "designation": "fas fa-id-badge",

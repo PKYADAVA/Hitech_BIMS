@@ -1,0 +1,59 @@
+{% comment %}
+One check on the Duplicate Entries page: what it looked for, what it cost if
+found, and the matching records as a table. A check that found nothing still
+renders — saying "we looked and it is clean" is the other half of the answer —
+but it carries the "clean" class so the page can fold it away, and it starts
+closed. A check with findings starts open: hiding what was found behind a
+chevron would be the opposite of the point.
+{% endcomment %}
+<div class="dup-card{% if check.error %} found open{% elif check.groups %} found open{% else %} clean{% endif %}">
+  <div class="dup-card-head">
+    <span class="dup-num">{{ counter }}</span>
+    <div>
+      <h6 class="dup-card-title">{{ check.title }}</h6>
+      <div class="dup-card-meta">Matched on: {{ check.matched_on }}{% if check.module %} &middot; {{ check.module }}{% endif %}</div>
+    </div>
+    <div class="dup-card-right">
+      {% if check.error %}
+        <span class="dup-badge failed">Could not run</span>
+      {% elif check.groups %}
+        <span class="dup-badge found">{{ check.count }} match{{ check.count|pluralize:"es" }}</span>
+        <span class="dup-badge review">Review</span>
+      {% else %}
+        <span class="dup-badge clean">Nothing found</span>
+      {% endif %}
+      <i class="fas fa-chevron-down dup-chev"></i>
+    </div>
+  </div>
+
+  <div class="dup-body">
+    {% if check.error %}
+      <div class="dup-error">{{ check.error }}</div>
+    {% elif check.groups %}
+      <div class="dup-why"><i class="fas fa-triangle-exclamation me-1"></i>{{ check.why }}</div>
+      {% for group in check.groups %}
+      <div class="dup-group">
+        <div class="dup-matched"><span>Matched:</span> {{ group.matched }}</div>
+        <div class="dup-table-wrap">
+          <table class="dup-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                {% for column in check.columns %}<th>{{ column }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in group.rows %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                {% for cell in row.cells %}<td>{{ cell|default:"&mdash;" }}</td>{% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
