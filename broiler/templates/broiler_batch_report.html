@@ -51,6 +51,26 @@
      which is what the scroll box is for. */
   .report-scroll .report-dense th,
   .report-scroll .report-dense td { white-space: nowrap; }
+  /* Remarks is the exception that rule must not swallow. It is a whole
+     sentence of free text -- "Daily Entry VISHVANATH-2 S/o Chandrajeet..." on
+     every row -- and held on one line it stretched the last column far past
+     the right edge of the box, so the column a reader can see least of is the
+     one they have to scroll furthest for. Capped and ellipsised instead: the
+     rows stay one line deep, which is what .report-dense is for, and the full
+     text is on the cell's tooltip and on the printed copy below.
+
+     The cap lives on an inner span, not the cell: under the automatic table
+     layout this table uses, a max-width on a <td> is a suggestion the browser
+     is free to ignore once the content is wider, and it does. */
+  .report-scroll .report-dense td.report-wrap > span {
+    display: block; max-width: 15rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  @media print {
+    .report-scroll .report-dense td.report-wrap > span {
+      max-width: none; overflow: visible; white-space: normal;
+    }
+  }
   .report-dense th, .report-dense td { font-size: .72rem; padding: .18rem .3rem; line-height: 1.15; }
   .report-dense thead th { position: sticky; z-index: 3; }
   .report-dense thead tr:first-child th { top: 0; }
@@ -669,7 +689,7 @@
               <td>{{ r.feed_2_name }}</td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
               <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
               <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
-              <td class="report-wrap">{{ r.remarks }}</td>
+              <td class="report-wrap"><span title="{{ r.remarks }}">{{ r.remarks }}</span></td>
             </tr>
             {% endif %}
             {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
