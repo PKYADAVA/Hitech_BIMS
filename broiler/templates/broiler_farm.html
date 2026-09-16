@@ -174,7 +174,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fr-search">Search</label>
-            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Search by name, mobile, USC or service no...">
+            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Name, mobile, USC, service no...">
           </div>
         </div>
       </div>
@@ -213,14 +213,14 @@
           <span class="bf-filter-icon" style="--bf-bg:#e8f1fd;--bf-fg:#1d6fe0"><i class="fas fa-code-branch"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-branch">Branch</label>
-            <select id="bf-fm-branch" class="form-select form-select-sm"><option value="">All Branches</option></select>
+            <select id="bf-fm-branch" class="form-select form-select-sm"><option value="">All</option></select>
           </div>
         </div>
         <div class="bf-filter">
           <span class="bf-filter-icon" style="--bf-bg:#fff1db;--bf-fg:#b54708"><i class="fas fa-user-tie"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-supervisor">Supervisor</label>
-            <select id="bf-fm-supervisor" class="form-select form-select-sm"><option value="">All Supervisors</option></select>
+            <select id="bf-fm-supervisor" class="form-select form-select-sm"><option value="">All</option></select>
           </div>
         </div>
         <div class="bf-filter">
@@ -263,7 +263,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-search">Search</label>
-            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search by code, farm, farmer or district...">
+            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Code, farm, farmer, district...">
           </div>
         </div>
       </div>
@@ -1110,8 +1110,8 @@ $(document).ready(function () {
                 farmTable.clear().rows.add(data).draw(false);
                 $("#bf-farm-count").text(data.length);
                 const distinct = (key) => [...new Set(data.map((r) => r[key]).filter(Boolean))].sort();
-                bfFillOptions(farmFilters.branch, distinct("branch_name"), "All Branches", farmSaved.branch);
-                bfFillOptions(farmFilters.supervisor, distinct("supervisor_name"), "All Supervisors", farmSaved.supervisor);
+                bfFillOptions(farmFilters.branch, distinct("branch_name"), "All", farmSaved.branch);
+                bfFillOptions(farmFilters.supervisor, distinct("supervisor_name"), "All", farmSaved.supervisor);
                 farmTable.draw(false);
             },
             error: function () {
