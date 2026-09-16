@@ -4495,7 +4495,8 @@ def _match_growing_charge_scheme(batch, on_date):
             or qs.filter(branch__isnull=True).order_by("-from_date", "-id").first())
 
 
-def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", med_key=None):
+def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id",
+                               med_key="transfer_item_id"):
     """Repriced in place, each row's own ``rate``/``amount`` replaced by what
     that transfer actually cost the company — ``inventory.services.valuation.
     compute_issue_rate``, the same engine ``StockIssue`` re-costing uses, at
@@ -4515,7 +4516,10 @@ def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", me
     own line id for medicine) — without that, the transfer being priced is
     also one of the outflows the ledger would replay as "already consumed",
     which would draw FIFO/LIFO layers down past themselves before ever
-    pricing the thing being asked about.
+    pricing the thing being asked about. Both keys are read per row, not per
+    list: the medicine table is fed from two transactions at once (Medicine
+    Vaccine Transfer lines and Stock Transfers of a medicine item), and a row
+    carrying the key its list was not named for would exclude nothing.
     """
     from inventory.services.valuation import compute_issue_rate
 
@@ -4525,7 +4529,7 @@ def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", me
             continue
         real_rate = compute_issue_rate(
             item, row.get("warehouse_id"), row["date"], row.get("quantity") or 0,
-            exclude_transfer_id=row.get(transfer_key) if med_key is None else None,
+            exclude_transfer_id=row.get(transfer_key) if transfer_key else None,
             exclude_medicine_transfer_item_id=row.get(med_key) if med_key else None,
         )
         # Rounded to paise, and the amount worked out from the rounded rate.
@@ -4887,6 +4891,7 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
 
 
 def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
+    from inventory.item_families import item_family
     from inventory.models import StockTransfer, MedicineTransfer, Mapping
     from purchase.models import GeneralPurchaseItem
 
@@ -4934,7 +4939,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     transfers = (StockTransfer.objects.filter(to_batch=batch)
                  .select_related("item__category", "from_warehouse", "from_farm")
                  .order_by("date", "id"))
-    chick_rows, feed_rows = [], []
+    chick_rows, feed_rows, medicine_transfer_rows = [], [], []
     feed_cum = Decimal("0")
     for t in transfers:
         row = {
@@ -4950,12 +4955,17 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             # counting the very outflow being priced.
             "warehouse_id": t.from_warehouse_id, "transfer_id": t.id,
         }
-        category_name = t.item.category.name if t.item.category_id else ""
-        # Chick-placement transfers are ordinary Stock Transfers of a
-        # "chicks" item; everything else transferred to a batch is treated
-        # as feed (this model has no dedicated chick-placement transaction).
-        if "chick" in category_name.lower():
+        # Chick-placement transfers are ordinary Stock Transfers of a "chicks"
+        # item (this model has no dedicated chick-placement transaction), and
+        # medicine reaches a farm on this screen as often as on Medicine
+        # Vaccine Transfer. Everything not feed used to be filed as feed, so a
+        # vaccine sent this way was listed under Feed Transfer In, priced into
+        # feed cost, and left out of the medicine tables entirely.
+        family = item_family(t.item)
+        if family == "chicks":
             chick_rows.append(row)
+        elif family == "medicine":
+            medicine_transfer_rows.append(row)
         else:
             feed_cum += row["quantity"] or 0
             row["cumulative"] = feed_cum
@@ -4964,7 +4974,6 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     med_transfers = (MedicineTransfer.objects.filter(to_batch=batch)
                      .prefetch_related("items__item").select_related("from_warehouse", "from_farm")
                      .order_by("date", "id"))
-    medicine_transfer_rows = []
     for mt in med_transfers:
         location_name = _transfer_location_name(mt)
         for line in mt.items.all():
@@ -4979,6 +4988,10 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
                 # keyed by this line's own id rather than the transfer's.
                 "warehouse_id": mt.from_warehouse_id, "transfer_item_id": line.id,
             })
+    # Two sources into one table, so the table is ordered once here rather
+    # than reading as a Stock Transfer block followed by a Medicine Transfer
+    # block.
+    medicine_transfer_rows.sort(key=lambda r: (r["date"], r["trnum"] or ""))
 
     # Feed/Medicine Return and Transfer-to-Other-Farm are the same "moved
     # OUT of this batch" leg (from_batch) of the same Stock/Medicine
@@ -4989,10 +5002,11 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
                           .select_related("item__category", "to_warehouse", "to_farm")
                           .order_by("date", "id"))
     feed_return_rows, feed_transfer_out_rows = [], []
-    # Items leaving the batch that are not feed, shown in their own table so
-    # they neither inflate the feed figures nor disappear. "Not feed" uses the
-    # same rule as the incoming split above — a chick-category item — so an
-    # item is never counted as feed on the way in and not on the way out.
+    medicine_return_rows, medicine_transfer_out_rows = [], []
+    # Items leaving the batch that are not feed go to the chicks or medicine
+    # tables instead, so they neither inflate the feed figures nor disappear.
+    # Same rule as the incoming split above, so an item is never counted as
+    # feed on the way in and not on the way out.
     other_transfer_out_rows = []
     for t in outgoing_transfers:
         row = {
@@ -5001,16 +5015,17 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             "item": str(t.item), "item_id": t.item_id, "quantity": t.quantity, "rate": t.rate,
             "amount": (t.quantity or 0) * (t.rate or 0),
         }
-        category_name = t.item.category.name if t.item.category_id else ""
-        if "chick" in category_name.lower():
+        family = item_family(t.item)
+        if family == "chicks":
             other_transfer_out_rows.append(row)
+        elif family == "medicine":
+            (medicine_return_rows if t.to_warehouse_id else medicine_transfer_out_rows).append(row)
         else:
             (feed_return_rows if t.to_warehouse_id else feed_transfer_out_rows).append(row)
 
     outgoing_med_transfers = (MedicineTransfer.objects.filter(from_batch=batch)
                               .prefetch_related("items__item").select_related("to_warehouse", "to_farm")
                               .order_by("date", "id"))
-    medicine_return_rows, medicine_transfer_out_rows = [], []
     for mt in outgoing_med_transfers:
         location_name = _transfer_to_location_name(mt)
         target = medicine_return_rows if mt.to_warehouse_id else medicine_transfer_out_rows
@@ -5021,6 +5036,8 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
                 "quantity": line.quantity, "rate": line.rate,
                 "amount": (line.quantity or 0) * (line.rate or 0),
             })
+    for rows in (medicine_return_rows, medicine_transfer_out_rows):
+        rows.sort(key=lambda r: (r["date"], r["trnum"] or ""))
 
     # Placement baseline for Opening Birds / Cum Mort% / Feed-per-bird below
     # is the Chick Placement total itself — BroilerBatch has no count field,
@@ -5125,15 +5142,22 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
                                                     "transferred_out": Decimal("0")})
 
     for pi in purchase_items:
-        category_name = pi.item.category.name if pi.item.category_id else ""
-        if "chick" not in category_name.lower():
+        # Feed only, for the same reason as the transfer legs below. The Feed
+        # Purchase table above still lists every non-chick purchase made for
+        # the flock — it is the flock's purchase register — but a medicine
+        # bought straight to the farm is not feed stock to be balanced off.
+        if item_family(pi.item) == "feed":
             _feed_bucket(pi.item.item_code)["purchased"] += (pi.rcv_qty or 0) + (pi.free_qty or 0)
     for t in transfers:
-        if not t.item.category_id or "chick" not in t.item.category.name.lower():
+        if item_family(t.item) == "feed":
             _feed_bucket(t.item.item_code)["transfer_in"] += t.quantity or 0
     for t in outgoing_transfers:
-        # Same split as the tables above: non-feed items are not feed stock.
-        if t.item.category_id and "chick" in t.item.category.name.lower():
+        # Same split as the tables above: chicks and medicine are not feed
+        # stock. A vaccine counted here as feed came in and was never eaten —
+        # Daily Entry cannot consume it — so it left a balance that could
+        # never be worked off, and held the batch open at settlement. It
+        # balances under medicine instead (see _pending_item_balances).
+        if item_family(t.item) != "feed":
             continue
         if t.to_warehouse_id:
             _feed_bucket(t.item.item_code)["returned"] += t.quantity or 0
@@ -5175,7 +5199,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         )
         _price_rows_for_management(chick_rows, items_by_id)
         _price_rows_for_management(feed_rows, items_by_id)
-        _price_rows_for_management(medicine_transfer_rows, items_by_id, med_key="transfer_item_id")
+        _price_rows_for_management(medicine_transfer_rows, items_by_id)
 
         # Feed/medicine leaving the batch — a return to warehouse, or a
         # transfer on to another farm — priced at the same blended real rate
