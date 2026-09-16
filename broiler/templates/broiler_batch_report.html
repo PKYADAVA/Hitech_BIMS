@@ -43,7 +43,12 @@
   .report-table td.report-wrap { white-space: normal; min-width: 120px; }
   /* Mortality table: compact so more columns fit, in a capped scroll box with a
      sticky 2-row header that stays locked at the top while the rows scroll. */
-  .report-scroll { max-height: 72vh; overflow: auto; }
+  .report-scroll { max-height: 82vh; overflow: auto; }
+  /* The table fills the card rather than being as wide as its content wants
+     to be, so the figures -- Date through Balance Feed -- are all on screen
+     at once and the box scrolls down through the days rather than sideways
+     through the columns. */
+  .report-scroll .report-dense { width: 100%; }
   /* Keep every figure on one line, the way .rpt-scroll does for the other wide
      reports. Without it a long label like "Pre-Starter Feed" wraps in its
      narrow column and drags the whole row to three lines — 88px against the
@@ -59,14 +64,21 @@
      rows stay one line deep, which is what .report-dense is for, and the full
      text is on the cell's tooltip and on the printed copy below.
 
-     The cap lives on an inner span, not the cell: under the automatic table
-     layout this table uses, a max-width on a <td> is a suggestion the browser
-     is free to ignore once the content is wider, and it does. */
+     A fixed cap is the wrong shape for it: too wide and the figures are
+     pushed off the right edge again, too narrow and space goes to waste on a
+     big screen. So Remarks takes whatever is left over instead -- max-width:0
+     tells the table this column asks for nothing, width:100% then hands it
+     every pixel the other columns did not want, and the span ellipsises at
+     that. A fixed max-width on the cell alone would not do: under the
+     automatic table layout this table uses it is a suggestion the browser is
+     free to ignore once the content is wider, and it does. */
+  .report-scroll .report-dense td.report-wrap { max-width: 0; width: 100%; }
   .report-scroll .report-dense td.report-wrap > span {
-    display: block; max-width: 15rem;
+    display: block; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   @media print {
+    .report-scroll .report-dense td.report-wrap { max-width: none; width: auto; }
     .report-scroll .report-dense td.report-wrap > span {
       max-width: none; overflow: visible; white-space: normal;
     }

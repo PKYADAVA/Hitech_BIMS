@@ -190,7 +190,12 @@ class Command(BaseCommand):
                 date=d, supervisor=supervisor, farm=farm, batch=batch, age_days=age,
                 mortality=mort, culls=0,
                 feed_1=f1, feed_1_qty=q1, feed_2=f2, feed_2_qty=q2,
-                avg_weight_gms=weight_g, remarks="",
+                avg_weight_gms=weight_g,
+                # Long enough to be a real remark. The column holds a whole
+                # sentence on a table already 23 columns wide, so a check of
+                # this page locally should see what that does to it.
+                remarks=f"Daily entry for {farm.farm_name}, age {age} — "
+                        f"mortality checked by {supervisor.name}",
             )
 
             # ---- bird sales on the selling days ----
