@@ -35,27 +35,35 @@
   }
   .bf-filter-body { flex: 1; min-width: 0; }
   .bf-filter label { display: block; font-size: .62rem; font-weight: 600; color: #475569; margin-bottom: 0; line-height: 1.2; }
-  /* The controls themselves, native and Select2 alike — the page upgrades
-     every .form-select, so styling only the native one leaves it tall. */
+  /* The controls themselves. The page upgrades every .form-select to Select2,
+     so the box actually on screen is a .select2-selection under the
+     bootstrap-5 theme, whose site-wide rule sets min-height: 31px — a height
+     alone does not shrink it, and a rule aimed at the --default theme never
+     matches at all. Both the min-height and the theme have to be named. */
   #bf-page .bf-filter .form-select, #bf-page .bf-filter .form-control {
-    font-size: .76rem; padding: .1rem 1.3rem .1rem .4rem; height: auto; min-height: 0; line-height: 1.35;
+    font-size: .76rem; padding: .1rem 1.3rem .1rem .4rem; line-height: 1.35;
+    height: 26px; min-height: 26px;
   }
   #bf-page .bf-filter .form-control { padding-right: .4rem; }
   #bf-page .bf-filter .select2-container { width: 100% !important; }
-  #bf-page .bf-filter .select2-container--default .select2-selection--single { height: 24px; border-color: #dee2e6; }
-  #bf-page .bf-filter .select2-container--default .select2-selection--single .select2-selection__rendered {
-    line-height: 22px; font-size: .76rem; padding-left: .4rem; padding-right: 1.3rem;
+  #bf-page .bf-filter .select2-container--bootstrap-5 .select2-selection.select2--small {
+    height: 26px; min-height: 26px; padding-top: 0; padding-bottom: 0;
   }
-  #bf-page .bf-filter .select2-container--default .select2-selection--single .select2-selection__arrow { height: 22px; }
+  #bf-page .bf-filter .select2-container--bootstrap-5 .select2-selection--single.select2--small .select2-selection__rendered {
+    line-height: 24px; font-size: .76rem; padding-left: .4rem;
+  }
+  #bf-page .bf-filter .select2-container--bootstrap-5 .select2-selection--single.select2--small .select2-selection__arrow { height: 24px; }
   @media (min-width: 1100px) {
     /* Both panes gained filters; these counts keep each pane's rows full
        rather than leaving a short second row. */
     #add-farmer-pane .bf-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); }
-    #add-farm-pane .bf-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  }
-  @media (min-width: 1240px) {
-    /* Wide enough for all eight on one row, which halves the bar's height. */
-    #add-farm-pane .bf-filters { grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.2fr); }
+    /* Two rows, but six to a row rather than four: eight across squeezed
+       every control, and four across stretched each one past what a "All"
+       dropdown needs. */
+    #add-farm-pane .bf-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    /* Eight filters over six columns leave the second row half empty; the
+       search box takes the slack, being the one control that gains from it. */
+    #add-farm-pane .bf-filter:last-child { grid-column: span 5; }
   }
 
   .bf-card { padding: .7rem; }
@@ -287,7 +295,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fr-search">Search</label>
-            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Search farmers...">
+            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Code, name, mobile, USC...">
           </div>
         </div>
       </div>
@@ -411,7 +419,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-search">Search</label>
-            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search farms...">
+            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Code, farm, farmer, district...">
           </div>
         </div>
       </div>
