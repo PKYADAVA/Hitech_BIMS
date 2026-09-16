@@ -4890,6 +4890,52 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     return data
 
 
+#: Detail table -> the columns its Total row adds up. Rate is in none of
+#: them on purpose: adding per-unit rates together gives a number that means
+#: nothing, so that cell stays empty. Nor is Feed Transfer-In's Cumulative,
+#: which is a running total whose last row is already the figure a Total row
+#: would repeat, nor Medicine Consumption's Stock, which is a balance rather
+#: than a flow. Bird Sales and Mortality total themselves (a tfoot and weekly
+#: subtotals) and are not listed here.
+_TABLE_TOTAL_COLUMNS = {
+    "chick_placement": ("quantity", "amount"),
+    "feed_purchase": ("quantity", "amount"),
+    "feed_transfer_in": ("quantity", "amount"),
+    "feed_return": ("quantity", "amount"),
+    "feed_transfer_out": ("quantity", "amount"),
+    "other_transfer_out": ("quantity", "amount"),
+    "feed_summary": ("purchased", "transfer_in", "consumed", "returned",
+                     "transferred_out", "balance"),
+    "medicine_transfer_in": ("quantity", "amount"),
+    "medicine_return": ("quantity", "amount"),
+    "medicine_transfer_out": ("quantity", "amount"),
+    "medicine_consumption": ("quantity",),
+}
+
+
+def _table_totals(tables):
+    """``{table key: {column: total}}`` for every detail table that has
+    figures to add up.
+
+    Summed here rather than in the template so the Total row and the costing
+    block above it are reading the same numbers, and so it happens after the
+    Management basis has repriced the rows — a total worked out from the Item
+    Price Master rates under a report showing real acquisition cost would be
+    a footer that disagrees with the column above it.
+    """
+    totals = {}
+    for key, columns in _TABLE_TOTAL_COLUMNS.items():
+        rows = tables.get(key) or []
+        if not rows:
+            continue
+        totals[key] = {
+            column: sum((Decimal(str(row.get(column) or 0)) for row in rows),
+                        Decimal("0"))
+            for column in columns
+        }
+    return totals
+
+
 def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     from inventory.item_families import item_family
     from inventory.models import StockTransfer, MedicineTransfer, Mapping
@@ -5241,9 +5287,24 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         },
     }
 
+    tables = {
+        "chick_placement": chick_rows,
+        "feed_purchase": feed_purchase_rows,
+        "feed_transfer_in": feed_rows,
+        "feed_return": feed_return_rows,
+        "feed_transfer_out": feed_transfer_out_rows,
+        "other_transfer_out": other_transfer_out_rows,
+        "feed_summary": feed_summary_rows,
+        "medicine_transfer_in": medicine_transfer_rows,
+        "medicine_return": medicine_return_rows,
+        "medicine_transfer_out": medicine_transfer_out_rows,
+        "medicine_consumption": medicine_consumption_rows,
+    }
+
     return {
         "batch_costing": batch_costing,
         "dashboard": dashboard,
+        "table_totals": _table_totals(tables),
         "chick_placement": chick_rows,
         "feed_purchase": feed_purchase_rows,
         "feed_transfer_in": feed_rows,

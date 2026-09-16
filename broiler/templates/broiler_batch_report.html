@@ -361,6 +361,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No chick placement transfers for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.chick_placement %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.chick_placement.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.chick_placement.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -380,6 +385,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed purchases at this farm's branch during the batch window</td></tr>{% endfor %}
               </tbody>
+              {% if report.feed_purchase %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.feed_purchase.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.feed_purchase.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -400,6 +410,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="9" class="text-center text-muted">No feed transfers for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.feed_transfer_in %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.feed_transfer_in.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.feed_transfer_in.amount|floatformat:2 }}</td><td></td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -419,6 +434,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed returned for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.feed_return %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.feed_return.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.feed_return.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -438,6 +458,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed transferred to other farms for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.feed_transfer_out %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.feed_transfer_out.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.feed_transfer_out.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -457,6 +482,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No non-feed items transferred out of this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.other_transfer_out %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.other_transfer_out.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.other_transfer_out.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -476,6 +506,19 @@
                 </tr>
                 {% empty %}<tr><td colspan="7" class="text-center text-muted">No feed movement for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.feed_summary %}
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.purchased|floatformat:2 }}</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.transfer_in|floatformat:2 }}</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.consumed|floatformat:2 }}</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.returned|floatformat:2 }}</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.transferred_out|floatformat:2 }}</td>
+                  <td class="text-end">{{ report.table_totals.feed_summary.balance|floatformat:2 }}</td>
+                </tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -495,6 +538,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transfers for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.medicine_transfer_in %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.medicine_transfer_in.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.medicine_transfer_in.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -514,6 +562,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine returned for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.medicine_return %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.medicine_return.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.medicine_return.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -533,6 +586,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transferred to other farms for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.medicine_transfer_out %}
+              <tfoot>
+                <tr><td colspan="5">Total</td><td class="text-end">{{ report.table_totals.medicine_transfer_out.quantity|floatformat:2 }}</td><td></td><td class="text-end">{{ report.table_totals.medicine_transfer_out.amount|floatformat:2 }}</td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
@@ -552,6 +610,11 @@
                 </tr>
                 {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
               </tbody>
+              {% if report.medicine_consumption %}
+              <tfoot>
+                <tr><td colspan="3">Total</td><td class="text-end">{{ report.table_totals.medicine_consumption.quantity|floatformat:2 }}</td><td></td><td></td></tr>
+              </tfoot>
+              {% endif %}
             </table>
           </div>
         </div>
