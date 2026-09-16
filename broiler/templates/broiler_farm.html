@@ -6,99 +6,316 @@
 {% block content %}
 {% include '_broiler_subnavbar.html' with active_tab='broiler_farm' %}
 
-<div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title">Manage Broiler Farm</div>
-      <div class="page-header-subtitle">Add farmers and manage broiler farms</div>
+<style>
+  .bf-page { display: flex; flex-direction: column; gap: .85rem; }
+  .bf-head, .bf-filters, .bf-card { background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem; }
+  .bf-head { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; padding: .85rem 1rem; }
+  .bf-head-icon {
+    width: 42px; height: 42px; flex: 0 0 42px; border-radius: .6rem; background: #0d7a5f; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  }
+  .bf-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
+  .bf-sub { font-size: .8rem; color: #64748b; }
+  .bf-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  .bf-tabs { display: flex; gap: .4rem; border: 0; margin: 0; }
+  .bf-tabs .nav-link {
+    display: flex; align-items: center; gap: .4rem; border: 1px solid #e3e8ef; border-radius: .5rem;
+    background: #fff; color: #334155; font-weight: 600; font-size: .85rem; padding: .45rem .9rem;
+  }
+  .bf-tabs .nav-link.active { background: #1d6fe0; border-color: #1d6fe0; color: #fff; }
+  .bf-count { font-size: .7rem; font-weight: 700; padding: .05rem .45rem; border-radius: 999px; background: #eef1f5; color: #475569; }
+  .bf-tabs .nav-link.active .bf-count { background: rgba(255,255,255,.25); color: #fff; }
+
+  .bf-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .6rem; padding: .7rem; margin-bottom: .85rem; }
+  .bf-filter { display: flex; align-items: center; gap: .55rem; min-width: 0; border: 1px solid #eef1f5; border-radius: .5rem; padding: .45rem .6rem; }
+  .bf-filter-icon {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: .5rem; display: flex; align-items: center;
+    justify-content: center; background: var(--bf-bg); color: var(--bf-fg);
+  }
+  .bf-filter-body { flex: 1; min-width: 0; }
+  .bf-filter label { display: block; font-size: .7rem; font-weight: 600; color: #475569; margin-bottom: .15rem; }
+  @media (min-width: 1100px) {
+    #add-farmer-pane .bf-filters { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 2fr); }
+    #add-farm-pane .bf-filters { grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.6fr); }
+  }
+
+  .bf-card { padding: .7rem; }
+  .bf-card-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+  .bf-card-title { font-size: .95rem; font-weight: 700; color: #0f172a; margin: 0; }
+  .bf-dt-top { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .bf-dt-top .dataTables_length label { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .8rem; }
+  .bf-dt-end-farmer, .bf-dt-end-farm { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+  .bf-card .dt-buttons .btn { background: #fff; border: 1px solid #d7dde5; color: #334155; font-size: .78rem; padding: .3rem .65rem; }
+  .bf-card .dt-buttons .btn:hover { background: #f1f5f9; }
+  .bf-table-wrap { overflow-x: auto; }
+  .bf-dt-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; font-size: .8rem; }
+
+  .ds .bf-card table.ds-grid thead th { white-space: normal; line-height: 1.2; font-size: .7rem; padding-left: 6px; padding-right: 6px; vertical-align: middle; }
+  .ds .bf-card table.ds-grid tbody td { font-size: .8rem; padding-left: 6px; padding-right: 6px; vertical-align: middle; }
+  .ds .bf-card table.dataTable > thead > tr > th.sorting,
+  .ds .bf-card table.dataTable > thead > tr > th.sorting_asc,
+  .ds .bf-card table.dataTable > thead > tr > th.sorting_desc { padding-right: 16px; }
+  .ds .bf-card table.ds-grid thead th.ds-num { text-align: right; }
+  .ds .bf-card table.ds-grid thead th.ds-mid { text-align: center; }
+  .ds .bf-card table.dataTable > thead > tr > th.ds-num.sorting,
+  .ds .bf-card table.dataTable > thead > tr > th.ds-num.sorting_asc,
+  .ds .bf-card table.dataTable > thead > tr > th.ds-num.sorting_desc { padding-right: 24px; }
+  #farmer-table tbody tr, #farm-table tbody tr { cursor: pointer; }
+  .bf-name { display: block; font-weight: 600; color: #0f172a; }
+  .bf-subline { display: block; font-size: .68rem; color: #64748b; }
+  .bf-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bf-link { border: 0; background: none; padding: 0; color: #1d4ed8; font-weight: 600; white-space: nowrap; text-align: left; }
+  .bf-link:hover { text-decoration: underline; }
+  .bf-pill { display: inline-block; padding: .12rem .5rem; border-radius: .4rem; font-size: .7rem; font-weight: 500; background: #e8f1fd; color: #1d4ed8; white-space: nowrap; }
+  .bf-pill.own { background: #e7f7ee; color: #067647; }
+  .bf-pill.ec_shed { background: #fff1db; color: #b54708; }
+  .bf-pill.integration { background: #f1ebfd; color: #6941c6; }
+  .bf-status { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+  .bf-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .bf-status.on { background: #e7f7ee; color: #067647; }
+  .bf-status.off { background: #eef1f5; color: #64748b; }
+  .bf-status.closed { background: #fde8e8; color: #b42318; }
+  .bf-loc { font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .bf-loc.ok { color: #067647; }
+  .bf-loc.warn { color: #b54708; }
+  .bf-loc.none { color: #94a3b8; }
+  #farmer-table tr.bf-row-off .bf-name, #farm-table tr.bf-row-off .bf-name { color: #94a3b8; }
+  .bf-actions { display: flex; gap: .25rem; justify-content: center; }
+  .bf-act { width: 28px; height: 28px; border: 0; border-radius: .4rem; display: inline-flex; align-items: center; justify-content: center; font-size: .75rem; }
+  .bf-act:focus-visible, .bf-link:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .bf-act.view { background: #e8f1fd; color: #1d6fe0; }
+  .bf-act.edit { background: #fff1db; color: #b54708; }
+  .bf-act.del { background: #fde8e8; color: #c0392b; }
+
+  @media (max-width: 640px) {
+    #farmer-table thead, #farm-table thead { display: none; }
+    #farmer-table, #farmer-table tbody, #farmer-table tr, #farmer-table td,
+    #farm-table, #farm-table tbody, #farm-table tr, #farm-table td { display: block; width: 100%; }
+    #farmer-table tbody tr, #farm-table tbody tr { border: 1px solid #e3e8ef; border-radius: .5rem; margin-bottom: .6rem; padding: .35rem .6rem; }
+    .ds .bf-card table.ds-grid tbody td { display: flex; justify-content: space-between; align-items: center; gap: .75rem; border: 0; padding: .2rem 0; text-align: right; height: auto; }
+    #farmer-table tbody td::before, #farm-table tbody td::before { content: attr(data-label); font-weight: 600; font-size: .7rem; color: #64748b; text-align: left; }
+    /* The id rule above turns every cell into a block, so this needs to win. */
+    #farmer-table tbody td.bf-rownum, #farm-table tbody td.bf-rownum { display: none !important; }
+    .bf-actions { justify-content: flex-end; }
+  }
+
+  .bf-foot { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; background: #ecfaf1; border: 1px solid #c9eed7; border-radius: .6rem; padding: .6rem .9rem; font-size: .8rem; color: #14532d; }
+  .bf-view dl { display: grid; grid-template-columns: 170px 1fr; gap: .35rem .9rem; margin: 0; font-size: .85rem; }
+  .bf-view dt { color: #64748b; font-weight: 500; }
+  .bf-view dd { margin: 0; color: #0f172a; }
+  .bf-view-links { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
+</style>
+
+<div class="bf-page" id="bf-page"
+     data-can-add="{{ page_perms.add|yesno:'1,0' }}"
+     data-can-edit="{{ page_perms.edit|yesno:'1,0' }}"
+     data-can-delete="{{ page_perms.delete|yesno:'1,0' }}">
+
+  <div class="bf-head">
+    <div class="bf-head-icon"><i class="fas fa-tractor"></i></div>
+    <div>
+      <div class="bf-title">Farmers &amp; Farms</div>
+      <div class="bf-sub">Manage the farmers you work with and the broiler farms they run.</div>
     </div>
     {% comment %}
     The farm master is where a farm's location is kept; the planner is where it
     is used. One click between them, so somebody correcting a pin can see what
     it does to a route.
     {% endcomment %}
-    {% if 'farm_map_planner' in allowed_tabs %}
-    <div class="page-header-right">
-      <a class="btn btn-outline-secondary" href="{% url 'farm_map_planner' %}">
-        <i class="fas fa-map-location-dot"></i> Map &amp; Route Planner</a>
-    </div>{% endif %}
-</div>
-
-<div class="card">
-    <div class="card-header p-0 border-bottom-0">
-        <ul class="nav nav-tabs px-3 py-3" id="farmSectionTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="add-farmer-tab" data-bs-toggle="tab" data-bs-target="#add-farmer-pane" type="button" role="tab">
-                    <i class="fas fa-user me-1"></i>Farmers
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="add-farm-tab" data-bs-toggle="tab" data-bs-target="#add-farm-pane" type="button" role="tab">
-                    <i class="fas fa-tractor me-1"></i>Farms
-                </button>
-            </li>
-        </ul>
+    <div class="bf-head-actions">
+      {% if 'farm_map_planner' in allowed_tabs %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'farm_map_planner' %}">
+        <i class="fas fa-map-location-dot me-1"></i>Map &amp; Route Planner</a>
+      {% endif %}
     </div>
-    <div class="card-body">
-        <div class="tab-content" id="farmSectionTabsContent">
+  </div>
 
-            <!-- =========================== ADD FARMER =========================== -->
-            <div class="tab-pane fade show active" id="add-farmer-pane" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0"><i class="fas fa-table me-2"></i>Farmer List</h5>
-                    {% if page_perms.add %}<button type="button" class="btn btn-primary" id="show-add-farmer-btn">
-                        <i class="fas fa-plus"></i> Add Farmer
-                    </button>{% endif %}
-                </div>
-                <div class="table-responsive mb-4">
-                    <table class="table table-hover table-bordered mb-0 ds-grid" id="farmer-table">
-                        <thead>
-                            <tr>
-                                <th>Farmer Name</th>
-                                <th>Mobile No.</th>
-                                <th>Farmer Group</th>
-                                <th>USC</th>
-                                <th>Service No</th>
-                                <th class="ds-mid">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+  <ul class="nav bf-tabs" id="farmSectionTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="add-farmer-tab" data-bs-toggle="tab" data-bs-target="#add-farmer-pane" type="button" role="tab">
+        <i class="fas fa-user"></i>Farmers <span class="bf-count" id="bf-farmer-count">0</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="add-farm-tab" data-bs-toggle="tab" data-bs-target="#add-farm-pane" type="button" role="tab">
+        <i class="fas fa-tractor"></i>Farms <span class="bf-count" id="bf-farm-count">0</span>
+      </button>
+    </li>
+  </ul>
 
-            </div>
+  <div class="tab-content" id="farmSectionTabsContent">
 
-            <!-- =========================== ADD FARM =========================== -->
-            <div class="tab-pane fade" id="add-farm-pane" role="tabpanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0"><i class="fas fa-table me-2"></i>Farm List</h5>
-                    {% if page_perms.add %}<button type="button" class="btn btn-primary" id="show-add-farm-btn">
-                        <i class="fas fa-plus"></i> Add Farm
-                    </button>{% endif %}
-                </div>
-                <div class="table-responsive mb-4">
-                    <table class="table table-hover table-bordered mb-0 ds-grid" id="farm-table">
-                        <thead>
-                            <tr>
-                                <th>Farm Code</th>
-                                <th>Branch</th>
-                                <th>Supervisor</th>
-                                <th>Farmer</th>
-                                <th>Farm Name</th>
-                                <th>Farm Type</th>
-                                <th class="ds-mid">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-
-            </div>
-
+    <!-- =========================== FARMERS =========================== -->
+    <div class="tab-pane fade show active" id="add-farmer-pane" role="tabpanel">
+      <div class="bf-filters">
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#e7f7ee;--bf-fg:#067647"><i class="fas fa-circle-check"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fr-status">Status</label>
+            <select id="bf-fr-status" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
         </div>
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#e8f1fd;--bf-fg:#1d6fe0"><i class="fas fa-people-group"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fr-group">Farmer Group</label>
+            <select id="bf-fr-group" class="form-select form-select-sm">
+              <option value="">All Groups</option>
+              {% for group in farmer_groups %}<option value="{{ group.description }}">{{ group.description }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fr-search">Search</label>
+            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Search by name, mobile, USC or service no...">
+          </div>
+        </div>
+      </div>
+      <div class="bf-card">
+        <div class="bf-card-head">
+          <h5 class="bf-card-title"><i class="fas fa-users me-2"></i>Farmer List</h5>
+          {% if page_perms.add %}<button type="button" class="btn btn-primary btn-sm" id="show-add-farmer-btn">
+            <i class="fas fa-plus me-1"></i>Add Farmer
+          </button>{% endif %}
+        </div>
+        <table class="table table-hover mb-0 ds-grid" id="farmer-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Farmer</th>
+              <th>Farmer Group</th>
+              <th>USC</th>
+              <th>Service No</th>
+              <th class="ds-num">Farms</th>
+              <th>Status</th>
+              <th class="ds-mid">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="bf-fr-end" hidden>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fr-clear"><i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters</button>
+        </div>
+      </div>
     </div>
+
+    <!-- =========================== FARMS =========================== -->
+    <div class="tab-pane fade" id="add-farm-pane" role="tabpanel">
+      <div class="bf-filters">
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#e8f1fd;--bf-fg:#1d6fe0"><i class="fas fa-code-branch"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fm-branch">Branch</label>
+            <select id="bf-fm-branch" class="form-select form-select-sm"><option value="">All Branches</option></select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <div class="bf-filter-body">
+            <label for="bf-fm-supervisor">Supervisor</label>
+            <select id="bf-fm-supervisor" class="form-select form-select-sm"><option value="">All Supervisors</option></select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <div class="bf-filter-body">
+            <label for="bf-fm-type">Farm Type</label>
+            <select id="bf-fm-type" class="form-select form-select-sm">
+              <option value="">All Types</option>
+              <option value="own">Own</option>
+              <option value="ec_shed">Ec Shed</option>
+              <option value="integration">Integration</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <div class="bf-filter-body">
+            <label for="bf-fm-status">Status</label>
+            <select id="bf-fm-status" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#e7f7ee;--bf-fg:#067647"><i class="fas fa-location-dot"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fm-location">Location</label>
+            <select id="bf-fm-location" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="verified">Verified</option>
+              <option value="unverified">Pin not verified</option>
+              <option value="none">No pin</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fm-search">Search</label>
+            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search by code, farm, farmer or district...">
+          </div>
+        </div>
+      </div>
+      <div class="bf-card">
+        <div class="bf-card-head">
+          <h5 class="bf-card-title"><i class="fas fa-tractor me-2"></i>Farm List</h5>
+          {% if page_perms.add %}<button type="button" class="btn btn-primary btn-sm" id="show-add-farm-btn">
+            <i class="fas fa-plus me-1"></i>Add Farm
+          </button>{% endif %}
+        </div>
+        <table class="table table-hover mb-0 ds-grid" id="farm-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Farm Code</th>
+              <th>Farm</th>
+              <th>Branch</th>
+              <th>Line</th>
+              <th>Type</th>
+              <th class="ds-num">Capacity</th>
+              <th class="ds-num">Sheds</th>
+              <th>District</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th class="ds-mid">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="bf-fm-end" hidden>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fm-clear"><i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bf-foot">
+    <i class="far fa-lightbulb"></i>
+    <span><b>Tip:</b> Click a farmer or a farm to see its details. A farmer's Farms count opens their farms.</span>
+  </div>
 </div>
 
-<!-- Add/Edit Farmer Modal -->
+<!-- View farmer / farm -->
+<div class="modal fade" id="bfViewModal" tabindex="-1" aria-labelledby="bfViewLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bfViewLabel">Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bf-view" id="bf-view-body"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="farmerFormModal" tabindex="-1" aria-labelledby="farmerFormModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -721,30 +938,8 @@ $(document).ready(function () {
             url: "{% url 'farmer_list' %}",
             type: "GET",
             success: function (data) {
-                const table = $("#farmer-table");
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
-                const tbody = table.find("tbody");
-                tbody.empty();
-                data.forEach(function (farmer) {
-                    tbody.append(`
-                        <tr>
-                            <td>${farmer.farmer_name}</td>
-                            <td>${farmer.mobile_no || ""}</td>
-                            <td>${farmer.farmer_group_name || ""}</td>
-                            <td>${farmer.usc || ""}</td>
-                            <td>${farmer.service_no || ""}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-farmer" data-id="${farmer.id}"><i class="fas fa-pen"></i></button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-farmer" data-id="${farmer.id}"><i class="fas fa-trash"></i></button>{% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    `);
-                });
-                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
+                farmerTable.clear().rows.add(data).draw(false);
+                $("#bf-farmer-count").text(data.length);
             },
             error: function () {
                 window.showToast('danger', "Error loading farmers. Please try again.");
@@ -909,31 +1104,12 @@ $(document).ready(function () {
             url: "/broiler_farm/",
             type: "GET",
             success: function (data) {
-                const table = $("#farm-table");
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
-                const tbody = table.find("tbody");
-                tbody.empty();
-                data.forEach(function (farm) {
-                    tbody.append(`
-                        <tr>
-                            <td>${farm.farm_code}</td>
-                            <td>${farm.branch_name || ""}</td>
-                            <td>${farm.supervisor_name || ""}</td>
-                            <td>${farm.farmer_name || ""}</td>
-                            <td>${farm.farm_name}</td>
-                            <td>${FARM_TYPE_LABELS[farm.farm_type] || farm.farm_type}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-farm" data-id="${farm.id}"><i class="fas fa-pen"></i></button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-farm" data-id="${farm.id}"><i class="fas fa-trash"></i></button>{% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    `);
-                });
-                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
+                farmTable.clear().rows.add(data).draw(false);
+                $("#bf-farm-count").text(data.length);
+                const distinct = (key) => [...new Set(data.map((r) => r[key]).filter(Boolean))].sort();
+                bfFillOptions(farmFilters.branch, distinct("branch_name"), "All Branches", farmSaved.branch);
+                bfFillOptions(farmFilters.supervisor, distinct("supervisor_name"), "All Supervisors", farmSaved.supervisor);
+                farmTable.draw(false);
             },
             error: function () {
                 window.showToast('danger', "Error loading farms. Please try again.");
@@ -1130,6 +1306,347 @@ $(document).ready(function () {
                 }
             });
         });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Lists: tables, filters, details                                   */
+    /* ---------------------------------------------------------------- */
+    const BF = document.getElementById("bf-page");
+    const BF_CAN = { edit: BF.dataset.canEdit === "1", del: BF.dataset.canDelete === "1" };
+    const bfEsc = (v) => escapeHtml(v === null || v === undefined ? "" : String(v));
+    const bfDash = '<span class="text-muted">&mdash;</span>';
+    const FARM_STATUS_LABELS = { active: "Active", inactive: "Inactive", closed: "Closed" };
+    const BF_EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
+    const BF_LENGTHS = [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]];
+
+    function bfSaved(key) {
+        try { return JSON.parse(window.localStorage.getItem(key) || "{}") || {}; } catch (e) { return {}; }
+    }
+    function bfRemember(key, value) {
+        try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not remembered */ }
+    }
+    function bfFillOptions(select, values, allLabel, preferred) {
+        const keep = select.val() || preferred || "";
+        select.html(`<option value="">${allLabel}</option>` + values.map((v) => `<option value="${bfEsc(v)}">${bfEsc(v)}</option>`).join(""));
+        if (keep && values.includes(keep)) select.val(keep);
+        select.trigger("change.select2");
+    }
+    function bfActions(kind, row) {
+        const parts = [`<button type="button" class="bf-act view bf-view-${kind}" data-id="${row.id}" title="View details" aria-label="View details"><i class="fas fa-eye"></i></button>`];
+        if (BF_CAN.edit) parts.push(`<button type="button" class="bf-act edit edit-${kind}" data-id="${row.id}" title="Edit" aria-label="Edit"><i class="fas fa-pen"></i></button>`);
+        if (BF_CAN.del) parts.push(`<button type="button" class="bf-act del delete-${kind}" data-id="${row.id}" title="Delete" aria-label="Delete"><i class="fas fa-trash"></i></button>`);
+        return `<div class="bf-actions">${parts.join("")}</div>`;
+    }
+    const bfStatus = (value) => {
+        const key = value === "inactive" ? "inactive" : value === "closed" ? "closed" : "active";
+        return `<span class="bf-status ${key === "active" ? "on" : key === "closed" ? "closed" : "off"}">${FARM_STATUS_LABELS[key]}</span>`;
+    };
+    const bfText = (d, type) => type === "display" ? (d ? bfEsc(d) : bfDash) : (d || "");
+    const bfLabels = (selector) => [...document.querySelectorAll(`${selector} thead th`)].map((th) => th.textContent.trim());
+    function bfNumber(table) {
+        const info = table.page.info();
+        table.column(0, { search: "applied", order: "applied", page: "current" }).nodes()
+            .each((cell, i) => { cell.textContent = info.start + i + 1; });
+    }
+
+    const farmerFilters = { status: $("#bf-fr-status"), group: $("#bf-fr-group"), search: $("#bf-fr-search") };
+    const farmFilters = {
+        branch: $("#bf-fm-branch"), supervisor: $("#bf-fm-supervisor"), type: $("#bf-fm-type"),
+        status: $("#bf-fm-status"), location: $("#bf-fm-location"), search: $("#bf-fm-search"),
+    };
+    const farmerSaved = bfSaved("bims.farmers.filters");
+    const farmSaved = bfSaved("bims.farms.filters");
+    [["status", farmerFilters.status, farmerSaved], ["group", farmerFilters.group, farmerSaved],
+     ["type", farmFilters.type, farmSaved], ["status", farmFilters.status, farmSaved], ["location", farmFilters.location, farmSaved]]
+        .forEach(([key, select, saved]) => {
+            if (saved[key] && select.find(`option[value="${saved[key]}"]`).length) select.val(saved[key]).trigger("change.select2");
+        });
+    if (farmerSaved.search) farmerFilters.search.val(farmerSaved.search);
+    if (farmSaved.search) farmFilters.search.val(farmSaved.search);
+
+    $.fn.dataTable.ext.search.push(function (settings, _data, index) {
+        const row = settings.aoData[index]._aData;
+        if (settings.nTable.id === "farmer-table") {
+            const status = farmerFilters.status.val();
+            if (status === "active" && row.status === "inactive") return false;
+            if (status === "inactive" && row.status !== "inactive") return false;
+            const group = farmerFilters.group.val();
+            if (group && (row.farmer_group_name || "") !== group) return false;
+            return true;
+        }
+        if (settings.nTable.id === "farm-table") {
+            if (farmFilters.branch.val() && (row.branch_name || "") !== farmFilters.branch.val()) return false;
+            if (farmFilters.supervisor.val() && (row.supervisor_name || "") !== farmFilters.supervisor.val()) return false;
+            if (farmFilters.type.val() && row.farm_type !== farmFilters.type.val()) return false;
+            if (farmFilters.status.val() && (row.farm_status || "active") !== farmFilters.status.val()) return false;
+            const location = farmFilters.location.val();
+            if (location === "verified" && !row.location_verified) return false;
+            if (location === "unverified" && (row.location_verified || !row.has_location)) return false;
+            if (location === "none" && row.has_location) return false;
+            return true;
+        }
+        return true;
+    });
+
+    const FARMER_LABELS = bfLabels("#farmer-table");
+    const farmerTable = $("#farmer-table").DataTable({
+        data: [],
+        autoWidth: false,
+        dom: "<'bf-dt-top'<'bf-dt-length'l><'bf-dt-buttons'B><'bf-dt-end-farmer'>><'bf-table-wrap'tr><'bf-dt-bottom'ip>",
+        pageLength: BF_LENGTHS[0].includes(farmerSaved.length) ? farmerSaved.length : 10,
+        lengthMenu: BF_LENGTHS,
+        search: { search: farmerSaved.search || "" },
+        order: [[1, "asc"]],
+        language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No farmers yet", zeroRecords: "No farmers match these filters" },
+        createdRow: function (tr, row) {
+            tr.classList.toggle("bf-row-off", row.status === "inactive");
+            [...tr.cells].forEach((cell, i) => { cell.dataset.label = FARMER_LABELS[i] || ""; });
+        },
+        buttons: [
+            { extend: "copy", exportOptions: BF_EXPORT },
+            { extend: "csv", title: "Farmers", exportOptions: BF_EXPORT },
+            { extend: "excel", title: "Farmers", exportOptions: BF_EXPORT },
+            { extend: "pdf", title: "Farmers", exportOptions: BF_EXPORT },
+            { extend: "print", title: "Farmers", exportOptions: BF_EXPORT },
+            { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
+        ],
+        columns: [
+            { data: null, orderable: false, searchable: false, className: "bf-rownum no-export", defaultContent: "" },
+            {
+                data: "farmer_name",
+                render: (d, type, row) => {
+                    if (type === "filter") return `${d} ${row.mobile_no || ""}`;
+                    if (type !== "display") return d;
+                    const mobile = row.mobile_no ? `<span class="bf-subline"><i class="fas fa-phone me-1"></i>${bfEsc(row.mobile_no)}</span>` : "";
+                    return `<span class="bf-name">${bfEsc(d)}</span>${mobile}`;
+                },
+            },
+            { data: "farmer_group_name", defaultContent: "", render: (d, type) => type === "display" ? (d ? `<span class="bf-pill">${bfEsc(d)}</span>` : bfDash) : (d || "") },
+            { data: "usc", defaultContent: "", render: bfText },
+            { data: "service_no", defaultContent: "", render: bfText },
+            {
+                data: "farm_count", className: "bf-num",
+                render: (d, type, row) => {
+                    if (type !== "display") return d || 0;
+                    return d ? `<button type="button" class="bf-link bf-open-farms" data-name="${bfEsc(row.farmer_name)}" title="Show this farmer's farms">${d}</button>` : '<span class="text-muted">0</span>';
+                },
+            },
+            { data: "status", render: (d, type) => type === "display" ? bfStatus(d) : (d === "inactive" ? "Inactive" : "Active") },
+            { data: null, orderable: false, searchable: false, className: "no-export no-colvis", render: (_d, type, row) => type === "display" ? bfActions("farmer", row) : "" },
+        ],
+    });
+
+    const FARM_LABELS = bfLabels("#farm-table");
+    const farmTable = $("#farm-table").DataTable({
+        data: [],
+        autoWidth: false,
+        dom: "<'bf-dt-top'<'bf-dt-length'l><'bf-dt-buttons'B><'bf-dt-end-farm'>><'bf-table-wrap'tr><'bf-dt-bottom'ip>",
+        pageLength: BF_LENGTHS[0].includes(farmSaved.length) ? farmSaved.length : 10,
+        lengthMenu: BF_LENGTHS,
+        search: { search: farmSaved.search || "" },
+        order: [[1, "asc"]],
+        language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No farms yet", zeroRecords: "No farms match these filters" },
+        createdRow: function (tr, row) {
+            tr.classList.toggle("bf-row-off", (row.farm_status || "active") !== "active");
+            [...tr.cells].forEach((cell, i) => { cell.dataset.label = FARM_LABELS[i] || ""; });
+        },
+        buttons: [
+            { extend: "copy", exportOptions: BF_EXPORT },
+            { extend: "csv", title: "Farms", exportOptions: BF_EXPORT },
+            { extend: "excel", title: "Farms", exportOptions: BF_EXPORT },
+            { extend: "pdf", title: "Farms", orientation: "landscape", exportOptions: BF_EXPORT },
+            { extend: "print", title: "Farms", exportOptions: BF_EXPORT },
+            { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
+        ],
+        columns: [
+            { data: null, orderable: false, searchable: false, className: "bf-rownum no-export", defaultContent: "" },
+            { data: "farm_code", render: (d, type, row) => type === "display" ? `<button type="button" class="bf-link bf-view-farm" data-id="${row.id}" title="View details">${bfEsc(d)}</button>` : d },
+            {
+                data: "farm_name",
+                render: (d, type, row) => {
+                    if (type === "filter") return `${d} ${row.farmer_name || ""}`;
+                    if (type !== "display") return d;
+                    const farmer = row.farmer_name ? `<span class="bf-subline"><i class="fas fa-user me-1"></i>${bfEsc(row.farmer_name)}</span>` : "";
+                    return `<span class="bf-name">${bfEsc(d)}</span>${farmer}`;
+                },
+            },
+            {
+                data: "branch_name", defaultContent: "",
+                render: (d, type, row) => {
+                    if (type === "filter") return `${d || ""} ${row.supervisor_name || ""}`;
+                    if (type !== "display") return d || "";
+                    const supervisor = row.supervisor_name ? `<span class="bf-subline">${bfEsc(row.supervisor_name)}</span>` : "";
+                    return `${d ? bfEsc(d) : bfDash}${supervisor}`;
+                },
+            },
+            { data: "line", defaultContent: "", render: bfText },
+            {
+                data: "farm_type",
+                render: (d, type) => {
+                    const label = FARM_TYPE_LABELS[d] || d || "";
+                    return type === "display" ? (label ? `<span class="bf-pill ${bfEsc(d)}">${bfEsc(label)}</span>` : bfDash) : label;
+                },
+            },
+            { data: "farm_capacity", className: "bf-num", render: (d, type) => type === "display" ? (d ? Number(d).toLocaleString("en-IN") : bfDash) : (d || 0) },
+            { data: "shed_count", className: "bf-num", render: (d, type) => type === "display" ? String(d || 0) : (d || 0) },
+            {
+                data: "district", defaultContent: "",
+                render: (d, type, row) => {
+                    if (type !== "display") return [d, row.state].filter(Boolean).join(", ");
+                    const state = row.state ? `<span class="bf-subline">${bfEsc(row.state)}</span>` : "";
+                    return `${d ? bfEsc(d) : bfDash}${state}`;
+                },
+            },
+            {
+                data: "location_verified",
+                render: (d, type, row) => {
+                    const text = d ? "Verified" : row.has_location ? "Pin not verified" : "No pin";
+                    if (type !== "display") return text;
+                    const cls = d ? "ok" : row.has_location ? "warn" : "none";
+                    return `<span class="bf-loc ${cls}"><i class="fas ${d ? "fa-circle-check" : "fa-location-dot"} me-1"></i>${text}</span>`;
+                },
+            },
+            { data: "farm_status", render: (d, type) => type === "display" ? bfStatus(d) : FARM_STATUS_LABELS[d || "active"] || d },
+            { data: null, orderable: false, searchable: false, className: "no-export no-colvis", render: (_d, type, row) => type === "display" ? bfActions("farm", row) : "" },
+        ],
+    });
+
+    $(".bf-dt-end-farmer").append($("#bf-fr-end").children());
+    $(".bf-dt-end-farm").append($("#bf-fm-end").children());
+    farmerTable.on("draw", () => bfNumber(farmerTable));
+    farmTable.on("draw", () => bfNumber(farmTable));
+
+    function rememberFarmers() {
+        bfRemember("bims.farmers.filters", { status: farmerFilters.status.val() || "", group: farmerFilters.group.val() || "",
+                                             search: farmerFilters.search.val() || "", length: farmerTable.page.len() });
+    }
+    function rememberFarms() {
+        bfRemember("bims.farms.filters", { branch: farmFilters.branch.val() || "", supervisor: farmFilters.supervisor.val() || "",
+                                           type: farmFilters.type.val() || "", status: farmFilters.status.val() || "",
+                                           location: farmFilters.location.val() || "", search: farmFilters.search.val() || "",
+                                           length: farmTable.page.len() });
+    }
+    [farmerFilters.status, farmerFilters.group].forEach((el) => el.on("change", () => { farmerTable.draw(); rememberFarmers(); }));
+    farmerFilters.search.on("input", () => { farmerTable.search(farmerFilters.search.val()).draw(); rememberFarmers(); });
+    [farmFilters.branch, farmFilters.supervisor, farmFilters.type, farmFilters.status, farmFilters.location]
+        .forEach((el) => el.on("change", () => { farmTable.draw(); rememberFarms(); }));
+    farmFilters.search.on("input", () => { farmTable.search(farmFilters.search.val()).draw(); rememberFarms(); });
+    farmerTable.on("length", rememberFarmers);
+    farmTable.on("length", rememberFarms);
+
+    $("#bf-fr-clear").on("click", function () {
+        farmerFilters.status.val("").trigger("change");
+        farmerFilters.group.val("").trigger("change");
+        farmerFilters.search.val("");
+        farmerTable.search("").draw();
+        rememberFarmers();
+    });
+    $("#bf-fm-clear").on("click", function () {
+        ["branch", "supervisor", "type", "status", "location"].forEach((k) => farmFilters[k].val("").trigger("change"));
+        farmFilters.search.val("");
+        farmTable.search("").draw();
+        rememberFarms();
+    });
+
+    // The chosen tab is remembered too; a hidden table is re-measured when shown.
+    $('#farmSectionTabs button[data-bs-toggle="tab"]').on("shown.bs.tab", function (e) {
+        bfRemember("bims.farms.tab", { tab: e.target.id });
+        (e.target.id === "add-farm-tab" ? farmTable : farmerTable).columns.adjust();
+    });
+    if (bfSaved("bims.farms.tab").tab === "add-farm-tab") {
+        bootstrap.Tab.getOrCreateInstance(document.getElementById("add-farm-tab")).show();
+    }
+
+    // A farmer's Farms count opens the Farms tab searched for that farmer.
+    $(document).on("click", ".bf-open-farms", function (e) {
+        e.stopPropagation();
+        const name = this.dataset.name || "";
+        $("#bfViewModal").modal("hide");
+        bootstrap.Tab.getOrCreateInstance(document.getElementById("add-farm-tab")).show();
+        farmFilters.search.val(name);
+        farmTable.search(name).draw();
+        rememberFarms();
+    });
+
+    function bfField(label, value) {
+        const empty = value === null || value === undefined || value === "";
+        return `<dt>${label}</dt><dd>${empty ? bfDash : bfEsc(value)}</dd>`;
+    }
+
+    function openFarmerView(id) {
+        const row = farmerTable.rows().data().toArray().find((r) => r.id === id) || {};
+        $.getJSON(`/farmer/${id}/`)
+            .done(function (f) {
+                $("#bfViewLabel").text(f.farmer_name || "Farmer");
+                $("#bf-view-body").html(`<dl>
+                    ${bfField("Mobile", f.mobile_no)}
+                    ${bfField("Second Mobile", f.mobile_2)}
+                    ${bfField("Phone", f.phone_no)}
+                    ${bfField("Farmer Group", f.farmer_group)}
+                    ${bfField("USC", f.usc)}
+                    ${bfField("Service No", f.service_no)}
+                    ${bfField("TDS %", f.tds_percent)}
+                    ${bfField("Bank", [f.bank_name, f.bank_branch].filter(Boolean).join(", "))}
+                    ${bfField("Account Holder", f.account_holder_name)}
+                    ${bfField("Account No", f.acc_no)}
+                    ${bfField("IFSC", f.ifsc_code)}
+                    ${bfField("Address", f.address)}
+                    ${bfField("Farms", row.farm_count)}
+                    ${bfField("Status", (row.status || f.status) === "inactive" ? "Inactive" : "Active")}
+                </dl>
+                <div class="bf-view-links">
+                    ${BF_CAN.edit ? `<button type="button" class="btn btn-sm btn-outline-warning edit-farmer" data-id="${id}"><i class="fas fa-pen me-1"></i>Edit</button>` : ""}
+                    ${row.farm_count ? `<button type="button" class="btn btn-sm btn-outline-primary bf-open-farms" data-name="${bfEsc(f.farmer_name)}"><i class="fas fa-tractor me-1"></i>Show farms</button>` : ""}
+                </div>`);
+                $("#bfViewModal").modal("show");
+            })
+            .fail(() => window.showToast("danger", "Could not load the farmer."));
+    }
+
+    function openFarmView(id) {
+        const row = farmTable.rows().data().toArray().find((r) => r.id === id) || {};
+        $.getJSON(`/broiler_farm/${id}/`)
+            .done(function (f) {
+                const sheds = f.sheds || [];
+                const shedCapacity = sheds.reduce((sum, s) => sum + (Number(s.capacity) || 0), 0);
+                const hasPin = f.farm_latitude !== null && f.farm_latitude !== undefined && f.farm_longitude !== null && f.farm_longitude !== undefined;
+                $("#bfViewLabel").text(`${row.farm_code || f.farm_code || ""} - ${f.farm_name || row.farm_name || "Farm"}`);
+                $("#bf-view-body").html(`<dl>
+                    ${bfField("Farmer", row.farmer_name)}
+                    ${bfField("Branch", row.branch_name)}
+                    ${bfField("Supervisor", row.supervisor_name)}
+                    ${bfField("Region / Line", [f.region, f.line].filter(Boolean).join(" / "))}
+                    ${bfField("Farm Type", FARM_TYPE_LABELS[f.farm_type] || f.farm_type)}
+                    ${bfField("Capacity", f.farm_capacity ? Number(f.farm_capacity).toLocaleString("en-IN") + " birds" : "")}
+                    ${bfField("Sheds", sheds.length ? `${sheds.length} (capacity ${shedCapacity.toLocaleString("en-IN")})` : "")}
+                    ${bfField("Address", [f.farm_address, f.area, f.district, f.state, f.farm_pincode].filter(Boolean).join(", "))}
+                    ${bfField("Location", f.location_verified ? "Verified pin" : hasPin ? "Pin not verified" : "No pin")}
+                    ${bfField("Visit Priority", f.visit_priority)}
+                    ${bfField("Agreement", [f.agreement_start_date, f.agreement_end_date].filter(Boolean).join(" to "))}
+                    ${bfField("Status", FARM_STATUS_LABELS[f.farm_status || "active"])}
+                </dl>
+                <div class="bf-view-links">
+                    ${BF_CAN.edit ? `<button type="button" class="btn btn-sm btn-outline-warning edit-farm" data-id="${id}"><i class="fas fa-pen me-1"></i>Edit</button>` : ""}
+                    ${hasPin ? `<a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${encodeURIComponent(f.farm_latitude + "," + f.farm_longitude)}"><i class="fas fa-map-location-dot me-1"></i>Open in Maps</a>` : ""}
+                </div>`);
+                $("#bfViewModal").modal("show");
+            })
+            .fail(() => window.showToast("danger", "Could not load the farm."));
+    }
+
+    $(document).on("click", ".bf-view-farmer", function (e) { e.stopPropagation(); openFarmerView(Number(this.dataset.id)); });
+    $(document).on("click", ".bf-view-farm", function (e) { e.stopPropagation(); openFarmView(Number(this.dataset.id)); });
+    $(document).on("click", "#bfViewModal .edit-farmer, #bfViewModal .edit-farm", () => $("#bfViewModal").modal("hide"));
+    // Clicking anywhere on a row opens its details, except on its controls.
+    $("#farmer-table tbody").on("click", "tr", function (e) {
+        if ($(e.target).closest("button, a, input, label").length) return;
+        const row = farmerTable.row(this).data();
+        if (row) openFarmerView(row.id);
+    });
+    $("#farm-table tbody").on("click", "tr", function (e) {
+        if ($(e.target).closest("button, a, input, label").length) return;
+        const row = farmTable.row(this).data();
+        if (row) openFarmView(row.id);
     });
 
     /* ---------------------------------------------------------------- */

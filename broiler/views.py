@@ -1189,18 +1189,19 @@ class FarmerAPI(BaseAPIView):
                     data[field] = file_obj.url if file_obj else None
                 return JsonResponse(data)
 
-            cache_key = "farmer_list"
-            cached_data = self.get_cached_data(cache_key)
-            if cached_data:
-                return JsonResponse(cached_data, safe=False)
+            # Not cached: a farmer table is small, and the list has to show a
+            # farmer the moment one is added or changed.
+            from django.db.models import Count
 
             farmers = list(
-                Farmer.objects.select_related("farmer_group").values(
-                    "id", "farmer_name", "mobile_no", "usc", "service_no",
+                Farmer.objects.select_related("farmer_group")
+                .annotate(farm_count=Count("broiler_farms"))
+                .order_by("farmer_name")
+                .values(
+                    "id", "farmer_name", "mobile_no", "usc", "service_no", "status", "farm_count",
                     farmer_group_name=F("farmer_group__description"),
                 )
             )
-            self.set_cached_data(cache_key, farmers)
             return JsonResponse(farmers, safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1908,22 +1909,29 @@ class BroilerFarmAPI(BaseAPIView):
                     data[field] = file_obj.url if file_obj else None
                 return JsonResponse(data)
 
-            cache_key = "broiler_farm_list"
-            cached_data = self.get_cached_data(cache_key)
-            if cached_data:
-                return JsonResponse(cached_data, safe=False)
+            # Not cached. "broiler_farm_list" was also the cache key of two
+            # other pages that store every farm column under it, so whichever
+            # loaded first could hand the other the wrong shape.
+            from django.db.models import Count
 
             broiler_farms = list(
                 BroilerFarm.objects.select_related("branch", "supervisor", "farmer")
+                .annotate(shed_count=Count("sheds", distinct=True))
+                .order_by("farm_code")
                 .values(
                     "id", "farm_code", "farm_name", "region", "line", "farm_type",
                     "agreement_start_date", "agreement_end_date",
+                    "farm_capacity", "farm_status", "district", "state",
+                    "location_verified", "farm_latitude", "farm_longitude", "visit_priority",
+                    "branch_id", "supervisor_id", "farmer_id", "shed_count",
                     branch_name=F("branch__branch_name"),
                     supervisor_name=F("supervisor__name"),
                     farmer_name=F("farmer__farmer_name"),
                 )
             )
-            self.set_cached_data(cache_key, broiler_farms)
+            for farm in broiler_farms:
+                farm["has_location"] = (farm["farm_latitude"] is not None
+                                        and farm["farm_longitude"] is not None)
             return JsonResponse(broiler_farms, safe=False)
         except Exception as e:
             return self.handle_exception(e)
