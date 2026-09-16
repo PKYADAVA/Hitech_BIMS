@@ -2,15 +2,20 @@
 
 The farmer was the one master here without one — its neighbours (farmer group,
 region, branch, supervisor, farm) all mint theirs on first save, so a farmer
-could only be referred to by name. Existing rows are numbered in name order so
-the codes read in the same order the list does.
+could only be referred to by name.
+
+Existing rows are numbered oldest first, so FRM-0001 is the farmer who has
+been on the books longest and the codes keep counting up the way new ones
+will. ``created_at`` has been on the model since it was created and was never
+backfilled, so it is a real creation time rather than a migration timestamp;
+``id`` breaks ties, and covers any row whose timestamp is somehow equal.
 """
 from django.db import migrations, models
 
 
 def issue_codes(apps, schema_editor):
     Farmer = apps.get_model("broiler", "Farmer")
-    for serial, farmer in enumerate(Farmer.objects.order_by("farmer_name", "id"), start=1):
+    for serial, farmer in enumerate(Farmer.objects.order_by("created_at", "id"), start=1):
         Farmer.objects.filter(pk=farmer.pk).update(farmer_code=f"FRM-{serial:04d}")
 
 
