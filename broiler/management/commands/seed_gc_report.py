@@ -206,6 +206,12 @@ class Command(BaseCommand):
                     sale_type="customer", customer=customer, farm=farm, batch=batch,
                     date=d, birds=sold, net_weight=(avg_kg * sold).quantize(Decimal("0.01")),
                     rate=Decimal("101"), doc_no=f"BS-DOC-{age}",
+                    vehicle=f"UP 42 AT {6000 + age}", driver="Ram Prasad",
+                    # Long enough to be a real remark, for the same reason the
+                    # daily entries carry one: Bird Sales shares the parked
+                    # Remarks column and a local check should see it loaded.
+                    remarks=f"Lifted from {farm.farm_name} on day {age} — "
+                            f"weighed at the gate, {sold} birds loaded",
                 )
             opening = opening - mort - sold
 

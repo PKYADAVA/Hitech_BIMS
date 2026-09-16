@@ -44,11 +44,6 @@
   /* Mortality table: compact so more columns fit, in a capped scroll box with a
      sticky 2-row header that stays locked at the top while the rows scroll. */
   .report-scroll { max-height: 82vh; overflow: auto; }
-  /* The table fills the card rather than being as wide as its content wants
-     to be, so the figures -- Date through Balance Feed -- are all on screen
-     at once and the box scrolls down through the days rather than sideways
-     through the columns. */
-  .report-scroll .report-dense { width: 100%; }
   /* Keep every figure on one line, the way .rpt-scroll does for the other wide
      reports. Without it a long label like "Pre-Starter Feed" wraps in its
      narrow column and drags the whole row to three lines — 88px against the
@@ -56,31 +51,35 @@
      which is what the scroll box is for. */
   .report-scroll .report-dense th,
   .report-scroll .report-dense td { white-space: nowrap; }
-  /* Remarks is the exception that rule must not swallow. It is a whole
-     sentence of free text -- "Daily Entry VISHVANATH-2 S/o Chandrajeet..." on
-     every row -- and held on one line it stretched the last column far past
-     the right edge of the box, so the column a reader can see least of is the
-     one they have to scroll furthest for. Capped and ellipsised instead: the
-     rows stay one line deep, which is what .report-dense is for, and the full
-     text is on the cell's tooltip and on the printed copy below.
+  /* .report-wide: a table whose last column is a whole sentence of free-text
+     Remarks -- Mortality And Feed Consumption Details, and Bird Sales. That
+     column is parked past the right edge rather than fitted inside. The
+     figures are what a reader came for, so they take the width of the box
+     and Remarks begins where the box ends: scroll right and it is there.
+     Left to size itself the sentence did the opposite, pushing the last of
+     the figures out of view so the columns that mattered were the ones
+     needing the scroll.
 
-     A fixed cap is the wrong shape for it: too wide and the figures are
-     pushed off the right edge again, too narrow and space goes to waste on a
-     big screen. So Remarks takes whatever is left over instead -- max-width:0
-     tells the table this column asks for nothing, width:100% then hands it
-     every pixel the other columns did not want, and the span ellipsises at
-     that. A fixed max-width on the cell alone would not do: under the
-     automatic table layout this table uses it is a suggestion the browser is
-     free to ignore once the content is wider, and it does. */
-  .report-scroll .report-dense td.report-wrap { max-width: 0; width: 100%; }
-  .report-scroll .report-dense td.report-wrap > span {
-    display: block; max-width: 100%;
+     The table is the box's width plus that column, so the slack the figures
+     would otherwise leave goes to them rather than letting Remarks creep
+     back into view. The .ds prefix is needed: design-system.css sets every
+     .ds-grid to width:100%, which out-ranks a plainer selector here.
+
+     Remarks is held to 20rem so a 255-character entry cannot turn the scroll
+     into a long haul, ellipsised at the cut, with the whole text on the
+     cell's tooltip and on the printed copy, where the widths come off and it
+     wraps. That width lives on an inner span, not the cell: under the
+     automatic table layout these use, a width on a <td> is a suggestion the
+     browser is free to overrule from the content, and it does. */
+  .ds .gc-page table.ds-grid.report-wide { width: calc(100% + 20rem); }
+  .report-wide td.report-wrap > span {
+    display: block; width: 20rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   @media print {
-    .report-scroll .report-dense td.report-wrap { max-width: none; width: auto; }
-    .report-scroll .report-dense td.report-wrap > span {
-      max-width: none; overflow: visible; white-space: normal;
+    .ds .gc-page table.ds-grid.report-wide { width: 100%; }
+    .report-wide td.report-wrap > span {
+      width: auto; overflow: visible; white-space: normal;
     }
   }
   .report-dense th, .report-dense td { font-size: .72rem; padding: .18rem .3rem; line-height: 1.15; }
@@ -723,7 +722,7 @@
     <div class="gc-card gc-full">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e34948;--ci-bg:#fbe9e9"><i class="fas fa-table-list"></i></span>Mortality And Feed Consumption Details</div>
       <div class="report-scroll">
-        <table class="table table-bordered mb-0 report-table report-dense rpt-table ds-grid">
+        <table class="table table-bordered mb-0 report-table report-dense report-wide rpt-table ds-grid">
           <thead>
             <tr>
               <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
@@ -776,7 +775,7 @@
     <div class="gc-card gc-full">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-hand-holding-dollar"></i></span>Bird Sales</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+        <table class="table table-bordered mb-0 report-table report-wide rpt-table ds-grid">
           <thead>
             <tr>
               <th class="ds-mid">Date</th><th>Sale No.</th><th>Doc No.</th><th>Customer/Farmer</th><th>Birds</th>
@@ -789,7 +788,8 @@
               <td>{{ r.date }}</td><td>{{ r.sale_no }}</td><td>{{ r.doc_no }}</td><td>{{ r.buyer_name }}</td>
               <td class="text-end">{{ r.birds }}</td><td class="text-end">{{ r.net_weight }}</td><td class="text-end">{{ r.avg_weight }}</td>
               <td class="text-end">{{ r.rate|floatformat:2 }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount|floatformat:2 }}</td>
-              <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td><td>{{ r.remarks }}</td>
+              <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td>
+              <td class="report-wrap"><span title="{{ r.remarks }}">{{ r.remarks }}</span></td>
             </tr>
             {% empty %}<tr><td colspan="13" class="text-center text-muted">No bird sales for this batch</td></tr>{% endfor %}
           </tbody>
