@@ -36,8 +36,10 @@
   .bf-filter-body { flex: 1; min-width: 0; }
   .bf-filter label { display: block; font-size: .7rem; font-weight: 600; color: #475569; margin-bottom: .15rem; }
   @media (min-width: 1100px) {
-    #add-farmer-pane .bf-filters { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 2fr); }
-    #add-farm-pane .bf-filters { grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.6fr); }
+    /* Both panes gained filters; these counts keep each pane's rows full
+       rather than leaving a short second row. */
+    #add-farmer-pane .bf-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); }
+    #add-farm-pane .bf-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   }
 
   .bf-card { padding: .7rem; }
@@ -96,9 +98,81 @@
     .ds .bf-card table.ds-grid tbody td { display: flex; justify-content: space-between; align-items: center; gap: .75rem; border: 0; padding: .2rem 0; text-align: right; height: auto; }
     #farmer-table tbody td::before, #farm-table tbody td::before { content: attr(data-label); font-weight: 600; font-size: .7rem; color: #64748b; text-align: left; }
     /* The id rule above turns every cell into a block, so this needs to win. */
-    #farmer-table tbody td.bf-rownum, #farm-table tbody td.bf-rownum { display: none !important; }
+    #farmer-table tbody td.bf-rownum, #farm-table tbody td.bf-rownum,
+    #farmer-table tbody td.bf-check-col, #farm-table tbody td.bf-check-col { display: none !important; }
+    .bf-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .bf-actions { justify-content: flex-end; }
   }
+
+  /* Summary strip: the figures that answer "how big is this" without scrolling.
+     Each one is a button that applies the filter it describes, so a count is
+     also the way to see what it counted. */
+  .bf-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: .5rem; margin-bottom: .6rem; }
+  .bf-sum-tile {
+    display: flex; flex-direction: column; gap: .1rem; text-align: left; background: #fff;
+    border: 1px solid #e3e8ef; border-radius: .5rem; padding: .45rem .6rem; min-width: 0;
+  }
+  button.bf-sum-tile { cursor: pointer; }
+  button.bf-sum-tile:hover { border-color: #1d6fe0; background: #f8fbff; }
+  button.bf-sum-tile:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .bf-sum-tile.is-on { border-color: #1d6fe0; background: #eff6ff; }
+  .bf-sum-val { font-size: 1.05rem; font-weight: 700; color: #0f172a; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bf-sum-lab { font-size: .68rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .02em; }
+  .bf-sum-tile.warn .bf-sum-val { color: #b54708; }
+  .bf-sum-tile.bad .bf-sum-val { color: #b42318; }
+  .bf-sum-tile.good .bf-sum-val { color: #067647; }
+
+  /* Bulk bar: only there once something is ticked. */
+  .bf-bulk {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .6rem;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: .5rem; padding: .45rem .7rem; font-size: .8rem;
+  }
+  .bf-bulk[hidden] { display: none; }
+  .bf-bulk-count { font-weight: 700; color: #1d4ed8; }
+  .bf-bulk .btn { font-size: .75rem; padding: .22rem .6rem; }
+  .bf-check { width: 15px; height: 15px; cursor: pointer; margin: 0; vertical-align: middle; }
+  .ds .bf-card table.ds-grid thead th.bf-check-col,
+  .ds .bf-card table.ds-grid tbody td.bf-check-col { width: 30px; text-align: center; padding-left: 4px; padding-right: 4px; }
+
+  /* Flock cell: what is on the farm right now. */
+  .bf-flock-on { display: block; font-weight: 600; color: #0f172a; white-space: nowrap; }
+  .bf-flock-off { color: #94a3b8; font-weight: 600; white-space: nowrap; }
+  .bf-code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .72rem; color: #475569; white-space: nowrap; }
+
+  /* Utilisation: the bar carries the comparison, the number carries the value. */
+  .bf-util { display: block; margin-top: .15rem; }
+  .bf-util-track { display: block; height: 4px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
+  .bf-util-fill { display: block; height: 100%; border-radius: 999px; background: #1d6fe0; }
+  .bf-util-fill.full { background: #067647; }
+  .bf-util-fill.over { background: #b42318; }
+  .bf-util-text { font-size: .66rem; color: #64748b; white-space: nowrap; }
+
+  .bf-ready { display: inline-flex; align-items: center; gap: .25rem; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+  .bf-ready.ok { color: #067647; }
+  .bf-ready.gap { color: #b54708; }
+  .bf-agree { font-size: .72rem; white-space: nowrap; }
+  .bf-agree.soon { color: #b54708; font-weight: 600; }
+  .bf-agree.gone { color: #b42318; font-weight: 600; }
+  .bf-agree.none { color: #94a3b8; }
+  .bf-flag { display: inline-flex; align-items: center; gap: .25rem; font-size: .66rem; color: #b54708; white-space: nowrap; }
+
+  /* Duplicate warning in the farmer form — a warning, never a block. */
+  #bf-dup-warn { gap: .6rem; align-items: flex-start; background: #fff8eb; border: 1px solid #f5d9a8; border-radius: .5rem; padding: .55rem .75rem; font-size: .8rem; color: #7a4a06; margin-bottom: .85rem; }
+  #bf-dup-warn[hidden] { display: none; }
+  #bf-dup-warn:not([hidden]) { display: flex; }
+  #bf-dup-warn ul { margin: .25rem 0 0; padding-left: 1.1rem; }
+
+  .bf-pending { display: inline-flex; align-items: center; gap: .35rem; }
+  .bf-pending .bf-count { background: #fff1db; color: #b54708; }
+
+  .bf-view-flags { margin-top: .75rem; display: flex; flex-direction: column; gap: .25rem; }
+  .bf-view-flags .bf-flag { font-size: .75rem; }
+  .bf-view-sheds { margin-top: .9rem; }
+  .bf-view-sheds-head { font-size: .78rem; font-weight: 700; color: #0f172a; margin-bottom: .35rem; }
+  .bf-shed-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  .bf-shed-table th { text-align: left; font-weight: 600; color: #64748b; font-size: .7rem; border-bottom: 1px solid #e3e8ef; padding: .25rem .4rem; }
+  .bf-shed-table td { padding: .25rem .4rem; border-bottom: 1px solid #f1f5f9; color: #0f172a; }
+  .bf-shed-table .bf-num { text-align: right; }
 
   .bf-foot { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; background: #ecfaf1; border: 1px solid #c9eed7; border-radius: .6rem; padding: .6rem .9rem; font-size: .8rem; color: #14532d; }
   .bf-view dl { display: grid; grid-template-columns: 170px 1fr; gap: .35rem .9rem; margin: 0; font-size: .85rem; }
@@ -124,6 +198,16 @@
     it does to a route.
     {% endcomment %}
     <div class="bf-head-actions">
+      {% comment %}
+      Approving a setup request is what creates the rows this page lists, so the
+      queue sits next to its result rather than only on a screen someone has to
+      remember to visit. Shown only when there is something waiting.
+      {% endcomment %}
+      {% if pending_setup_requests and 'farmer_farm_setup_request_list' in allowed_tabs %}
+      <a class="btn btn-outline-warning btn-sm bf-pending" href="{% url 'farmer_farm_setup_request_list' %}">
+        <i class="fas fa-inbox"></i>Setup Requests
+        <span class="bf-count">{{ pending_setup_requests }}</span></a>
+      {% endif %}
       {% if 'farm_map_planner' in allowed_tabs %}
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'farm_map_planner' %}">
         <i class="fas fa-map-location-dot me-1"></i>Map &amp; Route Planner</a>
@@ -171,12 +255,32 @@
           </div>
         </div>
         <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#fff1db;--bf-fg:#b54708"><i class="fas fa-university"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fr-ready">Bank Details</label>
+            <select id="bf-fr-ready" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="ready">Ready to pay</option>
+              <option value="gap">Missing details</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fr-search">Search</label>
-            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Name, mobile, USC, service no...">
+            <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Code, name, mobile, USC...">
           </div>
         </div>
+      </div>
+      <div class="bf-sum" id="bf-fr-sum"></div>
+      <div class="bf-bulk" id="bf-fr-bulk" hidden>
+        <span class="bf-bulk-count"><span id="bf-fr-bulk-n">0</span> selected</span>
+        {% if page_perms.edit %}
+        <button type="button" class="btn btn-outline-success" id="bf-fr-bulk-on"><i class="fas fa-circle-check me-1"></i>Make Active</button>
+        <button type="button" class="btn btn-outline-secondary" id="bf-fr-bulk-off"><i class="fas fa-circle-minus me-1"></i>Make Inactive</button>
+        {% endif %}
+        <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="bf-fr-bulk-clear">Clear selection</button>
       </div>
       <div class="bf-card">
         <div class="bf-card-head">
@@ -188,12 +292,15 @@
         <table class="table table-hover mb-0 ds-grid" id="farmer-table" style="width:100%">
           <thead>
             <tr>
+              <th class="bf-check-col no-export no-colvis"><input type="checkbox" class="bf-check" id="bf-fr-all" title="Select all on this page" aria-label="Select all farmers on this page"></th>
               <th>#</th>
+              <th>Code</th>
               <th>Farmer</th>
               <th>Farmer Group</th>
               <th>USC</th>
               <th>Service No</th>
               <th class="ds-num">Farms</th>
+              <th>Bank Details</th>
               <th>Status</th>
               <th class="ds-mid">Actions</th>
             </tr>
@@ -260,12 +367,43 @@
           </div>
         </div>
         <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#e8f1fd;--bf-fg:#1d6fe0"><i class="fas fa-kiwi-bird"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fm-flock">Flock</label>
+            <select id="bf-fm-flock" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="occupied">Occupied</option>
+              <option value="vacant">Vacant</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
+          <span class="bf-filter-icon" style="--bf-bg:#fff1db;--bf-fg:#b54708"><i class="fas fa-file-signature"></i></span>
+          <div class="bf-filter-body">
+            <label for="bf-fm-agreement">Agreement</label>
+            <select id="bf-fm-agreement" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="soon">Ends in 60 days</option>
+              <option value="expired">Expired</option>
+              <option value="none">No dates</option>
+            </select>
+          </div>
+        </div>
+        <div class="bf-filter">
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-search">Search</label>
             <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Code, farm, farmer, district...">
           </div>
         </div>
+      </div>
+      <div class="bf-sum" id="bf-fm-sum"></div>
+      <div class="bf-bulk" id="bf-fm-bulk" hidden>
+        <span class="bf-bulk-count"><span id="bf-fm-bulk-n">0</span> selected</span>
+        {% if page_perms.edit %}
+        <button type="button" class="btn btn-outline-primary" id="bf-fm-bulk-sup"><i class="fas fa-user-tie me-1"></i>Change Supervisor</button>
+        {% endif %}
+        <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="bf-fm-bulk-clear">Clear selection</button>
       </div>
       <div class="bf-card">
         <div class="bf-card-head">
@@ -277,15 +415,18 @@
         <table class="table table-hover mb-0 ds-grid" id="farm-table" style="width:100%">
           <thead>
             <tr>
+              <th class="bf-check-col no-export no-colvis"><input type="checkbox" class="bf-check" id="bf-fm-all" title="Select all on this page" aria-label="Select all farms on this page"></th>
               <th>#</th>
               <th>Farm Code</th>
               <th>Farm</th>
               <th>Branch</th>
               <th>Line</th>
               <th>Type</th>
+              <th>Flock</th>
               <th class="ds-num">Capacity</th>
               <th class="ds-num">Sheds</th>
               <th>District</th>
+              <th>Agreement</th>
               <th>Location</th>
               <th>Status</th>
               <th class="ds-mid">Actions</th>
@@ -303,6 +444,34 @@
   <div class="bf-foot">
     <i class="far fa-lightbulb"></i>
     <span><b>Tip:</b> Click a farmer or a farm to see its details. A farmer's Farms count opens their farms.</span>
+  </div>
+</div>
+
+<!-- Move the ticked farms onto one supervisor -->
+<div class="modal fade" id="bfSupModal" tabindex="-1" aria-labelledby="bfSupLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bfSupLabel"><i class="fas fa-user-tie me-2"></i>Change Supervisor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3" id="bf-sup-intro"></p>
+        <div class="mb-3">
+          <label for="bf-sup-branch" class="form-label">Branch</label>
+          <select id="bf-sup-branch" class="form-select form-select-sm"><option value="">-Select-</option></select>
+          <div class="form-text">A farm can only be given a supervisor from its own branch.</div>
+        </div>
+        <div class="mb-2">
+          <label for="bf-sup-person" class="form-label">Supervisor</label>
+          <select id="bf-sup-person" class="form-select form-select-sm"><option value="">-Select-</option></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="bf-sup-save">Move Farms</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -330,6 +499,14 @@
         {% csrf_token %}
         <input type="hidden" id="farmer_id" value="" />
         <div class="modal-body" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+
+            <div id="bf-dup-warn" hidden>
+              <i class="fas fa-triangle-exclamation mt-1"></i>
+              <div>
+                <b>This may already be on file.</b>
+                <ul id="bf-dup-list"></ul>
+              </div>
+            </div>
 
             <div class="form-section">
                 <div class="form-section-label"><i class="fas fa-user"></i>Personal Details</div>
@@ -916,6 +1093,8 @@ $(document).ready(function () {
         $("#farmer-form .form-text").text("");
         $("#farmer-save-btn").text("Save");
         $("#farmer-form-title").text("Add Farmer");
+        // Last farmer's duplicate warning must not greet the next one.
+        document.getElementById("bf-dup-warn").hidden = true;
         $("#farmer-form").off("submit").on("submit", handleFarmerSubmit);
     }
     function hideFarmerForm() {
@@ -941,14 +1120,50 @@ $(document).ready(function () {
             url: "{% url 'farmer_list' %}",
             type: "GET",
             success: function (data) {
+                bfRows.farmer = data;
                 farmerTable.clear().rows.add(data).draw(false);
                 $("#bf-farmer-count").text(data.length);
+                bfFarmerSummary(data);
             },
             error: function () {
                 window.showToast('danger', "Error loading farmers. Please try again.");
             }
         });
     }
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer: is this one already on file?                              */
+    /* ---------------------------------------------------------------- */
+    // A warning, never a block. Two farmers really can share a name, and the
+    // person typing is better placed to judge that than a rule is — but the
+    // same farmer entered twice is worth catching, because nothing else would.
+    let bfDupTimer = null;
+    function bfCheckDuplicate() {
+        const name = $("#farmer_name").val() || "";
+        const params = {
+            farmer_name: name.trim(),
+            mobile_no: ($("#mobile_no").val() || "").trim(),
+            pan_no: ($("#pan_no").val() || "").trim(),
+            aadhar_no: ($("#aadhar_no").val() || "").trim(),
+        };
+        const editing = $("#farmer_id").val();
+        if (editing) params.id = editing;
+        if (!params.farmer_name && !params.mobile_no && !params.pan_no && !params.aadhar_no) {
+            document.getElementById("bf-dup-warn").hidden = true;
+            return;
+        }
+        $.getJSON("{% url 'farmer_duplicate_check' %}", params, function (res) {
+            const matches = res.matches || [];
+            document.getElementById("bf-dup-warn").hidden = matches.length === 0;
+            document.getElementById("bf-dup-list").innerHTML = matches.map((m) =>
+                `<li>${bfEsc([m.farmer_code, m.farmer_name].filter(Boolean).join(" - "))}` +
+                `${m.mobile_no ? ` (${bfEsc(m.mobile_no)})` : ""} — ${bfEsc(m.why)}</li>`).join("");
+        });
+    }
+    $("#farmer_name, #mobile_no, #pan_no, #aadhar_no").on("input change", function () {
+        window.clearTimeout(bfDupTimer);
+        bfDupTimer = window.setTimeout(bfCheckDuplicate, 400);
+    });
 
     /* ---------------------------------------------------------------- */
     /* Farmer: create / update                                           */
@@ -1107,11 +1322,13 @@ $(document).ready(function () {
             url: "/broiler_farm/",
             type: "GET",
             success: function (data) {
+                bfRows.farm = data;
                 farmTable.clear().rows.add(data).draw(false);
                 $("#bf-farm-count").text(data.length);
                 const distinct = (key) => [...new Set(data.map((r) => r[key]).filter(Boolean))].sort();
                 bfFillOptions(farmFilters.branch, distinct("branch_name"), "All", farmSaved.branch);
                 bfFillOptions(farmFilters.supervisor, distinct("supervisor_name"), "All", farmSaved.supervisor);
+                bfFarmSummary(data);
                 farmTable.draw(false);
             },
             error: function () {
@@ -1334,8 +1551,16 @@ $(document).ready(function () {
         if (keep && values.includes(keep)) select.val(keep);
         select.trigger("change.select2");
     }
+    function bfPick(kind, row) {
+        const on = bfPicked[kind].has(row.id) ? " checked" : "";
+        return `<input type="checkbox" class="bf-check bf-pick" data-kind="${kind}" data-id="${row.id}"${on} aria-label="Select this ${kind}">`;
+    }
     function bfActions(kind, row) {
         const parts = [`<button type="button" class="bf-act view bf-view-${kind}" data-id="${row.id}" title="View details" aria-label="View details"><i class="fas fa-eye"></i></button>`];
+        if (kind === "farmer" && BF_CAN.edit) {
+            const off = row.status === "inactive";
+            parts.push(`<button type="button" class="bf-act ${off ? "del" : "edit"} toggle-farmer" data-id="${row.id}" title="${off ? "Make Active" : "Make Inactive"}" aria-label="${off ? "Make Active" : "Make Inactive"}"><i class="fas fa-power-off"></i></button>`);
+        }
         if (BF_CAN.edit) parts.push(`<button type="button" class="bf-act edit edit-${kind}" data-id="${row.id}" title="Edit" aria-label="Edit"><i class="fas fa-pen"></i></button>`);
         if (BF_CAN.del) parts.push(`<button type="button" class="bf-act del delete-${kind}" data-id="${row.id}" title="Delete" aria-label="Delete"><i class="fas fa-trash"></i></button>`);
         return `<div class="bf-actions">${parts.join("")}</div>`;
@@ -1348,19 +1573,50 @@ $(document).ready(function () {
     const bfLabels = (selector) => [...document.querySelectorAll(`${selector} thead th`)].map((th) => th.textContent.trim());
     function bfNumber(table) {
         const info = table.page.info();
-        table.column(0, { search: "applied", order: "applied", page: "current" }).nodes()
+        table.column(1, { search: "applied", order: "applied", page: "current" }).nodes()
             .each((cell, i) => { cell.textContent = info.start + i + 1; });
     }
 
-    const farmerFilters = { status: $("#bf-fr-status"), group: $("#bf-fr-group"), search: $("#bf-fr-search") };
+    const bfInt = (v) => Number(v || 0).toLocaleString("en-IN");
+    const bfDate = (iso) => {
+        if (!iso) return "";
+        const d = new Date(iso + "T00:00:00");
+        return isNaN(d) ? iso : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    };
+    // Agreements are judged against one window so the column, the filter and
+    // the summary tile cannot disagree about what "ending soon" means.
+    const BF_AGREEMENT_SOON_DAYS = 60;
+    const bfAgreementState = (row) => {
+        const left = row.agreement_days_left;
+        if (left === null || left === undefined) return "none";
+        if (left < 0) return "expired";
+        return left <= BF_AGREEMENT_SOON_DAYS ? "soon" : "ok";
+    };
+
+    const farmerFilters = { status: $("#bf-fr-status"), group: $("#bf-fr-group"),
+                            ready: $("#bf-fr-ready"), search: $("#bf-fr-search") };
     const farmFilters = {
         branch: $("#bf-fm-branch"), supervisor: $("#bf-fm-supervisor"), type: $("#bf-fm-type"),
-        status: $("#bf-fm-status"), location: $("#bf-fm-location"), search: $("#bf-fm-search"),
+        status: $("#bf-fm-status"), location: $("#bf-fm-location"), flock: $("#bf-fm-flock"),
+        agreement: $("#bf-fm-agreement"), search: $("#bf-fm-search"),
+    };
+    // Ticked rows, by id. Kept outside the table so a redraw, a filter or a
+    // page change cannot quietly drop a selection the person already made.
+    const bfPicked = { farmer: new Set(), farm: new Set() };
+    const bfRows = { farmer: [], farm: [] };
+    // Pages this one links on to, empty when the person cannot open them.
+    const BF_LINKS = {
+        settlement: "{% if 'gc_settlement' in allowed_tabs %}{% url 'gc_settlement' %}{% endif %}",
+        payment: "{% if 'farmer_gc_payment' in allowed_tabs %}{% url 'farmer_gc_payment' %}{% endif %}",
+        sheds: "{% if 'broiler_farm_shed' in allowed_tabs %}{% url 'broiler_farm_shed' %}{% endif %}",
     };
     const farmerSaved = bfSaved("bims.farmers.filters");
     const farmSaved = bfSaved("bims.farms.filters");
     [["status", farmerFilters.status, farmerSaved], ["group", farmerFilters.group, farmerSaved],
-     ["type", farmFilters.type, farmSaved], ["status", farmFilters.status, farmSaved], ["location", farmFilters.location, farmSaved]]
+     ["ready", farmerFilters.ready, farmerSaved],
+     ["type", farmFilters.type, farmSaved], ["status", farmFilters.status, farmSaved],
+     ["location", farmFilters.location, farmSaved], ["flock", farmFilters.flock, farmSaved],
+     ["agreement", farmFilters.agreement, farmSaved]]
         .forEach(([key, select, saved]) => {
             if (saved[key] && select.find(`option[value="${saved[key]}"]`).length) select.val(saved[key]).trigger("change.select2");
         });
@@ -1375,6 +1631,9 @@ $(document).ready(function () {
             if (status === "inactive" && row.status !== "inactive") return false;
             const group = farmerFilters.group.val();
             if (group && (row.farmer_group_name || "") !== group) return false;
+            const ready = farmerFilters.ready.val();
+            if (ready === "ready" && !row.payable_ready) return false;
+            if (ready === "gap" && row.payable_ready) return false;
             return true;
         }
         if (settings.nTable.id === "farm-table") {
@@ -1386,6 +1645,11 @@ $(document).ready(function () {
             if (location === "verified" && !row.location_verified) return false;
             if (location === "unverified" && (row.location_verified || !row.has_location)) return false;
             if (location === "none" && row.has_location) return false;
+            const flock = farmFilters.flock.val();
+            if (flock === "occupied" && !row.occupied) return false;
+            if (flock === "vacant" && row.occupied) return false;
+            const agreement = farmFilters.agreement.val();
+            if (agreement && bfAgreementState(row) !== agreement) return false;
             return true;
         }
         return true;
@@ -1399,7 +1663,7 @@ $(document).ready(function () {
         pageLength: BF_LENGTHS[0].includes(farmerSaved.length) ? farmerSaved.length : 10,
         lengthMenu: BF_LENGTHS,
         search: { search: farmerSaved.search || "" },
-        order: [[1, "asc"]],
+        order: [[3, "asc"]],
         language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No farmers yet", zeroRecords: "No farmers match these filters" },
         createdRow: function (tr, row) {
             tr.classList.toggle("bf-row-off", row.status === "inactive");
@@ -1414,11 +1678,14 @@ $(document).ready(function () {
             { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
         ],
         columns: [
+            { data: null, orderable: false, searchable: false, className: "bf-check-col no-export no-colvis",
+              render: (_d, type, row) => type === "display" ? bfPick("farmer", row) : "" },
             { data: null, orderable: false, searchable: false, className: "bf-rownum no-export", defaultContent: "" },
+            { data: "farmer_code", defaultContent: "", render: (d, type) => type === "display" ? (d ? `<span class="bf-code">${bfEsc(d)}</span>` : bfDash) : (d || "") },
             {
                 data: "farmer_name",
                 render: (d, type, row) => {
-                    if (type === "filter") return `${d} ${row.mobile_no || ""}`;
+                    if (type === "filter") return `${d} ${row.mobile_no || ""} ${row.farmer_code || ""}`;
                     if (type !== "display") return d;
                     const mobile = row.mobile_no ? `<span class="bf-subline"><i class="fas fa-phone me-1"></i>${bfEsc(row.mobile_no)}</span>` : "";
                     return `<span class="bf-name">${bfEsc(d)}</span>${mobile}`;
@@ -1434,6 +1701,20 @@ $(document).ready(function () {
                     return d ? `<button type="button" class="bf-link bf-open-farms" data-name="${bfEsc(row.farmer_name)}" title="Show this farmer's farms">${d}</button>` : '<span class="text-muted">0</span>';
                 },
             },
+            {
+                // Whether this farmer can actually be paid. A settlement needs a
+                // group and a bank account, and the day it is run is far too
+                // late to find out that neither was ever filled in.
+                data: "payable_ready",
+                render: (d, type, row) => {
+                    const missing = row.missing || [];
+                    if (type !== "display") return d ? "Ready" : `Missing ${missing.join(", ")}`;
+                    if (d && !missing.length) return '<span class="bf-ready ok"><i class="fas fa-circle-check"></i>Complete</span>';
+                    if (d) return `<span class="bf-ready ok" title="Also missing: ${bfEsc(missing.join(", "))}"><i class="fas fa-circle-check"></i>Ready to pay</span>`;
+                    const payable = missing.length;
+                    return `<span class="bf-ready gap" title="Missing: ${bfEsc(missing.join(", "))}"><i class="fas fa-triangle-exclamation"></i>${payable} missing</span>`;
+                },
+            },
             { data: "status", render: (d, type) => type === "display" ? bfStatus(d) : (d === "inactive" ? "Inactive" : "Active") },
             { data: null, orderable: false, searchable: false, className: "no-export no-colvis", render: (_d, type, row) => type === "display" ? bfActions("farmer", row) : "" },
         ],
@@ -1447,7 +1728,7 @@ $(document).ready(function () {
         pageLength: BF_LENGTHS[0].includes(farmSaved.length) ? farmSaved.length : 10,
         lengthMenu: BF_LENGTHS,
         search: { search: farmSaved.search || "" },
-        order: [[1, "asc"]],
+        order: [[2, "asc"]],
         language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No farms yet", zeroRecords: "No farms match these filters" },
         createdRow: function (tr, row) {
             tr.classList.toggle("bf-row-off", (row.farm_status || "active") !== "active");
@@ -1462,6 +1743,8 @@ $(document).ready(function () {
             { extend: "colvis", text: "Column Visibility", columns: ":not(.no-colvis)" },
         ],
         columns: [
+            { data: null, orderable: false, searchable: false, className: "bf-check-col no-export no-colvis",
+              render: (_d, type, row) => type === "display" ? bfPick("farm", row) : "" },
             { data: null, orderable: false, searchable: false, className: "bf-rownum no-export", defaultContent: "" },
             { data: "farm_code", render: (d, type, row) => type === "display" ? `<button type="button" class="bf-link bf-view-farm" data-id="${row.id}" title="View details">${bfEsc(d)}</button>` : d },
             {
@@ -1490,14 +1773,82 @@ $(document).ready(function () {
                     return type === "display" ? (label ? `<span class="bf-pill ${bfEsc(d)}">${bfEsc(label)}</span>` : bfDash) : label;
                 },
             },
-            { data: "farm_capacity", className: "bf-num", render: (d, type) => type === "display" ? (d ? Number(d).toLocaleString("en-IN") : bfDash) : (d || 0) },
-            { data: "shed_count", className: "bf-num", render: (d, type) => type === "display" ? String(d || 0) : (d || 0) },
+            {
+                // What is on the farm right now. Derived from the open batches
+                // and their placements, so it matches the flock screens rather
+                // than being a second figure to keep in step.
+                data: "occupied",
+                render: (d, type, row) => {
+                    if (type === "sort") return row.age_days === null || row.age_days === undefined ? -1 : row.age_days;
+                    if (type !== "display") {
+                        return d ? `${row.batch_name || "Occupied"} (day ${row.age_days ?? "?"}, ${row.live_birds} birds)`
+                                 : (row.vacant_since ? `Vacant since ${row.vacant_since}` : "Vacant");
+                    }
+                    if (!d) {
+                        const since = row.vacant_since ? `<span class="bf-subline">since ${bfEsc(bfDate(row.vacant_since))}</span>` : "";
+                        return `<span class="bf-flock-off">Vacant</span>${since}`;
+                    }
+                    const age = (row.age_days === null || row.age_days === undefined) ? "" : `Day ${row.age_days}`;
+                    const birds = row.live_birds ? `${bfInt(row.live_birds)} birds` : "";
+                    const more = row.open_batches > 1 ? ` · ${row.open_batches} flocks` : "";
+                    const sub = [age, birds].filter(Boolean).join(" · ") + more;
+                    return `<span class="bf-flock-on">${bfEsc(row.batch_name || "Occupied")}</span>` +
+                           (sub ? `<span class="bf-subline">${bfEsc(sub)}</span>` : "");
+                },
+            },
+            {
+                data: "farm_capacity", className: "bf-num",
+                render: (d, type, row) => {
+                    if (type !== "display") return d || 0;
+                    if (!d) return bfDash;
+                    const used = row.utilisation;
+                    let bar = "";
+                    if (used !== null && used !== undefined && row.occupied) {
+                        const cls = used > 100 ? "over" : used >= 90 ? "full" : "";
+                        bar = `<span class="bf-util"><span class="bf-util-track">` +
+                              `<span class="bf-util-fill ${cls}" style="width:${Math.min(used, 100)}%"></span></span>` +
+                              `<span class="bf-util-text">${used}% used</span></span>`;
+                    }
+                    const flag = (row.flags || []).length
+                        ? `<span class="bf-flag" title="${bfEsc(row.flags.join(". "))}"><i class="fas fa-triangle-exclamation"></i>check</span>`
+                        : "";
+                    return `${bfInt(d)}${bar}${flag}`;
+                },
+            },
+            {
+                data: "shed_count", className: "bf-num",
+                render: (d, type, row) => {
+                    if (type !== "display") return d || 0;
+                    if (!d) return '<span class="text-muted">0</span>';
+                    const cap = row.shed_capacity ? ` (${bfInt(row.shed_capacity)})` : "";
+                    return `<button type="button" class="bf-link bf-open-sheds" data-id="${row.id}" title="Show this farm's sheds">${d}${bfEsc(cap)}</button>`;
+                },
+            },
             {
                 data: "district", defaultContent: "",
                 render: (d, type, row) => {
                     if (type !== "display") return [d, row.state].filter(Boolean).join(", ");
                     const state = row.state ? `<span class="bf-subline">${bfEsc(row.state)}</span>` : "";
                     return `${d ? bfEsc(d) : bfDash}${state}`;
+                },
+            },
+            {
+                // Captured on the form and, until now, invisible on the list —
+                // which is how a farm ends up running on a lapsed agreement.
+                data: "agreement_days_left",
+                render: (d, type, row) => {
+                    const state = bfAgreementState(row);
+                    if (type === "sort") return d === null || d === undefined ? 99999 : d;
+                    if (type !== "display") {
+                        return row.agreement_end_date
+                            ? `${row.agreement_end_date} (${d < 0 ? `${-d} days ago` : `${d} days left`})` : "No dates";
+                    }
+                    if (!row.agreement_end_date) return '<span class="bf-agree none">&mdash;</span>';
+                    const when = state === "expired" ? `expired ${-d} days ago`
+                               : state === "soon" ? `in ${d} days` : `in ${d} days`;
+                    const cls = state === "expired" ? "gone" : state === "soon" ? "soon" : "";
+                    return `<span class="bf-agree ${cls}">${bfEsc(bfDate(row.agreement_end_date))}</span>` +
+                           `<span class="bf-subline">${bfEsc(when)}</span>`;
                 },
             },
             {
@@ -1516,22 +1867,221 @@ $(document).ready(function () {
 
     $(".bf-dt-end-farmer").append($("#bf-fr-end").children());
     $(".bf-dt-end-farm").append($("#bf-fm-end").children());
-    farmerTable.on("draw", () => bfNumber(farmerTable));
-    farmTable.on("draw", () => bfNumber(farmTable));
+    farmerTable.on("draw", () => { bfNumber(farmerTable); bfSyncPickAll("farmer"); });
+    farmTable.on("draw", () => { bfNumber(farmTable); bfSyncPickAll("farm"); });
+
+    /* ---------------------------------------------------------------- */
+    /* Summary tiles                                                     */
+    /* ---------------------------------------------------------------- */
+    // Each tile is a button that applies the filter it describes: the count
+    // and the way to see what it counted are the same control.
+    function bfTiles(host, tiles) {
+        host.innerHTML = tiles.map((t) => {
+            const cls = `bf-sum-tile ${t.tone || ""} ${t.on ? "is-on" : ""}`.trim();
+            const val = `<span class="bf-sum-val">${bfEsc(t.value)}</span><span class="bf-sum-lab">${bfEsc(t.label)}</span>`;
+            return t.filter
+                ? `<button type="button" class="${cls}" data-filter="${t.filter}" data-value="${bfEsc(t.valueKey || "")}" title="${bfEsc(t.title || "Show these")}">${val}</button>`
+                : `<div class="${cls}" title="${bfEsc(t.title || "")}">${val}</div>`;
+        }).join("");
+    }
+
+    function bfFarmerSummary(rows) {
+        const active = rows.filter((r) => r.status !== "inactive").length;
+        const gaps = rows.filter((r) => !r.payable_ready).length;
+        bfTiles(document.getElementById("bf-fr-sum"), [
+            { value: rows.length, label: "Farmers" },
+            { value: active, label: "Active", tone: "good", filter: "fr-status", valueKey: "active",
+              on: farmerFilters.status.val() === "active" },
+            { value: rows.length - active, label: "Inactive", filter: "fr-status", valueKey: "inactive",
+              on: farmerFilters.status.val() === "inactive" },
+            { value: rows.length - gaps, label: "Ready to pay", tone: "good", filter: "fr-ready", valueKey: "ready",
+              on: farmerFilters.ready.val() === "ready", title: "Group and bank account both on file" },
+            { value: gaps, label: "Missing details", tone: gaps ? "warn" : "", filter: "fr-ready", valueKey: "gap",
+              on: farmerFilters.ready.val() === "gap", title: "Cannot be settled or paid until these are filled in" },
+        ]);
+    }
+
+    function bfFarmSummary(rows) {
+        const occupied = rows.filter((r) => r.occupied);
+        const live = occupied.reduce((sum, r) => sum + (r.live_birds || 0), 0);
+        const capacity = rows.reduce((sum, r) => sum + (Number(r.farm_capacity) || 0), 0);
+        const ending = rows.filter((r) => ["soon", "expired"].includes(bfAgreementState(r))).length;
+        const unpinned = rows.filter((r) => !r.location_verified).length;
+        bfTiles(document.getElementById("bf-fm-sum"), [
+            { value: rows.length, label: "Farms" },
+            { value: occupied.length, label: "Occupied", tone: "good", filter: "fm-flock", valueKey: "occupied",
+              on: farmFilters.flock.val() === "occupied" },
+            { value: rows.length - occupied.length, label: "Vacant", filter: "fm-flock", valueKey: "vacant",
+              on: farmFilters.flock.val() === "vacant", title: "No open flock — free for a placement" },
+            { value: bfInt(live), label: "Birds on farm", title: "Placed, less mortality, culls and birds sold" },
+            { value: bfInt(capacity), label: "Total capacity" },
+            { value: ending, label: "Agreements ending", tone: ending ? "warn" : "", filter: "fm-agreement",
+              valueKey: "soon", on: farmFilters.agreement.val() === "soon",
+              title: `Ending within ${BF_AGREEMENT_SOON_DAYS} days, or already expired` },
+            { value: unpinned, label: "Pins to verify", tone: unpinned ? "warn" : "", filter: "fm-location",
+              valueKey: "unverified", on: farmFilters.location.val() === "unverified",
+              title: "Location not confirmed on a visit" },
+        ]);
+    }
+
+    const BF_TILE_TARGETS = {
+        "fr-status": farmerFilters.status, "fr-ready": farmerFilters.ready,
+        "fm-flock": farmFilters.flock, "fm-agreement": farmFilters.agreement,
+        "fm-location": farmFilters.location,
+    };
+    $(document).on("click", ".bf-sum-tile[data-filter]", function () {
+        const select = BF_TILE_TARGETS[this.dataset.filter];
+        if (!select) return;
+        // Clicking the tile that is already applied clears it, so a tile is a
+        // toggle rather than a one-way trip into a filtered list.
+        const wanted = this.dataset.value;
+        select.val(select.val() === wanted ? "" : wanted).trigger("change");
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Ticking rows, and what can be done with them                      */
+    /* ---------------------------------------------------------------- */
+    function bfBulkBar(kind) {
+        const n = bfPicked[kind].size;
+        const prefix = kind === "farmer" ? "bf-fr" : "bf-fm";
+        document.getElementById(`${prefix}-bulk`).hidden = n === 0;
+        document.getElementById(`${prefix}-bulk-n`).textContent = n;
+    }
+    function bfSyncPickAll(kind) {
+        const table = kind === "farmer" ? farmerTable : farmTable;
+        const prefix = kind === "farmer" ? "bf-fr" : "bf-fm";
+        const shown = table.rows({ page: "current" }).data().toArray();
+        const all = shown.length > 0 && shown.every((r) => bfPicked[kind].has(r.id));
+        const box = document.getElementById(`${prefix}-all`);
+        if (box) {
+            box.checked = all;
+            box.indeterminate = !all && shown.some((r) => bfPicked[kind].has(r.id));
+        }
+        bfBulkBar(kind);
+    }
+    $(document).on("change", ".bf-pick", function () {
+        const kind = this.dataset.kind;
+        const id = Number(this.dataset.id);
+        if (this.checked) bfPicked[kind].add(id); else bfPicked[kind].delete(id);
+        bfSyncPickAll(kind);
+    });
+    [["farmer", "#bf-fr-all", () => farmerTable], ["farm", "#bf-fm-all", () => farmTable]]
+        .forEach(([kind, selector, table]) => {
+            $(document).on("change", selector, function () {
+                const checked = this.checked;
+                table().rows({ page: "current" }).data().toArray().forEach((row) => {
+                    if (checked) bfPicked[kind].add(row.id); else bfPicked[kind].delete(row.id);
+                });
+                table().draw(false);
+            });
+        });
+    function bfClearPicks(kind) {
+        bfPicked[kind].clear();
+        (kind === "farmer" ? farmerTable : farmTable).draw(false);
+    }
+    $("#bf-fr-bulk-clear").on("click", () => bfClearPicks("farmer"));
+    $("#bf-fm-bulk-clear").on("click", () => bfClearPicks("farm"));
+
+    function bfBulkStatus(active) {
+        const ids = [...bfPicked.farmer];
+        if (!ids.length) return;
+        $.ajax({
+            url: "{% url 'farmers_bulk_status' %}",
+            type: "POST",
+            contentType: "application/json",
+            headers: { "X-CSRFToken": getCSRFToken() },
+            data: JSON.stringify({ ids: ids, active: active }),
+            success: function (res) {
+                bfPicked.farmer.clear();
+                loadFarmers();
+                window.showToast("success", res.message);
+            },
+            error: function (xhr) {
+                window.showToast("danger", (xhr.responseJSON || {}).error || "Could not change those farmers.");
+            },
+        });
+    }
+    $("#bf-fr-bulk-on").on("click", () => bfBulkStatus(true));
+    $("#bf-fr-bulk-off").on("click", () => bfBulkStatus(false));
+
+    // One farmer at a time, from the row.
+    $(document).on("click", ".toggle-farmer", function (e) {
+        e.stopPropagation();
+        const id = Number(this.dataset.id);
+        $.ajax({
+            url: `/farmer/${id}/toggle-active/`,
+            type: "POST",
+            headers: { "X-CSRFToken": getCSRFToken() },
+            success: function (res) { loadFarmers(); window.showToast("success", res.message); },
+            error: function () { window.showToast("danger", "Could not change that farmer."); },
+        });
+    });
+
+    /* Change supervisor on the ticked farms. */
+    $("#bf-fm-bulk-sup").on("click", function () {
+        const picked = farmTable.rows().data().toArray().filter((r) => bfPicked.farm.has(r.id));
+        const seen = new Map();
+        picked.forEach((r) => { if (r.branch_id) seen.set(r.branch_id, r.branch_name); });
+        const branches = [...seen.entries()];
+        $("#bf-sup-intro").text(`${picked.length} farm${picked.length === 1 ? "" : "s"} selected`
+            + (branches.length === 1 ? ` at ${branches[0][1]}.` : ` across ${branches.length} branches.`));
+        const branchSelect = $("#bf-sup-branch");
+        branchSelect.html('<option value="">-Select-</option>' + branches.map(([id, name]) =>
+            `<option value="${id}">${bfEsc(name)}</option>`).join(""));
+        if (branches.length === 1) branchSelect.val(String(branches[0][0]));
+        branchSelect.trigger("change");
+        $("#bfSupModal").modal("show");
+    });
+    $("#bf-sup-branch").on("change", function () {
+        const person = $("#bf-sup-person");
+        person.html('<option value="">-Select-</option>').trigger("change.select2");
+        if (!this.value) return;
+        $.getJSON("{% url 'get_supervisors' %}", { branch_id: this.value }, function (data) {
+            person.html('<option value="">-Select-</option>' + (data.supervisors || []).map((sup) =>
+                `<option value="${sup.id}">${bfEsc(sup.name)}</option>`).join(""));
+            person.trigger("change.select2");
+        });
+    });
+    $("#bf-sup-save").on("click", function () {
+        const supervisor = $("#bf-sup-person").val();
+        if (!supervisor) { window.showToast("warning", "Choose a supervisor."); return; }
+        $.ajax({
+            url: "{% url 'farms_bulk_supervisor' %}",
+            type: "POST",
+            contentType: "application/json",
+            headers: { "X-CSRFToken": getCSRFToken() },
+            data: JSON.stringify({ ids: [...bfPicked.farm], supervisor_id: supervisor }),
+            success: function (res) {
+                bfPicked.farm.clear();
+                $("#bfSupModal").modal("hide");
+                loadFarms();
+                window.showToast("success", res.message);
+            },
+            error: function (xhr) {
+                window.showToast("danger", (xhr.responseJSON || {}).error || "Could not move those farms.");
+            },
+        });
+    });
 
     function rememberFarmers() {
         bfRemember("bims.farmers.filters", { status: farmerFilters.status.val() || "", group: farmerFilters.group.val() || "",
+                                             ready: farmerFilters.ready.val() || "",
                                              search: farmerFilters.search.val() || "", length: farmerTable.page.len() });
+        bfFarmerSummary(bfRows.farmer);
     }
     function rememberFarms() {
         bfRemember("bims.farms.filters", { branch: farmFilters.branch.val() || "", supervisor: farmFilters.supervisor.val() || "",
                                            type: farmFilters.type.val() || "", status: farmFilters.status.val() || "",
                                            location: farmFilters.location.val() || "", search: farmFilters.search.val() || "",
+                                           flock: farmFilters.flock.val() || "", agreement: farmFilters.agreement.val() || "",
                                            length: farmTable.page.len() });
+        bfFarmSummary(bfRows.farm);
     }
-    [farmerFilters.status, farmerFilters.group].forEach((el) => el.on("change", () => { farmerTable.draw(); rememberFarmers(); }));
+    [farmerFilters.status, farmerFilters.group, farmerFilters.ready]
+        .forEach((el) => el.on("change", () => { farmerTable.draw(); rememberFarmers(); }));
     farmerFilters.search.on("input", () => { farmerTable.search(farmerFilters.search.val()).draw(); rememberFarmers(); });
-    [farmFilters.branch, farmFilters.supervisor, farmFilters.type, farmFilters.status, farmFilters.location]
+    [farmFilters.branch, farmFilters.supervisor, farmFilters.type, farmFilters.status, farmFilters.location,
+     farmFilters.flock, farmFilters.agreement]
         .forEach((el) => el.on("change", () => { farmTable.draw(); rememberFarms(); }));
     farmFilters.search.on("input", () => { farmTable.search(farmFilters.search.val()).draw(); rememberFarms(); });
     farmerTable.on("length", rememberFarmers);
@@ -1540,12 +2090,14 @@ $(document).ready(function () {
     $("#bf-fr-clear").on("click", function () {
         farmerFilters.status.val("").trigger("change");
         farmerFilters.group.val("").trigger("change");
+        farmerFilters.ready.val("").trigger("change");
         farmerFilters.search.val("");
         farmerTable.search("").draw();
         rememberFarmers();
     });
     $("#bf-fm-clear").on("click", function () {
-        ["branch", "supervisor", "type", "status", "location"].forEach((k) => farmFilters[k].val("").trigger("change"));
+        ["branch", "supervisor", "type", "status", "location", "flock", "agreement"]
+            .forEach((k) => farmFilters[k].val("").trigger("change"));
         farmFilters.search.val("");
         farmTable.search("").draw();
         rememberFarms();
@@ -1580,8 +2132,9 @@ $(document).ready(function () {
         const row = farmerTable.rows().data().toArray().find((r) => r.id === id) || {};
         $.getJSON(`/farmer/${id}/`)
             .done(function (f) {
-                $("#bfViewLabel").text(f.farmer_name || "Farmer");
+                $("#bfViewLabel").text([f.farmer_code, f.farmer_name].filter(Boolean).join(" - ") || "Farmer");
                 $("#bf-view-body").html(`<dl>
+                    ${bfField("Code", f.farmer_code)}
                     ${bfField("Mobile", f.mobile_no)}
                     ${bfField("Second Mobile", f.mobile_2)}
                     ${bfField("Phone", f.phone_no)}
@@ -1596,10 +2149,13 @@ $(document).ready(function () {
                     ${bfField("Address", f.address)}
                     ${bfField("Farms", row.farm_count)}
                     ${bfField("Status", (row.status || f.status) === "inactive" ? "Inactive" : "Active")}
+                    ${bfField("Bank Details", (row.missing || []).length ? `Missing ${row.missing.join(", ")}` : "Complete")}
                 </dl>
                 <div class="bf-view-links">
                     ${BF_CAN.edit ? `<button type="button" class="btn btn-sm btn-outline-warning edit-farmer" data-id="${id}"><i class="fas fa-pen me-1"></i>Edit</button>` : ""}
                     ${row.farm_count ? `<button type="button" class="btn btn-sm btn-outline-primary bf-open-farms" data-name="${bfEsc(f.farmer_name)}"><i class="fas fa-tractor me-1"></i>Show farms</button>` : ""}
+                    ${BF_LINKS.settlement ? `<a class="btn btn-sm btn-outline-secondary" href="${BF_LINKS.settlement}"><i class="fas fa-file-invoice-dollar me-1"></i>Settlements</a>` : ""}
+                    ${BF_LINKS.payment ? `<a class="btn btn-sm btn-outline-secondary" href="${BF_LINKS.payment}"><i class="fas fa-indian-rupee-sign me-1"></i>Payments</a>` : ""}
                 </div>`);
                 $("#bfViewModal").modal("show");
             })
@@ -1621,6 +2177,11 @@ $(document).ready(function () {
                     ${bfField("Region / Line", [f.region, f.line].filter(Boolean).join(" / "))}
                     ${bfField("Farm Type", FARM_TYPE_LABELS[f.farm_type] || f.farm_type)}
                     ${bfField("Capacity", f.farm_capacity ? Number(f.farm_capacity).toLocaleString("en-IN") + " birds" : "")}
+                    ${bfField("Flock", row.occupied
+                        ? `${row.batch_name || "Occupied"}${row.age_days === null || row.age_days === undefined ? "" : ` — day ${row.age_days}`}, ${bfInt(row.live_birds)} birds`
+                        : row.vacant_since ? `Vacant since ${bfDate(row.vacant_since)}` : "Vacant")}
+                    ${row.occupied && row.utilisation !== null && row.utilisation !== undefined
+                        ? bfField("Capacity Used", `${row.utilisation}%`) : ""}
                     ${bfField("Sheds", sheds.length ? `${sheds.length} (capacity ${shedCapacity.toLocaleString("en-IN")})` : "")}
                     ${bfField("Address", [f.farm_address, f.area, f.district, f.state, f.farm_pincode].filter(Boolean).join(", "))}
                     ${bfField("Location", f.location_verified ? "Verified pin" : hasPin ? "Pin not verified" : "No pin")}
@@ -1631,12 +2192,21 @@ $(document).ready(function () {
                 <div class="bf-view-links">
                     ${BF_CAN.edit ? `<button type="button" class="btn btn-sm btn-outline-warning edit-farm" data-id="${id}"><i class="fas fa-pen me-1"></i>Edit</button>` : ""}
                     ${hasPin ? `<a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${encodeURIComponent(f.farm_latitude + "," + f.farm_longitude)}"><i class="fas fa-map-location-dot me-1"></i>Open in Maps</a>` : ""}
-                </div>`);
+                    ${BF_LINKS.sheds ? `<a class="btn btn-sm btn-outline-secondary" href="${BF_LINKS.sheds}"><i class="fas fa-warehouse me-1"></i>Farm Shed master</a>` : ""}
+                </div>
+                ${(row.flags || []).length ? `<div class="bf-view-flags">${row.flags.map((w) => `<div class="bf-flag"><i class="fas fa-triangle-exclamation"></i>${bfEsc(w)}</div>`).join("")}</div>` : ""}
+                ${sheds.length ? `<div class="bf-view-sheds">
+                    <div class="bf-view-sheds-head">Sheds</div>
+                    <table class="bf-shed-table"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="bf-num">Capacity</th></tr></thead>
+                    <tbody>${sheds.map((sh) => `<tr><td>${bfEsc(sh.shed_code || "")}</td><td>${bfEsc(sh.shed_name || "")}</td>` +
+                        `<td>${bfEsc(sh.shed_type || "")}</td><td class="bf-num">${sh.capacity ? bfInt(sh.capacity) : "&mdash;"}</td></tr>`).join("")}</tbody></table>
+                </div>` : ""}`);
                 $("#bfViewModal").modal("show");
             })
             .fail(() => window.showToast("danger", "Could not load the farm."));
     }
 
+    $(document).on("click", ".bf-open-sheds", function (e) { e.stopPropagation(); openFarmView(Number(this.dataset.id)); });
     $(document).on("click", ".bf-view-farmer", function (e) { e.stopPropagation(); openFarmerView(Number(this.dataset.id)); });
     $(document).on("click", ".bf-view-farm", function (e) { e.stopPropagation(); openFarmView(Number(this.dataset.id)); });
     $(document).on("click", "#bfViewModal .edit-farmer, #bfViewModal .edit-farm", () => $("#bfViewModal").modal("hide"));

@@ -385,6 +385,13 @@ class Farmer(models.Model):
     """
     Represents a farmer who owns or operates broiler farms.
     """
+    farmer_code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this farmer, e.g. FRM-0001")
+    )
     farmer_name = models.CharField(
         max_length=150,
         help_text=_("Full name of the farmer")
@@ -533,6 +540,34 @@ class Farmer(models.Model):
     def get_farm_count(self):
         """Returns the number of farms belonging to this farmer."""
         return self.broiler_farms.count()
+
+    @classmethod
+    def next_farmer_code(cls):
+        """FRM-0001, a plain serial.
+
+        Deliberately not scoped the way ``BroilerFarm.next_farm_code`` is: a
+        farm belongs to one branch, but a farmer is not tied to a branch at
+        all, so there is nothing to scope to and a branch prefix here would
+        only go stale the first time a farmer dealt with a second branch.
+        """
+        serials = []
+        for existing in cls.objects.filter(
+                farmer_code__startswith="FRM-").values_list("farmer_code", flat=True):
+            match = re.match(r"^FRM-(\d+)$", existing or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"FRM-{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.farmer_code:
+            # Issued off the highest already taken, so two farmers added in the
+            # same moment can want the same one. Reissued and tried again.
+            self.farmer_code = self.next_farmer_code()
+            return mint_with_retry(
+                lambda: super(Farmer, self).save(*args, **kwargs),
+                lambda: setattr(self, "farmer_code", self.next_farmer_code()),
+                label="farmer code")
+        super().save(*args, **kwargs)
 
 
 class BroilerFarm(models.Model):

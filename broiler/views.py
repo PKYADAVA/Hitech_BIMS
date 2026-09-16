@@ -848,6 +848,11 @@ class BroilerFarmTemplateView(View):
             "farmers": farmers,
             "farmer_groups": FarmerGroup.objects.filter(is_active=True),
             "shed_types": BroilerFarmShed.SHED_TYPE_CHOICES,
+            # Approving one of these is what creates the farmer and farm rows
+            # this page lists, so the queue belongs next to its result rather
+            # than only on a screen someone has to remember to visit.
+            "pending_setup_requests": FarmerFarmSetupRequest.objects.filter(
+                status=FarmerFarmSetupRequest.Status.PENDING).count(),
         }
         return render(request, "broiler_farm.html", context)
 
@@ -1181,6 +1186,8 @@ class FarmerAPI(BaseAPIView):
                 farmer = Farmer.objects.select_related("farmer_group").get(id=id)
                 data = {field: getattr(farmer, field) for field in self.FORM_FIELDS}
                 data["id"] = farmer.id
+                data["farmer_code"] = farmer.farmer_code
+                data["status"] = farmer.status
                 data["tds_percent"] = str(farmer.tds_percent) if farmer.tds_percent is not None else None
                 data["farmer_group_id"] = farmer.farmer_group_id
                 data["farmer_group"] = farmer.farmer_group.description if farmer.farmer_group_id else None
@@ -1193,15 +1200,27 @@ class FarmerAPI(BaseAPIView):
             # farmer the moment one is added or changed.
             from django.db.models import Count
 
+            from broiler.services.farm_overview import farmer_gaps
+
             farmers = list(
                 Farmer.objects.select_related("farmer_group")
                 .annotate(farm_count=Count("broiler_farms"))
                 .order_by("farmer_name")
                 .values(
-                    "id", "farmer_name", "mobile_no", "usc", "service_no", "status", "farm_count",
+                    "id", "farmer_code", "farmer_name", "mobile_no", "usc", "service_no",
+                    "status", "farm_count", "farmer_group_id", "acc_no", "ifsc_code",
+                    "account_holder_name", "pan_no",
                     farmer_group_name=F("farmer_group__description"),
                 )
             )
+            for farmer in farmers:
+                gaps = farmer_gaps(farmer)
+                farmer["payable_ready"] = not gaps["payable"]
+                farmer["missing"] = gaps["payable"] + gaps["other"]
+                # The raw fields were only fetched to work the gaps out; the
+                # list shows whether they are filled, never the numbers.
+                for field in ("acc_no", "ifsc_code", "account_holder_name", "pan_no"):
+                    farmer.pop(field)
             return JsonResponse(farmers, safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1224,7 +1243,8 @@ class FarmerAPI(BaseAPIView):
                 farmer.save()
                 cache.delete("farmer_list")
             return JsonResponse(
-                {"message": "Farmer updated" if id else "Farmer created", "id": farmer.id},
+                {"message": "Farmer updated" if id else "Farmer created",
+                 "id": farmer.id, "farmer_code": farmer.farmer_code},
                 status=200 if id else 201,
             )
         except Exception as e:
@@ -1239,6 +1259,134 @@ class FarmerAPI(BaseAPIView):
             return JsonResponse({"message": "Farmer deleted"})
         except Exception as e:
             return self.handle_exception(e)
+
+
+@login_required
+@require_POST
+def farmer_toggle_active(request, id):
+    """Make a farmer Active or Inactive.
+
+    An inactive farmer is one no longer dealt with. Nothing already recorded
+    against them changes — their farms, flocks and settlements stay exactly as
+    they are; the farmer simply stops being offered for new work.
+    """
+    farmer = get_object_or_404(Farmer, id=id)
+    farmer.status = "inactive" if farmer.status == "active" else "active"
+    farmer.save(update_fields=["status", "updated_at"])
+    cache.delete("farmer_list")
+    state = "Active" if farmer.status == "active" else "Inactive"
+    return JsonResponse({"message": f"{farmer.farmer_name} is now {state}",
+                         "status": farmer.status})
+
+
+@login_required
+@require_POST
+def farmers_bulk_status(request):
+    """Make the ticked farmers Active or Inactive together."""
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    ids = [int(i) for i in (data.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        return JsonResponse({"error": "Tick at least one farmer."}, status=400)
+    status = "active" if data.get("active") else "inactive"
+    changed = Farmer.objects.filter(id__in=ids).exclude(status=status).update(
+        status=status, updated_at=timezone.now())
+    cache.delete("farmer_list")
+    state = "Active" if status == "active" else "Inactive"
+    return JsonResponse({"message": f"{changed} farmer{'' if changed == 1 else 's'} made {state}",
+                         "changed": changed})
+
+
+@login_required
+def farmer_duplicate_check(request):
+    """Farmers who look like the one being typed in.
+
+    A warning, never a block: two farmers really can share a name, and the
+    person entering the second one is better placed to judge that than a rule
+    is. What it catches is the same farmer entered twice, which nothing else
+    would notice — name, mobile, PAN and Aadhaar all allow duplicates.
+    """
+    name = (request.GET.get("farmer_name") or "").strip()
+    mobile = (request.GET.get("mobile_no") or "").strip()
+    pan = (request.GET.get("pan_no") or "").strip()
+    aadhar = (request.GET.get("aadhar_no") or "").strip()
+    exclude_id = request.GET.get("id")
+
+    match = Q()
+    if name:
+        match |= Q(farmer_name__iexact=name)
+    if mobile:
+        match |= Q(mobile_no=mobile) | Q(mobile_2=mobile)
+    if pan:
+        match |= Q(pan_no__iexact=pan)
+    if aadhar:
+        match |= Q(aadhar_no=aadhar)
+    if not match:
+        return JsonResponse({"matches": []})
+
+    farmers = Farmer.objects.filter(match)
+    if exclude_id and str(exclude_id).isdigit():
+        farmers = farmers.exclude(id=int(exclude_id))
+    matches = []
+    for farmer in farmers.order_by("farmer_name")[:5]:
+        # Say which field matched, so "duplicate" is a fact the person can
+        # check rather than an accusation they have to go and investigate.
+        why = []
+        if name and (farmer.farmer_name or "").lower() == name.lower():
+            why.append("same name")
+        if mobile and mobile in {farmer.mobile_no, farmer.mobile_2}:
+            why.append("same mobile")
+        if pan and (farmer.pan_no or "").lower() == pan.lower():
+            why.append("same PAN")
+        if aadhar and farmer.aadhar_no == aadhar:
+            why.append("same Aadhaar")
+        matches.append({"id": farmer.id, "farmer_code": farmer.farmer_code,
+                        "farmer_name": farmer.farmer_name, "mobile_no": farmer.mobile_no,
+                        "why": ", ".join(why)})
+    return JsonResponse({"matches": matches})
+
+
+@login_required
+@require_POST
+def farms_bulk_supervisor(request):
+    """Move the ticked farms onto one supervisor.
+
+    Supervisors change in batches — someone leaves and their whole line is
+    handed over — and doing that one farm at a time through the form is where
+    the odd farm gets missed. A farm may only be given a supervisor from its
+    own branch (the same rule ``BroilerFarm.clean`` enforces), so farms from
+    another branch are refused by name rather than silently skipped.
+    """
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    ids = [int(i) for i in (data.get("ids") or []) if str(i).isdigit()]
+    supervisor_id = data.get("supervisor_id")
+    if not ids:
+        return JsonResponse({"error": "Tick at least one farm."}, status=400)
+    if not str(supervisor_id or "").isdigit():
+        return JsonResponse({"error": "Choose a supervisor."}, status=400)
+    supervisor = Supervisor.objects.filter(id=int(supervisor_id)).select_related("branch").first()
+    if not supervisor:
+        return JsonResponse({"error": "That supervisor no longer exists."}, status=400)
+
+    farms = list(BroilerFarm.objects.filter(id__in=ids).select_related("branch"))
+    wrong_branch = [f.farm_code for f in farms if f.branch_id != supervisor.branch_id]
+    if wrong_branch:
+        shown = ", ".join(wrong_branch[:5])
+        more = f" and {len(wrong_branch) - 5} more" if len(wrong_branch) > 5 else ""
+        return JsonResponse(
+            {"error": f"{supervisor.name} works at {supervisor.branch.branch_name}, "
+                      f"so these farms cannot move to them: {shown}{more}."},
+            status=400)
+    with transaction.atomic():
+        changed = BroilerFarm.objects.filter(id__in=[f.id for f in farms]).update(
+            supervisor=supervisor, updated_at=timezone.now())
+    return JsonResponse({"message": f"{changed} farm{'' if changed == 1 else 's'} moved to {supervisor.name}",
+                         "changed": changed})
 
 
 # ---------------------------------------------------------------------------
@@ -1912,26 +2060,50 @@ class BroilerFarmAPI(BaseAPIView):
             # Not cached. "broiler_farm_list" was also the cache key of two
             # other pages that store every farm column under it, so whichever
             # loaded first could hand the other the wrong shape.
-            from django.db.models import Count
+            from broiler.services.farm_overview import (
+                farm_flags, farm_occupancy, shed_totals, utilisation)
 
             broiler_farms = list(
                 BroilerFarm.objects.select_related("branch", "supervisor", "farmer")
-                .annotate(shed_count=Count("sheds", distinct=True))
                 .order_by("farm_code")
                 .values(
                     "id", "farm_code", "farm_name", "region", "line", "farm_type",
                     "agreement_start_date", "agreement_end_date",
                     "farm_capacity", "farm_status", "district", "state",
                     "location_verified", "farm_latitude", "farm_longitude", "visit_priority",
-                    "branch_id", "supervisor_id", "farmer_id", "shed_count",
+                    "branch_id", "supervisor_id", "farmer_id",
                     branch_name=F("branch__branch_name"),
                     supervisor_name=F("supervisor__name"),
                     farmer_name=F("farmer__farmer_name"),
+                    farmer_code=F("farmer__farmer_code"),
                 )
             )
+            farm_ids = [farm["id"] for farm in broiler_farms]
+            occupancy = farm_occupancy(farm_ids)
+            sheds = shed_totals(farm_ids)
+            today = timezone.localdate()
             for farm in broiler_farms:
+                here = occupancy.get(farm["id"], {})
+                shed = sheds.get(farm["id"], {})
                 farm["has_location"] = (farm["farm_latitude"] is not None
                                         and farm["farm_longitude"] is not None)
+                farm["shed_count"] = shed.get("shed_count", 0)
+                farm["shed_capacity"] = shed.get("shed_capacity", 0)
+                farm["occupied"] = bool(here.get("occupied"))
+                farm["batch_name"] = here.get("batch_name")
+                farm["batch_id"] = here.get("batch_id")
+                farm["placed_on"] = here.get("placed_on")
+                farm["age_days"] = here.get("age_days")
+                farm["live_birds"] = here.get("live") or 0
+                farm["open_batches"] = here.get("open_batches") or 0
+                farm["vacant_since"] = here.get("vacant_since")
+                farm["utilisation"] = utilisation(farm["live_birds"], farm["farm_capacity"])
+                farm["flags"] = farm_flags(farm, here, shed)
+                # Days left on the agreement, negative once it has run out.
+                # Sent as a number so the list can sort and filter on it
+                # without every row re-deriving the same date arithmetic.
+                end = farm["agreement_end_date"]
+                farm["agreement_days_left"] = (end - today).days if end else None
             return JsonResponse(broiler_farms, safe=False)
         except Exception as e:
             return self.handle_exception(e)
