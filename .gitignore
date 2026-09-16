@@ -64,3 +64,10 @@ node_modules/
 # Local run-a-server-against-scratch-data settings (see the docstring).
 preview_settings.py
 full_test_settings.py
+
+# Local test settings: a scratch database per session, so two runs in one
+# checkout cannot deadlock each other. Never committed — and never named
+# test*.py, which Django's test discovery imports, replacing the normalised
+# DATABASES["default"]["TEST"] and breaking every run with KeyError: 'MIRROR'.
+quick_test_settings.py
+full_test_settings.py
