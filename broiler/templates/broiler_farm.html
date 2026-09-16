@@ -538,6 +538,11 @@
                 <div class="form-section-label"><i class="fas fa-user"></i>Personal Details</div>
                 <div class="row g-3">
                     <div class="col-md-3">
+                        <label for="farmer_code" class="form-label">Farmer Code</label>
+                        <input type="text" id="farmer_code" class="form-control bg-light" readonly placeholder="Auto-generated" />
+                        <div class="form-text" id="farmer-code-hint"></div>
+                    </div>
+                    <div class="col-md-3">
                         <label for="farmer_name" class="form-label">Farmer Name<span class="text-danger">*</span></label>
                         <input type="text" id="farmer_name" class="form-control" placeholder="Enter farmer's full name" required />
                     </div>
@@ -1120,9 +1125,23 @@ $(document).ready(function () {
     /* ---------------------------------------------------------------- */
     /* Farmer: form reset / cancel / show                                */
     /* ---------------------------------------------------------------- */
+    /* The code this farmer will be given — see showNextFarmCode for why it is
+       worded as the next one rather than a reservation. */
+    function showNextFarmerCode() {
+        $.getJSON("{% url 'farmer_next_code' %}")
+            .done(function (res) {
+                if ($("#farmer_id").val()) return;   // an edit opened meanwhile
+                $("#farmer_code").val(res.code || "");
+                $("#farmer-code-hint").text(res.code ? "Next code — issued when you save." : "");
+            })
+            .fail(() => { $("#farmer_code").val(""); $("#farmer-code-hint").text(""); });
+    }
+
     function resetFarmerForm() {
         $("#farmer-form")[0].reset();
         $("#farmer_id").val("");
+        $("#farmer_code").val("");
+        $("#farmer-code-hint").text("");
         $("#farmer-form .form-text").text("");
         $("#farmer-save-btn").text("Save");
         $("#farmer-form-title").text("Add Farmer");
@@ -1142,6 +1161,7 @@ $(document).ready(function () {
     });
     $("#show-add-farmer-btn").click(function () {
         resetFarmerForm();
+        showNextFarmerCode();
         showFarmerForm();
     });
 
@@ -1259,6 +1279,9 @@ $(document).ready(function () {
             type: "GET",
             success: function (farmer) {
                 $("#farmer_id").val(farmer.id);
+                // An existing farmer keeps its code; nothing to preview.
+                $("#farmer_code").val(farmer.farmer_code || "");
+                $("#farmer-code-hint").text("");
                 $("#farmer_name").val(farmer.farmer_name);
                 $("#phone_no").val(farmer.phone_no);
                 $("#mobile_no").val(farmer.mobile_no);

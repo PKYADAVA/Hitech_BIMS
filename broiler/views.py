@@ -1283,6 +1283,18 @@ def farmer_toggle_active(request, id):
 
 
 @login_required
+def farmer_next_code(request):
+    """The code the next farmer would be given.
+
+    A preview, not a reservation, on the same terms as the farm one: the number
+    is minted when the farmer is saved, and a farmer saved in between takes it.
+    Unlike a farm's, it is not scoped to anything — a farmer belongs to no
+    branch — so there is nothing to pass in.
+    """
+    return JsonResponse({"code": Farmer.next_farmer_code()})
+
+
+@login_required
 def broiler_farm_next_code(request):
     """The code the next farm at a branch would be given.
 

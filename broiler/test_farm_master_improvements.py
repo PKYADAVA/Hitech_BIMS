@@ -350,6 +350,26 @@ class NextFarmCodeTests(FarmMasterBase):
         self.assertContains(self.client.get(reverse("branch_farm")), 'id="farm-code-hint"')
 
 
+class NextFarmerCodeTests(FarmMasterBase):
+
+    def preview(self):
+        return self.client.get(reverse("farmer_next_code")).json()["code"]
+
+    def test_the_preview_is_the_code_the_next_farmer_actually_gets(self):
+        shown = self.preview()
+        self.assertEqual(Farmer.objects.create(farmer_name="Suresh").farmer_code, shown)
+
+    def test_the_preview_moves_up_once_that_code_is_taken(self):
+        first = self.preview()
+        Farmer.objects.create(farmer_name="Suresh")
+        self.assertNotEqual(self.preview(), first)
+
+    def test_the_form_has_somewhere_to_say_it(self):
+        response = self.client.get(reverse("branch_farm"))
+        self.assertContains(response, 'id="farmer_code"')
+        self.assertContains(response, 'id="farmer-code-hint"')
+
+
 class PageTests(FarmMasterBase):
 
     def test_the_page_offers_the_new_controls(self):
