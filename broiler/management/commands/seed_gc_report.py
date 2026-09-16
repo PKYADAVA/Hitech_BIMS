@@ -3,7 +3,13 @@ report (Broiler > Reports > Batch History Report) shows meaningful data end
 to end: chick placement, feed transfers-in, a feed return, ~37 days of daily
 entries with mortality + phase-based feed consumption (pre-starter ->
 pre-starter & starter -> starter -> starter & finisher -> finisher),
-bird sales, and a matching Growing Charge Scheme for Admin Cost / Grade.
+medicine and vaccine in, used, returned and passed on, bird sales, and a
+matching Growing Charge Scheme for Admin Cost / Grade.
+
+The medicine leg arrives both ways a real site sends it — on a Medicine
+Vaccine Transfer, and on an ordinary Stock Transfer of a medicine item — so
+the report's Medicine and Vaccine tables are exercised on both sources and
+the Feed Summary can be checked for what should no longer be in it.
 
 Reuses existing masters (farm, supervisor, office, customer, categories) and
 is idempotent — re-running deletes the previous seed batch and its
@@ -17,10 +23,11 @@ from django.db import transaction
 
 from broiler.models import (
     Branch, BroilerBatch, BroilerFarm, BirdSale, DailyEntry,
-    GrowingChargeScheme, GCFarmerClassification,
+    GrowingChargeScheme, GCFarmerClassification, MedicineVaccineEntry,
 )
 from inventory.models import (
-    Item, ItemCategory, Mapping, StockTransfer, UnitOfMeasurement, Warehouse,
+    Item, ItemCategory, Mapping, MedicineTransfer, MedicineTransferItem,
+    StockTransfer, UnitOfMeasurement, Warehouse,
 )
 from sales.models import Customer
 
@@ -31,6 +38,7 @@ DAYS = 37
 PLACEMENT = 1861
 CHICK_RATE = Decimal("35")
 FEED_RATE = Decimal("42")
+MEDICINE_CATEGORY = "Medicine & Vaccine"
 
 # Front-loaded mortality per age-day (index 0 == age 1).
 MORTALITY = [22, 18, 15, 12, 10, 8, 6,   5, 5, 4, 4, 3, 3, 3,
@@ -102,11 +110,34 @@ class Command(BaseCommand):
         if not chick_item:
             raise CommandError("No item under the chick category to place.")
 
+        # The medicine category is created rather than looked for: unlike feed
+        # and chicks it has no name to match on (a site calls it "Medicine",
+        # "Vaccine" or its own house name), and a site with no medicine items
+        # yet is exactly the one this seed is for.
+        med_cat, _ = ItemCategory.objects.get_or_create(name=MEDICINE_CATEGORY)
+
+        def ensure_medicine(desc, rate):
+            item, _ = Item.objects.get_or_create(
+                description=desc, category=med_cat,
+                defaults=dict(valuation_method="Weighted Average",
+                              standard_cost_per_unit=rate, storage_uom=uom,
+                              consumption_uom=uom, usage="Produced", source="Purchased",
+                              type="Raw Material", item_account="Expense"),
+            )
+            return item
+
+        gumboro = ensure_medicine("Gumboro Vaccine", Decimal("5"))
+        lasota = ensure_medicine("Lasota Vaccine", Decimal("4"))
+        tonic = ensure_medicine("Uronex 1 Ltr", Decimal("240"))
+
         # ---- idempotency: drop the previous seed batch + its transactions ----
         old = BroilerBatch.objects.filter(broiler_farm=farm, book_number=BOOK_NO)
         for b in old:
             StockTransfer.objects.filter(to_batch=b).delete()
             StockTransfer.objects.filter(from_batch=b).delete()
+            MedicineTransfer.objects.filter(to_batch=b).delete()
+            MedicineTransfer.objects.filter(from_batch=b).delete()
+            MedicineVaccineEntry.objects.filter(batch=b).delete()
             BirdSale.objects.filter(batch=b).delete()
             DailyEntry.objects.filter(batch=b).delete()
         old.delete()
@@ -196,6 +227,72 @@ class Command(BaseCommand):
             dc_no="DC-RET-001", remarks="Unused feed returned (seed)",
         )
 
+        # ---- Medicine and vaccine, both ways a site sends it ----
+        #
+        # A Medicine Vaccine Transfer carries several items on one header, so
+        # the two vaccines share one. The tonic goes on an ordinary Stock
+        # Transfer, which is the other way medicine reaches a farm and the one
+        # the report used to file under Feed Transfer In.
+        med_in = MedicineTransfer.objects.create(
+            date=START + timedelta(days=1), dc_no="DC-MED-001",
+            from_location_type="warehouse", from_warehouse=office,
+            to_location_type="farm", to_farm=farm, to_batch=batch,
+        )
+        for item, qty in ((gumboro, Decimal("2000")), (lasota, Decimal("2000"))):
+            MedicineTransferItem.objects.create(
+                transfer=med_in, item=item, quantity=qty,
+                rate=item.standard_cost_per_unit, remarks="Medicine in (seed)",
+            )
+        StockTransfer.objects.create(
+            date=START + timedelta(days=4), item=tonic, quantity=Decimal("6"),
+            rate=tonic.standard_cost_per_unit, purchase_rate=tonic.standard_cost_per_unit,
+            from_location_type="warehouse", from_warehouse=office,
+            to_location_type="farm", to_farm=farm, to_batch=batch,
+            dc_no="DC-MED-002", remarks="Tonic sent on a stock transfer (seed)",
+        )
+
+        # ---- what the flock was actually given ----
+        for age, item, qty in ((10, gumboro, Decimal("1900")),
+                               (18, lasota, Decimal("1900")),
+                               (22, tonic, Decimal("4"))):
+            MedicineVaccineEntry.objects.create(
+                date=START + timedelta(days=age - 1), supervisor=supervisor,
+                farm=farm, batch=batch, age_days=age, item=item, qty=qty,
+                remarks="Medicine/vaccine given (seed)",
+            )
+
+        # ---- what came back, and what went on to the next farm ----
+        med_back = MedicineTransfer.objects.create(
+            date=START + timedelta(days=DAYS), dc_no="DC-MED-RET-001",
+            from_location_type="farm", from_farm=farm, from_batch=batch,
+            to_location_type="warehouse", to_warehouse=office,
+        )
+        MedicineTransferItem.objects.create(
+            transfer=med_back, item=gumboro, quantity=Decimal("100"),
+            rate=gumboro.standard_cost_per_unit, remarks="Unused vaccine returned (seed)",
+        )
+        neighbour = BroilerFarm.objects.exclude(pk=farm.pk).first()
+        if neighbour:
+            StockTransfer.objects.create(
+                date=START + timedelta(days=DAYS), item=tonic, quantity=Decimal("2"),
+                rate=tonic.standard_cost_per_unit, purchase_rate=tonic.standard_cost_per_unit,
+                from_location_type="farm", from_farm=farm, from_batch=batch,
+                to_location_type="farm", to_farm=neighbour,
+                dc_no="DC-MED-OUT-001", remarks="Tonic passed to the next farm (seed)",
+            )
+        # Lasota is deliberately left short by 100: a flock still holding
+        # medicine is what the settlement's pending-balance check is for, and
+        # it should read as medicine rather than as feed that was never eaten.
+
+        # Running closing-stock columns, through the same helpers the forms
+        # use, so the registers read the way they would after real data entry.
+        from broiler.views import _recompute_medicine_stock_chain as _farm_chain
+        from inventory.views import _recompute_medicine_stock_chain as _source_chain
+        for item in (gumboro, lasota, tonic):
+            _source_chain("warehouse", office.id, item.id)
+            _source_chain("farm", farm.id, item.id)
+            _farm_chain(farm.id, item.id)
+
         # ---- Growing Charge Scheme (wins the match: later from_date) ----
         GrowingChargeScheme.objects.filter(schema_name=SEED_SCHEMA_NAME).delete()
         scheme = GrowingChargeScheme.objects.create(
@@ -220,6 +317,8 @@ class Command(BaseCommand):
             f"Seeded batch {batch.batch_name} (id={batch.id}) on {farm.farm_name}.\n"
             f"  Placed {PLACEMENT} | mortality {total_mort} | sold {total_sold} | "
             f"feed consumed {sum(consumed.values()):.0f} kg\n"
+            f"  Medicine: 2 vaccines on a Medicine Vaccine Transfer, a tonic on a "
+            f"Stock Transfer; 100 Lasota left on the farm\n"
             f"  Scheme: {scheme.scheme_code} (farmer admin 3, management admin 1)\n"
             f"  Open the report:  /broiler-report/?batch={batch.id}&fetch_type=farmer"
         ))
