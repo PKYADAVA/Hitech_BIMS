@@ -2433,6 +2433,21 @@ class FarmLocationCapture(models.Model):
         if farm.location_captured_at != latest.date:
             farm.location_captured_at = latest.date
             fields.append("location_captured_at")
+        # A capture is somebody standing at the farm writing down what their
+        # phone says, which is exactly what this flag claims: "somebody has
+        # confirmed this pin is where the farm is". Nothing set it before, so
+        # every farm read "Pin not verified" for ever and the Verified state
+        # was unreachable — the farm list, the Route Planner and the farm
+        # report were all showing a field with no writer.
+        #
+        # Only ever set, never cleared: a pin that was confirmed on a visit
+        # stays confirmed even if the capture is later deleted, because the
+        # visit still happened. Typing coordinates into the master by hand is
+        # deliberately NOT verification — that is the case the flag exists to
+        # tell apart.
+        if not farm.location_verified:
+            farm.location_verified = True
+            fields.append("location_verified")
         # The written parts only overwrite when the capture actually has them —
         # a visit that recorded a pin but no address must not wipe the master's.
         for capture_field, farm_field in (("address", "farm_address"),

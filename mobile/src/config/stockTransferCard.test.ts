@@ -1,4 +1,5 @@
 import { RESOURCES } from "./catalog";
+import { formatDate } from "@/utils/format";
 
 /**
  * What a Stock Transfer row says on the list, and over what span.
@@ -39,7 +40,11 @@ describe("the Stock Transfer card", () => {
   });
 
   it("leads with the date", () => {
-    expect(config.card(row).subtitle!.startsWith("09 Jul 2026")).toBe(true);
+    // Against formatDate rather than a literal: the card shows the date in the
+    // device's own locale, so "09 Jul 2026" on a phone set to English (India)
+    // is "Jul 09, 2026" on one set to English (US) — and a CI runner is the
+    // second. What this pins is the order, which is the thing that was wrong.
+    expect(config.card(row).subtitle!.startsWith(formatDate(row.date))).toBe(true);
   });
 
   it("leaves no dangling label when there is no DC number", () => {
