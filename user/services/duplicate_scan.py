@@ -494,7 +494,7 @@ def _transfer_checks():
     from inventory.models import StockTransfer
 
     transfers = StockTransfer.objects.select_related(
-        "item", "from_warehouse", "to_warehouse", "from_farm", "to_farm")
+        "item", "from_warehouse", "to_warehouse", "from_farm", "to_farm", "to_batch")
     # Source as well as destination. Without it, two transfers of the same item
     # and quantity arriving somewhere on one day looked identical even when they
     # came from different farms — which is a delivery from each, not a duplicate.
@@ -512,13 +512,20 @@ def _transfer_checks():
         title="Same stock transfer entered twice",
         matched_on="Item + Source + Destination + Date + Quantity",
         why="Stock is moved twice on paper, so the source reads low and the destination high.",
-        columns=["Transfer No", "Date", "DC No", "Item", "From", "To", "Quantity", "Rate"],
+        # The Stock Transfer register's own columns, in its order, so a row
+        # here and the row there read as the same record. Trnum leads because
+        # the number is the handle that opens the record; the register puts
+        # the date first, which is the one difference.
+        columns=["Trnum", "Date", "Dc No.", "From Location", "Item Code", "Item Name",
+                 "Driver", "Quantity", "To Location", "Batch"],
         groups=_collect(
             transfers, fields, _duplicate_keys(transfers, fields),
             cells=lambda t: [t.trnum or f"#{t.pk}", t.date, t.dc_no or "",
+                             _where(t, "from_warehouse", "from_farm"),
+                             t.item.item_code if t.item_id else "",
                              t.item.description if t.item_id else "",
-                             _where(t, "from_warehouse", "from_farm"), where(t),
-                             t.quantity, t.rate],
+                             t.driver_name or "", t.quantity, where(t),
+                             t.to_batch.batch_name if t.to_batch_id else ""],
             matched=lambda t: f"{t.item.description if t.item_id else ''} × {t.quantity} on {_date(t)}"))
 
 

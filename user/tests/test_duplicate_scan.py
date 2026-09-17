@@ -716,8 +716,17 @@ class WhereItHappenedTests(DuplicateScanBase):
         self.transfer(item, source, destination)
         found = check("stock_transfer")
         self.assertEqual(found.count, 1)
-        self.assertIn("From", found.columns)
+        self.assertIn("From Location", found.columns)
         self.assertIn("Source A", found.groups[0].rows[0].cells)
+
+    def test_the_transfer_rows_read_like_the_register(self):
+        # Same columns, same order as Inventory > Transactions > Stock Transfer,
+        # so a row here and the row there are recognisably one record. Trnum
+        # leads rather than the date, because the number is what opens it.
+        self.assertEqual(
+            check("stock_transfer").columns,
+            ["Trnum", "Date", "Dc No.", "From Location", "Item Code", "Item Name",
+             "Driver", "Quantity", "To Location", "Batch"])
 
     def test_a_daily_entry_row_names_its_branch(self):
         farm = self.farm()
