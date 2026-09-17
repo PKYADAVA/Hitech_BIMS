@@ -291,7 +291,39 @@
        for" won over "what just happened". */
     .dw-col-liftings, .dw-col-sale_overview,
     .dw-col-broiler_activity { flex:0 0 33.3333%; max-width:33.3333%; }
+    /* A row of its own. The card lists findings from any of seven modules,
+       and each line carries a check title, a count and the module it came
+       from — none of which fit in a third of a row without wrapping. */
+    .dw-col-duplicates { flex:0 0 100%; max-width:100%; }
   }
+  /* Duplicate Entries draws its own body - see duplicatesCard. */
+  .dupw { display:flex; flex-direction:column; gap:12px; }
+  .dupw-checked { font-size:.72rem; color:#6b7890; }
+  .dupw-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .dupw-tile { border:1px solid #e7edf5; border-radius:12px; padding:10px 12px; background:#fbfdff; }
+  .dupw-tile-value { display:block; font-size:1.35rem; font-weight:700; line-height:1.1; color:#15233b; font-variant-numeric:tabular-nums; }
+  .dupw-tile-label { display:block; font-size:.72rem; font-weight:600; color:#6b7890; }
+  .dupw-tile.t-blue { background:#f4f8ff; border-color:#dbe7fb; }
+  .dupw-tile.t-red { background:#fff6f6; border-color:#fadcdc; }
+  .dupw-tile.t-red .dupw-tile-value { color:#d92d20; }
+  .dupw-tile.t-amber { background:#fffaf0; border-color:#f6e3c3; }
+  .dupw-tile.t-amber .dupw-tile-value { color:#b54708; }
+  .dupw-tile.t-green { background:#f4fbf7; border-color:#cfeddd; }
+  .dupw-section { font-size:.78rem; font-weight:700; color:#15233b; }
+  .dupw-band { display:flex; height:26px; border-radius:7px; overflow:hidden; background:#eef2f7; }
+  .dupw-band-part { display:flex; align-items:center; justify-content:center; color:#fff; font-size:.72rem; font-weight:700; min-width:26px; }
+  .dupw-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:.74rem; color:#475569; }
+  .dupw-key { display:inline-flex; align-items:center; gap:6px; }
+  .dupw-key i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .dupw-findings { display:flex; flex-direction:column; }
+  .dupw-find { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid #edf1f6; font-size:.8rem; }
+  .dupw-find:last-of-type { border-bottom:0; }
+  .dupw-dot { width:9px; height:9px; border-radius:50%; flex:0 0 9px; }
+  .dupw-find-title { font-weight:600; color:#15233b; }
+  .dupw-find-count { font-size:.7rem; font-weight:700; color:#d92d20; background:#fde8e8; border-radius:999px; padding:.1rem .5rem; white-space:nowrap; }
+  .dupw-find-rule { margin-left:auto; font-size:.72rem; color:#6b7890; }
+  .dupw-run { align-self:flex-start; background:#2563eb; color:#fff; border-radius:9px; padding:.4rem .85rem; font-size:.78rem; font-weight:600; text-decoration:none; }
+  .dupw-run:hover { background:#1d4ed8; color:#fff; }
   /* One height for the pair, with neither card padded out to reach it.
      Both are flex columns (alerthub.css) whose list takes whatever the header
      and footer leave, so the slack goes into the scrolling part rather than
@@ -1308,8 +1340,85 @@
            + (footer ? '<div class="dw-act-foot">' + footer + '</div>' : '');
     }
 
+    /**
+     * Duplicate Entries draws itself.
+     *
+     * The generic body is a stat grid over a list, which cannot say the two
+     * things this card exists to say: which module holds the work, and what
+     * each finding matched on. So it gets a share-of-total band with a legend,
+     * and a findings list carrying the match count and the rule beside every
+     * row - the same wording the page uses, so the two read as one tool.
+     */
+    function duplicatesCard(w) {
+      var tones = ['blue', 'red', 'amber', 'green'];
+      var tiles = (w.stats || []).map(function (s, i) {
+        return '<div class="dupw-tile t-' + (tones[i] || 'blue') + '">'
+             + '<span class="dupw-tile-value">' + esc(s.value) + '</span>'
+             + '<span class="dupw-tile-label">' + esc(s.label) + '</span></div>';
+      }).join('');
+
+      var band = '';
+      if (w.bands && w.bands.length) {
+        band = '<div class="dupw-section">Module-wise duplicates</div>'
+             + '<div class="dupw-band">'
+             + w.bands.map(function (b) {
+                 return '<span class="dupw-band-part" style="width:' + b.share + '%;background:'
+                      + esc(b.colour) + '" title="' + esc(b.label) + '">' + esc(b.count) + '</span>';
+               }).join('')
+             + '</div><div class="dupw-legend">'
+             + w.bands.map(function (b) {
+                 return '<span class="dupw-key"><i style="background:' + esc(b.colour) + '"></i>'
+                      + esc(b.label) + ' (' + esc(b.count) + ')</span>';
+               }).join('')
+             + '</div>';
+      }
+
+      var list = '';
+      if (w.findings && w.findings.length) {
+        list = '<div class="dupw-section">Recent duplicate findings</div>'
+             + '<div class="dupw-findings">'
+             + w.findings.map(function (f) {
+                 return '<div class="dupw-find">'
+                      + '<span class="dupw-dot" style="background:' + esc(f.colour) + '"></span>'
+                      + '<span class="dupw-find-title">' + esc(f.title) + '</span>'
+                      + '<span class="dupw-find-count">' + esc(f.count) + ' match'
+                      + (f.count === 1 ? '' : 'es') + '</span>'
+                      + '<span class="dupw-find-rule">Matched on: ' + esc(f.matched_on) + '</span>'
+                      + '</div>';
+               }).join('')
+             + (w.more ? '<div class="dw-note">and ' + w.more + ' more</div>' : '')
+             + '</div>';
+      }
+
+      return '<div class="dupw">'
+           + (w.checked_at
+              ? '<div class="dupw-checked"><i class="fa-regular fa-clock"></i> Last checked: '
+                + esc(w.checked_at) + '</div>'
+              : '')
+           + '<div class="dupw-tiles">' + tiles + '</div>'
+           + band + list
+           + (w.note ? '<div class="dw-note">' + esc(w.note) + '</div>' : '')
+           + (w.url ? '<a class="dupw-run" href="' + esc(w.url) + '" target="_blank" rel="noopener">'
+                    + '<i class="fa-solid fa-play"></i> Run Duplicate Check</a>' : '')
+           + '</div>';
+    }
+
     function card(w) {
       var body = '';
+      if (w.key === 'duplicates') {
+        return '<div class="col-12 col-md-6 col-xl dw-col dw-col-' + esc(w.key) + '">'
+             + '<div class="dw-card">'
+             + '<div class="dw-head">'
+             + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'
+             + '<div class="dw-head-text"><h3 class="dw-title">' + esc(w.title) + '</h3>'
+             + '<p class="dw-card-sub">Find duplicate or similar records. '
+             + 'Nothing is changed automatically.</p></div>'
+             + (w.url ? '<a class="dw-open" href="' + esc(w.url) + '" target="_blank" rel="noopener">'
+                      + 'Open <i class="fa-solid fa-arrow-up-right-from-square"></i></a>' : '')
+             + '</div>'
+             + '<div class="dw-body">' + duplicatesCard(w) + '</div>'
+             + '</div></div>';
+      }
       if (w.timeline) body += timelineCard(w);
       // A donut replaces the stat grid rather than joining it: it is the same
       // birds counted the same way, and showing both says it twice.

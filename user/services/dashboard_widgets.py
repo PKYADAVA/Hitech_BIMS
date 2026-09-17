@@ -1191,6 +1191,87 @@ def _stock_alerts(viewable, filters, user=None):
     }
 
 
+#: One colour per module, so the band and the findings list agree at a glance.
+MODULE_COLOURS = {
+    "Broiler": "#3b82f6",
+    "Purchase": "#f59e0b",
+    "Inventory": "#10b981",
+    "Sales": "#8b5cf6",
+    "Account": "#64748b",
+    "Hatchery": "#ec4899",
+    "Human Resource": "#06b6d4",
+}
+
+
+def _duplicate_entries(viewable, filters, user=None):
+    """Records that look like they were entered twice, across every module.
+
+    Counts only. The analyser's second query per check — the one that fetches
+    the matching rows so the page can table them — is the expensive half, and a
+    card saying "3 possible duplicates" never needed it; the page itself does
+    the full pass when somebody opens it.
+
+    Reuses ``duplicate_scan`` rather than counting anything itself, for the
+    reason at the top of this module: a dashboard that disagrees with the page
+    it links to is worse than no dashboard.
+
+    None of the dashboard's filters apply. Duplicates are a property of the
+    records themselves, and the scan spans modules that have no farm, branch or
+    supervisor dimension at all — so an empty ``filters_used`` here is what
+    makes the card say so rather than quietly ignoring them.
+    """
+    from user.services import duplicate_scan
+
+    checks = duplicate_scan.run(counts_only=True)
+    totals = duplicate_scan.summary(checks)
+    found = sorted((c for c in checks if c.count), key=lambda c: -c.count)
+
+    if totals["failed"]:
+        note = f"{len(totals['failed'])} check(s) could not run — open the page for the reason."
+    elif not found:
+        note = f"Nothing found in {totals['checks']} checks."
+    else:
+        note = None
+
+    stats = [
+        {"label": "Checks run", "value": _num(totals["checks"])},
+        {"label": "Possible duplicates", "value": _num(totals["groups"]),
+         "tone": "bad" if totals["groups"] else "good"},
+        {"label": "Entry duplicates", "value": _num(totals["entry_groups"]),
+         "tone": "bad" if totals["entry_groups"] else "good"},
+        {"label": "Records involved", "value": _num(totals["records"])},
+    ]
+
+    # Module-wise, so the card says where the work is before it is opened.
+    # Only modules with something to show: a band of zeros is chart furniture.
+    by_module: dict[str, int] = {}
+    for check in found:
+        by_module[check.module] = by_module.get(check.module, 0) + check.count
+    ordered = sorted(by_module.items(), key=lambda kv: -kv[1])
+    total = sum(count for _name, count in ordered) or 1
+    bands = [{"label": name, "count": count,
+              "share": round(count * 100.0 / total, 1),
+              "colour": MODULE_COLOURS.get(name, "#94a3b8")}
+             for name, count in ordered]
+
+    return {
+        "stats": stats,
+        # Its own shape, drawn by duplicatesCard in home.html: a share-of-total
+        # band reads better here than the generic bar chart, because the
+        # question is "which module holds the work", not "how many each".
+        "bands": bands,
+        "findings": [{"title": c.title, "count": c.count, "module": c.module,
+                      "matched_on": c.matched_on,
+                      "colour": MODULE_COLOURS.get(c.module, "#94a3b8")}
+                     for c in found[:5]],
+        "more": max(0, len(found) - 5),
+        "checked_at": timezone.localtime().strftime("%d %b %Y %H:%M"),
+        "note": note,
+        # Deliberately empty: see the docstring.
+        "filters_used": [],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -1418,6 +1499,11 @@ WIDGETS = [
      "supplier_balance", "fa-solid fa-indian-rupee-sign", "gs-amber", _payables),
     ("stock_alerts", "Stock Alerts", ("negative_stock_report",),
      "negative_stock_report", "fa-solid fa-triangle-exclamation", "gs-red", _stock_alerts),
+    # Its own full-width row (see home.html): it lists findings from any of
+    # seven modules, and a third of a row cannot carry a check title, a count
+    # and the module it came from without wrapping every line.
+    ("duplicates", "Duplicate Entries", ("duplicate_analyser",),
+     "duplicate_analyser", "fa-solid fa-clone", "gs-orange", _duplicate_entries),
 ]
 
 
@@ -1469,6 +1555,9 @@ DEFAULT_PANEL_ORDER = (
     # answers from the other end.
     "farm_route",
     "receivables", "payables", "stock_alerts",
+    # Before Field Team and on a row of its own: data health is something you
+    # check and clear, so it reads better as a band than as one card in three.
+    "duplicates",
     "field_team",
 )
 

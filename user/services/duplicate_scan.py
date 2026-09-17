@@ -70,9 +70,20 @@ class Check:
 
 
 def _duplicate_keys(queryset, fields):
-    """The values of ``fields`` that appear on more than one row."""
+    """``(key, how_many)`` for every value of ``fields`` on more than one row.
+
+    The count rides along because the counts-only pass needs it: without it a
+    card could say how many groups there were but not how many records they
+    held, and "records involved" would read zero for ever.
+    """
     rows = (queryset.values(*fields).annotate(n=Count("id")).filter(n__gt=1).order_by())
-    return [{f: row[f] for f in fields} for row in rows]
+    return [({f: row[f] for f in fields}, row["n"]) for row in rows]
+
+
+#: Set while a caller only wants the counts. The checks are written as one
+#: expression each, so the cheapest way to skip the row fetch is to make the
+#: fetch itself a no-op that still reports how many groups there were.
+_COUNTS_ONLY = False
 
 
 def _collect(queryset, fields, keys, cells, matched=None, limit=200):
@@ -83,8 +94,13 @@ def _collect(queryset, fields, keys, cells, matched=None, limit=200):
     """
     if not keys:
         return []
+    if _COUNTS_ONLY:
+        # Placeholder rows, real counts: enough for "3 groups, 7 records", and
+        # cheap enough for a dashboard that renders on every page load.
+        return [Group(matched="", rows=[Row(id=0) for _ in range(n)])
+                for _key, n in keys[:limit]]
     match = Q()
-    for key in keys[:limit]:
+    for key, _n in keys[:limit]:
         match |= Q(**key)
     grouped: dict[tuple, Group] = {}
     for obj in queryset.filter(match):
@@ -474,13 +490,31 @@ CHECK_SOURCES: list[Callable] = [
 ]
 
 
-def run(only: Optional[str] = None, module: Optional[str] = None) -> list[Check]:
+def run(only: Optional[str] = None, module: Optional[str] = None,
+        counts_only: bool = False) -> list[Check]:
     """Every check, in the order they are shown.
 
     A check that raises is reported as a failed check rather than taking the
     page down with it: a scan that answers eleven questions and admits it could
     not answer the twelfth is worth more than an error screen.
     """
+    global _COUNTS_ONLY
+
+    checks: list[Check] = []
+    was = _COUNTS_ONLY
+    _COUNTS_ONLY = counts_only
+    try:
+        checks = _run_sources()
+    finally:
+        _COUNTS_ONLY = was
+    if only:
+        checks = [c for c in checks if c.code == only]
+    if module:
+        checks = [c for c in checks if c.module == module]
+    return checks
+
+
+def _run_sources() -> list[Check]:
     checks: list[Check] = []
     for source in CHECK_SOURCES:
         try:
@@ -491,10 +525,6 @@ def run(only: Optional[str] = None, module: Optional[str] = None) -> list[Check]
                                 error=f"{type(exc).__name__}: {exc}"))
             continue
         checks.extend(produced)
-    if only:
-        checks = [c for c in checks if c.code == only]
-    if module:
-        checks = [c for c in checks if c.module == module]
     return checks
 
 

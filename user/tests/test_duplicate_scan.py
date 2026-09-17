@@ -445,3 +445,82 @@ class HatcheryAndHRTests(DuplicateScanBase):
 
     def test_no_check_fails_to_run(self):
         self.assertEqual(summary(run())["failed"], [])
+
+
+class DashboardWidgetTests(DuplicateScanBase):
+    """The dashboard card, which counts without fetching the rows."""
+
+    def plant(self):
+        farm = self.farm()
+        batch = self.batch(farm)
+        for mortality in (10, 12):
+            DailyEntry.objects.create(farm=farm, batch=batch, supervisor=self.supervisor,
+                                      date=self.today, mortality=mortality)
+        Farmer.objects.create(farmer_name="vishvanath")
+
+    def widget(self):
+        from user.services.dashboard_widgets import _duplicate_entries
+
+        return _duplicate_entries(None, {}, None)
+
+    def test_counts_only_agrees_with_the_full_scan(self):
+        self.plant()
+        full, light = summary(run()), summary(run(counts_only=True))
+        self.assertEqual(full["groups"], light["groups"])
+        # Records matter too: the card shows them, and a placeholder row that
+        # did not carry the real count made this read zero for ever.
+        self.assertEqual(full["records"], light["records"])
+        self.assertEqual(light["records"], 4)
+
+    def test_counts_only_does_not_fetch_the_rows(self):
+        self.plant()
+        for check in run(counts_only=True):
+            for group in check.groups:
+                self.assertEqual([r.cells for r in group.rows], [[]] * len(group.rows))
+
+    def test_the_card_reports_what_was_found(self):
+        self.plant()
+        card = self.widget()
+        stats = {s["label"]: s["value"] for s in card["stats"]}
+        self.assertEqual(stats["Possible duplicates"], "2")
+        self.assertEqual(stats["Entry duplicates"], "1")
+        self.assertEqual(stats["Records involved"], "4")
+        self.assertTrue(card["findings"])
+        self.assertIn("Farm + Batch + Date", [f["matched_on"] for f in card["findings"]])
+        self.assertTrue(card["checked_at"])
+
+    def test_the_card_breaks_the_findings_down_by_module(self):
+        self.plant()
+        bands = self.widget()["bands"]
+        self.assertEqual([b["label"] for b in bands], ["Broiler"])
+        self.assertEqual(bands[0]["count"], 2)
+        # One module holding everything is the whole band, and each band
+        # carries the colour its findings are dotted with.
+        self.assertEqual(bands[0]["share"], 100.0)
+        self.assertTrue(bands[0]["colour"].startswith("#"))
+
+    def test_a_clean_database_says_so_and_draws_no_band(self):
+        card = self.widget()
+        self.assertEqual(card["bands"], [])
+        self.assertIn("Nothing found", card["note"])
+        self.assertEqual(card["findings"], [])
+
+    def test_the_card_admits_the_dashboard_filters_do_not_apply(self):
+        # An empty filters_used is what makes the dashboard print "Date does
+        # not apply here" rather than showing a figure that ignored it.
+        self.assertEqual(self.widget()["filters_used"], [])
+
+    def test_the_widget_is_registered_and_gated_on_the_page(self):
+        from user.services.dashboard_widgets import WIDGETS
+
+        entry = [w for w in WIDGETS if w[0] == "duplicates"]
+        self.assertEqual(len(entry), 1)
+        key, title, tabs, url, _icon, _colour, _build = entry[0]
+        self.assertEqual((title, tabs, url),
+                         ("Duplicate Entries", ("duplicate_analyser",), "duplicate_analyser"))
+
+    def test_it_sits_before_field_team_in_the_default_order(self):
+        from user.services.dashboard_widgets import DEFAULT_PANEL_ORDER
+
+        order = list(DEFAULT_PANEL_ORDER)
+        self.assertLess(order.index("duplicates"), order.index("field_team"))
