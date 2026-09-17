@@ -683,3 +683,69 @@ class CoverageTests(DuplicateScanBase):
                      "debitnote", "creditnote", "customerdebitnote", "customercreditnote",
                      "sales_invoice_reference"):
             self.assertIn(code, codes)
+
+
+class WhereItHappenedTests(DuplicateScanBase):
+    """Every row says where it happened, and the source counts as "where"."""
+
+    def transfer(self, item, source_farm, dest_farm, qty="50"):
+        from inventory.models import StockTransfer
+
+        return StockTransfer.objects.create(
+            item=item, quantity=Decimal(qty), date=self.today,
+            from_location_type="farm", from_farm=source_farm,
+            to_location_type="farm", to_farm=dest_farm)
+
+    def test_transfers_from_different_sources_are_not_duplicates(self):
+        # The case that was being reported wrongly: same item, same quantity,
+        # same day, same destination — but one delivery from each of two farms.
+        item = Item.objects.create(description="Starter", category=self.category,
+                                   valuation_method="FIFO", usage="Purchased",
+                                   standard_cost_per_unit=Decimal("40"))
+        destination = self.farm(name="Destination Farm")
+        self.transfer(item, self.farm(name="Source A"), destination)
+        self.transfer(item, self.farm(name="Source B"), destination)
+        self.assertEqual(check("stock_transfer").count, 0)
+
+    def test_the_same_source_and_destination_is_still_a_duplicate(self):
+        item = Item.objects.create(description="Starter", category=self.category,
+                                   valuation_method="FIFO", usage="Purchased",
+                                   standard_cost_per_unit=Decimal("40"))
+        source, destination = self.farm(name="Source A"), self.farm(name="Destination Farm")
+        self.transfer(item, source, destination)
+        self.transfer(item, source, destination)
+        found = check("stock_transfer")
+        self.assertEqual(found.count, 1)
+        self.assertIn("From", found.columns)
+        self.assertIn("Source A", found.groups[0].rows[0].cells)
+
+    def test_a_daily_entry_row_names_its_branch(self):
+        farm = self.farm()
+        batch = self.batch(farm)
+        for mortality in (10, 12):
+            DailyEntry.objects.create(farm=farm, batch=batch, supervisor=self.supervisor,
+                                      date=self.today, mortality=mortality)
+        found = check("daily_entry")
+        self.assertIn("Branch", found.columns)
+        self.assertIn("Akbarpur", found.groups[0].rows[0].cells)
+
+    def test_a_receipt_row_names_its_location(self):
+        from sales.models import Customer, SalesReceipt
+
+        customer = Customer.objects.create(name="Sample", address="Road", mobile="9000000009")
+        for _ in range(2):
+            SalesReceipt.objects.create(customer=customer, date=self.today,
+                                        amount=Decimal("500"), mode="Cash",
+                                        location=self.warehouse("Akbarpur Store"),
+                                        receipt_account=self.account())
+        found = check("sales_receipt")
+        self.assertIn("Location", found.columns)
+        self.assertIn("Akbarpur Store", found.groups[0].rows[0].cells)
+
+    def test_every_row_has_a_cell_for_every_column(self):
+        # A column added to one check and not to its cells would push every
+        # value in that row one place left.
+        for c in run():
+            for group in c.groups:
+                for row in group.rows:
+                    self.assertEqual(len(row.cells), len(c.columns), c.code)

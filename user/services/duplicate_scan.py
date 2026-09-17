@@ -144,6 +144,33 @@ def _date(obj):
     return _text(getattr(obj, "date", None))
 
 
+def _where(obj, *names):
+    """The first of ``names`` this row actually has, as a place name.
+
+    Warehouses, farms and branches are all "where" to the person reading the
+    table, and each model spells it differently — warehouse, farm_warehouse,
+    sector, storage_location, to_farm. One reader keeps the column meaning the
+    same thing across every check.
+    """
+    for name in names:
+        value = _value(obj, name) if "__" in name else getattr(obj, name, None)
+        if value is None:
+            continue
+        for attr in ("name", "farm_name", "branch_name", "description"):
+            label = getattr(value, attr, None)
+            if label:
+                return label
+        return str(value)
+    return ""
+
+
+def _branch_of_farm(obj, farm_attr="farm"):
+    """The branch a farm belongs to, for rows that carry a farm but not a branch."""
+    farm = getattr(obj, farm_attr, None)
+    branch = getattr(farm, "branch", None) if farm is not None else None
+    return getattr(branch, "branch_name", "") if branch is not None else ""
+
+
 # ---------------------------------------------------------------------------
 # Transaction entries
 # ---------------------------------------------------------------------------
@@ -157,10 +184,10 @@ def _entry_checks():
         title="Two daily entries for one flock on one day",
         matched_on="Farm + Batch + Date",
         why="Mortality, culls and feed are counted twice, which moves the FCR and the settlement.",
-        columns=["Entry No", "Date", "Farm", "Batch", "Mortality", "Culls", "Entered by"],
+        columns=["Entry No", "Date", "Branch", "Farm", "Batch", "Mortality", "Culls", "Entered by"],
         groups=_collect(
             daily, ["batch_id", "date"], _duplicate_keys(daily, ["batch_id", "date"]),
-            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date,
+            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date, _branch_of_farm(e),
                              e.farm.farm_name if e.farm_id else "",
                              e.batch.batch_name if e.batch_id else "",
                              e.mortality, e.culls,
@@ -173,11 +200,11 @@ def _entry_checks():
         title="Same medicine booked twice on one day",
         matched_on="Farm + Item + Date",
         why="The farm is charged twice and its medicine stock is understated.",
-        columns=["Entry No", "Date", "Farm", "Item", "Qty"],
+        columns=["Entry No", "Date", "Branch", "Farm", "Item", "Qty"],
         groups=_collect(
             medicine, ["farm_id", "item_id", "date"],
             _duplicate_keys(medicine, ["farm_id", "item_id", "date"]),
-            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date,
+            cells=lambda e: [e.entry_no or f"#{e.pk}", e.date, _branch_of_farm(e),
                              e.farm.farm_name if e.farm_id else "",
                              e.item.description if e.item_id else "", e.qty],
             matched=lambda e: f"{e.item.description if e.item_id else ''} on {_date(e)}"))
@@ -188,11 +215,11 @@ def _entry_checks():
         title="Identical bird sales on one day",
         matched_on="Batch + Date + Birds",
         why="Birds are taken off the flock twice, so what is left reads low.",
-        columns=["Sale No", "Date", "Farm", "Batch", "Birds", "Sold to"],
+        columns=["Sale No", "Date", "Branch", "Farm", "Batch", "Birds", "Sold to"],
         groups=_collect(
             sales, ["batch_id", "date", "birds"],
             _duplicate_keys(sales, ["batch_id", "date", "birds"]),
-            cells=lambda s: [s.sale_no or f"#{s.pk}", s.date,
+            cells=lambda s: [s.sale_no or f"#{s.pk}", s.date, _branch_of_farm(s),
                              s.farm.farm_name if s.farm_id else "",
                              s.batch.batch_name if s.batch_id else "", s.birds,
                              (s.customer.name if s.customer_id else
@@ -217,19 +244,21 @@ def _purchase_checks():
                              p.supplier.name if p.supplier_id else "", p.bill_no],
             matched=lambda p: f"bill {p.bill_no}"))
 
-    lines = GeneralPurchaseItem.objects.select_related("purchase", "purchase__supplier", "item")
+    lines = GeneralPurchaseItem.objects.select_related(
+        "purchase", "purchase__supplier", "item", "farm_warehouse", "farm")
     fields = ["purchase__supplier_id", "item_id", "purchase__date", "rcv_qty", "rate"]
     yield Check(
         code="purchase_line", kind="entry", module=PURCHASE,
         title="Same purchase line entered twice",
         matched_on="Supplier + Item + Date + Qty + Rate",
         why="The same delivery is stocked and costed twice, even under different bill numbers.",
-        columns=["Purchase No", "Date", "Supplier", "Item", "Qty", "Rate"],
+        columns=["Purchase No", "Date", "Supplier", "Warehouse", "Item", "Qty", "Rate"],
         groups=_collect(
             lines, fields, _duplicate_keys(lines, fields),
             cells=lambda l: [l.purchase.purchase_no if l.purchase_id else f"#{l.pk}",
                              l.purchase.date if l.purchase_id else "",
                              l.purchase.supplier.name if l.purchase_id and l.purchase.supplier_id else "",
+                             _where(l, "farm_warehouse", "farm"),
                              l.item.description if l.item_id else "", l.rcv_qty, l.rate],
             matched=lambda l: f"{l.item.description if l.item_id else ''} × {l.rcv_qty}"))
 
@@ -239,7 +268,11 @@ def _transfer_checks():
 
     transfers = StockTransfer.objects.select_related(
         "item", "from_warehouse", "to_warehouse", "from_farm", "to_farm")
-    fields = ["item_id", "date", "quantity", "to_warehouse_id", "to_farm_id"]
+    # Source as well as destination. Without it, two transfers of the same item
+    # and quantity arriving somewhere on one day looked identical even when they
+    # came from different farms — which is a delivery from each, not a duplicate.
+    fields = ["item_id", "date", "quantity",
+              "from_warehouse_id", "from_farm_id", "to_warehouse_id", "to_farm_id"]
 
     def where(t):
         for obj in (t.to_warehouse, t.to_farm):
@@ -250,31 +283,33 @@ def _transfer_checks():
     yield Check(
         code="stock_transfer", kind="entry", module=INVENTORY,
         title="Same stock transfer entered twice",
-        matched_on="Item + Destination + Date + Quantity",
+        matched_on="Item + Source + Destination + Date + Quantity",
         why="Stock is moved twice on paper, so the source reads low and the destination high.",
-        columns=["Transfer No", "Date", "Item", "To", "Quantity"],
+        columns=["Transfer No", "Date", "Item", "From", "To", "Quantity"],
         groups=_collect(
             transfers, fields, _duplicate_keys(transfers, fields),
             cells=lambda t: [t.trnum or f"#{t.pk}", t.date,
-                             t.item.description if t.item_id else "", where(t), t.quantity],
+                             t.item.description if t.item_id else "",
+                             _where(t, "from_warehouse", "from_farm"), where(t), t.quantity],
             matched=lambda t: f"{t.item.description if t.item_id else ''} × {t.quantity} on {_date(t)}"))
 
 
 def _voucher_checks():
     from account.models import Voucher
 
-    vouchers = Voucher.objects.exclude(Q(narration__isnull=True) | Q(narration=""))
+    vouchers = Voucher.objects.select_related("sector").exclude(
+        Q(narration__isnull=True) | Q(narration=""))
     fields = ["voucher_type", "date", "narration"]
     yield Check(
         code="voucher_narration", kind="entry", module=ACCOUNT,
         title="Same voucher entered twice",
         matched_on="Type + Date + Narration",
         why="The same expense or payment is posted twice to the ledger.",
-        columns=["Voucher No", "Date", "Type", "Narration"],
+        columns=["Voucher No", "Date", "Type", "Sector", "Narration"],
         groups=_collect(
             vouchers, fields, _duplicate_keys(vouchers, fields),
             cells=lambda v: [v.voucher_no or f"#{v.pk}", v.date, v.voucher_type,
-                             (v.narration or "")[:80]],
+                             _where(v, "sector"), (v.narration or "")[:80]],
             matched=lambda v: f"{v.voucher_type} on {_date(v)}"))
 
 
@@ -306,34 +341,35 @@ def _money_checks():
                              i.customer.name if i.customer_id else "", i.reference_no],
             matched=lambda i: f"reference {i.reference_no}"))
 
-    receipts = SalesReceipt.objects.select_related("customer")
+    receipts = SalesReceipt.objects.select_related("customer", "location")
     fields = ["customer_id", "date", "amount"]
     yield Check(
         code="sales_receipt", kind="entry", module=SALES,
         title="Same customer receipt twice on one day",
         matched_on="Customer + Date + Amount",
         why="Money is credited twice, so the customer appears to owe less than they do.",
-        columns=["Receipt No", "Date", "Customer", "Mode", "Amount"],
+        columns=["Receipt No", "Date", "Customer", "Location", "Mode", "Amount"],
         groups=_collect(
             receipts, fields, _duplicate_keys(receipts, fields),
             cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date,
-                             r.customer.name if r.customer_id else "", r.mode, r.amount],
+                             r.customer.name if r.customer_id else "",
+                             _where(r, "location"), r.mode, r.amount],
             matched=lambda r: f"{r.amount} on {_date(r)}"))
 
-    bird_receipts = BirdSaleReceipt.objects.select_related("customer", "farmer")
+    bird_receipts = BirdSaleReceipt.objects.select_related("customer", "farmer", "location")
     fields = ["customer_id", "farmer_id", "date", "amount"]
     yield Check(
         code="bird_sale_receipt", kind="entry", module=BROILER,
         title="Same bird sale receipt twice on one day",
         matched_on="Payer + Date + Amount",
         why="Collection against bird sales is counted twice.",
-        columns=["Receipt No", "Date", "Received from", "Mode", "Amount"],
+        columns=["Receipt No", "Date", "Received from", "Location", "Mode", "Amount"],
         groups=_collect(
             bird_receipts, fields, _duplicate_keys(bird_receipts, fields),
             cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date,
                              (r.customer.name if r.customer_id else
                               r.farmer.farmer_name if r.farmer_id else ""),
-                             r.mode, r.amount],
+                             _where(r, "location"), r.mode, r.amount],
             matched=lambda r: f"{r.amount} on {_date(r)}"))
 
     payments = FarmerGCPayment.objects.all()
@@ -357,20 +393,20 @@ def _money_checks():
             (CreditNote, PURCHASE, "supplier", "supplier credit note"),
             (CustomerDebitNote, SALES, "customer", "customer debit note"),
             (CustomerCreditNote, SALES, "customer", "customer credit note")):
-        rows = model.objects.select_related(party)
+        rows = model.objects.select_related(party, "sector")
         fields = [f"{party}_id", "date", "amount"]
         yield Check(
             code=f"{model.__name__.lower()}", kind="entry", module=module,
             title=f"Same {label} twice on one day",
             matched_on=f"{party.capitalize()} + Date + Amount",
             why="The adjustment is applied twice, moving the balance twice as far.",
-            columns=["Note No", "Date", party.capitalize(), "Against bill", "Amount"],
+            columns=["Note No", "Date", party.capitalize(), "Sector", "Against bill", "Amount"],
             groups=_collect(
                 rows, fields, _duplicate_keys(rows, fields),
                 cells=lambda n, party=party: [
                     n.note_no or f"#{n.pk}", n.date,
                     getattr(getattr(n, party, None), "name", "") or "",
-                    n.against_bill or "", n.amount],
+                    _where(n, "sector"), n.against_bill or "", n.amount],
                 matched=lambda n: f"{n.amount} on {_date(n)}"))
 
 
@@ -396,7 +432,8 @@ def _stock_movement_checks():
                               or getattr(t.to_farm, "farm_name", "") or "")],
             matched=lambda t: f"DC {t.dc_no} on {_date(t)}"))
 
-    adjustments = InventoryAdjustmentItem.objects.select_related("adjustment", "item")
+    adjustments = InventoryAdjustmentItem.objects.select_related(
+        "adjustment", "adjustment__warehouse", "adjustment__farm", "item")
     fields = ["adjustment__date", "item_id", "quantity", "adjustment__warehouse_id",
               "adjustment__farm_id"]
     yield Check(
@@ -404,30 +441,32 @@ def _stock_movement_checks():
         title="Same inventory adjustment twice",
         matched_on="Item + Location + Date + Quantity",
         why="Stock is corrected twice, so the correction overshoots.",
-        columns=["Adjustment No", "Date", "Item", "Quantity"],
+        columns=["Adjustment No", "Date", "Location", "Item", "Quantity"],
         groups=_collect(
             adjustments, fields, _duplicate_keys(adjustments, fields),
             cells=lambda a: [a.adjustment.trnum if a.adjustment_id else f"#{a.pk}",
                              a.adjustment.date if a.adjustment_id else "",
+                             _where(a, "adjustment__warehouse", "adjustment__farm"),
                              a.item.description if a.item_id else "", a.quantity],
             matched=lambda a: f"{a.item.description if a.item_id else ''} × {a.quantity}"))
 
     for model, code, title in ((StockIssueItem, "stock_issue", "stock issue"),
                                (StockReceiveItem, "stock_receive", "stock receipt")):
         parent = "issue" if model is StockIssueItem else "receive"
-        rows = model.objects.select_related(parent, "item")
+        rows = model.objects.select_related(parent, "item", "warehouse", "farm")
         fields = [f"{parent}__date", "item_id", "quantity"]
         yield Check(
             code=code, kind="entry", module=INVENTORY,
             title=f"Same {title} line twice on one day",
             matched_on="Item + Date + Quantity",
             why="The same movement is booked twice, so the balance moves twice.",
-            columns=["Number", "Date", "Item", "Quantity"],
+            columns=["Number", "Date", "Location", "Item", "Quantity"],
             groups=_collect(
                 rows, fields, _duplicate_keys(rows, fields),
                 cells=lambda r, parent=parent: [
                     getattr(getattr(r, parent, None), "trnum", "") or f"#{r.pk}",
                     getattr(getattr(r, parent, None), "date", ""),
+                    _where(r, "warehouse", "farm"),
                     r.item.description if r.item_id else "", r.quantity],
                 matched=lambda r: f"{r.item.description if r.item_id else ''} × {r.quantity}"))
 
@@ -445,18 +484,19 @@ def _hatchery_production_checks():
     """
     from hatchery.models import EggGrading, TraySetting
 
-    gradings = EggGrading.objects.select_related("supplier", "item")
+    gradings = EggGrading.objects.select_related("supplier", "item", "storage_location")
     fields = ["supplier_id", "item_id", "date", "purchase_invoice_id"]
     yield Check(
         code="egg_grading", kind="entry", module=HATCHERY,
         title="Same egg grading entered twice",
         matched_on="Supplier + Item + Date + Invoice",
         why="The same intake is graded twice, so the eggs it sorted are counted twice.",
-        columns=["Transaction No", "Date", "Supplier", "Item"],
+        columns=["Transaction No", "Date", "Supplier", "Storage", "Item"],
         groups=_collect(
             gradings, fields, _duplicate_keys(gradings, fields),
             cells=lambda g: [g.transaction_no or f"#{g.pk}", g.date,
                              g.supplier.name if g.supplier_id else "",
+                             _where(g, "storage_location"),
                              g.item.description if g.item_id else ""],
             matched=lambda g: f"{g.item.description if g.item_id else ''} on {_date(g)}"))
 
@@ -592,20 +632,21 @@ def _hatchery_checks():
     from hatchery.models import DeliveryChallan, EggPurchaseItem
 
     lines = EggPurchaseItem.objects.select_related(
-        "egg_purchase", "egg_purchase__supplier", "item")
+        "egg_purchase", "egg_purchase__supplier", "egg_purchase__warehouse", "item")
     fields = ["egg_purchase__supplier_id", "item_id", "egg_purchase__date", "rcv_qty", "rate"]
     yield Check(
         code="egg_purchase_line", kind="entry", module=HATCHERY,
         title="Same egg purchase line entered twice",
         matched_on="Supplier + Item + Date + Qty + Rate",
         why="The same intake is stocked and costed twice, which carries into every hatch it feeds.",
-        columns=["Transaction No", "Date", "Supplier", "Item", "Qty", "Rate"],
+        columns=["Transaction No", "Date", "Supplier", "Warehouse", "Item", "Qty", "Rate"],
         groups=_collect(
             lines, fields, _duplicate_keys(lines, fields),
             cells=lambda l: [l.egg_purchase.transaction_no if l.egg_purchase_id else f"#{l.pk}",
                              l.egg_purchase.date if l.egg_purchase_id else "",
                              (l.egg_purchase.supplier.name
                               if l.egg_purchase_id and l.egg_purchase.supplier_id else ""),
+                             _where(l, "egg_purchase__warehouse"),
                              l.item.description if l.item_id else "", l.rcv_qty, l.rate],
             matched=lambda l: f"{l.item.description if l.item_id else ''} × {l.rcv_qty}"))
 
@@ -625,11 +666,12 @@ def _hatchery_checks():
             matched=lambda d: f"{d.vehicle_no} on {_date(d)}"))
 
 
-EMPLOYEE_COLUMNS = ["Employee ID", "Name", "Contact", "Designation", "Department"]
+EMPLOYEE_COLUMNS = ["Employee ID", "Name", "Contact", "Warehouse", "Designation", "Department"]
 
 
 def _employee_cells(e):
     return [e.employee_id, e.full_name or "", e.personal_contact or "",
+            _where(e, "warehouse"),
             e.designation.name if e.designation_id and hasattr(e.designation, "name") else "",
             e.department.name if e.department_id and hasattr(e.department, "name") else ""]
 
@@ -637,7 +679,7 @@ def _employee_cells(e):
 def _hr_checks():
     from hr.models import Employee, Payroll
 
-    base = Employee.objects.select_related("designation", "department")
+    base = Employee.objects.select_related("designation", "department", "warehouse")
     named = base.annotate(lower=Lower("full_name")).exclude(
         Q(full_name__isnull=True) | Q(full_name=""))
     yield Check(
