@@ -1817,13 +1817,25 @@ def duplicate_analyser(request):
     the business rather than something to act on automatically — and merging
     records is not an operation this system has.
     """
+    from django.urls import NoReverseMatch, reverse
     from django.utils import timezone
 
+    from user.access import allowed_view_tabs
     from user.services import duplicate_scan
 
     only = (request.GET.get("only") or "").strip() or None
     module = (request.GET.get("module") or "").strip() or None
     checks = duplicate_scan.run(only=only, module=module)
+    # Each check links to the page its records are entered on, so "where do I
+    # go and look" is a click rather than a hunt through the menus. A tab the
+    # person cannot open is left unlinked rather than offered and refused.
+    viewable = allowed_view_tabs(request.user)
+    for check in checks:
+        if check.tab and (viewable is None or check.tab in viewable):
+            try:
+                check.url = reverse(check.tab)
+            except NoReverseMatch:
+                check.url = ""
     totals = duplicate_scan.summary(checks)
     entry_checks = [c for c in checks if c.kind == "entry"]
     master_checks = [c for c in checks if c.kind == "master"]

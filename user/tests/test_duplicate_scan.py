@@ -749,3 +749,72 @@ class WhereItHappenedTests(DuplicateScanBase):
             for group in c.groups:
                 for row in group.rows:
                     self.assertEqual(len(row.cells), len(c.columns), c.code)
+
+
+class WhereToGoTests(DuplicateScanBase):
+    """Each check names the page its records are entered on."""
+
+    def test_every_check_names_a_page(self):
+        for c in run():
+            self.assertTrue(c.tab, c.code)
+            self.assertIn("›", c.where, c.code)
+
+    def test_the_path_reads_module_section_tab(self):
+        daily = check("daily_entry")
+        self.assertEqual(daily.where, "Broiler › Transactions › Daily Entry")
+        self.assertEqual(check("sales_receipt").where, "Sales › Transactions › Sales Receipt")
+        self.assertEqual(check("payroll_period").where, "Human Resource › Payroll › Payroll")
+
+    def test_the_path_comes_from_the_registry_not_a_second_copy(self):
+        # Rename a tab in the access registry and the analyser follows, rather
+        # than going on showing the old name.
+        from user.services import duplicate_scan
+
+        duplicate_scan._TAB_PATHS = None
+        try:
+            duplicate_scan._TAB_PATHS = {"daily_entry_list": ("Broiler", "Transactions", "Renamed")}
+            self.assertEqual(check("daily_entry").where, "Broiler › Transactions › Renamed")
+        finally:
+            duplicate_scan._TAB_PATHS = None
+
+    def test_every_tab_named_actually_exists(self):
+        from user.access import iter_tabs
+        from user.services.duplicate_scan import CHECK_TABS
+
+        known = {code for _nav, _section, code, _label, _extra in iter_tabs()}
+        for check_code, tab in CHECK_TABS.items():
+            self.assertIn(tab, known, f"{check_code} points at a tab that is not registered")
+
+
+class FullDetailTests(DuplicateScanBase):
+
+    def test_a_daily_entry_row_carries_the_whole_day(self):
+        farm = self.farm()
+        batch = self.batch(farm)
+        for mortality in (10, 12):
+            DailyEntry.objects.create(farm=farm, batch=batch, supervisor=self.supervisor,
+                                      date=self.today, mortality=mortality, culls=1,
+                                      feed_1_qty=Decimal("40"))
+        found = check("daily_entry")
+        for column in ("Age", "Mortality", "Culls", "Feed 1", "Entered by", "Entered at"):
+            self.assertIn(column, found.columns)
+        self.assertEqual(len(found.groups[0].rows[0].cells), len(found.columns))
+
+    def test_a_purchase_line_carries_its_costing(self):
+        from purchase.models import GeneralPurchaseItem
+
+        supplier = Supplier.objects.create(name="Feeds Ltd")
+        item = Item.objects.create(description="Starter", category=self.category,
+                                   valuation_method="FIFO", usage="Purchased",
+                                   standard_cost_per_unit=Decimal("40"))
+        for bill in ("A-1", "A-2"):
+            purchase = GeneralPurchase.objects.create(supplier=supplier, date=self.today, bill_no=bill)
+            GeneralPurchaseItem.objects.create(
+                purchase=purchase, item=item, farm_warehouse=self.warehouse(), unit="Bag",
+                rcv_qty=Decimal("100"), rate=Decimal("42"), discount_percent=Decimal("0"),
+                discount_amount=Decimal("0"), gst_percent=Decimal("5"))
+        found = check("purchase_line")
+        for column in ("Bill No", "Warehouse", "Unit", "Sent", "Received", "Free",
+                       "Rate", "Discount", "GST %", "Amount"):
+            self.assertIn(column, found.columns)
+        self.assertEqual(len(found.groups[0].rows[0].cells), len(found.columns))
