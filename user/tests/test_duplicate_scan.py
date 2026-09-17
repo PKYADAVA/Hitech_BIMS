@@ -365,3 +365,83 @@ class ExportTests(DuplicateScanBase):
         self.assertContains(response, 'id="dup-module"')
         self.assertContains(response, "All Modules")
         self.assertContains(response, "Run All Checks")
+
+
+class HatcheryAndHRTests(DuplicateScanBase):
+    """The modules the first version left out entirely."""
+
+    def employee(self, name, **kw):
+        from hr.models import Employee
+
+        return Employee.objects.create(full_name=name, **kw)
+
+    def test_two_employees_with_one_name_are_found(self):
+        self.employee("R. Verma")
+        self.employee("r. verma")
+        self.assertEqual(check("employee_name").count, 1)
+
+    def test_different_employees_are_left_alone(self):
+        self.employee("R. Verma")
+        self.employee("S. Yadav")
+        self.assertEqual(check("employee_name").count, 0)
+
+    def test_a_shared_contact_number_is_found(self):
+        self.employee("R. Verma", personal_contact=9876500000)
+        self.employee("Ramesh V", personal_contact=9876500000)
+        self.assertEqual(check("employee_personal_contact").count, 1)
+
+    def test_employees_with_no_contact_are_not_matched_on_it(self):
+        # A number column cannot be compared to "", which is what broke the
+        # first cut of this check — every HR check went down with it.
+        self.employee("A")
+        self.employee("B")
+        self.assertEqual(check("employee_personal_contact").count, 0)
+
+    def test_attendance_needs_no_check_because_the_database_refuses_it(self):
+        # hr.Attendance is unique on (employee, date), so a second mark for one
+        # person on one day cannot be stored at all. That is why there is no
+        # attendance check: it could never find anything.
+        from django.db import IntegrityError, transaction
+        from hr.models import Attendance
+
+        person = self.employee("R. Verma")
+        Attendance.objects.create(employee=person, date=self.today, status="Present")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Attendance.objects.create(employee=person, date=self.today, status="Present")
+        self.assertEqual([c for c in run() if c.code == "attendance_day"], [])
+
+    def test_one_month_paid_twice_is_found(self):
+        from hr.models import Payroll
+
+        person = self.employee("R. Verma")
+        for _ in range(2):
+            Payroll.objects.create(employee=person, month=6, year=2026,
+                                   gross_salary=Decimal("20000"), net_salary=Decimal("19000"),
+                                   total_working_days=26, payable_salary=Decimal("19000"))
+        self.assertEqual(check("payroll_period").count, 1)
+
+    def test_different_months_are_not_duplicates(self):
+        from hr.models import Payroll
+
+        person = self.employee("R. Verma")
+        for month in (6, 7):
+            Payroll.objects.create(employee=person, month=month, year=2026,
+                                   gross_salary=Decimal("20000"), net_salary=Decimal("19000"),
+                                   total_working_days=26, payable_salary=Decimal("19000"))
+        self.assertEqual(check("payroll_period").count, 0)
+
+    def test_hatchery_and_hr_are_both_scannable_on_their_own(self):
+        self.assertTrue(run(module="Hatchery"))
+        self.assertTrue(run(module="Human Resource"))
+
+    def test_every_business_module_is_covered(self):
+        # The first version claimed "all modules" while covering five; this is
+        # the assertion that keeps the claim and the code together.
+        covered = {c.module for c in run()}
+        for name in ("Broiler", "Purchase", "Inventory", "Account", "Sales",
+                     "Hatchery", "Human Resource"):
+            self.assertIn(name, covered)
+
+    def test_no_check_fails_to_run(self):
+        self.assertEqual(summary(run())["failed"], [])

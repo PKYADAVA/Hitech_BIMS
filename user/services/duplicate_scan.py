@@ -25,8 +25,8 @@ from django.db.models import Count, Q
 from django.db.models.functions import Lower
 
 # Modules a check belongs to, for the page's filter.
-BROILER, PURCHASE, INVENTORY, ACCOUNT, SALES = (
-    "Broiler", "Purchase", "Inventory", "Account", "Sales")
+BROILER, PURCHASE, INVENTORY, ACCOUNT, SALES, HATCHERY, HR = (
+    "Broiler", "Purchase", "Inventory", "Account", "Sales", "Hatchery", "Human Resource")
 
 
 @dataclass
@@ -374,9 +374,103 @@ def _party_checks():
                                          c.place or "", c.state or ""]))
 
 
+def _hatchery_checks():
+    from hatchery.models import DeliveryChallan, EggPurchaseItem
+
+    lines = EggPurchaseItem.objects.select_related(
+        "egg_purchase", "egg_purchase__supplier", "item")
+    fields = ["egg_purchase__supplier_id", "item_id", "egg_purchase__date", "rcv_qty", "rate"]
+    yield Check(
+        code="egg_purchase_line", kind="entry", module=HATCHERY,
+        title="Same egg purchase line entered twice",
+        matched_on="Supplier + Item + Date + Qty + Rate",
+        why="The same intake is stocked and costed twice, which carries into every hatch it feeds.",
+        columns=["Transaction No", "Date", "Supplier", "Item", "Qty", "Rate"],
+        groups=_collect(
+            lines, fields, _duplicate_keys(lines, fields),
+            cells=lambda l: [l.egg_purchase.transaction_no if l.egg_purchase_id else f"#{l.pk}",
+                             l.egg_purchase.date if l.egg_purchase_id else "",
+                             (l.egg_purchase.supplier.name
+                              if l.egg_purchase_id and l.egg_purchase.supplier_id else ""),
+                             l.item.description if l.item_id else "", l.rcv_qty, l.rate],
+            matched=lambda l: f"{l.item.description if l.item_id else ''} × {l.rcv_qty}"))
+
+    challans = (DeliveryChallan.objects.select_related("customer")
+                .exclude(Q(vehicle_no__isnull=True) | Q(vehicle_no="")))
+    fields = ["customer_id", "date", "vehicle_no"]
+    yield Check(
+        code="delivery_challan", kind="entry", module=HATCHERY,
+        title="Same delivery challan raised twice",
+        matched_on="Customer + Date + Vehicle",
+        why="One lorry-load is billed and taken out of stock twice.",
+        columns=["Challan No", "Date", "Customer", "Vehicle"],
+        groups=_collect(
+            challans, fields, _duplicate_keys(challans, fields),
+            cells=lambda d: [d.challan_no or f"#{d.pk}", d.date,
+                             d.customer.name if d.customer_id else "", d.vehicle_no],
+            matched=lambda d: f"{d.vehicle_no} on {_date(d)}"))
+
+
+EMPLOYEE_COLUMNS = ["Employee ID", "Name", "Contact", "Designation", "Department"]
+
+
+def _employee_cells(e):
+    return [e.employee_id, e.full_name or "", e.personal_contact or "",
+            e.designation.name if e.designation_id and hasattr(e.designation, "name") else "",
+            e.department.name if e.department_id and hasattr(e.department, "name") else ""]
+
+
+def _hr_checks():
+    from hr.models import Employee, Payroll
+
+    base = Employee.objects.select_related("designation", "department")
+    named = base.annotate(lower=Lower("full_name")).exclude(
+        Q(full_name__isnull=True) | Q(full_name=""))
+    yield Check(
+        code="employee_name", kind="master", module=HR,
+        title="Employees with the same name", matched_on="Name, ignoring case",
+        why="Two records for one person split their attendance, payroll and access.",
+        columns=EMPLOYEE_COLUMNS,
+        groups=_collect(named, ["lower"], _duplicate_keys(named, ["lower"]), _employee_cells))
+
+    # personal_contact is a number column, so excluding "" from it is not a
+    # comparison the database will accept — only the text fields get that.
+    for fieldname, human, is_text in (("personal_contact", "contact number", False),
+                                      ("pan_card", "PAN", True),
+                                      ("aadhar_number", "Aadhaar number", True)):
+        rows = base.exclude(**{f"{fieldname}__isnull": True})
+        if is_text:
+            rows = rows.exclude(**{fieldname: ""})
+        yield Check(
+            code=f"employee_{fieldname}", kind="master", module=HR,
+            title=f"Employees sharing a {human}", matched_on=human.capitalize(),
+            why=f"A {human} belongs to one person, so this is usually one employee entered twice.",
+            columns=EMPLOYEE_COLUMNS,
+            groups=_collect(rows, [fieldname], _duplicate_keys(rows, [fieldname]), _employee_cells))
+
+    # No attendance check: hr.Attendance carries unique_together on
+    # (employee, date), so the database refuses a second mark for one person on
+    # one day. A check for it could never fire, and a row reading "Nothing
+    # found" for ever says less than the constraint already does.
+
+    payroll = Payroll.objects.select_related("employee")
+    fields = ["employee_id", "month", "year"]
+    yield Check(
+        code="payroll_period", kind="entry", module=HR,
+        title="One employee paid twice for a month",
+        matched_on="Employee + Month + Year",
+        why="The same month's salary is booked twice.",
+        columns=["Employee", "Month", "Year", "Gross", "Net", "Payable"],
+        groups=_collect(
+            payroll, fields, _duplicate_keys(payroll, fields),
+            cells=lambda p: [p.employee.full_name if p.employee_id else "", p.month, p.year,
+                             p.gross_salary, p.net_salary, p.payable_salary],
+            matched=lambda p: f"{p.employee.full_name if p.employee_id else ''} — {p.month}/{p.year}"))
+
+
 CHECK_SOURCES: list[Callable] = [
-    _entry_checks, _purchase_checks, _transfer_checks, _voucher_checks,
-    _farmer_checks, _farm_checks, _item_checks, _party_checks,
+    _entry_checks, _purchase_checks, _transfer_checks, _voucher_checks, _hatchery_checks,
+    _farmer_checks, _farm_checks, _item_checks, _party_checks, _hr_checks,
 ]
 
 

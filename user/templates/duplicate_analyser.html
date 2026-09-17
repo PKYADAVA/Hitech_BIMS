@@ -147,7 +147,7 @@
         <div>
           <div class="dup-tile-val">{{ totals.checks }}</div>
           <div class="dup-tile-lab">Checks run</div>
-          <div class="dup-tile-note">{% if module %}{{ module }} only{% else %}Across all modules{% endif %}</div>
+          <div class="dup-tile-note">{% if module %}{{ module }} only{% else %}Across {{ modules|length }} modules{% endif %}</div>
         </div>
       </div>
       <div class="dup-tile {% if totals.groups %}red{% else %}green{% endif %}">
