@@ -236,7 +236,7 @@ class SaleOverviewTests(TestCase):
     def test_with_no_date_chosen_it_stands_at_the_last_day_that_had_a_sale(self):
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
         note = self.card()["note"]
-        self.assertIn((self.today - timedelta(days=9)).strftime("%d %b %Y"), note)
+        self.assertIn((self.today - timedelta(days=9)).strftime("%d-%m-%Y"), note)
         self.assertIn("the last day with a sale", note)
 
     def test_the_receipts_are_that_day_s_too(self):
@@ -251,7 +251,7 @@ class SaleOverviewTests(TestCase):
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
         card = self.card(filters={"date": self.today})
         self.assertIn("No bird sales on this day", card["note"])
-        self.assertIn((self.today - timedelta(days=9)).strftime("%d %b %Y"), card["note"])
+        self.assertIn((self.today - timedelta(days=9)).strftime("%d-%m-%Y"), card["note"])
 
     def test_a_business_that_has_never_sold_says_that_instead(self):
         self.assertEqual(self.card()["note"], "No bird sales recorded yet.")
@@ -409,7 +409,7 @@ class SaleOverviewBranchTests(SaleOverviewTests):
         card = self.card(filters={"branch": self.branch.id})
         self.assertEqual(next(s for s in card["stats"]
                               if s["label"] == "Sold birds")["value"], "100")
-        self.assertIn((self.today - timedelta(days=6)).strftime("%d %b %Y"), card["note"])
+        self.assertIn((self.today - timedelta(days=6)).strftime("%d-%m-%Y"), card["note"])
 
     def test_money_on_a_day_with_no_lifting_is_still_shown(self):
         """A payment against an earlier lifting is not an empty day — hiding it
