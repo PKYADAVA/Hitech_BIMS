@@ -1861,6 +1861,34 @@ def duplicate_analyser(request):
     })
 
 
+@login_required
+def duplicate_record(request):
+    """One record behind a duplicate row, for the dialog its number opens.
+
+    Gated twice: the check has to be one the analyser knows, which is what
+    decides the model, and the reader has to be allowed on the tab those
+    records live on. Without the second test this would hand out rows from
+    modules the person cannot open anywhere else in the app.
+    """
+    from user.access import allowed_view_tabs
+    from user.services import duplicate_scan
+
+    code = (request.GET.get("check") or "").strip()
+    pk = (request.GET.get("id") or "").strip()
+    if not pk.isdigit():
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    tab = duplicate_scan.CHECK_TABS.get(code)
+    viewable = allowed_view_tabs(request.user)
+    if not tab or (viewable is not None and tab not in viewable):
+        return JsonResponse({"error": "Not allowed"}, status=403)
+
+    detail = duplicate_scan.record_detail(code, int(pk))
+    if detail is None:
+        return JsonResponse({"error": "Not found"}, status=404)
+    return JsonResponse(detail)
+
+
 def _duplicate_csv(checks):
     """The findings as a file, one row per record, so they can be worked
     through away from the screen or handed to somebody else."""

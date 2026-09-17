@@ -21,6 +21,7 @@ no write path at all.
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from django.db import models
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 
@@ -91,6 +92,91 @@ CHECK_TABS = {
     "employee_pan_card": "employee_list",
     "employee_aadhar_number": "employee_list",
 }
+
+#: check code -> the model its rows come from, as "app_label.ModelName".
+#: The record dialog loads through this table and nothing else, so a crafted
+#: request cannot ask the page for a row of some model the analyser never
+#: touches.
+CHECK_MODELS = {
+    "daily_entry": "broiler.DailyEntry",
+    "medicine_entry": "broiler.MedicineVaccineEntry",
+    "bird_sale": "broiler.BirdSale",
+    "bird_sale_receipt": "broiler.BirdSaleReceipt",
+    "gc_payment": "broiler.FarmerGCPayment",
+    "purchase_bill": "purchase.GeneralPurchase",
+    "purchase_line": "purchase.GeneralPurchaseItem",
+    "debitnote": "purchase.DebitNote",
+    "creditnote": "purchase.CreditNote",
+    "customerdebitnote": "sales.CustomerDebitNote",
+    "customercreditnote": "sales.CustomerCreditNote",
+    "sales_invoice_reference": "sales.SalesInvoice",
+    "sales_receipt": "sales.SalesReceipt",
+    "voucher_narration": "account.Voucher",
+    "stock_transfer": "inventory.StockTransfer",
+    "medicine_transfer": "inventory.MedicineTransfer",
+    "inventory_adjustment": "inventory.InventoryAdjustmentItem",
+    "stock_issue": "inventory.StockIssueItem",
+    "stock_receive": "inventory.StockReceiveItem",
+    "egg_purchase_line": "hatchery.EggPurchaseItem",
+    "egg_grading": "hatchery.EggGrading",
+    "tray_setting": "hatchery.TraySetting",
+    "delivery_challan": "hatchery.DeliveryChallan",
+    "payroll_period": "hr.Payroll",
+    "farmer_name": "broiler.Farmer",
+    "farmer_mobile_no": "broiler.Farmer",
+    "farmer_pan_no": "broiler.Farmer",
+    "farmer_aadhar_no": "broiler.Farmer",
+    "farm_name": "broiler.BroilerFarm",
+    "item_description": "inventory.Item",
+    "supplier_name": "purchase.Supplier",
+    "supplier_mobile": "purchase.Supplier",
+    "supplier_gstin": "purchase.Supplier",
+    "customer_name": "sales.Customer",
+    "employee_name": "hr.Employee",
+    "employee_personal_contact": "hr.Employee",
+    "employee_pan_card": "hr.Employee",
+    "employee_aadhar_number": "hr.Employee",
+}
+
+#: Never shown in the record dialog: passwords and the like have no business
+#: on a data-health screen, and a file field is a path rather than a fact.
+HIDDEN_FIELDS = {"password", "id"}
+
+
+def record_detail(check_code: str, pk: int) -> Optional[dict]:
+    """Every stored field of one record, for the dialog behind its number.
+
+    Read straight off the model rather than from a hand-written list per check:
+    thirty-eight checks over thirty models would be thirty lists to keep in
+    step, and the point of the dialog is to show what is actually stored.
+    """
+    from django.apps import apps
+
+    path = CHECK_MODELS.get(check_code)
+    if not path:
+        return None
+    model = apps.get_model(path)
+    row = model.objects.filter(pk=pk).first()
+    if row is None:
+        return None
+
+    fields = []
+    for field in model._meta.concrete_fields:
+        if field.name in HIDDEN_FIELDS:
+            continue
+        value = getattr(row, field.name, None)
+        if field.is_relation:
+            value = str(value) if value is not None else ""
+        elif isinstance(field, models.FileField):
+            # Asked by type, not by probing for .url: an empty file field
+            # raises ValueError when that attribute is touched, so hasattr does
+            # not come back False, it comes back as an exception — which took
+            # the whole dialog down for any record carrying an unfilled upload.
+            value = getattr(value, "name", "") or ""
+        label = (field.verbose_name or field.name).replace("_", " ").strip()
+        fields.append({"label": label[:1].upper() + label[1:], "value": _text(value)})
+    return {"title": str(row), "model": model._meta.verbose_name.title(), "fields": fields}
+
 
 #: nav key -> the module name shown on the page.
 NAV_LABELS = {
@@ -403,18 +489,22 @@ def _transfer_checks():
 def _voucher_checks():
     from account.models import Voucher
 
-    vouchers = Voucher.objects.select_related("sector").exclude(
-        Q(narration__isnull=True) | Q(narration=""))
+    # Cancelled vouchers are not live entries. Leaving them in made every
+    # revision look like a duplicate: the cancelled original and the voucher
+    # that replaced it share a date, a type and a narration by definition.
+    vouchers = (Voucher.objects.select_related("sector")
+                .exclude(Q(narration__isnull=True) | Q(narration=""))
+                .exclude(status="Cancelled"))
     fields = ["voucher_type", "date", "narration"]
     yield Check(
         code="voucher_narration", kind="entry", module=ACCOUNT,
         title="Same voucher entered twice",
         matched_on="Type + Date + Narration",
         why="The same expense or payment is posted twice to the ledger.",
-        columns=["Voucher No", "Date", "Type", "Sector", "Narration"],
+        columns=["Voucher No", "Date", "Type", "Status", "Sector", "Narration"],
         groups=_collect(
             vouchers, fields, _duplicate_keys(vouchers, fields),
-            cells=lambda v: [v.voucher_no or f"#{v.pk}", v.date, v.voucher_type,
+            cells=lambda v: [v.voucher_no or f"#{v.pk}", v.date, v.voucher_type, v.status,
                              _where(v, "sector"), (v.narration or "")[:80]],
             matched=lambda v: f"{v.voucher_type} on {_date(v)}"))
 

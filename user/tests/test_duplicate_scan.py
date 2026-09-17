@@ -818,3 +818,79 @@ class FullDetailTests(DuplicateScanBase):
                        "Rate", "Discount", "GST %", "Amount"):
             self.assertIn(column, found.columns)
         self.assertEqual(len(found.groups[0].rows[0].cells), len(found.columns))
+
+
+class VoucherStatusTests(DuplicateScanBase):
+
+    def voucher(self, status="Posted", narration="Broiler sales"):
+        from account.models import FinancialYear, Voucher
+
+        year, _ = FinancialYear.objects.get_or_create(
+            start_date=date(2026, 4, 1), end_date=date(2027, 3, 31))
+        return Voucher.objects.create(
+            company=CompanyProfile.get_solo(), financial_year=year,
+            voucher_type="Receipt", date=self.today, narration=narration, status=status)
+
+    def test_a_cancelled_voucher_and_its_replacement_are_not_a_duplicate(self):
+        # A revision shares the date, type and narration of the voucher it
+        # replaced by definition, so leaving cancelled ones in made every
+        # revision look like a duplicate. Found on real data.
+        self.voucher(status="Cancelled")
+        self.voucher(status="Posted")
+        self.assertEqual(check("voucher_narration").count, 0)
+
+    def test_two_live_vouchers_the_same_are_still_a_duplicate(self):
+        self.voucher(status="Posted")
+        self.voucher(status="Posted")
+        found = check("voucher_narration")
+        self.assertEqual(found.count, 1)
+        self.assertIn("Status", found.columns)
+
+
+class RecordDialogTests(DuplicateScanBase):
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser(
+            "recadmin", "r@x.com", "Str0ngPass!"))
+
+    def test_every_check_knows_which_model_its_rows_come_from(self):
+        from user.services.duplicate_scan import CHECK_MODELS, CHECK_TABS
+
+        self.assertEqual(set(CHECK_TABS), set(CHECK_MODELS))
+
+    def test_a_record_comes_back_with_its_stored_fields(self):
+        farm = self.farm()
+        entry = DailyEntry.objects.create(farm=farm, batch=self.batch(farm),
+                                          supervisor=self.supervisor, date=self.today,
+                                          mortality=5)
+        response = self.client.get(reverse("duplicate_record"),
+                                   {"check": "daily_entry", "id": entry.id})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["fields"])
+        labels = {f["label"] for f in body["fields"]}
+        self.assertIn("Mortality", labels)
+        # The primary key is not a fact about the business.
+        self.assertNotIn("Id", labels)
+
+    def test_a_check_the_analyser_does_not_know_is_refused(self):
+        # The model is chosen by the check code, so an unknown code must not
+        # reach for anything at all.
+        response = self.client.get(reverse("duplicate_record"),
+                                   {"check": "auth.User", "id": 1})
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_missing_record_is_a_404(self):
+        response = self.client.get(reverse("duplicate_record"),
+                                   {"check": "daily_entry", "id": 99999999})
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_bad_id_is_a_404(self):
+        response = self.client.get(reverse("duplicate_record"),
+                                   {"check": "daily_entry", "id": "abc"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_the_page_offers_the_dialog(self):
+        response = self.client.get(reverse("duplicate_analyser"))
+        self.assertContains(response, 'id="dupRecordModal"')

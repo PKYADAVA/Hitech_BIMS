@@ -116,6 +116,14 @@
   /* Only while the clean checks are folded away: with them showing, the cards
      say it themselves and this would be saying it twice. */
   .dup-page:not(.hide-clean) .dup-clear { display: none; }
+  .dup-open-record { border: 0; background: none; padding: 0; color: #1d4ed8; font-weight: 600;
+                     text-align: left; white-space: nowrap; }
+  .dup-open-record:hover { text-decoration: underline; }
+  .dup-open-record:focus-visible { outline: 2px solid #1d6fe0; outline-offset: 1px; }
+  .dup-rec dl { display: grid; grid-template-columns: 190px 1fr; gap: .3rem .9rem; margin: 0; font-size: .82rem; }
+  .dup-rec dt { color: #64748b; font-weight: 500; }
+  .dup-rec dd { margin: 0; color: #0f172a; word-break: break-word; }
+  .dup-rec-empty { color: #94a3b8; }
   .dup-pane { display: none; flex-direction: column; gap: .6rem; }
   .dup-pane.active { display: flex; }
   .dup-hidden { display: none !important; }
@@ -252,9 +260,27 @@
   </div>
 </div>
 
+<!-- One record, opened from its number in a findings table -->
+<div class="modal fade" id="dupRecordModal" tabindex="-1" aria-labelledby="dupRecordLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dupRecordLabel">Record</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body dup-rec" id="dup-record-body"></div>
+    </div>
+  </div>
+</div>
+
 <script>
   (function () {
     var page = document.getElementById("dup-page");
+    function esc(value) {
+      return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
 
     // Clean checks folded away by default; the switch brings them back.
     var hideClean = document.getElementById("dup-hide-clean");
@@ -295,6 +321,39 @@
     moduleSelect.addEventListener("change", function () {
       var value = moduleSelect.value;
       window.location.search = value ? "?module=" + encodeURIComponent(value) : "";
+    });
+
+    // A transaction number opens the record behind it. Fetched when asked for
+    // rather than shipped with the page: thirty-eight checks' worth of full
+    // records would be most of the database on a screen that shows a handful.
+    var recordModal = null;
+    page.addEventListener('click', function (event) {
+      var button = event.target.closest('.dup-open-record');
+      if (!button) return;
+      var body = document.getElementById('dup-record-body');
+      document.getElementById('dupRecordLabel').textContent = button.textContent.trim();
+      body.innerHTML = '<div class="dup-rec-empty">Loading\u2026</div>';
+      recordModal = recordModal
+        || new bootstrap.Modal(document.getElementById('dupRecordModal'));
+      recordModal.show();
+      fetch('{% url "duplicate_record" %}?check=' + encodeURIComponent(button.dataset.check)
+            + '&id=' + encodeURIComponent(button.dataset.id), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          document.getElementById('dupRecordLabel').textContent = data.title || 'Record';
+          var rows = (data.fields || []).map(function (f) {
+            return '<dt>' + esc(f.label) + '</dt><dd>'
+                 + (f.value ? esc(f.value) : '<span class="dup-rec-empty">&mdash;</span>') + '</dd>';
+          }).join('');
+          body.innerHTML = '<div class="dup-rec-empty mb-2">' + esc(data.model || '') + '</div>'
+                         + '<dl>' + rows + '</dl>';
+        })
+        .catch(function (status) {
+          body.innerHTML = '<div class="dup-rec-empty">'
+                         + (status === 403 ? 'You are not allowed to open this record.'
+                                           : 'That record could not be loaded.')
+                         + '</div>';
+        });
     });
 
     // Search filters what is already on the page: it hides rows that do not

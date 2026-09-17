@@ -48,10 +48,23 @@ chevron would be the opposite of the point.
               </tr>
             </thead>
             <tbody>
+              {% comment %}
+              The first cell is the transaction's own number, so it is the
+              handle: clicking it opens the whole record rather than sending
+              the reader off to find it. The rest of the cells are plain.
+              {% endcomment %}
               {% for row in group.rows %}
               <tr>
                 <td>{{ forloop.counter }}</td>
-                {% for cell in row.cells %}<td>{{ cell|default:"&mdash;" }}</td>{% endfor %}
+                {% for cell in row.cells %}
+                  {% if forloop.first %}
+                    <td><button type="button" class="dup-open-record"
+                                data-check="{{ check.code }}" data-id="{{ row.id }}"
+                                title="Show this record">{{ cell|default:"&mdash;" }}</button></td>
+                  {% else %}
+                    <td>{{ cell|default:"&mdash;" }}</td>
+                  {% endif %}
+                {% endfor %}
               </tr>
               {% endfor %}
             </tbody>
