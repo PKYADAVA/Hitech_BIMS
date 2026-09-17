@@ -291,18 +291,25 @@
        for" won over "what just happened". */
     .dw-col-liftings, .dw-col-sale_overview,
     .dw-col-broiler_activity { flex:0 0 33.3333%; max-width:33.3333%; }
-    /* A row of its own. The card lists findings from any of seven modules,
-       and each line carries a check title, a count and the module it came
-       from — none of which fit in a third of a row without wrapping. */
-    .dw-col-duplicates { flex:0 0 100%; max-width:100%; }
+    /* A third, like the rows above it, rather than a band of its own. The
+       card's insides are laid out for that width below: two tiles to a line,
+       and each finding stacked rather than strung across one row. */
+    .dw-col-duplicates { flex:0 0 33.3333%; max-width:33.3333%; }
   }
+  /* A little taller than the shared 420px cap. That cap exists so a long card
+     does not stretch the ones beside it — this one has nothing beside it, and
+     at 420 the Run button sat under the fold with the whole body scrolling. */
+  .dw-col-duplicates { --dw-card-max: 520px; }
   /* Duplicate Entries draws its own body - see duplicatesCard. */
-  .dupw { display:flex; flex-direction:column; gap:12px; }
+  .dupw { display:flex; flex-direction:column; gap:9px; }
   .dupw-checked { font-size:.72rem; color:#6b7890; }
-  .dupw-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
-  .dupw-tile { border:1px solid #e7edf5; border-radius:12px; padding:10px 12px; background:#fbfdff; }
-  .dupw-tile-value { display:block; font-size:1.35rem; font-weight:700; line-height:1.1; color:#15233b; font-variant-numeric:tabular-nums; }
-  .dupw-tile-label { display:block; font-size:.72rem; font-weight:600; color:#6b7890; }
+  .dupw-tiles { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; }
+  /* One line each: the figure and its label side by side rather than stacked,
+     which is what made four tiles taller than the findings list they head. */
+  .dupw-tile { display:flex; align-items:baseline; gap:6px; border:1px solid #e7edf5;
+               border-radius:8px; padding:5px 8px; background:#fbfdff; }
+  .dupw-tile-value { font-size:1rem; font-weight:700; line-height:1.15; color:#15233b; font-variant-numeric:tabular-nums; }
+  .dupw-tile-label { font-size:.68rem; font-weight:600; color:#6b7890; line-height:1.15; }
   .dupw-tile.t-blue { background:#f4f8ff; border-color:#dbe7fb; }
   .dupw-tile.t-red { background:#fff6f6; border-color:#fadcdc; }
   .dupw-tile.t-red .dupw-tile-value { color:#d92d20; }
@@ -312,16 +319,18 @@
   .dupw-section { font-size:.78rem; font-weight:700; color:#15233b; }
   .dupw-band { display:flex; height:26px; border-radius:7px; overflow:hidden; background:#eef2f7; }
   .dupw-band-part { display:flex; align-items:center; justify-content:center; color:#fff; font-size:.72rem; font-weight:700; min-width:26px; }
-  .dupw-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:.74rem; color:#475569; }
+  .dupw-legend { display:flex; flex-wrap:wrap; gap:6px 12px; font-size:.72rem; color:#475569; }
   .dupw-key { display:inline-flex; align-items:center; gap:6px; }
   .dupw-key i { width:9px; height:9px; border-radius:50%; display:inline-block; }
   .dupw-findings { display:flex; flex-direction:column; }
-  .dupw-find { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid #edf1f6; font-size:.8rem; }
+  .dupw-find { display:grid; grid-template-columns:9px 1fr auto; align-items:center;
+               column-gap:8px; row-gap:2px; padding:7px 0; border-bottom:1px solid #edf1f6; font-size:.78rem; }
   .dupw-find:last-of-type { border-bottom:0; }
-  .dupw-dot { width:9px; height:9px; border-radius:50%; flex:0 0 9px; }
+  .dupw-dot { width:9px; height:9px; border-radius:50%; }
   .dupw-find-title { font-weight:600; color:#15233b; }
-  .dupw-find-count { font-size:.7rem; font-weight:700; color:#d92d20; background:#fde8e8; border-radius:999px; padding:.1rem .5rem; white-space:nowrap; }
-  .dupw-find-rule { margin-left:auto; font-size:.72rem; color:#6b7890; }
+  .dupw-find-count { font-size:.68rem; font-weight:700; color:#d92d20; background:#fde8e8; border-radius:999px; padding:.1rem .45rem; white-space:nowrap; }
+  /* Third column of the grid, second row: under the title, not beside it. */
+  .dupw-find-rule { grid-column:2 / -1; font-size:.7rem; color:#6b7890; }
   .dupw-run { align-self:flex-start; background:#2563eb; color:#fff; border-radius:9px; padding:.4rem .85rem; font-size:.78rem; font-weight:600; text-decoration:none; }
   .dupw-run:hover { background:#1d4ed8; color:#fff; }
   /* One height for the pair, with neither card padded out to reach it.
@@ -1406,7 +1415,11 @@
     function card(w) {
       var body = '';
       if (w.key === 'duplicates') {
-        return '<div class="col-12 col-md-6 col-xl dw-col dw-col-' + esc(w.key) + '">'
+        // Bootstrap's own line break: without it the card takes its third out
+        // of the row above, leaving the four cards already there to share what
+        // is left and squeezing every one of them.
+        return '<div class="w-100"></div>'
+             + '<div class="col-12 col-md-6 col-xl dw-col dw-col-' + esc(w.key) + '">'
              + '<div class="dw-card">'
              + '<div class="dw-head">'
              + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'

@@ -428,7 +428,7 @@ class DashboardWidgetTests(TestCase):
         self.assertEqual([w["key"] for w in dashboard_widgets(self.admin, use_cache=False)],
                          ["live_flock", "daily_entries", "flock_ages", "liftings",
                           "sale_overview", "broiler_activity", "farm_route",
-                          "receivables", "payables", "stock_alerts"])
+                          "receivables", "payables", "stock_alerts", "duplicates"])
 
     # ---- the endpoint and the page ---------------------------------------
 
