@@ -929,6 +929,21 @@ class OpenTheRegisterTests(DuplicateScanBase):
         self.assertContains(response, f"from_date={self.today.isoformat()}")
         self.assertContains(response, "Open both in Daily Entry")
 
+    def test_the_link_names_the_records_so_only_those_two_are_shown(self):
+        # The day alone would show every entry made that day. The numbers ride
+        # along so the register narrows to the pair.
+        self.two_entries()
+        group = check("daily_entry").groups[0]
+        numbers = group.numbers.split(",")
+        self.assertEqual(len(numbers), 2)
+        self.assertTrue(all(n.startswith("DE") or n.startswith("#") for n in numbers), numbers)
+        self.assertContains(self.client.get(reverse("duplicate_analyser")), "records=")
+
+    def test_a_group_with_unnumbered_rows_offers_no_record_list(self):
+        from user.services.duplicate_scan import Group, Row
+
+        self.assertEqual(Group(matched="x", rows=[Row(id=1), Row(id=2)]).numbers, "")
+
     def test_rows_a_day_apart_offer_no_link(self):
         # They are not a duplicate anyway, but the rule matters for checks that
         # match across dates: one date for the group only while every row

@@ -48,6 +48,11 @@ window.addEventListener('load', function () {
 
     const record = params.get('record');
     if (record) showOnlyRecord(record);
+
+    // Several records at once — the Duplicate Entries page sends the numbers
+    // of one finding so the register opens on exactly those rows.
+    const records = params.get('records');
+    if (records) showOnlyRecords(records.split(',').filter(Boolean));
   }, 0);
 });
 
@@ -74,6 +79,40 @@ function showOnlyRecord(record) {
       return;
     }
     if (++attempts < 40) setTimeout(tick, 150);   // give up after ~6 seconds
+  })();
+}
+
+// Show only the records named, however many.
+//
+// The single-record version above types into the search box, which cannot
+// express "this one or that one" — the box searches for one string. So this
+// goes through the DataTables API instead, where a search can be a regular
+// expression, and asks for the numbers joined by alternation.
+//
+// The box is filled in afterwards so the page does not look unfiltered, but
+// without firing the events that would make DataTables re-read it as a plain
+// string and throw the regex away.
+//
+// Same wait as the single version, and the same reason: a register rebuilds
+// its table when its filter returns, and a search applied before that is lost.
+function showOnlyRecords(records) {
+  if (!records.length) return;
+  if (records.length === 1) return showOnlyRecord(records[0]);
+
+  const pattern = records
+    .map(function (r) { return r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
+    .join('|');
+  let attempts = 0;
+  (function tick() {
+    const body = document.querySelector('table tbody');
+    const ready = body && records.some(function (r) { return body.textContent.includes(r); });
+    if (ready && $.fn.dataTable) {
+      $.fn.dataTable.tables({ api: true }).search(pattern, true, false).draw();
+      const input = document.querySelector('.dataTables_filter input');
+      if (input) input.value = records.join(' , ');
+      return;
+    }
+    if (++attempts < 40) setTimeout(tick, 150);
   })();
 }
 

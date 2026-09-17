@@ -51,6 +51,16 @@ class Group:
     #: is what lets a group open on the list with both rows in view.
     date: str = ""
 
+    @property
+    def numbers(self) -> str:
+        """The rows' own numbers, comma separated, for ?records= on a register.
+
+        The first cell of every check is the record's number — its entry no,
+        voucher no, transfer no — which is what the register's search can find
+        it by.
+        """
+        return ",".join(row.cells[0] for row in self.rows if row.cells and row.cells[0])
+
 
 #: check code -> the tab code its records are entered on. The label and the
 #: module path come from the access registry, so a tab renamed there is renamed

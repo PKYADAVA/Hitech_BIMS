@@ -47,7 +47,7 @@ chevron would be the opposite of the point.
           page's own filter button.
           {% endcomment %}
           {% if check.url and group.date %}
-          <a class="dup-open-list" href="{{ check.url }}?from_date={{ group.date }}&amp;to_date={{ group.date }}"
+          <a class="dup-open-list" href="{{ check.url }}?from_date={{ group.date }}&amp;to_date={{ group.date }}{% if group.numbers %}&amp;records={{ group.numbers|urlencode }}{% endif %}"
              target="_blank" rel="noopener">
             Open both in {{ check.tab_label|default:"the list" }}
             <i class="fas fa-arrow-up-right-from-square"></i></a>
