@@ -46,6 +46,10 @@ class Group:
     """Records that matched each other."""
     matched: str
     rows: list[Row] = field(default_factory=list)
+    #: The day these records were entered on, ISO, when they share one. The
+    #: register pages take ?from_date=&to_date= and reload themselves, so this
+    #: is what lets a group open on the list with both rows in view.
+    date: str = ""
 
 
 #: check code -> the tab code its records are entered on. The label and the
@@ -281,6 +285,13 @@ def _collect(queryset, fields, keys, cells, matched=None, limit=200):
                 str(v) for v in signature if v not in (None, ""))))
             grouped[signature] = group
         group.rows.append(Row(id=obj.pk, cells=[_text(c) for c in cells(obj)]))
+        # One date for the group only while every row agrees. Two rows a day
+        # apart would otherwise open a register on the wrong day and look empty.
+        when = _row_date(obj)
+        if not group.rows[:-1]:
+            group.date = when
+        elif group.date != when:
+            group.date = ""
     # A key that ends up with one row came from a filter the re-query narrowed;
     # it is not a duplicate, so it does not belong in the answer.
     return [g for g in grouped.values() if len(g.rows) > 1]
@@ -312,6 +323,21 @@ def _text(value):
 
 def _date(obj):
     return _text(getattr(obj, "date", None))
+
+
+#: Where a row keeps its date. Line items carry their parent's, and the
+#: hatchery spells its own.
+DATE_PATHS = ("date", "purchase__date", "adjustment__date", "egg_purchase__date",
+              "issue__date", "receive__date", "setting_date")
+
+
+def _row_date(obj) -> str:
+    """The row's date as ISO, or "" — for the link that opens its register."""
+    for path in DATE_PATHS:
+        value = _value(obj, path) if "__" in path else getattr(obj, path, None)
+        if value is not None and hasattr(value, "isoformat"):
+            return value.isoformat()
+    return ""
 
 
 def _where(obj, *names):

@@ -38,7 +38,21 @@ chevron would be the opposite of the point.
       <div class="dup-why"><i class="fas fa-triangle-exclamation me-1"></i>{{ check.why }}</div>
       {% for group in check.groups %}
       <div class="dup-group">
-        <div class="dup-matched"><span>Matched:</span> {{ group.matched }}</div>
+        <div class="dup-matched">
+          <span>Matched:</span> {{ group.matched }}
+          {% comment %}
+          Straight to the register, on the day both rows were entered, so they
+          are on screen together. The date range is the convention main.js
+          already reads on every register: it fills the dates and presses the
+          page's own filter button.
+          {% endcomment %}
+          {% if check.url and group.date %}
+          <a class="dup-open-list" href="{{ check.url }}?from_date={{ group.date }}&amp;to_date={{ group.date }}"
+             target="_blank" rel="noopener">
+            Open both in {{ check.tab_label|default:"the list" }}
+            <i class="fas fa-arrow-up-right-from-square"></i></a>
+          {% endif %}
+        </div>
         <div class="dup-table-wrap">
           <table class="dup-table">
             <thead>

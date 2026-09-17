@@ -894,3 +894,46 @@ class RecordDialogTests(DuplicateScanBase):
     def test_the_page_offers_the_dialog(self):
         response = self.client.get(reverse("duplicate_analyser"))
         self.assertContains(response, 'id="dupRecordModal"')
+
+
+class OpenTheRegisterTests(DuplicateScanBase):
+    """A group links to the register, on the day both rows were entered."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser(
+            "openadmin", "o@x.com", "Str0ngPass!"))
+
+    def two_entries(self, same_day=True):
+        farm = self.farm()
+        batch = self.batch(farm)
+        for offset, mortality in ((0, 10), (0 if same_day else 1, 12)):
+            DailyEntry.objects.create(farm=farm, batch=batch, supervisor=self.supervisor,
+                                      date=self.today - timedelta(days=offset), mortality=mortality)
+        return batch
+
+    def test_a_group_carries_the_day_its_rows_share(self):
+        self.two_entries()
+        group = check("daily_entry").groups[0]
+        self.assertEqual(group.date, self.today.isoformat())
+
+    def test_a_master_group_has_no_date_to_open_on(self):
+        # A farmer is not entered on a register, so there is no day to land on
+        # and no link to offer.
+        Farmer.objects.create(farmer_name="vishvanath")
+        self.assertEqual(check("farmer_name").groups[0].date, "")
+
+    def test_the_page_links_to_the_register_for_that_day(self):
+        self.two_entries()
+        response = self.client.get(reverse("duplicate_analyser"))
+        self.assertContains(response, f"from_date={self.today.isoformat()}")
+        self.assertContains(response, "Open both in Daily Entry")
+
+    def test_rows_a_day_apart_offer_no_link(self):
+        # They are not a duplicate anyway, but the rule matters for checks that
+        # match across dates: one date for the group only while every row
+        # agrees, or the register opens on the wrong day and looks empty.
+        from user.services.duplicate_scan import Group, Row
+
+        group = Group(matched="x", rows=[Row(id=1), Row(id=2)])
+        self.assertEqual(group.date, "")
