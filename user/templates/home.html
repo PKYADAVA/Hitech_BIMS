@@ -351,9 +351,16 @@
   .dash-alert-row > [class*="col-"] > * { flex:1 1 auto; width:100%; margin-bottom:0 !important; }
   .dw-col-liftings .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
   /* Wider than the rest: these tiles carry an icon column as well as a label.
-     132, not 138 — the grid is 422px with a 9px gap, so 138 asks for more
-     than three columns can have and drops the card to two, five rows tall. */
+     Below xl, where the card is half or full width, auto-fit is right. */
   .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(132px, 1fr)); }
+  @media (min-width: 1200px) {
+    /* Three to a row, stated rather than asked for. The minmax above wanted
+       132px and the grid is 393px wide with 6px gaps, which leaves 127 per
+       column — so auto-fit dropped it to two and nine tiles ran five rows
+       deep. A width that has to be guessed right is a width that goes stale
+       the next time the column changes. */
+    .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  }
   .dw-stat { padding:6px 8px; border:1px solid #eaf0f7; border-radius:9px;
              background:#fbfdff; display:flex; align-items:flex-start; gap:5px; }
   .dw-stat-text { min-width:0; flex:1 1 auto; }
