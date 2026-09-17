@@ -327,7 +327,7 @@ def _text(value):
     if value is None:
         return ""
     if hasattr(value, "strftime"):
-        return value.strftime("%d %b %Y")
+        return value.strftime("%d-%m-%Y")
     return str(value)
 
 

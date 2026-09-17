@@ -94,7 +94,7 @@
         {% for r in ledger.rows %}
         <tr>
           <td>{{ forloop.counter }}</td>
-          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.date|date:"d-m-Y" }}</td>
           <td class="rpt-type">{{ r.type }}</td>
           <td>{{ r.trnum }}</td>
           <td class="rpt-loc">{{ r.location }}</td>

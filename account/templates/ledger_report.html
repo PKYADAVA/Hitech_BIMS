@@ -103,7 +103,7 @@ $(document).ready(function () {
             }
             response.rows.forEach(row => {
                 body.append(`<tr>
-                    <td>${escapeHtml(row.date)}</td>
+                    <td>${fmtDate(row.date)}</td>
                     <td>${escapeHtml(row.voucher_no)}</td>
                     <td>${escapeHtml(row.voucher_type)}</td>
                     <td>${escapeHtml(row.narration)}</td>

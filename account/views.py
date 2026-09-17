@@ -1214,13 +1214,13 @@ def _journal_voucher_excel(ctx):
 
     for row in ctx["rows"]:
         ws.append([
-            row["date"].strftime("%d.%m.%Y") if row["date"] else "",
+            row["date"].strftime("%d-%m-%Y") if row["date"] else "",
             row["voucher_no"], row["voucher_type"], row["branch"],
             row["centre"],
             row["from_account"], row["to_account"], row["reference"],
             row["debit"], row["credit"], row["narration"], row["status"],
             row["created_by"],
-            timezone.localtime(row["created_time"]).strftime("%d.%m.%Y %H:%M")
+            timezone.localtime(row["created_time"]).strftime("%d-%m-%Y %H:%M")
             if row["created_time"] else "",
         ])
         for line in row["lines"]:

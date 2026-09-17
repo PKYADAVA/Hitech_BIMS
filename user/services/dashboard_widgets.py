@@ -773,7 +773,7 @@ def _showing_note(day, chosen):
         return None
     if day == timezone.localdate():
         return None
-    return (f"Showing {day.strftime('%d %b %Y')} — the last day with a lifting. "
+    return (f"Showing {day.strftime('%d-%m-%Y')} — the last day with a lifting. "
             "Pick a date to see another.")
 
 
@@ -895,7 +895,7 @@ def _sale_note(day, chosen, orphan_money):
     """
     parts = []
     if not chosen:
-        parts.append(f"Showing {day.strftime('%d %b %Y')} — the last day with "
+        parts.append(f"Showing {day.strftime('%d-%m-%Y')} — the last day with "
                      "a sale. Pick a date to see another.")
     if orphan_money:
         parts.append(f"₹{_inr(orphan_money)} was received at offices with no "
@@ -993,7 +993,7 @@ def _sale_overview(viewable, filters, user=None):
         return {"stats": [{"label": "Sold birds", "value": "0"}],
                 **_sale_trend(branch_ids, day),
                 "note": ("No bird sales on this day. The last was "
-                         f"{last.strftime('%d %b %Y')}."
+                         f"{last.strftime('%d-%m-%Y')}."
                          if last else f"No bird sales recorded{where} yet."),
                 "filters_used": used}
 
@@ -1265,7 +1265,7 @@ def _duplicate_entries(viewable, filters, user=None):
                       "colour": MODULE_COLOURS.get(c.module, "#94a3b8")}
                      for c in found[:5]],
         "more": max(0, len(found) - 5),
-        "checked_at": timezone.localtime().strftime("%d %b %Y %H:%M"),
+        "checked_at": timezone.localtime().strftime("%d-%m-%Y %H:%M"),
         "note": note,
         # Deliberately empty: see the docstring.
         "filters_used": [],
@@ -1352,7 +1352,7 @@ def _farm_route(viewable, filters, user=None):
                       "sub": "every farm on the round has been reached"})
     return {"stats": stats,
             "note": (f"{len(routes)} round{'' if len(routes) == 1 else 's'} planned "
-                     f"for {day.strftime('%d %b %Y')}."),
+                     f"for {day.strftime('%d-%m-%Y')}."),
             "filters_used": ["date", "branch", "supervisor"]}
 
 

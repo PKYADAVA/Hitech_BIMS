@@ -101,7 +101,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.date|date:"d-m-Y" }}</td>
           <td title="{{ r.branch }}">{{ r.branch }}</td>
           <td title="{{ r.line }}">{{ r.line }}</td>
           <td title="{{ r.farm }}">{{ r.farm }}</td>

@@ -284,7 +284,7 @@
           </td>
           <td>{{ r.batch_name }}{% for f in r.flags %}<br><span class="flag">{{ f }}</span>{% endfor %}</td>
           <td>{{ r.age }}</td>
-          <td class="text-nowrap">{% if r.last_entry %}{{ r.last_entry|date:"d.m.Y" }}{% elif r.is_first %}<span class="text-muted">none</span>{% endif %}</td>
+          <td class="text-nowrap">{% if r.last_entry %}{{ r.last_entry|date:"d-m-Y" }}{% elif r.is_first %}<span class="text-muted">none</span>{% endif %}</td>
           <td class="num {% if r.gap_days >= 7 %}neg{% elif r.gap_days >= 2 %}gap-warn{% endif %}">{{ r.gap_days }}</td>
           <td class="item" title="{{ r.item }}">{{ r.item }}</td>
           <td class="num">{% if r.is_first %}{{ r.placed|floatformat:0 }}{% endif %}</td>

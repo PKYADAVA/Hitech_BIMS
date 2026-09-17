@@ -307,7 +307,7 @@
                 <span class="badge bg-secondary">Inactive</span>
               {% endif %}
             </td>
-            <td>{{ row.profile.updated_at|date:"d M Y H:i" }}</td>
+            <td>{{ row.profile.updated_at|date:"d-m-Y H:i" }}</td>
             <td class="ds-mid">
               <button type="button" class="btn btn-sm btn-outline-primary oa-edit"
                       data-id="{{ row.profile.id }}" title="Edit">

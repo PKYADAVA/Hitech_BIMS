@@ -243,8 +243,8 @@ A statement missing its rows reads as complete, and somebody decides on it.
             <td class="lbl">Supervisor</td><td class="val">{{ batch.broiler_farm.supervisor.name }}</td>
           </tr>
           <tr>
-            <td class="lbl">Placement Date</td><td class="val">{{ report.batch_costing.placement_date|date:"d.m.Y" }}</td>
-            <td class="lbl">Sale Start</td><td class="val">{{ report.batch_costing.sale_start_date|date:"d.m.Y" }}</td>
+            <td class="lbl">Placement Date</td><td class="val">{{ report.batch_costing.placement_date|date:"d-m-Y" }}</td>
+            <td class="lbl">Sale Start</td><td class="val">{{ report.batch_costing.sale_start_date|date:"d-m-Y" }}</td>
             <td class="lbl">Chicks Placed</td><td class="val">{{ report.batch_costing.chicks_placed }}</td>
             <td class="lbl">Birds Sold</td><td class="val">{{ report.batch_costing.sold_birds }}</td>
           </tr>

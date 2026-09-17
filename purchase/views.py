@@ -1762,7 +1762,7 @@ def _ledger_excel(company, supplier, from_date, to_date, prev_balance, prev_cr_d
                   + [num(g["debit"]), num(g["credit"]), f"{g['closing']} {g['cr_dr']}"] + [""] * 4)
         for r in g["rows"]:
             ws.append([
-                r["date"].strftime("%d.%m.%Y") if r["date"] else "",
+                r["date"].strftime("%d-%m-%Y") if r["date"] else "",
                 r["trnum"], r["type"], r["doc_no"], r["item"],
                 num(r["boxes_bags"]), num(r["sent_qty"]), num(r["rcv_qty"]), num(r["free_qty"]),
                 num(r["rate"]), num(r["amount"]), num(r["freight"]), num(r["gst"]), num(r["tds"]),
@@ -2260,11 +2260,11 @@ def _purchase_report_excel(ctx):
             if key in numeric:
                 line.append(float(value or 0))
             elif key == "date":
-                line.append(value.strftime("%d.%m.%Y") if value else "")
+                line.append(value.strftime("%d-%m-%Y") if value else "")
             elif key == "added_time":
-                line.append(value.strftime("%d.%m.%Y %I:%M %p") if value else "")
+                line.append(value.strftime("%d-%m-%Y %I:%M %p") if value else "")
             elif key == "received_date":
-                line.append(value.strftime("%d.%m.%Y") if value else "")
+                line.append(value.strftime("%d-%m-%Y") if value else "")
             else:
                 line.append(value or "")
         ws.append(line)

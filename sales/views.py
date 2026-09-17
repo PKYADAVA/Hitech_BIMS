@@ -1352,7 +1352,7 @@ def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, 
             c.font = bold
         for r in g["rows"]:
             ws.append([
-                r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["trnum"], r["doc_no"],
+                r["date"].strftime("%d-%m-%Y") if r["date"] else "", r["trnum"], r["doc_no"],
                 r["type"], r["item"], r["birds"], r["quantity"], r["avg_weight"], r["free"], r["rate"],
                 r["amount"], r["debit"], r["credit"],
                 f"{r['balance']} {r['cr_dr']}" if r["balance"] != "" else "",

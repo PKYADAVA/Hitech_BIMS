@@ -50,13 +50,13 @@ class ProgrammeGapTests(TestCase):
         self.master(effective_from=date(2026, 4, 1), effective_to=date(2026, 7, 31))
         gap = _feed_programme_gap(self.batch, self.today, list(FeedPhaseMaster.objects.all()))
         self.assertIn("expired", gap)
-        self.assertIn("31.07.2026", gap)
+        self.assertIn("31-07-2026", gap)
 
     def test_a_window_not_yet_open_says_when_it_starts(self):
         self.master(effective_from=date(2026, 9, 1))
         gap = _feed_programme_gap(self.batch, self.today, list(FeedPhaseMaster.objects.all()))
         self.assertIn("starts", gap)
-        self.assertIn("01.09.2026", gap)
+        self.assertIn("01-09-2026", gap)
 
     def test_no_master_for_the_breed_names_the_breed(self):
         other = Breed.objects.create(description="Layer Brown")

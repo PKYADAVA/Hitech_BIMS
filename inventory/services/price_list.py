@@ -117,7 +117,7 @@ def parse_date(value):
     if isinstance(value, date):
         return value
     text = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:
@@ -606,7 +606,7 @@ def revise_preview(item_ids, mode, value, effective_date):
                 row["base_rate"] = str(cost)
                 row["message"] = "From last purchase %s on %s" % (cost, purchase["date"])
         elif base is None:
-            row["message"] = "No price in force on %s to revise" % on_date.strftime("%d.%m.%Y")
+            row["message"] = "No price in force on %s to revise" % on_date.strftime("%d-%m-%Y")
         elif mode == "percent":
             new = _money(base.price * (1 + value / 100))
         else:

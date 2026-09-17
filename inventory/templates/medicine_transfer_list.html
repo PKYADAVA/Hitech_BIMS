@@ -184,7 +184,7 @@ $(function () {
     rows.forEach(function (row) {
       tbody.append(`<tr>
         <td class="text-center"><input type="checkbox" class="row-select" value="${row.id}"></td>
-        <td>${escapeHtml(row.date)}</td>
+        <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.from_location_name)}</td>

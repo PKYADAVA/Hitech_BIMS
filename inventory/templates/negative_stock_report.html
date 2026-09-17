@@ -58,7 +58,7 @@
           <td class="rpt-loc">{{ r.location }}</td>
           <td class="rpt-type">{{ r.item }}</td>
           <td>{{ to_date|default:"—" }}</td>
-          <td>{{ r.since|date:"d.m.Y" }}</td>
+          <td>{{ r.since|date:"d-m-Y" }}</td>
           <td class="num rpt-neg">{{ r.quantity|indian_currency }}</td>
         </tr>
         {% endfor %}

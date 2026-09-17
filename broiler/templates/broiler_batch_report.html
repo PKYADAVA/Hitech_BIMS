@@ -343,7 +343,7 @@
         <div><div class="gc-kpi-label">Total Mortality</div><div class="gc-kpi-value">{{ c.mortality }}</div>
           <div class="gc-kpi-sub">{{ c.total_mort_pct }}% Mortality <span class="gc-status gc-status-{{ c.mortality_status|slugify }}">{{ c.mortality_status }}</span></div></div></div>
       <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#4a3aa7;--kpi-bg:#ece9f8"><i class="fas fa-weight-hanging"></i></div>
-        <div><div class="gc-kpi-label">Avg. Live Weight</div><div class="gc-kpi-value">{{ d.avg_live_weight_kg }} kg</div><div class="gc-kpi-sub">As on {{ d.as_of_date|date:"d M Y" }}</div></div></div>
+        <div><div class="gc-kpi-label">Avg. Live Weight</div><div class="gc-kpi-value">{{ d.avg_live_weight_kg }} kg</div><div class="gc-kpi-sub">As on {{ d.as_of_date|date:"d-m-Y" }}</div></div></div>
       <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#eb6834;--kpi-bg:#fdece5"><i class="fas fa-utensils"></i></div>
         <div><div class="gc-kpi-label">Total Feed Consumed</div><div class="gc-kpi-value">{{ c.feed_consumed }} kg</div><div class="gc-kpi-sub">{{ c.fcr }} kg / Bird</div></div></div>
       <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#1baf7a;--kpi-bg:#e6f7f1"><i class="fas fa-chart-line"></i></div>
@@ -817,9 +817,9 @@
         <table class="table table-bordered mb-0 report-costing rpt-table ds-grid">
           <tbody>
             <tr>
-              <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d.m.Y" }}</td>
+              <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d-m-Y" }}</td>
               <td class="lbl">1st week Mort%</td><td class="val">{{ c.first_week_mort_pct }}</td>
-              <td class="lbl">Sale Start Date</td><td class="val">{{ c.sale_start_date|date:"d.m.Y" }}</td>
+              <td class="lbl">Sale Start Date</td><td class="val">{{ c.sale_start_date|date:"d-m-Y" }}</td>
               <td class="lbl">Feed Sent</td><td class="val">{{ c.feed_sent }}</td>
               <td class="lbl">Med/Vac Sent</td><td class="val">{{ c.med_sent }}</td>
             </tr>

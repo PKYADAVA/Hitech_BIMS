@@ -74,7 +74,7 @@
         <tbody>
           {% for expense in expenses %}
           <tr>
-            <td>{{ expense.date|date:"d.m.Y" }}</td>
+            <td>{{ expense.date|date:"d-m-Y" }}</td>
             <td>
               {{ expense.hatchery.hatchery_name }}
               {% if not expense.is_active %}

@@ -213,7 +213,7 @@ $(function () {
     tbody.empty();
     chickRows.forEach(function (row) {
       tbody.append(`<tr>
-        <td>${escapeHtml(row.date)}</td>
+        <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.source_name) || "-"}</td>

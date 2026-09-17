@@ -111,7 +111,7 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
-        <td>${escapeHtml(row.date)}</td>
+        <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
         <td>${escapeHtml(row.buyer_name)}</td>
         <td>${escapeHtml(row.mode)}</td>

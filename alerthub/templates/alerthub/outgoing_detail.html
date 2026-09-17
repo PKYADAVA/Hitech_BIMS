@@ -31,7 +31,7 @@ that could disagree.
       <p class="ah-sub">
         Notification #{{ outgoing.pk }} ·
         {{ outgoing.created_by.get_full_name|default:outgoing.created_by.username|default:"—" }} ·
-        {{ outgoing.created_at|date:"d M Y, h:i A" }}
+        {{ outgoing.created_at|date:"d-m-Y, h:i A" }}
       </p>
     </div>
     <div class="text-end">
@@ -92,11 +92,11 @@ that could disagree.
             {{ outgoing.failed_count }}</span></div>
         <div class="sn-fact"><span class="sn-fact-l">Scheduled for</span>
           <span class="sn-fact-v">
-            {% if outgoing.send_at %}{{ outgoing.send_at|date:"d M Y, h:i A" }}{% else %}Immediate{% endif %}
+            {% if outgoing.send_at %}{{ outgoing.send_at|date:"d-m-Y, h:i A" }}{% else %}Immediate{% endif %}
           </span></div>
         <div class="sn-fact"><span class="sn-fact-l">Sent at</span>
           <span class="sn-fact-v">
-            {% if outgoing.sent_at %}{{ outgoing.sent_at|date:"d M Y, h:i A" }}{% else %}—{% endif %}
+            {% if outgoing.sent_at %}{{ outgoing.sent_at|date:"d-m-Y, h:i A" }}{% else %}—{% endif %}
           </span></div>
         <div class="sn-fact"><span class="sn-fact-l">Status</span>
           <span class="sn-fact-v">{{ outgoing.get_status_display }}</span></div>
@@ -192,7 +192,7 @@ that could disagree.
       <div class="ah-empty">
         <i class="fa-regular fa-paper-plane"></i>
         {% if outgoing.status == 'scheduled' %}
-          Not sent yet — due {{ outgoing.send_at|date:"d M Y, h:i A" }}.
+          Not sent yet — due {{ outgoing.send_at|date:"d-m-Y, h:i A" }}.
         {% elif outgoing.status == 'draft' %}
           Still a draft. Nothing has been sent.
         {% else %}

@@ -140,7 +140,7 @@ $(function () {
     if (row.object_label) query.set('record', row.object_label);
     const range = query.toString() ? `?${query}` : '';
     return `<a href="${row.record_url}${range}" target="_blank" rel="noopener"`
-      + ` title="Open ${escapeHtml(row.module_label)}${row.record_date ? ' on ' + escapeHtml(row.record_date) : ''}">`
+      + ` title="Open ${escapeHtml(row.module_label)}${row.record_date ? ' on ' + fmtDate(row.record_date) : ''}">`
       + `${label} <i class="fas fa-up-right-from-square small opacity-75"></i></a>`;
   }
 

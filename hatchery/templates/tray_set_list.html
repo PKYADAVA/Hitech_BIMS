@@ -81,9 +81,9 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
-        <td>${escapeHtml(row.setting_date)}</td>
+        <td>${fmtDate(row.setting_date)}</td>
         <td>${escapeHtml(row.hatchery_name)}</td>
-        <td>${escapeHtml(row.hatch_date)}</td>
+        <td>${fmtDate(row.hatch_date)}</td>
         <td>${escapeHtml(row.supplier_names) || "-"}</td>
         <td>${escapeHtml(row.grading_no)}</td>
         <td>${escapeHtml(row.setting_no)}</td>

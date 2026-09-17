@@ -93,7 +93,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.date|date:"d-m-Y" }}</td>
           <td class="rpt-link">{{ r.receipt_no }}</td>
           <td class="rpt-type">{{ r.source }}</td>
           <td class="rpt-loc">{{ r.party_name }}</td>
@@ -105,7 +105,7 @@
           <td class="num {% if r.balance_cr_dr == 'Cr' %}rpt-neg{% endif %}">{{ r.balance|indian_currency }} {{ r.balance_cr_dr }}</td>
           <td>{{ r.remarks }}</td>
           <td>{{ r.added_by }}</td>
-          <td>{{ r.added_time|date:"d.m.Y h:i A" }}</td>
+          <td>{{ r.added_time|date:"d-m-Y h:i A" }}</td>
         </tr>
         {% endfor %}
       </tbody>

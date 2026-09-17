@@ -333,7 +333,7 @@
           </tr>
           {% for r in ledger_rows %}
           <tr {% if r.is_receipt %}class="receipt-row"{% endif %} data-search="{{ r.challan_no }} {{ r.txn_no }} {{ r.name }} {{ r.vehicle_no }} {{ r.farm_code }} {{ r.batch_no }}">
-            <td>{{ r.date|date:"d.m.Y" }}</td>
+            <td>{{ r.date|date:"d-m-Y" }}</td>
             <td>{{ r.txn_no|default:"-" }}</td>
             <td>{{ r.challan_no|default:"-" }}</td>
             <td>{{ r.branch_name|default:"-" }}</td>

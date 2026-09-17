@@ -128,8 +128,8 @@
                 <img src="{{ shot.image.url }}" alt="Farm" class="ffr-thumb"></a>
             {% empty %}—{% endfor %}
           </td>
-          <td>{{ m.agreement_start_date|date:"d M Y"|default:"—" }}</td>
-          <td>{{ m.agreement_end_date|date:"d M Y"|default:"—" }}</td>
+          <td>{{ m.agreement_start_date|date:"d-m-Y"|default:"—" }}</td>
+          <td>{{ m.agreement_end_date|date:"d-m-Y"|default:"—" }}</td>
           <td class="text-end">{{ m.agreement_months|default_if_none:"—" }}</td>
           <td>{% if m.agreement_copy %}<a class="ffr-doc" href="{{ m.agreement_copy.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
           <td>{% if m.cheque_1_file %}<a class="ffr-doc" href="{{ m.cheque_1_file.url }}" target="_blank" rel="noopener">{{ m.cheque_1_no|default:"view" }}</a>{% else %}{{ m.cheque_1_no|default:"—" }}{% endif %}</td>

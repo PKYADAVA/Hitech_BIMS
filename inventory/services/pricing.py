@@ -25,6 +25,6 @@ def item_issue_price(item, on_date=None):
 
 def missing_price_message(item, on_date=None):
     """Message shown when an item has no price for the date."""
-    as_on = " as on %s" % on_date.strftime("%d.%m.%Y") if on_date else ""
+    as_on = " as on %s" % on_date.strftime("%d-%m-%Y") if on_date else ""
     return ("Item Price not defined for %s%s. Add one in "
             "Inventory > Master > Item Price List." % (item, as_on))

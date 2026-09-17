@@ -1286,7 +1286,7 @@ class DailyEntry(models.Model):
             raise ValidationError({
                 "feed_1_qty": [
                     "%s: only %s kg is at this farm on %s, and this entry feeds %s."
-                    % (item, available, self.date.strftime("%d.%m.%Y") if self.date else "",
+                    % (item, available, self.date.strftime("%d-%m-%Y") if self.date else "",
                        qty)
                     for item, qty, available in short
                 ]

@@ -96,7 +96,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.date|date:"d-m-Y" }}</td>
           <td class="rpt-link">{{ r.invoice }}</td>
           <td class="rpt-type">{{ r.txn_type }}</td>
           <td>{{ r.dc_no }}</td>
@@ -124,7 +124,7 @@
             <i class="fas {% if r.upload_status == 'Uploaded' %}fa-circle-check{% else %}fa-clock{% endif %} me-1"></i>{{ r.upload_status }}</span>
             {% for f in r.upload_files %}<a href="{{ f.url }}" target="_blank" rel="noopener" class="rpt-doc-link" title="{{ f.name }}"><i class="fas fa-paperclip"></i></a>{% endfor %}</td>
           <td>{{ r.added_by }}</td>
-          <td>{{ r.added_time|date:"d.m.Y h:i A" }}</td>
+          <td>{{ r.added_time|date:"d-m-Y h:i A" }}</td>
         </tr>
         {% endfor %}
       </tbody>

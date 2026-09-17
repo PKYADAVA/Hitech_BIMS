@@ -76,12 +76,12 @@
     <div><div class="lbl">Batch No.</div><div class="val">{{ batch.batch_name }}</div>
          <div class="lbl" style="margin-top:6px;">Scheme</div><div class="val" style="font-size:9px;">{{ scheme.schema_name|default:"-" }}</div></div>
     <div class="status"><div class="lbl">Batch Status</div><div class="s">CLOSED</div>
-         <div class="muted" style="font-size:8px;">Date: {{ s.gc_date|date:"d M Y" }}</div></div>
+         <div class="muted" style="font-size:8px;">Date: {{ s.gc_date|date:"d-m-Y" }}</div></div>
   </div>
 
   <!-- Performance KPIs (no revenue/profit) -->
   <div class="kpis">
-    <div class="kpi"><div class="ic" style="background:#2d6cdf;">🐤</div><div class="l">Birds Placed</div><div class="v">{{ s.placed_birds }}</div><div class="sub">{{ s.placement_date|date:"d M Y" }}</div></div>
+    <div class="kpi"><div class="ic" style="background:#2d6cdf;">🐤</div><div class="l">Birds Placed</div><div class="v">{{ s.placed_birds }}</div><div class="sub">{{ s.placement_date|date:"d-m-Y" }}</div></div>
     <div class="kpi"><div class="ic" style="background:#16a34a;">🐔</div><div class="l">Birds Sold</div><div class="v">{{ s.sold_birds }}</div><div class="sub">wt {{ s.sold_weight|floatformat:2 }} kg</div></div>
     <div class="kpi"><div class="ic" style="background:#dc2626;">☠</div><div class="l">Mortality</div><div class="v">{{ s.mortality }}</div><div class="sub">{{ s.total_mortality_pct|floatformat:2 }}%</div></div>
     <div class="kpi"><div class="ic" style="background:#7c3aed;">⚖</div><div class="l">Avg Weight</div><div class="v">{{ s.avg_weight|floatformat:2 }}</div><div class="sub">kg</div></div>
@@ -94,8 +94,8 @@
     <div>
       <div class="sec-title">BATCH INFORMATION</div>
       <div class="card pad">
-        <div class="kv"><span>Chicks Place Date</span><b>{{ s.placement_date|date:"d/m/y"|default:"-" }}</b></div>
-        <div class="kv"><span>Final Liquidation Date</span><b>{{ s.liquidation_date|date:"d/m/y"|default:"-" }}</b></div>
+        <div class="kv"><span>Chicks Place Date</span><b>{{ s.placement_date|date:"d-m-Y"|default:"-" }}</b></div>
+        <div class="kv"><span>Final Liquidation Date</span><b>{{ s.liquidation_date|date:"d-m-Y"|default:"-" }}</b></div>
         <div class="kv"><span>Age at Liquidation</span><b>{{ s.age|floatformat:0 }}</b></div>
         <div class="kv"><span>Avg. Lifting Age</span><b>{{ s.mean_age|floatformat:2 }}</b></div>
         <div class="kv"><span>Day Gain (g)</span><b>{{ s.day_gain|floatformat:2 }}</b></div>

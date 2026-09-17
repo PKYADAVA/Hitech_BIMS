@@ -114,7 +114,7 @@
       {% for r in rows %}
       <tr class="jv-row{% if r.status == 'Cancelled' %} jv-cancelled-row{% endif %}" data-target="jv-lines-{{ r.id }}">
         <td class="text-center"><i class="fas fa-chevron-right jv-caret text-muted"></i></td>
-        <td>{{ r.date|date:"d.m.Y" }}</td>
+        <td>{{ r.date|date:"d-m-Y" }}</td>
         <td>{{ r.voucher_no }}</td>
         <td><span class="jv-type">{{ r.voucher_type }}</span></td>
         <td>{{ r.branch }}</td>
@@ -127,7 +127,7 @@
         <td>{{ r.narration }}</td>
         <td><span class="jv-status jv-{{ r.status|lower }}">{{ r.status }}</span></td>
         <td>{{ r.created_by }}</td>
-        <td>{{ r.created_time|date:"d.m.Y H:i" }}</td>
+        <td>{{ r.created_time|date:"d-m-Y H:i" }}</td>
       </tr>
       <tr class="jv-lines d-none" id="jv-lines-{{ r.id }}">
         <td colspan="15">

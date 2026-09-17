@@ -27,7 +27,7 @@
 
 {% include '_report_letterhead.html' with title='Detailed Daily Entry Report' %}
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-  <div class="text-muted small">{{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} &middot; {{ rows|length }} record(s)</div>
+  <div class="text-muted small">{{ from_date|date:"d-m-Y" }} – {{ to_date|date:"d-m-Y" }} &middot; {{ rows|length }} record(s)</div>
 </div>
 
 <!-- Filters -->
@@ -101,7 +101,7 @@
           <td data-c="farmer" class="txt">{{ r.farmer|default:"-" }}</td>
           <td data-c="batch" class="txt">{{ r.batch|default:"-" }}</td>
           <td data-c="book_no">{{ r.book_no|default:"-" }}</td>
-          <td data-c="entry_date">{{ r.entry_date|date:"d.m.Y" }}</td>
+          <td data-c="entry_date">{{ r.entry_date|date:"d-m-Y" }}</td>
           <td data-c="age" class="num">{{ r.age }}</td>
           <td data-c="placed" class="num">{{ r.placed|floatformat:0 }}</td>
           <td data-c="opening" class="num">{{ r.opening|floatformat:0 }}</td>
@@ -141,13 +141,13 @@
           <td data-c="line" class="txt">{{ r.line|default:"-" }}</td>
           <td data-c="branch" class="txt">{{ r.branch|default:"-" }}</td>
           <td data-c="farmer_contact" class="txt">{{ r.farmer_contact|default:"-" }}</td>
-          <td data-c="entry_time">{{ r.entry_time|date:"d.m.Y H:i"|default:"-" }}</td>
+          <td data-c="entry_time">{{ r.entry_time|date:"d-m-Y H:i"|default:"-" }}</td>
           <td data-c="entry_by" class="txt">{{ r.entry_by|default:"-" }}</td>
           <td data-c="farm_location" class="txt">{% if r.farm_location %}<a href="https://maps.google.com/?q={{ r.farm_location|urlencode }}" target="_blank" rel="noopener">{{ r.farm_location }}</a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
           <td data-c="entry_location" class="txt">{% if r.entry_location %}<a href="https://maps.google.com/?q={{ r.entry_location|urlencode }}" target="_blank" rel="noopener">{{ r.entry_location }}</a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="50" class="text-center text-muted py-4">No daily entries in {{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} with these filters.</td></tr>
+        <tr><td colspan="50" class="text-center text-muted py-4">No daily entries in {{ from_date|date:"d-m-Y" }} – {{ to_date|date:"d-m-Y" }} with these filters.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}

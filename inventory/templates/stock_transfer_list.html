@@ -247,7 +247,7 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
-        <td class="ds-mid">${escapeHtml(row.date)}</td>
+        <td class="ds-mid">${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.from_location_name)}</td>

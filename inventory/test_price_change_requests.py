@@ -78,7 +78,7 @@ class PriceChangeRequestTests(TestCase):
         request = self.propose("edit", self.new_price())
         self.assertEqual(request.status, "pending")
         self.assertEqual(request.object_label,
-                         f"{self.item.item_code} from {self.entry.effective_date:%d.%m.%Y}")
+                         f"{self.item.item_code} from {self.entry.effective_date:%d-%m-%Y}")
         self.entry.refresh_from_db()
         self.assertEqual(self.entry.price, Decimal("42.00"))
 

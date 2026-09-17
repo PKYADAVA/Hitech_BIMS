@@ -27,7 +27,7 @@ only ever produce a wrong number.
       <p class="ah-sub">
         <span class="ah-pill {{ n.priority }}">{{ n.get_priority_display }}</span>
         <span class="ah-chip ms-1">{{ n.get_module_display }}</span>
-        <span class="ms-2">{{ n.created_at|date:"d M Y, H:i" }}</span>
+        <span class="ms-2">{{ n.created_at|date:"d-m-Y, H:i" }}</span>
       </p>
     </div>
     {% if n.action_url %}
@@ -92,7 +92,7 @@ only ever produce a wrong number.
       </div>
       <div>
         <div class="ah-field-l">Raised at</div>
-        <div class="ah-field-v">{{ n.created_at|date:"d M Y, H:i" }}</div>
+        <div class="ah-field-v">{{ n.created_at|date:"d-m-Y, H:i" }}</div>
       </div>
       <div>
         <div class="ah-field-l">Configuration</div>
@@ -103,7 +103,7 @@ only ever produce a wrong number.
       <div>
         <div class="ah-field-l">You read this</div>
         <div class="ah-field-v">
-          {% if recipient.read_at %}{{ recipient.read_at|date:"d M Y, H:i" }}{% else %}Just now{% endif %}
+          {% if recipient.read_at %}{{ recipient.read_at|date:"d-m-Y, H:i" }}{% else %}Just now{% endif %}
         </div>
       </div>
     </div>
@@ -145,7 +145,7 @@ only ever produce a wrong number.
               <span class="ah-trail-who">
                 by {% firstof entry.actor.get_full_name entry.actor.username "System" %}
               </span>
-              <span class="ah-trail-when">{{ entry.created_at|date:"d M Y, H:i" }}</span>
+              <span class="ah-trail-when">{{ entry.created_at|date:"d-m-Y, H:i" }}</span>
             </div>
             {% if entry.notified %}
               <div class="ah-trail-note">{% spaceless %}
@@ -187,7 +187,7 @@ only ever produce a wrong number.
                   <span class="badge bg-secondary-subtle text-secondary">Unread</span>
                 {% endif %}
               </td>
-              <td class="ah-nowrap">{{ r.read_at|date:"d M Y, H:i"|default:"—" }}</td>
+              <td class="ah-nowrap">{{ r.read_at|date:"d-m-Y, H:i"|default:"—" }}</td>
               <td>{{ r.delivered_channels|join:", "|default:"in_app" }}</td>
             </tr>
           {% empty %}

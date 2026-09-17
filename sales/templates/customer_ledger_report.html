@@ -135,7 +135,7 @@
         </tr>
         {% for r in g.rows %}
         <tr>
-          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.date|date:"d-m-Y" }}</td>
           <td title="{{ r.trnum }}">{{ r.trnum }}</td>
           <td title="{{ r.doc_no }}">{{ r.doc_no }}</td>
           <td>{% if r.type %}<span class="vb vb-{{ r.type_slug }}">{{ r.type }}</span>{% endif %}</td>

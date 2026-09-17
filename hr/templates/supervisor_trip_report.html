@@ -99,7 +99,7 @@
       {% for t in trips %}
       <tr>
         <td>{{ t.trip_no }}</td>
-        <td>{{ t.date|date:"d M Y" }}</td>
+        <td>{{ t.date|date:"d-m-Y" }}</td>
         <td>{{ t.employee.full_name }}</td>
         <td>{{ t.employee.warehouse.name|default:"—" }}</td>
         <td>{{ t.vehicle_type }}</td>
@@ -110,7 +110,7 @@
             <a href="{{ t.start_photo.url }}" target="_blank" rel="noopener">
               <img src="{{ t.start_photo.url }}" alt="Start capture" class="rpt-thumb">
             </a>
-            <div class="rpt-stamp">{{ t.start_photo_at|date:"d M Y H:i"|default:"—" }}</div>
+            <div class="rpt-stamp">{{ t.start_photo_at|date:"d-m-Y H:i"|default:"—" }}</div>
             {% if t.start_address %}
               <div class="rpt-address" title="{{ t.start_address }}">{{ t.start_address }}</div>
             {% endif %}
@@ -126,7 +126,7 @@
             <a href="{{ t.end_photo.url }}" target="_blank" rel="noopener">
               <img src="{{ t.end_photo.url }}" alt="End capture" class="rpt-thumb">
             </a>
-            <div class="rpt-stamp">{{ t.end_photo_at|date:"d M Y H:i"|default:"—" }}</div>
+            <div class="rpt-stamp">{{ t.end_photo_at|date:"d-m-Y H:i"|default:"—" }}</div>
             {% if t.end_address %}
               <div class="rpt-address" title="{{ t.end_address }}">{{ t.end_address }}</div>
             {% endif %}
@@ -156,7 +156,7 @@
             <tbody>
               {% for v in t.visits.all %}
               <tr>
-                <td>{{ v.checked_in_at|date:"d M Y H:i"|default:"—" }}</td>
+                <td>{{ v.checked_in_at|date:"d-m-Y H:i"|default:"—" }}</td>
                 <td>{{ v.farm.farm_name }}</td>
                 <td>{{ v.purpose|default:"—" }}</td>
                 <td>{{ v.duration_label|default:"—" }}</td>

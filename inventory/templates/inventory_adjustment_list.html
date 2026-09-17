@@ -119,7 +119,7 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
-        <td>${escapeHtml(row.date)}</td>
+        <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.type) || "-"}</td>
         <td>${escapeHtml(row.chart_of_account_label) || "-"}</td>

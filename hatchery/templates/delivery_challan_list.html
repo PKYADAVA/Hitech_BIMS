@@ -202,7 +202,7 @@ $(function () {
     rows.forEach(function (row) {
       tbody.append(`<tr>
         <td>${escapeHtml(row.challan_no)}</td>
-        <td>${escapeHtml(row.date)}</td>
+        <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.customer_name)}</td>
         <td>${escapeHtml(row.vehicle_no) || "-"}</td>
         <td>${escapeHtml(row.total_quantity)}</td>

@@ -116,10 +116,10 @@
               href="{% url 'farm_detailed_daily_entry_report' %}?farm={{ r.farm_id }}&amp;batch={{ r.batch_id }}{% if r.placement_date %}&amp;from_date={{ r.placement_date|date:'Y-m-d' }}{% endif %}&amp;to_date={{ today|date:'Y-m-d' }}">{{ r.batch }}<i class="fas fa-arrow-up-right-from-square lfs-drill-ico"></i></a></td>
           <td>{{ r.book_no|default:"-" }}</td>
           <td class="num">{{ r.actual_age }}</td>
-          <td>{{ r.placement_date|date:"d.m.Y"|default:"-" }}</td>
-          <td>{{ r.lifting_start|date:"d.m.Y"|default:"-" }}</td>
+          <td>{{ r.placement_date|date:"d-m-Y"|default:"-" }}</td>
+          <td>{{ r.lifting_start|date:"d-m-Y"|default:"-" }}</td>
           <td class="num">{{ r.mean_age|floatformat:2 }}</td>
-          <td>{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry|date:"d.m.Y"|default:"-" }}{% endif %}</td>
+          <td>{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry|date:"d-m-Y"|default:"-" }}{% endif %}</td>
           <td class="num">{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry_age|default_if_none:"-" }}{% endif %}</td>
           <td class="num {% if not r.not_started and r.gap_days is not None %}{% if r.gap_days >= 2 %}gap-bad{% else %}gap-ok{% endif %}{% endif %}">{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.gap_days|default:"-" }}{% endif %}</td>
           <td class="num">{{ r.housed|floatformat:0 }}</td>
@@ -134,7 +134,7 @@
           <td class="num">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num">{{ r.avg_bwt|floatformat:2 }}</td>
           <td class="num">{% if r.std_bwt_at_feed is not None %}{{ r.std_bwt_at_feed|floatformat:2 }}{% else %}-{% endif %}</td>
-          <td>{{ r.last_bwt_date|date:"d.m.Y"|default:"-" }}</td>
+          <td>{{ r.last_bwt_date|date:"d-m-Y"|default:"-" }}</td>
           <td class="num {% if r.last_bwt_gap is not None %}{% if r.last_bwt_gap >= 2 %}gap-bad{% else %}gap-ok{% endif %}{% endif %}">{{ r.last_bwt_gap|default:"-" }}</td>
           <td class="num">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:3 }}{% else %}-{% endif %}</td>
           <td class="num">{{ r.fcr|floatformat:3 }}</td>

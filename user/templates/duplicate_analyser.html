@@ -155,7 +155,7 @@
         </div>
         <a class="btn btn-primary btn-sm" href="{% url 'duplicate_analyser' %}{% if module %}?module={{ module }}{% endif %}">
           <i class="fas fa-play me-1"></i>Run All Checks</a>
-        <span class="dup-ran"><i class="far fa-clock me-1"></i>Last run: {{ ran_at|date:"d M Y H:i" }}</span>
+        <span class="dup-ran"><i class="far fa-clock me-1"></i>Last run: {{ ran_at|date:"d-m-Y H:i" }}</span>
       </div>
     </div>
 

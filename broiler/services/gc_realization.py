@@ -803,7 +803,7 @@ def _format_cells(values):
         if value is None:
             text = "—"
         elif places == "date":
-            text = value.strftime("%d.%m.%Y")
+            text = value.strftime("%d-%m-%Y")
         elif places == 0:
             text = f"{int(value):,}"
         else:

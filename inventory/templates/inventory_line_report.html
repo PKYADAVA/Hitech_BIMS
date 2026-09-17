@@ -46,7 +46,7 @@
       {% for r in rows %}
       <tr>
         {% for value, kind, key in r.cells %}
-          {% if kind == 'date' %}<td>{{ value|date:"d.m.Y" }}</td>
+          {% if kind == 'date' %}<td>{{ value|date:"d-m-Y" }}</td>
           {% elif kind == 'num' %}<td class="num">{{ value|indian_currency }}</td>
           {% else %}<td{% if key == 'location' %} class="rpt-loc"{% endif %}>{{ value }}</td>
           {% endif %}

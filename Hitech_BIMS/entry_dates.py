@@ -27,7 +27,7 @@ def reject_future_date(value, label="Entry date"):
     if value and value > timezone.localdate():
         raise ValidationError(
             "%s cannot be later than today (%s)."
-            % (label, timezone.localdate().strftime("%d.%m.%Y")))
+            % (label, timezone.localdate().strftime("%d-%m-%Y")))
     return value
 
 

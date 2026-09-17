@@ -128,6 +128,26 @@ function showOnlyRecords(records) {
 // Exposed globally because ~50 pages need it; `date` is optional and defaults
 // to now.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// A date as DD-MM-YYYY, which is how this business writes one.
+//
+// The registers printed whatever the API sent, which is ISO (2026-07-21), so a
+// grid disagreed with its own filter boxes and with every server-rendered date
+// on the site. One helper rather than twenty copies of the same three lines.
+//
+// Anything that is not an ISO date comes back unchanged but escaped, since
+// these values are dropped straight into a template string.
+// ---------------------------------------------------------------------------
+window.fmtDate = function (value) {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[3] + "-" + iso[2] + "-" + iso[1];
+  return text.replace(/[&<>"]/g, function (ch) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+  });
+};
+
 window.localDay = function (date) {
   const d = date ? new Date(date) : new Date();
   if (isNaN(d.getTime())) return "";

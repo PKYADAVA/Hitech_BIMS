@@ -6967,9 +6967,9 @@ def _feed_programme_gap(batch, on_date, masters):
 
     for m in near:
         if on_date and m.effective_to and on_date > m.effective_to:
-            return f"Feed programme expired {m.effective_to.strftime('%d.%m.%Y')}"
+            return f"Feed programme expired {m.effective_to.strftime('%d-%m-%Y')}"
         if on_date and m.effective_from and on_date < m.effective_from:
-            return f"Feed programme starts {m.effective_from.strftime('%d.%m.%Y')}"
+            return f"Feed programme starts {m.effective_from.strftime('%d-%m-%Y')}"
     return "No feed programme"
 
 
@@ -7482,11 +7482,11 @@ def batch_wise_feed_scheduling_report(request):
             if programme_gap:
                 flags.append(programme_gap)
             if not is_live:
-                flags.append(f"Closed {as_of.strftime('%d.%m.%Y')}")
+                flags.append(f"Closed {as_of.strftime('%d-%m-%Y')}")
             elif last_entry and (today - last_entry).days > 14:
                 # Only a running flock owes daily entries; a finished one
                 # having none lately is simply what "finished" looks like.
-                flags.append(f"No entry since {last_entry.strftime('%d.%m.%Y')}")
+                flags.append(f"No entry since {last_entry.strftime('%d-%m-%Y')}")
             if any(r["avail_qty"] < 0 for r in batch_rows):
                 flags.append("Negative stock")
 
@@ -8585,8 +8585,8 @@ class GrowingChargeSchemeAPI(BaseAPIView):
                 schemes.append({
                     "id": s.id,
                     "scheme_code": s.scheme_code,
-                    "from_date": s.from_date.strftime("%d.%m.%Y") if s.from_date else "",
-                    "to_date": s.to_date.strftime("%d.%m.%Y") if s.to_date else "",
+                    "from_date": s.from_date.strftime("%d-%m-%Y") if s.from_date else "",
+                    "to_date": s.to_date.strftime("%d-%m-%Y") if s.to_date else "",
                     "branch_name": s.branch.branch_name if s.branch else "-All-",
                     "schema_name": s.schema_name,
                     "chick_cost": str(s.chick_cost),
@@ -9316,7 +9316,7 @@ class GCSettlementAPI(View):
         if to_date:
             rows = rows.filter(gc_date__lte=date_from_query(to_date))
         def fmt(d):
-            return d.strftime("%d.%m.%Y") if d else ""
+            return d.strftime("%d-%m-%Y") if d else ""
         return JsonResponse([{
             "id": s.id,
             "closed_date": fmt(timezone.localtime(s.created_at).date() if s.created_at else None),

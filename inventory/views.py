@@ -3076,7 +3076,7 @@ def _item_ledger_excel(ctx):
         cell.font = bold
 
     for i, r in enumerate(ledger["rows"], start=1):
-        ws.append([i, r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["type"], r["trnum"],
+        ws.append([i, r["date"].strftime("%d-%m-%Y") if r["date"] else "", r["type"], r["trnum"],
                    r["location"], r["remarks"],
                    num(r["in_qty"]), num(r["in_price"]), num(r["in_amount"]),
                    num(r["out_qty"]), num(r["out_price"]), num(r["out_amount"]),
@@ -3276,7 +3276,7 @@ def _stock_transfer_excel(ctx):
 
     for r in ctx["rows"]:
         ws.append([
-            r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["branch"], r["trnum"], r["dc_no"],
+            r["date"].strftime("%d-%m-%Y") if r["date"] else "", r["branch"], r["trnum"], r["dc_no"],
             r["from_location"], r["from_farm_code"], r["from_batch"],
             r["to_location"], r["to_farm_code"], r["to_batch"],
             r["item_code"], r["item"],
@@ -3616,7 +3616,7 @@ def _negative_stock_excel(ctx):
     as_on = ctx["to_date"] or ""
     for i, r in enumerate(ctx["rows"], start=1):
         ws.append([i, r["location"], r["item"], as_on,
-                   r["since"].strftime("%d.%m.%Y") if r["since"] else "",
+                   r["since"].strftime("%d-%m-%Y") if r["since"] else "",
                    float(r["quantity"])])
 
     for col, width in enumerate([8, 34, 28, 13, 15, 14], start=1):
@@ -3819,7 +3819,7 @@ def _inventory_line_excel(ctx, cfg):
         line = []
         for _label, key, kind in ctx["columns"]:
             value = row.get(key, "")
-            line.append(value.strftime("%d.%m.%Y") if kind == "date" and value else value)
+            line.append(value.strftime("%d-%m-%Y") if kind == "date" and value else value)
         ws.append(line)
 
     total = []
@@ -3921,7 +3921,7 @@ _CR_HANDLERS.update({
         "label": "Item Price List", "tab": "item_price_list", "model": ItemPriceList,
         "save": _save_item_price_change_request,
         "delete": _delete_item_price_change_request,
-        "number": lambda obj: f"{obj.item.item_code} from {obj.effective_date:%d.%m.%Y}",
+        "number": lambda obj: f"{obj.item.item_code} from {obj.effective_date:%d-%m-%Y}",
     },
     "stock_transfer": {
         "api": "/stock_transfer_api/",
