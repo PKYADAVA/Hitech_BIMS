@@ -726,7 +726,7 @@ class WhereItHappenedTests(DuplicateScanBase):
         self.assertEqual(
             check("stock_transfer").columns,
             ["Trnum", "Date", "Dc No.", "From Location", "Item Code", "Item Name",
-             "Driver", "Quantity", "To Location", "Batch"])
+             "Quantity", "To Location", "Batch Id"])
 
     def test_a_daily_entry_row_names_its_branch(self):
         farm = self.farm()

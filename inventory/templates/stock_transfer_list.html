@@ -81,9 +81,15 @@
             <th class="w-farm">From Location</th>
             <th class="w-code">Item Code</th>
             <th class="w-item">Item Name</th>
-            <th class="w-name">Driver</th>
             <th class="ds-num w-qty">Quantity</th>
             <th class="w-farm">To Location</th>
+            {% comment %}
+            A transfer onto a farm names the flock it is for, and one off a
+            farm names the flock it came out of. Either way it is the batch
+            this stock moved against, and the register was the one place it
+            could not be seen — the API has carried both names all along.
+            {% endcomment %}
+            <th class="w-code">Batch Id</th>
             <th class="ds-mid w-action">Action</th>
           </tr>
         </thead>
@@ -247,9 +253,9 @@ $(function () {
         <td>${escapeHtml(row.from_location_name)}</td>
         <td>${escapeHtml(row.item_code)}</td>
         <td>${escapeHtml(row.item_name)}</td>
-        <td>${escapeHtml(row.driver_name) || "-"}</td>
         <td class="ds-num">${Number(row.quantity).toFixed(2)}</td>
         <td>${escapeHtml(row.to_location_name)}</td>
+        <td>${escapeHtml(row.to_batch_name || row.from_batch_name) || "-"}</td>
         <td class="ds-mid">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${row.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
