@@ -45,6 +45,21 @@ class DuplicateScanBase(TestCase):
     def batch(self, farm):
         return BroilerBatch.objects.create(broiler_farm=farm, start_date=self.today - timedelta(days=20))
 
+    def account(self):
+        """A ledger account, which receipts and adjustments cannot be saved without."""
+        if not hasattr(self, "_account"):
+            kind = AccountType.objects.create(name="Cash", code_range_start=100000,
+                                              code_range_end=199999, report="BS")
+            self._account = ChartOfAccount.objects.create(
+                company=CompanyProfile.get_solo(), code="100001",
+                description="Cash in hand", account_type=kind)
+        return self._account
+
+    def warehouse(self, name="Central"):
+        from inventory.models import Warehouse
+
+        return Warehouse.objects.get_or_create(name=name)[0]
+
 
 class EntryDuplicateTests(DuplicateScanBase):
 
@@ -524,3 +539,147 @@ class DashboardWidgetTests(DuplicateScanBase):
 
         order = list(DEFAULT_PANEL_ORDER)
         self.assertLess(order.index("duplicates"), order.index("field_team"))
+
+
+class MoneyDuplicateTests(DuplicateScanBase):
+    """Where a duplicate moves cash rather than a figure."""
+
+    def customer(self, name="Sample Customer", mobile="9000000001"):
+        from sales.models import Customer
+
+        return Customer.objects.create(name=name, address="Main Road", mobile=mobile)
+
+    def test_the_same_customer_receipt_twice_is_found(self):
+        from sales.models import SalesReceipt
+
+        customer = self.customer()
+        for _ in range(2):
+            SalesReceipt.objects.create(customer=customer, date=self.today,
+                                        amount=Decimal("5000"), mode="Cash",
+                                        location=self.warehouse(), receipt_account=self.account())
+        found = check("sales_receipt")
+        self.assertEqual(found.count, 1)
+        self.assertEqual(found.records, 2)
+
+    def test_receipts_of_different_amounts_are_not_duplicates(self):
+        from sales.models import SalesReceipt
+
+        customer = self.customer()
+        for amount in ("5000", "4000"):
+            SalesReceipt.objects.create(customer=customer, date=self.today,
+                                        amount=Decimal(amount), mode="Cash",
+                                        location=self.warehouse(), receipt_account=self.account())
+        self.assertEqual(check("sales_receipt").count, 0)
+
+    def test_two_customers_paying_the_same_amount_are_not_duplicates(self):
+        from sales.models import SalesReceipt
+
+        for i, name in enumerate(("A Ltd", "B Ltd")):
+            SalesReceipt.objects.create(customer=self.customer(name, f"90000000{i}2"),
+                                        date=self.today, amount=Decimal("5000"), mode="Cash",
+                                        location=self.warehouse(), receipt_account=self.account())
+        self.assertEqual(check("sales_receipt").count, 0)
+
+    def test_the_same_bird_sale_receipt_twice_is_found(self):
+        from broiler.models import BirdSaleReceipt
+
+        for _ in range(2):
+            BirdSaleReceipt.objects.create(farmer=self.farmer, sale_type="farmer",
+                                           date=self.today, amount=Decimal("1200"), mode="Cash",
+                                           location=self.warehouse(), receipt_account=self.account())
+        self.assertEqual(check("bird_sale_receipt").count, 1)
+
+    def test_the_same_growing_charge_payment_twice_is_found(self):
+        from broiler.models import FarmerGCPayment
+
+        for _ in range(2):
+            FarmerGCPayment.objects.create(date=self.today, narration="GC for June")
+        self.assertEqual(check("gc_payment").count, 1)
+
+    def test_a_payment_with_no_narration_is_not_matched(self):
+        from broiler.models import FarmerGCPayment
+
+        for _ in range(3):
+            FarmerGCPayment.objects.create(date=self.today, narration="")
+        self.assertEqual(check("gc_payment").count, 0)
+
+    def test_the_same_supplier_debit_note_twice_is_found(self):
+        from purchase.models import DebitNote
+
+        supplier = Supplier.objects.create(name="Maharashtra Feeds")
+        for _ in range(2):
+            DebitNote.objects.create(supplier=supplier, date=self.today,
+                                     amount=Decimal("750"), against_bill="INV-9")
+        self.assertEqual(check("debitnote").count, 1)
+
+
+class StockMovementDuplicateTests(DuplicateScanBase):
+
+    def item(self, name="Pre Starter"):
+        return Item.objects.create(description=name, category=self.category,
+                                   valuation_method="FIFO", usage="Purchased",
+                                   standard_cost_per_unit=Decimal("40"))
+
+    def test_the_same_inventory_adjustment_twice_is_found(self):
+        from inventory.models import InventoryAdjustment, InventoryAdjustmentItem
+
+        warehouse = self.warehouse()
+        item = self.item()
+        for _ in range(2):
+            adjustment = InventoryAdjustment.objects.create(
+                date=self.today, location_type="warehouse", warehouse=warehouse,
+                chart_of_account=self.account())
+            InventoryAdjustmentItem.objects.create(
+                adjustment=adjustment, item=item, adjustment_type="add",
+                quantity=Decimal("20"), rate=Decimal("40"))
+        self.assertEqual(check("inventory_adjustment").count, 1)
+
+    def test_adjustments_of_different_sizes_are_not_duplicates(self):
+        from inventory.models import InventoryAdjustment, InventoryAdjustmentItem
+
+        warehouse = self.warehouse()
+        item = self.item()
+        for qty in ("20", "30"):
+            adjustment = InventoryAdjustment.objects.create(
+                date=self.today, location_type="warehouse", warehouse=warehouse,
+                chart_of_account=self.account())
+            InventoryAdjustmentItem.objects.create(
+                adjustment=adjustment, item=item, adjustment_type="add",
+                quantity=Decimal(qty), rate=Decimal("40"))
+        self.assertEqual(check("inventory_adjustment").count, 0)
+
+
+class HatcheryProductionTests(DuplicateScanBase):
+
+    def test_hatch_entries_need_no_check_because_the_database_refuses_them(self):
+        # HatchEntry.tray_setting is a one-to-one, so a second hatch against one
+        # setting cannot be stored. Same reasoning as attendance and settlement.
+        self.assertEqual([c for c in run() if c.code == "hatch_entry"], [])
+
+    def test_a_settlement_cannot_be_duplicated_either(self):
+        from broiler.models import GrowingChargeSettlement
+
+        field = GrowingChargeSettlement._meta.get_field("batch")
+        self.assertTrue(field.one_to_one, "a batch can only be settled once")
+
+
+class CoverageTests(DuplicateScanBase):
+
+    def test_every_check_runs_and_is_described(self):
+        checks = run()
+        self.assertGreaterEqual(len(checks), 38)
+        self.assertEqual(summary(checks)["failed"], [])
+        for c in checks:
+            self.assertTrue(c.title and c.matched_on and c.why and c.module, c.code)
+            self.assertTrue(c.columns, c.code)
+
+    def test_check_codes_are_unique(self):
+        codes = [c.code for c in run()]
+        self.assertEqual(len(codes), len(set(codes)))
+
+    def test_the_money_movements_are_all_covered(self):
+        codes = {c.code for c in run()}
+        for code in ("sales_receipt", "bird_sale_receipt", "gc_payment",
+                     "debitnote", "creditnote", "customerdebitnote", "customercreditnote",
+                     "sales_invoice_reference"):
+            self.assertIn(code, codes)

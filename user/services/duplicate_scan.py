@@ -278,6 +278,204 @@ def _voucher_checks():
             matched=lambda v: f"{v.voucher_type} on {_date(v)}"))
 
 
+def _money_checks():
+    """Where a duplicate moves cash rather than a figure.
+
+    Receipts and payments are matched on party, date and amount: the same
+    money, from the same person, on the same day. That is a real pattern in
+    honest data — somebody can pay in two instalments of the same size — so
+    these are questions like all the rest, not findings.
+    """
+    from broiler.models import BirdSaleReceipt, FarmerGCPayment
+    from purchase.models import CreditNote, DebitNote
+    from sales.models import CustomerCreditNote, CustomerDebitNote, SalesInvoice, SalesReceipt
+
+    invoices = SalesInvoice.objects.select_related("customer")
+    fields = ["customer_id", "date", "reference_no"]
+    yield Check(
+        code="sales_invoice_reference", kind="entry", module=SALES,
+        title="Same sales invoice reference twice",
+        matched_on="Customer + Date + Reference",
+        why="One despatch is billed twice, so the customer's balance reads high.",
+        columns=["Invoice No", "Date", "Customer", "Reference"],
+        groups=_collect(
+            invoices.exclude(Q(reference_no__isnull=True) | Q(reference_no="")),
+            fields,
+            _duplicate_keys(invoices.exclude(Q(reference_no__isnull=True) | Q(reference_no="")), fields),
+            cells=lambda i: [i.invoice_no or f"#{i.pk}", i.date,
+                             i.customer.name if i.customer_id else "", i.reference_no],
+            matched=lambda i: f"reference {i.reference_no}"))
+
+    receipts = SalesReceipt.objects.select_related("customer")
+    fields = ["customer_id", "date", "amount"]
+    yield Check(
+        code="sales_receipt", kind="entry", module=SALES,
+        title="Same customer receipt twice on one day",
+        matched_on="Customer + Date + Amount",
+        why="Money is credited twice, so the customer appears to owe less than they do.",
+        columns=["Receipt No", "Date", "Customer", "Mode", "Amount"],
+        groups=_collect(
+            receipts, fields, _duplicate_keys(receipts, fields),
+            cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date,
+                             r.customer.name if r.customer_id else "", r.mode, r.amount],
+            matched=lambda r: f"{r.amount} on {_date(r)}"))
+
+    bird_receipts = BirdSaleReceipt.objects.select_related("customer", "farmer")
+    fields = ["customer_id", "farmer_id", "date", "amount"]
+    yield Check(
+        code="bird_sale_receipt", kind="entry", module=BROILER,
+        title="Same bird sale receipt twice on one day",
+        matched_on="Payer + Date + Amount",
+        why="Collection against bird sales is counted twice.",
+        columns=["Receipt No", "Date", "Received from", "Mode", "Amount"],
+        groups=_collect(
+            bird_receipts, fields, _duplicate_keys(bird_receipts, fields),
+            cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date,
+                             (r.customer.name if r.customer_id else
+                              r.farmer.farmer_name if r.farmer_id else ""),
+                             r.mode, r.amount],
+            matched=lambda r: f"{r.amount} on {_date(r)}"))
+
+    payments = FarmerGCPayment.objects.all()
+    fields = ["date", "narration"]
+    yield Check(
+        code="gc_payment", kind="entry", module=BROILER,
+        title="Same growing charge payment twice",
+        matched_on="Date + Narration",
+        why="A farmer is paid twice for the same settlement.",
+        columns=["Payment No", "Date", "Narration"],
+        groups=_collect(
+            payments.exclude(narration=""), fields,
+            _duplicate_keys(payments.exclude(narration=""), fields),
+            cells=lambda p: [p.payment_no or f"#{p.pk}", p.date, (p.narration or "")[:70]],
+            matched=lambda p: f"on {_date(p)}"))
+
+    # The four note types share a shape, so they share a loop: party, date and
+    # amount, against the same bill.
+    for model, module, party, label in (
+            (DebitNote, PURCHASE, "supplier", "supplier debit note"),
+            (CreditNote, PURCHASE, "supplier", "supplier credit note"),
+            (CustomerDebitNote, SALES, "customer", "customer debit note"),
+            (CustomerCreditNote, SALES, "customer", "customer credit note")):
+        rows = model.objects.select_related(party)
+        fields = [f"{party}_id", "date", "amount"]
+        yield Check(
+            code=f"{model.__name__.lower()}", kind="entry", module=module,
+            title=f"Same {label} twice on one day",
+            matched_on=f"{party.capitalize()} + Date + Amount",
+            why="The adjustment is applied twice, moving the balance twice as far.",
+            columns=["Note No", "Date", party.capitalize(), "Against bill", "Amount"],
+            groups=_collect(
+                rows, fields, _duplicate_keys(rows, fields),
+                cells=lambda n, party=party: [
+                    n.note_no or f"#{n.pk}", n.date,
+                    getattr(getattr(n, party, None), "name", "") or "",
+                    n.against_bill or "", n.amount],
+                matched=lambda n: f"{n.amount} on {_date(n)}"))
+
+
+def _stock_movement_checks():
+    """Movements that are not the plain Stock Transfer already covered."""
+    from inventory.models import (InventoryAdjustmentItem, MedicineTransfer,
+                                  StockIssueItem, StockReceiveItem)
+
+    medicine = MedicineTransfer.objects.select_related(
+        "from_warehouse", "to_warehouse", "from_farm", "to_farm")
+    fields = ["date", "dc_no", "to_warehouse_id", "to_farm_id"]
+    with_dc = medicine.exclude(Q(dc_no__isnull=True) | Q(dc_no=""))
+    yield Check(
+        code="medicine_transfer", kind="entry", module=INVENTORY,
+        title="Same medicine transfer entered twice",
+        matched_on="Destination + Date + DC No",
+        why="Medicine is moved twice on paper, so the source reads low.",
+        columns=["Transfer No", "Date", "DC No", "To"],
+        groups=_collect(
+            with_dc, fields, _duplicate_keys(with_dc, fields),
+            cells=lambda t: [t.trnum or f"#{t.pk}", t.date, t.dc_no,
+                             (getattr(t.to_warehouse, "name", None)
+                              or getattr(t.to_farm, "farm_name", "") or "")],
+            matched=lambda t: f"DC {t.dc_no} on {_date(t)}"))
+
+    adjustments = InventoryAdjustmentItem.objects.select_related("adjustment", "item")
+    fields = ["adjustment__date", "item_id", "quantity", "adjustment__warehouse_id",
+              "adjustment__farm_id"]
+    yield Check(
+        code="inventory_adjustment", kind="entry", module=INVENTORY,
+        title="Same inventory adjustment twice",
+        matched_on="Item + Location + Date + Quantity",
+        why="Stock is corrected twice, so the correction overshoots.",
+        columns=["Adjustment No", "Date", "Item", "Quantity"],
+        groups=_collect(
+            adjustments, fields, _duplicate_keys(adjustments, fields),
+            cells=lambda a: [a.adjustment.trnum if a.adjustment_id else f"#{a.pk}",
+                             a.adjustment.date if a.adjustment_id else "",
+                             a.item.description if a.item_id else "", a.quantity],
+            matched=lambda a: f"{a.item.description if a.item_id else ''} × {a.quantity}"))
+
+    for model, code, title in ((StockIssueItem, "stock_issue", "stock issue"),
+                               (StockReceiveItem, "stock_receive", "stock receipt")):
+        parent = "issue" if model is StockIssueItem else "receive"
+        rows = model.objects.select_related(parent, "item")
+        fields = [f"{parent}__date", "item_id", "quantity"]
+        yield Check(
+            code=code, kind="entry", module=INVENTORY,
+            title=f"Same {title} line twice on one day",
+            matched_on="Item + Date + Quantity",
+            why="The same movement is booked twice, so the balance moves twice.",
+            columns=["Number", "Date", "Item", "Quantity"],
+            groups=_collect(
+                rows, fields, _duplicate_keys(rows, fields),
+                cells=lambda r, parent=parent: [
+                    getattr(getattr(r, parent, None), "trnum", "") or f"#{r.pk}",
+                    getattr(getattr(r, parent, None), "date", ""),
+                    r.item.description if r.item_id else "", r.quantity],
+                matched=lambda r: f"{r.item.description if r.item_id else ''} × {r.quantity}"))
+
+
+def _hatchery_production_checks():
+    """Hatchery work that is neither a purchase nor a despatch.
+
+    No hatch entry check: ``HatchEntry.tray_setting`` is a one-to-one, so the
+    database already refuses a second hatch against one setting — the same
+    reason there is no attendance check, and no settlement one.
+
+    Matched on more than the date. Grading twice in a day is ordinary; grading
+    the same supplier's same item twice in a day is the thing worth asking
+    about.
+    """
+    from hatchery.models import EggGrading, TraySetting
+
+    gradings = EggGrading.objects.select_related("supplier", "item")
+    fields = ["supplier_id", "item_id", "date", "purchase_invoice_id"]
+    yield Check(
+        code="egg_grading", kind="entry", module=HATCHERY,
+        title="Same egg grading entered twice",
+        matched_on="Supplier + Item + Date + Invoice",
+        why="The same intake is graded twice, so the eggs it sorted are counted twice.",
+        columns=["Transaction No", "Date", "Supplier", "Item"],
+        groups=_collect(
+            gradings, fields, _duplicate_keys(gradings, fields),
+            cells=lambda g: [g.transaction_no or f"#{g.pk}", g.date,
+                             g.supplier.name if g.supplier_id else "",
+                             g.item.description if g.item_id else ""],
+            matched=lambda g: f"{g.item.description if g.item_id else ''} on {_date(g)}"))
+
+    trays = TraySetting.objects.select_related("hatchery", "grading")
+    fields = ["hatchery_id", "grading_id", "setting_date"]
+    yield Check(
+        code="tray_setting", kind="entry", module=HATCHERY,
+        title="Same grading set twice on one day",
+        matched_on="Hatchery + Grading + Setting date",
+        why="Eggs are recorded into the setters twice, overstating what is incubating.",
+        columns=["Setting No", "Setting date", "Hatchery", "Hatch date"],
+        groups=_collect(
+            trays, fields, _duplicate_keys(trays, fields),
+            cells=lambda t: [t.setting_no or f"#{t.pk}", t.setting_date,
+                             getattr(t.hatchery, "name", "") if t.hatchery_id else "",
+                             t.hatch_date],
+            matched=lambda t: f"set on {_text(t.setting_date)}"))
+
+
 # ---------------------------------------------------------------------------
 # Master records
 # ---------------------------------------------------------------------------
@@ -486,6 +684,7 @@ def _hr_checks():
 
 CHECK_SOURCES: list[Callable] = [
     _entry_checks, _purchase_checks, _transfer_checks, _voucher_checks, _hatchery_checks,
+    _money_checks, _stock_movement_checks, _hatchery_production_checks,
     _farmer_checks, _farm_checks, _item_checks, _party_checks, _hr_checks,
 ]
 
