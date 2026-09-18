@@ -61,9 +61,6 @@
        every control, and four across stretched each one past what a "All"
        dropdown needs. */
     #add-farm-pane .bf-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-    /* Eight filters over six columns leave the second row half empty; the
-       search box takes the slack, being the one control that gains from it. */
-    #add-farm-pane .bf-filter:last-child { grid-column: span 5; }
   }
 
   .bf-card { padding: .7rem; }
@@ -419,7 +416,7 @@
           <span class="bf-filter-icon" style="--bf-bg:#eef1f5;--bf-fg:#475569"><i class="fas fa-magnifying-glass"></i></span>
           <div class="bf-filter-body">
             <label for="bf-fm-search">Search</label>
-            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Code, farm, farmer, district...">
+            <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search farms...">
           </div>
         </div>
       </div>
