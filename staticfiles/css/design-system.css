@@ -832,3 +832,16 @@ body.ds-shell .content > footer { display: none; }
   .ds tfoot { display: table-footer-group; }
   .ds tr { break-inside: avoid; }
 }
+
+/* A list page's filter bar on one line. Opt-in by adding .list-filter-row to
+   the bar's .row: dates and Month / Year take the width their contents need,
+   the buttons their own, and the selects share what is left — so a bar of
+   eight controls fits where six fixed col-md-2 columns did. Below xl it wraps
+   as before. */
+@media (min-width: 1200px) {
+  .row.list-filter-row { flex-wrap: nowrap; }
+  .row.list-filter-row > [class*="col-md-2"] { flex: 1 1 0; width: auto; min-width: 0; }
+  .row.list-filter-row > .lf-date { flex: 0 0 9.75rem; }
+  .row.list-filter-row > .lf-period { flex: 0 0 6.25rem; }
+  .row.list-filter-row > .lf-actions { flex: 0 0 auto; white-space: nowrap; }
+}
