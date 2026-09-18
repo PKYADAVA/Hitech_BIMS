@@ -22,14 +22,31 @@
   input.gcs-ro { background:#eef0f4 !important; }
   .gcs-colhead { text-align:center; font-weight:700; color:#2d6cdf; font-size:.8rem; }
   .gcs-total input { font-weight:700; }
+  /* List fits one screen: headers may wrap to two lines, dates (DD-MM-YYYY)
+     need no more than their ten digits, and Farm / Batch wrap long names
+     instead of pushing Action off the right edge. */
+  #gcs-table th { white-space:normal; min-width:0; vertical-align:middle; line-height:1.2; }
+  #gcs-table th, #gcs-table td { padding:.35rem .45rem; }
+  #gcs-table td { white-space:nowrap; }
+  #gcs-table td.gcs-wrap { white-space:normal; min-width:7rem; }
+  .gcs-filters input[type=date] { width:9.5rem; }
+  .gcs-filters .gcs-flt-month { width:6rem; }
+  .gcs-filters .gcs-flt-year { width:6rem; }
+  .gcs-filters .gcs-flt-branch { width:11rem; }
 </style>
 
 <!-- ============================ LIST VIEW ============================ -->
 <div id="gcs-list-view">
   <div class="card mb-3"><div class="card-body">
-    <div class="d-flex align-items-end gap-3 flex-wrap">
+    <div class="d-flex align-items-end gap-2 flex-wrap gcs-filters">
       <div><label class="gcs-form-label d-block">From Date:</label><input type="date" id="flt-from" class="form-control form-control-sm"></div>
       <div><label class="gcs-form-label d-block">To Date:</label><input type="date" id="flt-to" class="form-control form-control-sm"></div>
+      <div><label class="gcs-form-label d-block">Month:</label>
+        <select id="flt-month" class="form-select form-select-sm gcs-flt-month"><option value="">All</option><option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option><option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option><option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option></select></div>
+      <div><label class="gcs-form-label d-block">Year:</label>
+        <select id="flt-year" class="form-select form-select-sm gcs-flt-year"><option value="">All</option>{% for y in filter_years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select></div>
+      {% if filter_branches %}<div><label class="gcs-form-label d-block">Branch:</label>
+        <select id="flt-branch" class="form-select form-select-sm gcs-flt-branch"><option value="">All Branches</option>{% for b in filter_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}</select></div>{% endif %}
       <button class="btn btn-success btn-sm" id="gcs-filter-btn">Submit</button>
       {% if page_perms.add %}<button class="btn btn-primary btn-sm ms-auto" id="gcs-add-btn"><i class="fas fa-bars me-1"></i>ADD</button>{% endif %}
     </div>
@@ -246,21 +263,51 @@ const csrfToken = '{{ csrf_token }}';
 let gcsTable = null;
 function showForm() { $('#gcs-list-view').hide(); $('#gcs-form').show(); window.scrollTo(0, 0); }
 function showList() { $('#gcs-form').hide(); $('#gcs-list-view').show(); }
+// Last 7 days by default, as on the other registers — a page opened fresh
+// shows the recent week rather than every settlement ever made. On ready,
+// because main.js (which provides localDay) loads after this page's script;
+// registered ahead of $(loadList) below, so the first load uses these dates.
+$(function () {
+  document.getElementById('flt-from').value = localDay(new Date(Date.now() - 6 * 86400000));
+  document.getElementById('flt-to').value = localDay();
+});
+
+// Month / Year are shortcuts that fill From and To: a year alone is the whole
+// year, a month alone is that month this year. Submit applies them, as it
+// does the dates and the branch.
+$('#flt-month, #flt-year').on('change', function () {
+  const month = parseInt($('#flt-month').val(), 10);
+  const yearPicked = parseInt($('#flt-year').val(), 10);
+  if (!month && !yearPicked) return;
+  const year = yearPicked || new Date().getFullYear();
+  const first = new Date(year, month ? month - 1 : 0, 1);
+  const last = month ? new Date(year, month, 0) : new Date(year, 11, 31);
+  document.getElementById('flt-from').value = localDay(first);
+  document.getElementById('flt-to').value = localDay(last);
+});
+// Typed dates no longer describe a month or year, so clear the shortcuts.
+$('#flt-from, #flt-to').on('input', function () {
+  $('#flt-month, #flt-year').val('').trigger('change.select2');
+});
+
 function loadList() {
-  const from = document.getElementById('flt-from').value;
-  const to = document.getElementById('flt-to').value;
-  $.getJSON(`/gc_settlement_list/?from_date=${from}&to_date=${to}`, function (rows) {
+  const params = $.param({
+    from_date: document.getElementById('flt-from').value,
+    to_date: document.getElementById('flt-to').value,
+    branch: $('#flt-branch').val() || '',
+  });
+  $.getJSON(`/gc_settlement_list/?${params}`, function (rows) {
     if (gcsTable) { gcsTable.destroy(); gcsTable = null; }
     const body = $('#gcs-table-body').empty();
     rows.forEach(s => body.append(`
       <tr>
-        <td>${escapeHtml(s.closed_date)}</td>
+        <td>${fmtDate(s.closed_date)}</td>
         <td>${escapeHtml(s.settlement_code)}</td>
-        <td>${escapeHtml(s.gc_date)}</td>
-        <td>${escapeHtml(s.farm_name)}</td>
-        <td>${escapeHtml(s.batch_name)}</td>
-        <td>${escapeHtml(s.start_date)}</td>
-        <td>${escapeHtml(s.liquidation_date)}</td>
+        <td>${fmtDate(s.gc_date)}</td>
+        <td class="gcs-wrap">${escapeHtml(s.farm_name)}</td>
+        <td class="gcs-wrap">${escapeHtml(s.batch_name)}</td>
+        <td>${fmtDate(s.start_date)}</td>
+        <td>${fmtDate(s.liquidation_date)}</td>
         <td class="text-end">${escapeHtml(s.gc_amount)}</td>
         <td>${escapeHtml(s.grade)}</td>
         <td><div class="d-flex gap-1 justify-content-center flex-nowrap">
