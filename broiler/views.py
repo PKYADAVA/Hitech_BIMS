@@ -24,7 +24,7 @@ from django.core.cache import cache
 from django.conf import settings
 from .models import (
     BirdSale, BirdSalePhoto, BirdSaleReceipt, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
-    BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup,
+    BroilerFarmShed, BroilerLine, DailyEntry, DailyEntryPhoto, Farmer, FarmerGroup,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
@@ -2286,6 +2286,33 @@ def get_supervisors(request) -> JsonResponse:
 # Daily Entry (Broiler > Transactions)
 # ---------------------------------------------------------------------------
 
+#: The order a day's photos are shown in: what died, what was culled, what was fed.
+_DAILY_PHOTO_ORDER = ["mortality", "culls", "feed", "feed_2"]
+
+
+def _daily_entry_photos(row):
+    """Every photo evidencing one day's entry, for the register's thumbnails.
+
+    The per-category rows are the full set. An entry saved before those rows
+    existed carries its pictures only in the three single fields, so those are
+    added too — unless they are the same file a row already holds, which is how
+    a row's first photo is mirrored into its field (see DailyEntryPhoto.save).
+    """
+    labels = dict(DailyEntryPhoto.KIND_CHOICES)
+    out, seen = [], set()
+    for p in row.photos.all():
+        if p.image:
+            seen.add(p.image.name)
+            out.append({"kind": p.kind, "label": str(labels.get(p.kind, p.kind)), "url": p.image.url})
+    for kind, field in DailyEntryPhoto.LEGACY_FIELD.items():
+        f = getattr(row, field)
+        if f and f.name not in seen:
+            out.append({"kind": kind, "label": str(labels[kind]), "url": f.url})
+    out.sort(key=lambda p: _DAILY_PHOTO_ORDER.index(p["kind"])
+             if p["kind"] in _DAILY_PHOTO_ORDER else len(_DAILY_PHOTO_ORDER))
+    return out
+
+
 def _daily_entry_to_dict(row):
     return {
         "id": row.id, "date": row.date.isoformat(), "entry_no": row.entry_no,
@@ -2301,6 +2328,7 @@ def _daily_entry_to_dict(row):
         "is_active": row.is_batch_active,
         "entry_by": row.entry_by.username if row.entry_by_id else "",
         "entry_time": timezone.localtime(row.entry_time).strftime("%Y-%m-%d %H:%M") if row.entry_time else "",
+        "photos": _daily_entry_photos(row),
     }
 
 
@@ -2555,7 +2583,7 @@ class DailyEntryAPI(BaseAPIView):
                 # permission, and the list below is the only thing that would
                 # otherwise have hidden it.
                 row = (_scope_rows(request.user, DailyEntry.objects.select_related(
-                    "farm__branch", "batch", "feed_1", "feed_2"))
+                    "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos"))
                     .filter(id=id).first())
                 # A row that is gone, or that this user may not see, is a 404.
                 # It used to raise DoesNotExist into the catch-all below and
@@ -2566,7 +2594,7 @@ class DailyEntryAPI(BaseAPIView):
                 return JsonResponse(_daily_entry_to_dict(row))
 
             qs = _scope_rows(request.user, DailyEntry.objects.select_related(
-                "farm__branch", "batch", "feed_1", "feed_2"))
+                "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos"))
             qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
