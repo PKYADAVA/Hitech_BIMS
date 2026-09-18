@@ -31,7 +31,7 @@
   #gcs-table td.gcs-wrap { white-space:normal; min-width:7rem; }
   .gcs-filters input[type=date] { width:9.5rem; }
   .gcs-filters .gcs-flt-month { width:6rem; }
-  .gcs-filters .gcs-flt-year { width:9.5rem; }
+  .gcs-filters .gcs-flt-year { width:6rem; }
   .gcs-filters .gcs-flt-branch { width:11rem; }
   /* Dropdown text centred in its box, as on the other list filter bars. */
   .gcs-filters .select2-container--bootstrap-5 .select2-selection--single { padding-top:0; padding-bottom:0; }
@@ -47,7 +47,7 @@
       <div><label class="gcs-form-label d-block">Month:</label>
         <select id="flt-month" class="form-select form-select-sm gcs-flt-month"><option value="">All</option><option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option><option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option><option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option></select></div>
       <div><label class="gcs-form-label d-block">Year:</label>
-        {% load account_tags %}{% financial_years as fys %}<select id="flt-year" class="form-select form-select-sm gcs-flt-year" data-period-year data-period-month="#flt-month" data-period-from="#flt-from" data-period-to="#flt-to"><option value="">All</option>{% for fy in fys %}<option value="{{ fy.id }}" data-start="{{ fy.start_date|date:"Y-m-d" }}" data-end="{{ fy.end_date|date:"Y-m-d" }}"{% if fy.is_active %} data-active="1"{% endif %}>{{ fy }}</option>{% endfor %}</select></div>
+        {% load account_tags %}{% financial_years as fys %}<select id="flt-year" class="form-select form-select-sm gcs-flt-year" data-period-year data-period-month="#flt-month" data-period-from="#flt-from" data-period-to="#flt-to"><option value="">All</option>{% for y in fys %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select></div>
       {% if filter_branches %}<div><label class="gcs-form-label d-block">Branch:</label>
         <select id="flt-branch" class="form-select form-select-sm gcs-flt-branch"><option value="">All Branches</option>{% for b in filter_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}</select></div>{% endif %}
       <button class="btn btn-success btn-sm" id="gcs-filter-btn">Submit</button>
@@ -275,7 +275,7 @@ $(function () {
   document.getElementById('flt-to').value = localDay();
 });
 
-// Month / Year (a financial year) fill From and To through the shared wiring
+// Month / Year fill From and To through the shared wiring
 // in main.js; see the data-period-* attributes on #flt-year.
 
 function loadList() {

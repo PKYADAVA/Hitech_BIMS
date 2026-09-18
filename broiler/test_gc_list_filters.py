@@ -59,12 +59,13 @@ class GCListFilterTests(TestCase):
         FinancialYear.objects.create(start_date=date(2026, 4, 1), end_date=date(2027, 3, 31),
                                      is_active=True)
         html = self.client.get("/gc-settlement/").content.decode()
-        self.assertIn('data-start="2025-04-01" data-end="2026-03-31">FY 2025-2026</option>', html)
-        self.assertIn('data-start="2026-04-01" data-end="2027-03-31" data-active="1">'
-                      'FY 2026-2027</option>', html)
-        # Newest first, and no calendar years any more.
-        self.assertLess(html.index("FY 2026-2027"), html.index("FY 2025-2026"))
+        # The calendar years those two financial years cover, newest first,
+        # and none outside them.
+        for year in (2025, 2026, 2027):
+            self.assertIn('<option value="%d">%d</option>' % (year, year), html)
+        self.assertLess(html.index('<option value="2027">'), html.index('<option value="2025">'))
         self.assertNotIn('<option value="2024">', html)
+        self.assertNotIn('<option value="2028">', html)
 
 
 class GCListScopeTests(GCListFilterTests):
@@ -123,5 +124,5 @@ class ListPeriodFilterTests(TestCase):
             html = self.client.get(url).content.decode()
             self.assertIn('id="f-month"', html, url)
             self.assertIn('data-period-year data-period-month="#f-month"', html, url)
-            self.assertIn(">FY 2025-2026</option>", html, url)
+            self.assertIn('<option value="2026">2026</option>', html, url)
             self.assertIn("list-filter-row", html, url)

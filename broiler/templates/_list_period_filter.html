@@ -1,6 +1,7 @@
 {% comment %}
-Month / Year shortcuts for a list page's filter bar. Year is a financial year
-from Account > Financial Year. They fill the page's own From Date / To Date
+Month / Year shortcuts for a list page's filter bar. Year lists the calendar
+years the financial years in Account > Financial Year cover. They fill the
+page's own From Date / To Date
 (#from-date, #to-date) and Submit applies them as usual. The wiring is in
 main.js, shared with every Month / Year pair marked data-period-year.
 {% endcomment %}{% load account_tags %}{% financial_years as fys %}
@@ -26,6 +27,6 @@ main.js, shared with every Month / Year pair marked data-period-year.
   <label class="form-label">Year:</label>
   <select class="form-select" id="f-year" data-period-year data-period-month="#f-month"
           data-period-from="#from-date" data-period-to="#to-date">
-    <option value="">All</option>{% for fy in fys %}<option value="{{ fy.id }}" data-start="{{ fy.start_date|date:"Y-m-d" }}" data-end="{{ fy.end_date|date:"Y-m-d" }}"{% if fy.is_active %} data-active="1"{% endif %}>{{ fy }}</option>{% endfor %}
+    <option value="">All</option>{% for y in fys %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
   </select>
 </div>

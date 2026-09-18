@@ -156,11 +156,11 @@ window.localDay = function (date) {
 };
 
 // Month / Year shortcuts: a Year select marked data-period-year, naming its
-// Month select and the From / To inputs it fills. Year is a financial year
-// from Account > Financial Year (its options carry data-start / data-end).
-//   Year alone  -> that financial year, start to end.
-//   Month + FY  -> that month inside the FY (Feb in FY 2025-2026 is Feb 2026).
-//   Month alone -> that month inside the active FY.
+// Month select and the From / To inputs it fills. Year lists the calendar
+// years the financial years in Account > Financial Year cover.
+//   Year alone  -> that whole year, 1 Jan to 31 Dec.
+//   Month + Year -> that month of that year.
+//   Month alone -> that month this year.
 // Loading is left to the page's Submit, as for the dates themselves. Typing a
 // date, or Clear, puts both back to All: they no longer describe the range.
 $(function () {
@@ -169,30 +169,14 @@ $(function () {
     const from = document.querySelector(year.dataset.periodFrom);
     const to = document.querySelector(year.dataset.periodTo);
     if (!month || !from || !to) return;
-    const years = [].slice.call(year.options).filter(function (o) { return o.dataset.start; });
-    const today = localDay();
-    const current = function () {
-      return years.find(function (o) { return o.dataset.active; })
-          || years.find(function (o) { return o.dataset.start <= today && today <= o.dataset.end; });
-    };
 
     $(month).add(year).on("change", function () {
       const m = parseInt(month.value, 10);
-      const picked = year.selectedOptions[0];
-      const fy = picked && picked.dataset.start ? picked : null;
-      if (!m && !fy) return;
-      if (!m) { from.value = fy.dataset.start; to.value = fy.dataset.end; return; }
-      const base = fy || current();
-      // No financial year defined at all: fall back to this calendar year.
-      const parts = (base ? base.dataset.start : today.slice(0, 4) + "-01-01").split("-").map(Number);
-      for (let i = 0; i < 12; i++) {
-        const first = new Date(parts[0], parts[1] - 1 + i, 1);
-        if (first.getMonth() + 1 === m) {
-          from.value = localDay(first);
-          to.value = localDay(new Date(first.getFullYear(), first.getMonth() + 1, 0));
-          return;
-        }
-      }
+      const picked = parseInt(year.value, 10);
+      if (!m && !picked) return;
+      const y = picked || new Date().getFullYear();
+      from.value = localDay(new Date(y, m ? m - 1 : 0, 1));
+      to.value = localDay(m ? new Date(y, m, 0) : new Date(y, 11, 31));
     });
     const reset = function () { $(month).add(year).val("").trigger("change.select2"); };
     $(from).add(to).on("input", reset);

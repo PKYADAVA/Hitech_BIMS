@@ -27,17 +27,17 @@
 {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 
 <div class="card mb-3"><div class="card-body">
-  <div class="row g-3 align-items-end">
-    <div class="col-md-2"><label class="form-label">From Date</label>
+  <div class="row g-3 align-items-end list-filter-row">
+    <div class="col-md-2 lf-date"><label class="form-label">From Date</label>
       <input type="date" class="form-control" id="from-date"></div>
-    <div class="col-md-2"><label class="form-label">To Date</label>
+    <div class="col-md-2 lf-date"><label class="form-label">To Date</label>
       <input type="date" class="form-control" id="to-date"></div>
     <div class="col-md-4"><label class="form-label">Farm</label>
       <select class="form-select" id="farm-filter"><option value="">All farms</option>
         {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_code }} - {{ f.farm_name }}</option>{% endfor %}
       </select></div>
     {% include "_list_place_filter.html" %}
-    <div class="col-md-2"><button class="btn btn-primary" id="filter-submit">Submit</button></div>
+    <div class="col-md-2 lf-actions"><button class="btn btn-primary" id="filter-submit">Submit</button></div>
   </div>
 </div></div>
 

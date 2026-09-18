@@ -843,7 +843,6 @@ body.ds-shell .content > footer { display: none; }
   .row.list-filter-row > [class*="col-md-2"] { flex: 1 1 0; width: auto; min-width: 0; max-width: 15rem; }
   .row.list-filter-row > .lf-date { flex: 0 0 9.75rem; }
   .row.list-filter-row > .lf-period { flex: 0 0 6.25rem; }
-  .row.list-filter-row > .lf-period:has(#f-year) { flex-basis: 10.75rem; }
   .row.list-filter-row > .lf-actions { flex: 0 0 auto; white-space: nowrap; }
 }
 /* In that bar the dropdowns' text sits centred in its box (the theme's
@@ -856,3 +855,14 @@ body.ds-shell .content > footer { display: none; }
   padding-left: 0;
 }
 .list-filter-row .lf-actions .btn { height: var(--ds-control-h, 36px); min-height: 0; }
+/* Compact: the Broiler > Transactions filter bars are a tool strip above the
+   register, not a form. Every control in them sizes from --ds-control-h, so
+   one override shortens the dates, the dropdowns and the buttons together. */
+.list-filter-row {
+  --ds-control-h: 31px;
+  --bs-gutter-x: .75rem;
+  --bs-gutter-y: .5rem;
+}
+.list-filter-row .form-label { margin-bottom: 2px; }
+.card-body:has(> .list-filter-row) { padding: .55rem .9rem .65rem; }
+.card:has(> .card-body > .list-filter-row) { margin-bottom: .75rem !important; }
