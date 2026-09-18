@@ -155,6 +155,33 @@ window.localDay = function (date) {
     .toISOString().slice(0, 10);
 };
 
+// Month / Year shortcuts (_list_period_filter.html). They fill the page's
+// From / To dates and leave loading to its Submit, as the dates themselves
+// do. A year alone is the whole year; a month alone is that month this year.
+// Typing a date, or Clear, puts them back to All — they no longer describe
+// the range shown.
+$(function () {
+  const month = document.getElementById("f-month");
+  const year = document.getElementById("f-year");
+  const from = document.getElementById("from-date");
+  const to = document.getElementById("to-date");
+  if (!month || !year || !from || !to) return;
+  const now = new Date().getFullYear();
+  for (let y = now; y >= now - 5; y--) year.add(new Option(String(y), String(y)));
+
+  $(month).add(year).on("change", function () {
+    const m = parseInt(month.value, 10);
+    const picked = parseInt(year.value, 10);
+    if (!m && !picked) return;
+    const y = picked || now;
+    from.value = localDay(new Date(y, m ? m - 1 : 0, 1));
+    to.value = localDay(m ? new Date(y, m, 0) : new Date(y, 11, 31));
+  });
+  const reset = function () { $(month).add(year).val("").trigger("change.select2"); };
+  $(from).add(to).on("input", reset);
+  $("#filter-clear").on("click", reset);
+});
+
 // Applied to every DataTable on the site as soon as this script runs (i.e.
 // before any page's own $(document).ready() handler calls .DataTable()),
 // since defaults must be set before initialization, not inside a ready

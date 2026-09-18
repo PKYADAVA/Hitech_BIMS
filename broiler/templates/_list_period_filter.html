@@ -1,0 +1,31 @@
+{% comment %}
+Month / Year shortcuts for a list page's filter bar. They fill the page's own
+From Date / To Date (#from-date, #to-date) and Submit applies them as usual —
+a year alone is the whole year, a month alone is that month this year. The
+wiring and the Year options live in main.js, shared by every page that
+includes this.
+{% endcomment %}
+<div class="col-md-2 lf-period">
+  <label class="form-label">Month:</label>
+  <select class="form-select" id="f-month">
+    <option value="">All</option>
+    <option value="1">Jan</option>
+    <option value="2">Feb</option>
+    <option value="3">Mar</option>
+    <option value="4">Apr</option>
+    <option value="5">May</option>
+    <option value="6">Jun</option>
+    <option value="7">Jul</option>
+    <option value="8">Aug</option>
+    <option value="9">Sep</option>
+    <option value="10">Oct</option>
+    <option value="11">Nov</option>
+    <option value="12">Dec</option>
+  </select>
+</div>
+<div class="col-md-2 lf-period">
+  <label class="form-label">Year:</label>
+  <select class="form-select" id="f-year">
+    <option value="">All</option>
+  </select>
+</div>

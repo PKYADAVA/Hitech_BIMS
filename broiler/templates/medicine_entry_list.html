@@ -18,15 +18,16 @@
 <!-- Filters -->
 <div class="card mb-3">
   <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-2">
+    <div class="row g-3 align-items-end list-filter-row">
+      <div class="col-md-2 lf-date">
         <label class="form-label">From Date:</label>
         <input type="date" class="form-control" id="from-date">
       </div>
-      <div class="col-md-2">
+      <div class="col-md-2 lf-date">
         <label class="form-label">To Date:</label>
         <input type="date" class="form-control" id="to-date">
       </div>
+      {% include "_list_period_filter.html" %}
       {% comment %}Two, not three: with Branch added, the row came to thirteen
       columns of a twelve-column grid and the buttons dropped to a line of their
       own.{% endcomment %}
@@ -46,7 +47,7 @@
         </select>
       </div>
       {% include "_list_place_filter.html" %}
-      <div class="col-md-2">
+      <div class="col-md-2 lf-actions">
         <button class="btn btn-primary" id="filter-submit">Submit</button>
         <button type="button" class="btn btn-outline-secondary" id="filter-clear">Clear</button>
       </div>
