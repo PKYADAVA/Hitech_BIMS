@@ -9219,16 +9219,9 @@ class GCSettlementTemplateView(View):
     """Renders the Farmer GC Settlement / batch-closing form page."""
 
     def get(self, request):
-        today = timezone.localdate()
-        # The Year filter runs from the first settlement's year to this one,
-        # so it never offers a year with nothing in it before the first GC.
-        first = (GrowingChargeSettlement.objects.order_by("gc_date")
-                 .values_list("gc_date", flat=True).first())
-        first_year = first.year if first else today.year
         return render(request, "gc_settlement_form.html", {
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch", "supervisor").order_by("farm_name")),
-            "today": today.isoformat(),
-            "filter_years": range(today.year, min(first_year, today.year) - 1, -1),
+            "today": timezone.localdate().isoformat(),
             **_place_filter_options(request.user),
         })
 

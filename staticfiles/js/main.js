@@ -155,31 +155,49 @@ window.localDay = function (date) {
     .toISOString().slice(0, 10);
 };
 
-// Month / Year shortcuts (_list_period_filter.html). They fill the page's
-// From / To dates and leave loading to its Submit, as the dates themselves
-// do. A year alone is the whole year; a month alone is that month this year.
-// Typing a date, or Clear, puts them back to All — they no longer describe
-// the range shown.
+// Month / Year shortcuts: a Year select marked data-period-year, naming its
+// Month select and the From / To inputs it fills. Year is a financial year
+// from Account > Financial Year (its options carry data-start / data-end).
+//   Year alone  -> that financial year, start to end.
+//   Month + FY  -> that month inside the FY (Feb in FY 2025-2026 is Feb 2026).
+//   Month alone -> that month inside the active FY.
+// Loading is left to the page's Submit, as for the dates themselves. Typing a
+// date, or Clear, puts both back to All: they no longer describe the range.
 $(function () {
-  const month = document.getElementById("f-month");
-  const year = document.getElementById("f-year");
-  const from = document.getElementById("from-date");
-  const to = document.getElementById("to-date");
-  if (!month || !year || !from || !to) return;
-  const now = new Date().getFullYear();
-  for (let y = now; y >= now - 5; y--) year.add(new Option(String(y), String(y)));
+  document.querySelectorAll("select[data-period-year]").forEach(function (year) {
+    const month = document.querySelector(year.dataset.periodMonth);
+    const from = document.querySelector(year.dataset.periodFrom);
+    const to = document.querySelector(year.dataset.periodTo);
+    if (!month || !from || !to) return;
+    const years = [].slice.call(year.options).filter(function (o) { return o.dataset.start; });
+    const today = localDay();
+    const current = function () {
+      return years.find(function (o) { return o.dataset.active; })
+          || years.find(function (o) { return o.dataset.start <= today && today <= o.dataset.end; });
+    };
 
-  $(month).add(year).on("change", function () {
-    const m = parseInt(month.value, 10);
-    const picked = parseInt(year.value, 10);
-    if (!m && !picked) return;
-    const y = picked || now;
-    from.value = localDay(new Date(y, m ? m - 1 : 0, 1));
-    to.value = localDay(m ? new Date(y, m, 0) : new Date(y, 11, 31));
+    $(month).add(year).on("change", function () {
+      const m = parseInt(month.value, 10);
+      const picked = year.selectedOptions[0];
+      const fy = picked && picked.dataset.start ? picked : null;
+      if (!m && !fy) return;
+      if (!m) { from.value = fy.dataset.start; to.value = fy.dataset.end; return; }
+      const base = fy || current();
+      // No financial year defined at all: fall back to this calendar year.
+      const parts = (base ? base.dataset.start : today.slice(0, 4) + "-01-01").split("-").map(Number);
+      for (let i = 0; i < 12; i++) {
+        const first = new Date(parts[0], parts[1] - 1 + i, 1);
+        if (first.getMonth() + 1 === m) {
+          from.value = localDay(first);
+          to.value = localDay(new Date(first.getFullYear(), first.getMonth() + 1, 0));
+          return;
+        }
+      }
+    });
+    const reset = function () { $(month).add(year).val("").trigger("change.select2"); };
+    $(from).add(to).on("input", reset);
+    $("#filter-clear").on("click", reset);
   });
-  const reset = function () { $(month).add(year).val("").trigger("change.select2"); };
-  $(from).add(to).on("input", reset);
-  $("#filter-clear").on("click", reset);
 });
 
 // Applied to every DataTable on the site as soon as this script runs (i.e.

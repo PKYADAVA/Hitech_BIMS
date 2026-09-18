@@ -8,7 +8,6 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.utils import timezone
 
 from broiler.models import (Branch, BroilerBatch, BroilerFarm, Farmer,
                             GrowingChargeSettlement, Region, Supervisor)
@@ -53,10 +52,19 @@ class GCListFilterTests(TestCase):
         html = self.client.get("/gc-settlement/").content.decode()
         self.assertIn('id="flt-branch"', html)
         self.assertIn(">Basti</option>", html)
-        this_year = timezone.localdate().year
-        for year in range(2024, this_year + 1):
-            self.assertIn('<option value="%d">%d</option>' % (year, year), html)
-        self.assertNotIn('<option value="2023">', html)
+
+    def test_year_offers_the_financial_years_defined_in_account(self):
+        from account.models import FinancialYear
+        FinancialYear.objects.create(start_date=date(2025, 4, 1), end_date=date(2026, 3, 31))
+        FinancialYear.objects.create(start_date=date(2026, 4, 1), end_date=date(2027, 3, 31),
+                                     is_active=True)
+        html = self.client.get("/gc-settlement/").content.decode()
+        self.assertIn('data-start="2025-04-01" data-end="2026-03-31">FY 2025-2026</option>', html)
+        self.assertIn('data-start="2026-04-01" data-end="2027-03-31" data-active="1">'
+                      'FY 2026-2027</option>', html)
+        # Newest first, and no calendar years any more.
+        self.assertLess(html.index("FY 2026-2027"), html.index("FY 2025-2026"))
+        self.assertNotIn('<option value="2024">', html)
 
 
 class GCListScopeTests(GCListFilterTests):
@@ -100,3 +108,20 @@ class GCListScopeTests(GCListFilterTests):
         self.assertEqual(self.client.put(base, "{}", content_type="application/json").status_code, 404)
         self.assertEqual(self.client.delete(base + "delete/").status_code, 404)
         self.assertTrue(GrowingChargeSettlement.objects.filter(id=self.other.id).exists())
+
+
+class ListPeriodFilterTests(TestCase):
+    """The Broiler transaction lists offer the same financial years."""
+
+    def test_each_list_offers_the_financial_years(self):
+        from account.models import FinancialYear
+        FinancialYear.objects.create(start_date=date(2025, 4, 1), end_date=date(2026, 3, 31))
+        self.client.force_login(get_user_model().objects.create_superuser(
+            "fyadmin", "f@x.com", "Str0ngPass!"))
+        for url in ("/daily-entry/", "/medicine-entry/", "/daily-entry/single/",
+                    "/bird-sale/", "/bird-sale-receipt/", "/chicks-placement/"):
+            html = self.client.get(url).content.decode()
+            self.assertIn('id="f-month"', html, url)
+            self.assertIn('data-period-year data-period-month="#f-month"', html, url)
+            self.assertIn(">FY 2025-2026</option>", html, url)
+            self.assertIn("list-filter-row", html, url)

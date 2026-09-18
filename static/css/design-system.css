@@ -840,8 +840,19 @@ body.ds-shell .content > footer { display: none; }
    as before. */
 @media (min-width: 1200px) {
   .row.list-filter-row { flex-wrap: nowrap; }
-  .row.list-filter-row > [class*="col-md-2"] { flex: 1 1 0; width: auto; min-width: 0; }
+  .row.list-filter-row > [class*="col-md-2"] { flex: 1 1 0; width: auto; min-width: 0; max-width: 15rem; }
   .row.list-filter-row > .lf-date { flex: 0 0 9.75rem; }
   .row.list-filter-row > .lf-period { flex: 0 0 6.25rem; }
+  .row.list-filter-row > .lf-period:has(#f-year) { flex-basis: 10.75rem; }
   .row.list-filter-row > .lf-actions { flex: 0 0 auto; white-space: nowrap; }
 }
+/* In that bar the dropdowns' text sits centred in its box (the theme's
+   vertical padding under the full-height line-height pushed it low), and the
+   buttons match the controls' height rather than standing taller. */
+.list-filter-row .select2-container--bootstrap-5 .select2-selection--single {
+  padding-top: 0; padding-bottom: 0;
+}
+.list-filter-row .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+  padding-left: 0;
+}
+.list-filter-row .lf-actions .btn { height: var(--ds-control-h, 36px); min-height: 0; }
