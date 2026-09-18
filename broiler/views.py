@@ -9205,6 +9205,15 @@ def _gc_settlement_totals(d, sold_birds, sold_weight):
     }
 
 
+def _scoped_settlements(user):
+    """Settlements on the farms and branches this user may see.
+
+    Every way in narrows by it — the list, and each lookup by id — because an
+    id in the url is not a permission, and the list is not the only door.
+    """
+    return _scope_rows(user, GrowingChargeSettlement.objects.all())
+
+
 @method_decorator(login_required, name="dispatch")
 class GCSettlementTemplateView(View):
     """Renders the Farmer GC Settlement / batch-closing form page."""
@@ -9312,10 +9321,12 @@ class GCSettlementAPI(View):
 
     def get(self, request, id=None):
         if id:
-            s = get_object_or_404(GrowingChargeSettlement.objects.select_related(
+            s = get_object_or_404(_scoped_settlements(request.user).select_related(
                 "batch__broiler_farm", "farm", "scheme"), id=id)
             return JsonResponse(_gc_settlement_detail(s))
-        rows = (GrowingChargeSettlement.objects
+        # Scoped first: "All Branches" means every branch this user may see,
+        # not every branch there is.
+        rows = (_scoped_settlements(request.user)
                 .select_related("batch__broiler_farm", "farm", "scheme").order_by("-gc_date", "-id"))
         rows = _apply_place_filters(request, rows, branch="farm__branch")
         from_date = (request.GET.get("from_date") or "").strip()
@@ -9345,7 +9356,8 @@ class GCSettlementAPI(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        batch = (BroilerBatch.objects.select_related("broiler_farm")
+        batch = (_scope_rows(request.user, BroilerBatch.objects.select_related("broiler_farm"),
+                             farm_field="broiler_farm")
                  .filter(id=data.get("batch")).first())
         if not batch:
             return JsonResponse({"error": "Select a Batch."}, status=400)
@@ -9432,7 +9444,7 @@ class GCSettlementAPI(View):
 
     @transaction.atomic
     def put(self, request, id):
-        s = get_object_or_404(GrowingChargeSettlement, id=id)
+        s = get_object_or_404(_scoped_settlements(request.user), id=id)
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
@@ -9458,7 +9470,7 @@ class GCSettlementAPI(View):
 
     @transaction.atomic
     def delete(self, request, id):
-        s = get_object_or_404(GrowingChargeSettlement.objects.select_related("batch"), id=id)
+        s = get_object_or_404(_scoped_settlements(request.user).select_related("batch"), id=id)
         batch = s.batch
         # Take the charge off the books before the document that raised it goes.
         # Reopening a batch is the path most likely to be forgotten, and missing
@@ -9516,7 +9528,7 @@ def gc_settlement_recalculate(request, id):
     from broiler.services import gc_recalc
 
     settlement = get_object_or_404(
-        GrowingChargeSettlement.objects.select_related("batch", "scheme", "farm"), id=id)
+        _scoped_settlements(request.user).select_related("batch", "scheme", "farm"), id=id)
     include_date = (request.GET.get("include_date", "1") != "0"
                     if request.method == "GET" else True)
 
@@ -9555,7 +9567,7 @@ def gc_settlement_print(request, id):
     profitability or margin (in contract growing the company owns/sells the
     birds; the farmer is paid growing charges)."""
     from account.models import CompanyProfile
-    s = get_object_or_404(GrowingChargeSettlement.objects.select_related(
+    s = get_object_or_404(_scoped_settlements(request.user).select_related(
         "batch__broiler_farm__branch", "batch__broiler_farm__supervisor",
         "batch__broiler_farm__farmer", "scheme"), id=id)
     batch = s.batch
