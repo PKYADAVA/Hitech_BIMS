@@ -6,6 +6,23 @@
 {% block content %}
 {% include '_broiler_transaction_subnavbar.html' with active_tab='bird_sale' %}
 
+<style>
+  /* Evidence photos as thumbnails in the row, so a lifting's truck, birds and
+     slip can be seen at a glance; the whole strip opens the full-size set. */
+  .bs-thumbs { display:inline-flex; align-items:center; gap:3px; padding:0; border:0;
+               background:none; vertical-align:middle; cursor:zoom-in; }
+  .bs-thumbs img { width:28px; height:28px; object-fit:cover; border-radius:4px;
+                   border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .bs-thumbs:hover img { border-color:var(--bs-primary, #2563eb); }
+  .bs-thumbs .bs-more { min-width:28px; height:28px; padding:0 4px; border-radius:4px;
+                        display:inline-flex; align-items:center; justify-content:center;
+                        font-size:.75rem; font-weight:600; color:#334155; background:#e2e8f0; }
+  /* Room for the pin, two thumbnails and the count, so the strip never runs
+     into the Action buttons beside it. */
+  #sale-table th.bs-ev-col { min-width:9.5rem; }
+  .bs-thumbs:focus-visible { outline:2px solid var(--bs-primary, #2563eb); outline-offset:2px; border-radius:4px; }
+</style>
+
 <div class="page-header">
   <div class="page-header-main">
     <div class="page-header-title"><i class="fas fa-truck-loading"></i> Bird Sale</div>
@@ -45,7 +62,7 @@
           <tr>
             <th class="ds-mid">Date</th><th>Sale No.</th><th>Doc No.</th><th>Sale To</th><th>Farm</th>
             <th>Batch</th><th>Birds</th><th>Net Wt.</th><th>Avg Wt.</th><th class="ds-num">Rate</th>
-            <th class="ds-num">Amount</th><th class="text-center">Evidence</th>
+            <th class="ds-num">Amount</th><th class="text-center bs-ev-col">Evidence</th>
             <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
@@ -120,9 +137,15 @@ $(function () {
     }
     if (row.photos && row.photos.length) {
       photosById[row.id] = row.photos;
-      bits.push(`<button type="button" class="btn btn-sm btn-outline-primary evidence-button ms-1"
-                    data-id="${row.id}" title="View photos"><i class="fas fa-camera"></i>
-                    <span class="ms-1">${row.photos.length}</span></button>`);
+      // The first two as thumbnails, then a count of the rest.
+      const shown = row.photos.slice(0, 2);
+      const more = row.photos.length - shown.length;
+      bits.push(`<button type="button" class="evidence-button bs-thumbs ms-1" data-id="${row.id}"
+                    title="View ${row.photos.length} photo${row.photos.length > 1 ? "s" : ""}">`
+        + shown.map(p => `<img src="${escapeHtml(p.url)}" alt="${escapeHtml(p.label)}"
+                              title="${escapeHtml(p.label)}" loading="lazy">`).join("")
+        + (more > 0 ? `<span class="bs-more">+${more}</span>` : "")
+        + `</button>`);
     }
     return bits.length ? bits.join("") : '<span class="text-muted">—</span>';
   }
