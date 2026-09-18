@@ -863,7 +863,7 @@
                 .done(function (it) {
                     const field = (label, value) => `<dt>${label}</dt><dd>${value === null || value === undefined || value === "" ? dash : esc(value)}</dd>`;
                     const updated = it.updated_at ? new Date(it.updated_at).toLocaleString("en-IN") : "";
-                    const price = it.current_price !== null ? `${money(it.current_price)} (from ${it.price_date})` : "Not Priced";
+                    const price = it.current_price !== null ? `${money(it.current_price)} (from ${fmtDate(it.price_date)})` : "Not Priced";
                     $("#itlViewLabel").text(`${it.item_code} - ${it.description}`);
                     $("#itl-view-body").html(`<dl>
                         ${field("Item Code", it.item_code)}

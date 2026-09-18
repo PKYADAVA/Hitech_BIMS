@@ -156,7 +156,7 @@ $(function () {
       <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
     </div>`;
     html += `<div class="detail-grid">
-      <div><b>Challan Number:</b> ${escapeHtml(c.challan_no)}<br><b>Challan Date:</b> ${escapeHtml(c.date)}<br><b>Place of Supply:</b> ${escapeHtml(c.place_of_supply)}</div>
+      <div><b>Challan Number:</b> ${escapeHtml(c.challan_no)}<br><b>Challan Date:</b> ${fmtDate(c.date)}<br><b>Place of Supply:</b> ${escapeHtml(c.place_of_supply)}</div>
       <div><b>Transporter Details</b><hr>${detailLines([
         ["Transporter", c.transporter_name],
         ["Vehicle No.", c.vehicle_no],

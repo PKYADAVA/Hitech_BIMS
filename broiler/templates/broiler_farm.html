@@ -1919,7 +1919,7 @@ $(document).ready(function () {
                     if (type === "sort") return d === null || d === undefined ? 99999 : d;
                     if (type !== "display") {
                         return row.agreement_end_date
-                            ? `${row.agreement_end_date} (${d < 0 ? `${-d} days ago` : `${d} days left`})` : "No dates";
+                            ? `${fmtDate(row.agreement_end_date)} (${d < 0 ? `${-d} days ago` : `${d} days left`})` : "No dates";
                     }
                     if (!row.agreement_end_date) return '<span class="bf-agree none">&mdash;</span>';
                     const when = state === "expired" ? `expired ${-d} days ago`

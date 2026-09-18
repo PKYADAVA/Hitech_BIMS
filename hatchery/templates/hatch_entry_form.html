@@ -210,7 +210,7 @@ function rebuildSettingOptions(keepValue) {
     options.map(ts => {
       const setterCount = (ts.lines || []).length;
       const setterLabel = setterCount ? `, ${setterCount} setter${setterCount > 1 ? 's' : ''}` : '';
-      return `<option value="${ts.id}">${ts.setting_no} — Set: ${ts.setting_date}, Hatch: ${ts.hatch_date}, ` +
+      return `<option value="${ts.id}">${ts.setting_no} — Set: ${fmtDate(ts.setting_date)}, Hatch: ${fmtDate(ts.hatch_date)}, ` +
         `Eggs Set: ${Math.round(Number(ts.eggs_set))}${setterLabel}</option>`;
     }).join('');
   if (keepValue && [...get('tray_setting').options].some(o => o.value === String(keepValue))) {

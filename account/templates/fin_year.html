@@ -126,8 +126,8 @@
                     response.forEach((year) => {
                         const tableRow = `
                             <tr>
-                                <td>${year.start_date}</td>
-                                <td>${year.end_date}</td>
+                                <td>${fmtDate(year.start_date)}</td>
+                                <td>${fmtDate(year.end_date)}</td>
                                 <td>${year.is_active ? "Active" : "Inactive"}</td>
                                 <td>
                                     <div class="d-flex gap-1">

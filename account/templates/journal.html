@@ -466,7 +466,7 @@ $(document).ready(function () {
                 body.append(`
                   <tr>
                     <td class="fw-bold">${escapeHtml(v.voucher_no)}${v.system_generated ? ' <span class="badge bg-info text-dark">Auto</span>' : ''}</td>
-                    <td>${escapeHtml(v.date)}</td>
+                    <td>${fmtDate(v.date)}</td>
                     <td>${escapeHtml(v.voucher_type)}</td>
                     <td>${escapeHtml(v.sector_name || '')}</td>
                     <td>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</td>
@@ -830,7 +830,7 @@ $(document).ready(function () {
                     <td>${escapeHtml(l.narration)}</td></tr>`).join('');
             $('#voucher-view-body').html(`
                 <div class="mb-2 small text-muted">
-                  ${escapeHtml(v.voucher_type)} · ${escapeHtml(v.date)} · FY ${escapeHtml(v.financial_year)}
+                  ${escapeHtml(v.voucher_type)} · ${fmtDate(v.date)} · FY ${escapeHtml(v.financial_year)}
                   ${v.sector_name ? ' · Sector: ' + escapeHtml(v.sector_name) : ''}
                   ${v.reference ? ' · Ref: ' + escapeHtml(v.reference) : ''}
                   ${v.created_by ? ' · By: ' + escapeHtml(v.created_by) : ''}

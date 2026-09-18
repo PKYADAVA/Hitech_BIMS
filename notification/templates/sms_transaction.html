@@ -248,7 +248,7 @@ $(function () {
     rows.forEach(function (r, i) {
       tbody.append(`<tr>
         <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
-        <td>${escapeHtml(r.date)}</td>
+        <td>${fmtDate(r.date)}</td>
         <td>${escapeHtml(MODULE_LABELS[r.module] || r.module)}</td>
         <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
         <td>${escapeHtml(r.party_name)}</td>

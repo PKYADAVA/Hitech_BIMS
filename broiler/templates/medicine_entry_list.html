@@ -193,7 +193,7 @@ $(function () {
         ? `{% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}{% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${r.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}`
         : `{% if page_perms.delete %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Only the newest entry can be deleted"><i class="fas fa-trash"></i></button>{% endif %}{% if not page_perms.delete %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Only the newest entry can be deleted"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}`;
       return `<tr>
-        <td>${escapeHtml(r.date)}</td>
+        <td>${fmtDate(r.date)}</td>
         <td>${escapeHtml(r.entry_no)}</td>
         <td>${escapeHtml(r.item_name) || "-"}</td>
         <td>${Number(r.qty).toFixed(2)} ${escapeHtml(r.unit)}</td>

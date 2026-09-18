@@ -113,7 +113,7 @@ $(document).ready(function () {
         rows.forEach(function (ep) {
             const row = `
                 <tr>
-                    <td>${escapeHtml(ep.date)}</td>
+                    <td>${fmtDate(ep.date)}</td>
                     <td>${escapeHtml(ep.transaction_no)}</td>
                     <td>${escapeHtml(ep.dc_no)}</td>
                     <td>${escapeHtml(ep.supplier_name)}</td>

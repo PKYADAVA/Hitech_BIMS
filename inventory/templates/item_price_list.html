@@ -890,7 +890,7 @@ $(function () {
                 $("#iplHistoryLabel").text(`${it.item_code} - ${it.item_name}`);
                 const lp = res.last_purchase;
                 const lastBought = lp
-                    ? `Last purchase ₹${money(lp.rate)}${lp.unit ? " / " + lp.unit : ""} on ${lp.date}${lp.supplier ? " from " + lp.supplier : ""}`
+                    ? `Last purchase ₹${money(lp.rate)}${lp.unit ? " / " + lp.unit : ""} on ${fmtDate(lp.date)}${lp.supplier ? " from " + lp.supplier : ""}`
                     : "No purchase recorded";
                 $("#ipl-h-meta").text([it.category, it.unit, lastBought].filter(Boolean).join(" · "));
                 const body = res.entries.map((e) => {

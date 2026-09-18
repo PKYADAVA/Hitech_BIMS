@@ -212,7 +212,7 @@ $(document).ready(function () {
             success: function (response) {
                 let html = '<option value="">select</option>';
                 response.forEach(function (ep) {
-                    html += `<option value="${ep.id}" ${String(ep.id) === String(selectedId) ? 'selected' : ''}>${ep.transaction_no} (${ep.date})</option>`;
+                    html += `<option value="${ep.id}" ${String(ep.id) === String(selectedId) ? 'selected' : ''}>${ep.transaction_no} (${fmtDate(ep.date)})</option>`;
                 });
                 select.html(html);
             },

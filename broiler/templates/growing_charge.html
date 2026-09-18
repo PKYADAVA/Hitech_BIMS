@@ -376,8 +376,8 @@ $(document).ready(function () {
       rows.forEach(s => {
         body.append(`
           <tr>
-            <td>${escapeHtml(s.from_date)}</td>
-            <td>${escapeHtml(s.to_date)}</td>
+            <td>${fmtDate(s.from_date)}</td>
+            <td>${fmtDate(s.to_date)}</td>
             <td>${escapeHtml(s.branch_name)}
               ${!s.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
               ${s.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}
