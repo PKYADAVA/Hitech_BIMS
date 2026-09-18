@@ -332,6 +332,32 @@ class ItemPriceListAudit(models.Model):
         return f"{self.get_action_display()} {self.item_label} at {self.created_at:%Y-%m-%d %H:%M}"
 
 
+def _require_farm_batches(transfer):
+    """A transfer touching a farm must say which flock it moved against.
+
+    Stock onto a farm is for one flock and stock off it comes out of one; left
+    blank, the feed, medicine or chicks land on the farm with no batch to charge
+    them to, and every per-flock figure built on them — consumption, cost,
+    the settlement — is short by exactly that amount. So a farm on either side
+    needs its batch, the same way it already needs the farm itself.
+
+    Shared by Stock Transfer and Medicine Transfer, whose location fields are
+    named alike.
+    """
+    missing = []
+    if transfer.from_location_type == 'farm' and transfer.from_farm_id and not transfer.from_batch_id:
+        missing.append(("from", transfer.from_farm))
+    if transfer.to_location_type == 'farm' and transfer.to_farm_id and not transfer.to_batch_id:
+        missing.append(("to", transfer.to_farm))
+    if not missing:
+        return
+    raise ValidationError({
+        f"{side}_batch": (f"Select the batch at {getattr(farm, 'farm_name', 'the farm')} "
+                          f"({'From' if side == 'from' else 'To'} Location).")
+        for side, farm in missing
+    })
+
+
 class StockTransfer(models.Model):
     """One item moved from one location to another — Office/Warehouse or
     Broiler Farm, in any combination (warehouse-to-farm, farm-to-farm,
@@ -449,6 +475,7 @@ class StockTransfer(models.Model):
             raise ValidationError("To Location (Farm) is required.")
         if self._location_key('from') == self._location_key('to'):
             raise ValidationError("From Location and To Location must be different.")
+        _require_farm_batches(self)
 
         # A transfer is valued at the Item Price Master rate, so refuse to save
         # one for an item that has no price defined for its date rather than
@@ -625,6 +652,7 @@ class MedicineTransfer(models.Model):
             raise ValidationError("To Location (Farm) is required.")
         if self._location_key('from') == self._location_key('to'):
             raise ValidationError("From Location and To Location must be different.")
+        _require_farm_batches(self)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding

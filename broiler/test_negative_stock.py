@@ -234,6 +234,12 @@ class TransferStockGuardTests(TestCase):
             branch=branch, supervisor=sup, farmer=farmer, region=region,
             line="L1", farm_name="Second Farm", farm_capacity=5000)
         self.warehouse = Warehouse.objects.create(name="Akbarpur Store")
+        # A transfer touching a farm names the flock it moved against, so each
+        # farm here has one.
+        self.batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                                 start_date=self.today - timedelta(days=10))
+        self.other_batch = BroilerBatch.objects.create(broiler_farm=self.other,
+                                                       start_date=self.today - timedelta(days=10))
         feed = ItemCategory.objects.create(name="Broiler Feed")
         self.item = Item.objects.create(item_code="ITM-0001", description="Pre-Starter Feed",
                                         category=feed, standard_cost_per_unit=0)
@@ -246,13 +252,13 @@ class TransferStockGuardTests(TestCase):
         return StockTransfer.objects.create(
             date=self.today - timedelta(days=2), item=self.item, quantity=kg,
             from_location_type="warehouse", from_warehouse=self.warehouse,
-            to_location_type="farm", to_farm=self.farm)
+            to_location_type="farm", to_farm=self.farm, to_batch=self.batch)
 
     def moving_out(self, kg):
         return StockTransfer(
             date=self.today, item=self.item, quantity=kg,
-            from_location_type="farm", from_farm=self.farm,
-            to_location_type="farm", to_farm=self.other)
+            from_location_type="farm", from_farm=self.farm, from_batch=self.batch,
+            to_location_type="farm", to_farm=self.other, to_batch=self.other_batch)
 
     def test_moving_more_off_a_farm_than_it_holds_is_refused(self):
         self.deliver(100)

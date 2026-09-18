@@ -152,7 +152,7 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Batch <span class="text-muted small">(when From Location is a Farm)</span></label>
+              <label class="form-label">Batch <span class="text-danger">*</span> <span class="text-muted small">(when From Location is a Farm)</span></label>
               <select class="form-select" id="edit-from-batch" disabled>
                 <option value="">N/A</option>
               </select>
@@ -166,7 +166,7 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Batch <span class="text-muted small">(when To Location is a Farm)</span></label>
+              <label class="form-label">Batch <span class="text-danger">*</span> <span class="text-muted small">(when To Location is a Farm)</span></label>
               <select class="form-select" id="edit-to-batch" disabled>
                 <option value="">N/A</option>
               </select>
@@ -384,6 +384,10 @@ $(function () {
       driver_name: $("#edit-driver-name").val(),
       remarks: $("#edit-remarks").val(),
     };
+    if ((from.type === "farm" && !payload.from_batch) || (to.type === "farm" && !payload.to_batch)) {
+      window.showToast("warning", "Select the Batch for the farm location.");
+      return;
+    }
     if (editRequestMode) {
       $("#editModal").modal("hide");
       submitChangeRequest("stock_transfer", id, payload, "{% url 'stock_transfer_list' %}");

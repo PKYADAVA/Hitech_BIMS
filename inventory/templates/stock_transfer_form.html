@@ -44,9 +44,9 @@
               <th class="c-num m-num">Quantity <span class="text-danger">*</span></th>
               <th class="c-num m-num">Rate</th>
               <th class="c-fit m-mid">From Location <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid col-from-batch d-none">Batch</th>
+              <th class="c-fit m-mid col-from-batch d-none">Batch <span class="text-danger">*</span></th>
               <th class="c-fit m-mid">To Location <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid col-to-batch d-none">Batch</th>
+              <th class="c-fit m-mid col-to-batch d-none">Batch <span class="text-danger">*</span></th>
               <th class="c-fit m-short">Vehicle</th>
               <th class="c-fit m-short">Driver</th>
               <th class="c-grow m-mid">Remarks</th>
@@ -293,6 +293,18 @@ get('stock-transfer-form').addEventListener('submit', function (e) {
   }
   if (rows.some(r => r.from_location_type === r.to_location_type && r.from_location_id === r.to_location_id)) {
     alert('From Location and To Location must be different.');
+    return;
+  }
+  // A farm on either side needs the batch the stock moved against — the
+  // server refuses the row without it, so say so before sending rather than
+  // after. Numbered as the rows are, so the one to fix is easy to find.
+  const unbatched = rows
+    .map((r, i) => ({ r, n: i + 1 }))
+    .filter(({ r }) => (r.from_location_type === 'farm' && !r.from_batch)
+                    || (r.to_location_type === 'farm' && !r.to_batch));
+  if (unbatched.length) {
+    alert('Select the Batch for every farm location (row '
+          + unbatched.map(x => x.n).join(', ') + ').');
     return;
   }
   fetch("{% url 'stock_transfer_api_list' %}", {

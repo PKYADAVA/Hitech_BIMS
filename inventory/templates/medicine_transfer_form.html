@@ -45,7 +45,7 @@
           </select>
         </div>
         <div class="col-md-2 d-none" id="from-batch-wrap">
-          <label class="form-label">Batch</label>
+          <label class="form-label">Batch <span class="text-danger">*</span></label>
           <select class="form-select" id="from-batch">
             <option value="">select</option>
           </select>
@@ -59,7 +59,7 @@
           </select>
         </div>
         <div class="col-md-2 d-none" id="to-batch-wrap">
-          <label class="form-label">Batch</label>
+          <label class="form-label">Batch <span class="text-danger">*</span></label>
           <select class="form-select" id="to-batch">
             <option value="">select</option>
           </select>
@@ -277,6 +277,11 @@ get('medicine-transfer-form').addEventListener('submit', function (e) {
   const to = parseLocation(get('to-location').value);
   if (!from || !to) { alert('Select both From Location and To Location.'); return; }
   if (from.type === to.type && from.id === to.id) { alert('From Location and To Location must be different.'); return; }
+  // A farm on either side needs its batch; the server refuses it otherwise.
+  if ((from.type === 'farm' && !get('from-batch').value) || (to.type === 'farm' && !get('to-batch').value)) {
+    alert('Select the Batch for the farm location.');
+    return;
+  }
 
   const items = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
     item: tr.querySelector('.item').value,
