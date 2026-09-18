@@ -42,7 +42,7 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="receipt-table">
         <thead class="table-dark">
           <tr>
-            <th class="ds-mid">Date</th><th>Trnum</th><th>Customer</th><th>Mode</th>
+            <th class="ds-mid">Date</th><th>Trnum</th><th>Location</th><th>Customer</th><th>Mode</th>
             <th>Method</th><th>Reference</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
@@ -113,6 +113,7 @@ $(function () {
       tbody.append(`<tr>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
+        <td>${escapeHtml(row.location_name)}</td>
         <td>${escapeHtml(row.buyer_name)}</td>
         <td>${escapeHtml(row.mode)}</td>
         <td>${escapeHtml(row.receipt_account_name)}</td>

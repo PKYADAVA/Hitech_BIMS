@@ -599,22 +599,27 @@ def _money_checks():
                              (r.remarks or "")[:40], r.amount],
             matched=lambda r: f"{r.amount} on {_date(r)}"))
 
-    bird_receipts = BirdSaleReceipt.objects.select_related("customer", "farmer", "location")
+    bird_receipts = BirdSaleReceipt.objects.select_related(
+        "customer", "farmer", "location", "receipt_account")
     fields = ["customer_id", "farmer_id", "date", "amount"]
     yield Check(
         code="bird_sale_receipt", kind="entry", module=BROILER,
         title="Same bird sale receipt twice on one day",
         matched_on="Payer + Date + Amount",
         why="Collection against bird sales is counted twice.",
-        columns=["Receipt No", "Date", "Received from", "Location", "Mode", "Reference",
-                 "Remarks", "Amount"],
+        # The Bird Receipt register's columns, in its order, so a row here and
+        # the row there read as one record.
+        columns=["Trnum", "Date", "Location", "Customer", "Mode", "Method",
+                 "Reference", "Amount"],
         groups=_collect(
             bird_receipts, fields, _duplicate_keys(bird_receipts, fields),
-            cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date,
+            cells=lambda r: [r.receipt_no or f"#{r.pk}", r.date, _where(r, "location"),
                              (r.customer.name if r.customer_id else
                               r.farmer.farmer_name if r.farmer_id else ""),
-                             _where(r, "location"), r.mode, r.reference_no or "",
-                             (r.remarks or "")[:40], r.amount],
+                             r.mode,
+                             (f"{r.receipt_account.code} - {r.receipt_account.description}"
+                              if r.receipt_account_id else ""),
+                             r.reference_no or "", r.amount],
             matched=lambda r: f"{r.amount} on {_date(r)}"))
 
     payments = FarmerGCPayment.objects.all()
