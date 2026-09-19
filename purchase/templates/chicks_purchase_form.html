@@ -51,10 +51,16 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">Item <span class="text-danger">*</span></label>
-          <select class="form-select" name="item" required>
+          <select class="form-select" name="item" id="cp-item" required>
             <option value="">select</option>
-            {% for item in items %}<option value="{{ item.id }}" {% if chicks_purchase.item_id == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
+            {% for item in items %}<option value="{{ item.id }}" data-uom="{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name }}{% endif %}" {% if chicks_purchase.item_id == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
           </select>
+        </div>
+        {% comment %}The chosen item's unit, from the Item master — shown, not
+        saved: a Chicks Purchase counts heads and carries no unit of its own.{% endcomment %}
+        <div class="col-md-1 cp-uom">
+          <label class="form-label">UOM</label>
+          <input type="text" class="form-control bg-light" id="cp-uom" readonly tabindex="-1">
         </div>
         <div class="col-md-3">
           <label class="form-label">Vehicle</label>
@@ -117,6 +123,7 @@
     .cp-head { flex-wrap: nowrap; }
     .cp-head > [class*="col-md-"] { flex: 1 1 0; width: auto; min-width: 0; }
     .cp-head > .cp-fit { flex: 0 0 9.5rem; }
+    .cp-head > .cp-uom { flex: 0 0 5.5rem; }
     .cp-head > .col-md-4 { flex-grow: 1.6; }
   }
   /* Dropdown text centred in its box (the theme's vertical padding under the
@@ -401,6 +408,14 @@ function refreshFarmCells(tr, keep = {}) {
 }
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
+
+// UOM follows the Item: the chosen option carries its unit from the Item master.
+function refreshUom() {
+  const opt = get('cp-item').selectedOptions[0];
+  get('cp-uom').value = opt ? (opt.dataset.uom || '') : '';
+}
+$('#cp-item').on('change', refreshUom);
+refreshUom();
 
 function itemRow(row = {}) {
   const tr = document.createElement('tr');

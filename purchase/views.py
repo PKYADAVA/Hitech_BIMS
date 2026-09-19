@@ -914,7 +914,7 @@ def _chick_item_choices(keep=()):
     keep = [i for i in keep if i]
     return (Item.objects.for_entry(keep=keep)
             .filter(Q(id__in=chick_items().values("id")) | Q(id__in=keep))
-            .order_by("item_code"))
+            .select_related("storage_uom").order_by("item_code"))
 
 
 def _require_chicks_item(instance, previous_item_id=None):

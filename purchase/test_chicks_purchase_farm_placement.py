@@ -163,3 +163,11 @@ class ChicksPurchaseItemChoiceTests(ChicksPurchaseFarmPlacementTests):
             "bill_no": "KEPT", "items_json": json.dumps([self.warehouse_line()])})
         old.refresh_from_db()
         self.assertEqual(old.bill_no, "KEPT")
+
+    def test_the_header_shows_the_items_uom(self):
+        from inventory.models import UnitOfMeasurement
+        self.chicks.storage_uom = UnitOfMeasurement.objects.create(name="Numbers", symbol="Nos")
+        self.chicks.save()
+        html = self.client.get("/chicks-purchase/add/").content.decode()
+        self.assertIn('id="cp-uom"', html)
+        self.assertIn('data-uom="Nos"', html)
