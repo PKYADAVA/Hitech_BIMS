@@ -22,6 +22,26 @@
 </div>
 {% endif %}
 
+<style>
+  /* Compact, as General and Chicks Purchase: every control sizes from
+     --ds-control-h, so one override shortens the boxes and dropdowns
+     together; the Payment Lines grid keeps its own entry height. Tighter card
+     headers, padding, gutters and labels, dropdown text centred in its box,
+     and Sr. only as wide as its number. */
+  #payment-form { --ds-control-h: 31px; }
+  #payment-form > .card { margin-bottom: .75rem !important; }
+  #payment-form .card-header { padding-top: .55rem; padding-bottom: .55rem; }
+  #payment-form .card-body:not(.p-0) { padding: .65rem 1rem .8rem; }
+  #payment-form .card-body > .row { --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+  #payment-form .form-label { margin-bottom: 2px; }
+  #payment-form .form-text { margin-top: 2px; }
+  #payment-form .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
+  #payment-form .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left: 0; }
+  #line-table thead th:first-child { width: 2.75rem; min-width: 2.75rem; }
+  /* Select2's hidden select anchored to its cell, inside the grid's scroll box. */
+  #line-table td { position: relative; }
+</style>
+
 <form method="post" id="payment-form">
   {% csrf_token %}
 
