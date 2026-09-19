@@ -117,6 +117,33 @@
 
   <div class="card mb-3">
 <style>
+  /* The whole form, compact — as on General Purchase. Every control sizes
+     from --ds-control-h, so one override shortens the boxes, dropdowns and
+     file pickers together; the Batches grid keeps its own entry height.
+     Tighter card headers, padding, gutters and labels do the rest, and radios
+     stand level with the boxes beside them. */
+  #chicks-purchase-form { --ds-control-h: 31px; }
+  #chicks-purchase-form > .card { margin-bottom: .75rem !important; }
+  #chicks-purchase-form .card-header { padding-top: .55rem; padding-bottom: .55rem; }
+  #chicks-purchase-form .card-body:not(.p-0) { padding: .65rem 1rem .8rem; }
+  #chicks-purchase-form .card-body > .row { --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+  #chicks-purchase-form .form-label { margin-bottom: 2px; }
+  #chicks-purchase-form .form-text { margin-top: 2px; }
+  #chicks-purchase-form .card-body .form-check-inline {
+    display: inline-flex; align-items: center; gap: .3rem;
+    height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0; }
+  #chicks-purchase-form .card-body .form-check-inline .form-check-input { margin-top: 0; }
+  /* Bag / Batch Details holds seven fields; at xl they share one line rather
+     than leaving TDS Applicable on a row of its own. */
+  @media (min-width: 1200px) {
+    .cp-seven { flex-wrap: nowrap; }
+    .cp-seven > [class*="col-md-"] { flex: 1 1 0; width: auto; min-width: 0; }
+    .cp-seven > .cp-check { flex: 0 0 auto; }
+  }
+  .cp-check .form-check { display: flex; align-items: center; gap: .35rem;
+                          height: var(--ds-control-h); margin: 0; padding-left: 0; }
+  .cp-check .form-check-input { margin: 0; float: none; }
+
   /* Purchase Details on one line at xl: Date and Purchase No. take what they
      need, Supplier and Item share the most, the rest split what is left. */
   @media (min-width: 1200px) {
@@ -242,7 +269,7 @@
   <div class="card mb-3">
     <div class="card-header">Bag / Batch Details</div>
     <div class="card-body">
-      <div class="row g-3">
+      <div class="row g-3 align-items-end cp-seven">
         <div class="col-md-2">
           <label class="form-label">Bag Type</label>
           <select class="form-select" name="bag_type">
@@ -272,8 +299,8 @@
           <label class="form-label">TDS Amount</label>
           <input type="number" min="0" step=".01" class="form-control" name="tds_amount" id="tds_amount" value="{{ chicks_purchase.tds_amount|default:'0' }}">
         </div>
-        <div class="col-md-2">
-          <div class="form-check mt-4">
+        <div class="col-md-2 cp-check">
+          <div class="form-check">
             <input class="form-check-input" type="checkbox" name="tds_applicable" id="tds_applicable" {% if chicks_purchase.tds_applicable %}checked{% endif %}>
             <label class="form-check-label" for="tds_applicable">TDS Applicable</label>
           </div>
