@@ -111,7 +111,7 @@
               <th class="c-fit m-short">GST</th>
               <th class="c-num m-num ds-num">Amount</th>
               <th class="c-fit m-mid">Warehouse / Farm <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid col-batch d-none">Flock / Batch</th>
+              <th class="c-fit m-mid col-batch d-none">Flock / Batch <span class="text-danger">*</span></th>
               <th class="c-fit"></th>
             </tr>
           </thead>
@@ -577,6 +577,19 @@ get('general-purchase-form').addEventListener('submit', function (e) {
   if (!rows.length || rows.some(r => !r.item || !r.destination)) {
     e.preventDefault();
     alert('Add at least one item row with Item and Warehouse/Farm selected.');
+    return;
+  }
+  // A farm line needs its flock, as on Stock Transfer: the server refuses the
+  // bill without it, so say so before sending. A farm with no open batch
+  // cannot take a delivery at all until one is placed.
+  const unbatched = rows.map((r, i) => ({ r, n: i + 1 }))
+    .filter(({ r }) => r.destination.startsWith('farm:') && !r.batch);
+  if (unbatched.length) {
+    e.preventDefault();
+    const noOpen = unbatched.filter(({ r }) => !(farmBatches[r.destination.split(':')[1]] || []).length);
+    alert('Select the Flock / Batch for every farm row (row ' + unbatched.map(x => x.n).join(', ') + ').'
+          + (noOpen.length ? '\nRow ' + noOpen.map(x => x.n).join(', ')
+             + ': the farm has no open batch to book this to.' : ''));
     return;
   }
   get('items_json').value = JSON.stringify(rows);

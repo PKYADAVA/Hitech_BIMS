@@ -567,6 +567,39 @@ def _batch_for_farm(farm_id, batch_id):
             .first())
 
 
+def _row_destination(row):
+    """(kind, id) of a posted line's destination: "warehouse:4" / "farm:11",
+    or the plain farm_warehouse older saved rows and the API still post."""
+    dest = str(row.get("destination") or "")
+    kind, _, dest_id = dest.partition(":")
+    if not dest_id and row.get("farm_warehouse"):
+        kind, dest_id = "warehouse", str(row["farm_warehouse"])
+    return kind, dest_id
+
+
+def _require_farm_batches(rows):
+    """Refuse a line delivered to a farm without that farm's batch.
+
+    Feed or medicine bought onto a farm is for one flock; left without its
+    batch, it lands on the farm charged to nobody, and that flock's
+    consumption, cost and settlement are short by it — the rule Stock
+    Transfer and Medicine Transfer already keep. Checked over every line
+    before anything is written, so a refused bill changes nothing.
+    """
+    from broiler.models import BroilerFarm
+
+    missing = []
+    for n, row in enumerate(rows, 1):
+        kind, dest_id = _row_destination(row)
+        if not row.get("item") or kind != "farm" or not dest_id.isdigit():
+            continue
+        if not _batch_for_farm(int(dest_id), row.get("batch")):
+            farm = BroilerFarm.objects.filter(pk=dest_id).values_list("farm_name", flat=True).first()
+            missing.append("row %d (%s)" % (n, farm or "farm"))
+    if missing:
+        raise ValidationError("Select the batch for every farm line: " + ", ".join(missing) + ".")
+
+
 def _save_general_purchase_items(instance, request):
     try:
         rows = json.loads(request.POST.get("items_json") or "[]")
@@ -579,16 +612,13 @@ def _apply_general_purchase_items(instance, rows):
     """Same item application as _save_general_purchase_items, but rows-in
     rather than request-in — shared with the change-request replay, which has
     no request to read items_json from."""
+    _require_farm_batches(rows)
     instance.items.all().delete()
     for row in rows:
         # The destination arrives as one field carrying its own kind, e.g.
         # "warehouse:4" or "farm:11" — a bare id could not say which table it
         # belonged to, and the two id spaces overlap.
-        dest = str(row.get("destination") or "")
-        kind, _, dest_id = dest.partition(":")
-        # Older saved rows (and the API) still post a plain farm_warehouse.
-        if not dest_id and row.get("farm_warehouse"):
-            kind, dest_id = "warehouse", str(row["farm_warehouse"])
+        kind, dest_id = _row_destination(row)
         if not row.get("item") or kind not in ("warehouse", "farm") or not dest_id.isdigit():
             continue
         to_farm = kind == "farm"
@@ -2357,6 +2387,10 @@ def _save_general_purchase(data, oid):
             setattr(instance, field_name, data[field_name])
     validate_value("purchase", "GeneralPurchase", "calculation_based_on", instance.calculation_based_on)
     instance.full_clean(exclude=["purchase_no"])
+    # Before the header is saved: the approval that replays this answers an
+    # error rather than raising it, so a refusal after the save would leave a
+    # changed header behind.
+    _require_farm_batches(data.get("items") or [])
     instance.save()
     _apply_general_purchase_items(instance, data.get("items") or [])
     return instance
