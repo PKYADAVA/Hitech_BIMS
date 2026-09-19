@@ -103,3 +103,24 @@ class DuplicateResolverTests(TestCase):
         self.assertIn("Resolved (1)", html)
         self.assertIn("Two firms", html)
         self.assertIn("1 kept", html)
+
+
+class DuplicatesCardMigrationTests(TestCase):
+    """0018: a hand-set dashboard gains the card before Field Team; a default one is left alone."""
+
+    def test_the_card_joins_a_configured_dashboard_before_field_team(self):
+        import importlib
+        from django.apps import apps
+        from user.models import GroupDashboardWidget as W
+        migration = importlib.import_module("user.migrations.0018_duplicates_widget_for_configured_groups")
+
+        managers = AuthGroup.objects.create(name="Managers")
+        for pos, key in enumerate(["quick_actions", "stock_alerts", "field_team"], 1):
+            W.objects.create(group=managers, widget_key=key, position=pos)
+        untouched = AuthGroup.objects.create(name="Defaults")
+        migration.add_duplicates_card(apps, None)
+        order = list(W.objects.filter(group=managers).order_by("position").values_list("widget_key", flat=True))
+        self.assertEqual(order, ["quick_actions", "stock_alerts", "duplicates", "field_team"])
+        self.assertFalse(W.objects.filter(group=untouched).exists())
+        migration.add_duplicates_card(apps, None)   # running again changes nothing
+        self.assertEqual(W.objects.filter(group=managers, widget_key="duplicates").count(), 1)
