@@ -29,8 +29,8 @@
 
   <div class="card mb-3">
     <div class="card-header">Purchase Details</div>
-    <div class="card-body">
-      <div class="row g-3">
+    <div class="card-body gp-head-body">
+      <div class="row g-3 gp-head">
         <div class="col-md-2">
           <label class="form-label">Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" name="date" id="date" value="{{ general_purchase.date|date:'Y-m-d'|default:today }}" required>
@@ -126,6 +126,17 @@
 
   <div class="card mb-3">
 <style>
+  /* Purchase Details, compact: every control sizes from --ds-control-h, so
+     one override shortens the boxes and dropdowns together; tighter gutters,
+     labels and padding do the rest. */
+  .gp-head { --ds-control-h: 31px; --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+  .gp-head .form-label { margin-bottom: 2px; }
+  /* The Sent / Received radios stand on the same line as the boxes beside them. */
+  .gp-head .form-check-inline { display: inline-flex; align-items: center; gap: .3rem;
+                                height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0; }
+  .gp-head .form-check-inline .form-check-input { margin-top: 0; }
+  .card-body.gp-head-body { padding: .65rem 1rem .8rem; }
+
   /* Items grid. The footer's Flock / Batch cell hides with its column — left
      showing, it made a phantom fourteenth column past the edge of the grid.
      Sr. is only as wide as its number; the dropdown text sits centred in its
