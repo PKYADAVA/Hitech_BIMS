@@ -2046,14 +2046,16 @@ img, svg, video, canvas {
    permissions included) and never drifts from it. Lives inside #moduleBar,
    which gives its links the menu's icon colours for free.
    --------------------------------------------------------------------------- */
+/* It covers the screen below the bars, edge to edge; its height is set from
+   the window when it opens (and on resize). Nothing scrolls the panel as a
+   whole — each column scrolls on its own. */
 .bims-mega {
-  position: absolute; top: 100%; left: 16px; right: 16px; z-index: 1060;
-  margin-top: 6px;
-  max-height: calc(100vh - var(--navbar-height, 60px) - 32px - 24px);
-  overflow-y: auto;
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 1060;
+  height: calc(100vh - var(--navbar-height, 60px) - 32px);
+  overflow: hidden;
   display: grid; grid-template-columns: 230px 1fr;
-  background: #ffffff; border: 1px solid var(--border, #e5e7eb);
-  border-radius: 14px; box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
+  background: #ffffff; border-top: 1px solid var(--border, #e5e7eb);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
   animation: bims-mega-in .14s ease-out;
 }
 @keyframes bims-mega-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
@@ -2062,7 +2064,7 @@ img, svg, video, canvas {
 .bims-mega-intro {
   padding: 22px 20px; border-right: 1px solid #eef1f5;
   background: linear-gradient(180deg, #f3faf6 0%, #ffffff 70%);
-  border-radius: 14px 0 0 14px;
+  overflow-y: auto;
 }
 .bims-mega-icon {
   width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center;
@@ -2076,9 +2078,12 @@ img, svg, video, canvas {
 
 .bims-mega-cols {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 6px 10px; padding: 16px 14px 18px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 6px 10px; padding: 16px 14px 0; min-height: 0;
 }
-.bims-mega-col { padding: 0 6px; }
+.bims-mega-col { padding: 0 6px; display: flex; flex-direction: column; min-height: 0; }
+.bims-mega-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 16px;
+                  scrollbar-width: thin; overscroll-behavior: contain; }
 .bims-mega-col + .bims-mega-col { border-left: 1px solid #f1f4f8; }
 .bims-mega-head {
   display: flex; align-items: center; gap: 10px;
@@ -2097,6 +2102,14 @@ img, svg, video, canvas {
 .bims-mega-sub { font-size: .7rem; font-weight: 700; color: #64748b; text-transform: uppercase;
                  letter-spacing: .5px; padding: 10px 8px 2px; }
 .bims-mega-sub + .dropdown-item, .bims-mega-sub ~ .dropdown-item { padding-left: 14px; }
+
+.bims-mega-close {
+  position: absolute; top: 10px; right: 14px; width: 34px; height: 34px;
+  border: 1px solid #e5e7eb; border-radius: 50%; background: #ffffff; color: #475569;
+  display: grid; place-items: center; font-size: 15px; cursor: pointer; z-index: 2;
+}
+.bims-mega-close:hover { background: #f1f5f9; color: #0f172a; }
+.bims-mega-close:focus-visible { outline: 2px solid #16a34a; outline-offset: 2px; }
 
 /* The tab whose panel is open stays lit, as a pressed tab would. */
 #moduleBar .nav-link.is-mega-open { background: rgba(255, 255, 255, .14); }

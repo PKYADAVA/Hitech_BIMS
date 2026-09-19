@@ -1313,6 +1313,12 @@ document.addEventListener("DOMContentLoaded", function () {
       head.appendChild(tile);
       head.appendChild(document.createTextNode(title));
       col.appendChild(head);
+      // The pages scroll on their own under the heading, so a long section
+      // (Broiler > Reports) scrolls in its column and the others stay put.
+      var list = document.createElement("div");
+      list.className = "bims-mega-list";
+      col.appendChild(list);
+      col.list = list;
       return col;
     }
     function build(li) {
@@ -1336,13 +1342,13 @@ document.addEventListener("DOMContentLoaded", function () {
               var sub = document.createElement("div");
               sub.className = "bims-mega-sub";
               sub.textContent = text(row.querySelector(":scope > .dropdown-toggle"));
-              col.appendChild(sub);
+              col.list.appendChild(sub);
               row.querySelectorAll(":scope > .dropdown-menu > li > a.dropdown-item").forEach(function (a) {
-                col.appendChild(link(a)); pages++;
+                col.list.appendChild(link(a)); pages++;
               });
             } else {
               var a = row.querySelector(":scope > a.dropdown-item");
-              if (a) { col.appendChild(link(a)); pages++; }
+              if (a) { col.list.appendChild(link(a)); pages++; }
             }
           });
           cols.appendChild(col);
@@ -1350,7 +1356,7 @@ document.addEventListener("DOMContentLoaded", function () {
           var a = child.querySelector(":scope > a.dropdown-item");
           if (!a) return;
           if (!loose) { loose = column(text(toggle), toggle.querySelector("i")); }
-          loose.appendChild(link(a)); pages++;
+          loose.list.appendChild(link(a)); pages++;
         }
       });
       if (loose) cols.insertBefore(loose, cols.firstChild);
@@ -1373,6 +1379,16 @@ document.addEventListener("DOMContentLoaded", function () {
         pages + " page" + (pages === 1 ? "" : "s") + " in " + sections + " section" + (sections === 1 ? "" : "s");
       el.appendChild(intro);
       el.appendChild(cols);
+      // It covers the screen, so there is nowhere left to click "outside":
+      // an explicit close, beside Esc and a second click on the tab.
+      var close = document.createElement("button");
+      close.type = "button";
+      close.className = "bims-mega-close";
+      close.setAttribute("aria-label", "Close menu");
+      close.title = "Close (Esc)";
+      close.innerHTML = '<i class="fas fa-xmark"></i>';
+      close.addEventListener("click", function (e) { e.stopPropagation(); closeMega(); });
+      el.appendChild(close);
       return el;
     }
     function hideDropdown(li) {
@@ -1380,6 +1396,13 @@ document.addEventListener("DOMContentLoaded", function () {
       if (menu) menu.classList.remove("show");
       li.querySelector(":scope > .nav-link").setAttribute("aria-expanded", "false");
     }
+    // The panel covers the screen below the bars, whatever the window's size.
+    function fitPanel() {
+      if (!panel) return;
+      panel.style.height = Math.max(240, window.innerHeight - bar.getBoundingClientRect().bottom) + "px";
+    }
+    window.addEventListener("resize", fitPanel);
+
     function closeMega() {
       if (panel) { panel.remove(); panel = null; }
       if (openLi) { openLi.querySelector(":scope > .nav-link").classList.remove("is-mega-open"); openLi = null; }
@@ -1390,6 +1413,7 @@ document.addEventListener("DOMContentLoaded", function () {
       openLi = li;
       panel = build(li);
       bar.appendChild(panel);
+      fitPanel();
       var toggle = li.querySelector(":scope > .nav-link");
       toggle.classList.add("is-mega-open");
       toggle.setAttribute("aria-expanded", "true");
