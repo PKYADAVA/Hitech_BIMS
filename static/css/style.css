@@ -1790,7 +1790,13 @@ img, svg, video, canvas {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    /* The scrollbar keeps its room but shows only while the row is hovered:
+       a grey bar under every module's tabs read as part of the design. Its
+       space stays reserved, so the row does not jump when it appears. */
+    scrollbar-color: transparent transparent;
   }
+  .module-subnav:hover .subnav-tabs,
+  .module-subnav .subnav-tabs:focus-within { scrollbar-color: #cbd5e1 transparent; }
   .module-subnav .subnav-tab a { white-space: nowrap; }
 }
 
@@ -2117,3 +2123,53 @@ img, svg, video, canvas {
 
 /* The tab whose panel is open stays lit, as a pressed tab would. */
 #moduleBar .nav-link.is-mega-open { background: rgba(255, 255, 255, .14); }
+
+/* ---------------------------------------------------------------------------
+   Navigation details from the reference design.
+   --------------------------------------------------------------------------- */
+/* The Ctrl + K hint is hidden below 1600px for the dashboard's crowded
+   toolbar; in the top bar there is room for it from the desktop width up.
+   (It still hides while the box has text: that rule is more specific.) */
+@media (min-width: 1200px) {
+  .bims-navbar .gs-wrap:not(.has-text) .gs-kbd { display: inline-block; }
+}
+
+/* Module names end in a small chevron rather than Bootstrap's filled caret. */
+.bims-modulebar .navbar-nav > li > .dropdown-toggle::after {
+  border: 0;
+  content: "\f078";
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: .55rem;
+  vertical-align: .1em;
+  margin-left: .4em;
+  opacity: .8;
+}
+
+/* The page you are on: a green tab with a small pointer under it, marking
+   the row the page belongs to. The pointer sits inside the row's own
+   padding, which its sideways scroll would otherwise clip. */
+.module-subnav .subnav-tab a.active {
+  background: #15803d;
+  color: #ffffff;
+  position: relative;
+}
+.module-subnav .subnav-tab a.active::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+  border: 5px solid transparent; border-bottom: 0; border-top-color: #15803d;
+}
+.module-subnav .subnav-tab a.active i { color: #ffffff; }
+
+/* Mega panel: a search box under the module's name. */
+.bims-mega-search {
+  margin-top: 14px; position: relative;
+}
+.bims-mega-search input {
+  width: 100%; height: 32px; padding: 0 10px 0 30px; font-size: .8rem;
+  border: 1px solid #dbe3ea; border-radius: 8px; background: #ffffff;
+}
+.bims-mega-search input:focus { outline: 0; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, .15); }
+.bims-mega-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: .75rem; }
+.bims-mega-none { grid-column: 1 / -1; padding: 20px 8px; color: #64748b; font-size: .82rem; }
+.bims-mega .is-hidden { display: none !important; }

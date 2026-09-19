@@ -1377,6 +1377,47 @@ document.addEventListener("DOMContentLoaded", function () {
       intro.querySelector(".bims-mega-desc").textContent = INTRO[toggle.id] || "";
       intro.querySelector(".bims-mega-count").textContent =
         pages + " page" + (pages === 1 ? "" : "s") + " in " + sections + " section" + (sections === 1 ? "" : "s");
+      // Find a page by name: typing narrows every column at once; Enter opens
+      // the first match, and the down arrow steps into the list.
+      var find = document.createElement("div");
+      find.className = "bims-mega-search";
+      find.innerHTML = '<i class="fas fa-magnifying-glass"></i><input type="search" placeholder="Find a page..." aria-label="Find a page">';
+      intro.appendChild(find);
+      var none = document.createElement("div");
+      none.className = "bims-mega-none is-hidden";
+      none.textContent = "No page matches.";
+      cols.appendChild(none);
+      var input = find.querySelector("input");
+      input.addEventListener("input", function () {
+        var q = input.value.trim().toLowerCase(), any = false;
+        cols.querySelectorAll(".bims-mega-col").forEach(function (col) {
+          var shown = 0, sub = null, subShown = 0;
+          Array.prototype.forEach.call(col.list.children, function (el) {
+            if (el.classList.contains("bims-mega-sub")) {
+              if (sub) sub.classList.toggle("is-hidden", !subShown);
+              sub = el; subShown = 0; return;
+            }
+            var hit = !q || text(el).toLowerCase().indexOf(q) !== -1;
+            el.classList.toggle("is-hidden", !hit);
+            if (hit) { shown++; if (sub) subShown++; }
+          });
+          if (sub) sub.classList.toggle("is-hidden", !subShown);
+          col.classList.toggle("is-hidden", !shown);
+          if (shown) any = true;
+        });
+        none.classList.toggle("is-hidden", any);
+        // Only the columns still showing take a track, so a match does not sit
+        // in a narrow slot beside the empty ones it replaced.
+        var showing = cols.querySelectorAll(".bims-mega-col:not(.is-hidden)").length;
+        cols.style.gridTemplateColumns = q
+          ? "repeat(" + Math.max(showing, 1) + ", minmax(150px, 300px))"
+          : "repeat(" + Math.max(sections, 1) + ", minmax(150px, 1fr))";
+      });
+      input.addEventListener("keydown", function (e) {
+        var first = visibleLinks(cols)[0];
+        if (e.key === "Enter" && first) { e.preventDefault(); first.click(); }
+        if (e.key === "ArrowDown" && first) { e.preventDefault(); first.focus(); }
+      });
       el.appendChild(intro);
       el.appendChild(cols);
       // It covers the screen, so there is nowhere left to click "outside":
@@ -1391,6 +1432,32 @@ document.addEventListener("DOMContentLoaded", function () {
       el.appendChild(close);
       return el;
     }
+    function visibleLinks(scope) {
+      return Array.prototype.filter.call(scope.querySelectorAll("a.dropdown-item"),
+        function (a) { return a.offsetParent !== null; });
+    }
+    // Arrow keys inside the panel: up and down within a column, left and
+    // right to the neighbouring column at about the same row.
+    function arrowKeys(e) {
+      var a = e.target.closest && e.target.closest("a.dropdown-item");
+      if (!a || !panel || !panel.contains(a)) return;
+      var col = a.closest(".bims-mega-col");
+      var here = visibleLinks(col), i = here.indexOf(a);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        var next = here[i + (e.key === "ArrowDown" ? 1 : -1)];
+        if (next) { e.preventDefault(); next.focus(); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); panel.querySelector(".bims-mega-search input").focus(); }
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        var cols = Array.prototype.filter.call(panel.querySelectorAll(".bims-mega-col"),
+          function (c) { return !c.classList.contains("is-hidden"); });
+        var to = cols[cols.indexOf(col) + (e.key === "ArrowRight" ? 1 : -1)];
+        if (!to) return;
+        var there = visibleLinks(to);
+        var target = there[Math.min(i, there.length - 1)];
+        if (target) { e.preventDefault(); target.focus(); }
+      }
+    }
+
     function hideDropdown(li) {
       var menu = li.querySelector(":scope > .dropdown-menu");
       if (menu) menu.classList.remove("show");
@@ -1425,8 +1492,9 @@ document.addEventListener("DOMContentLoaded", function () {
       var toggle = li.querySelector(":scope > .nav-link");
       toggle.classList.add("is-mega-open");
       toggle.setAttribute("aria-expanded", "true");
-      var first = panel.querySelector(".dropdown-item");
-      if (first) first.focus({ preventScroll: true });
+      panel.addEventListener("keydown", arrowKeys);
+      var find = panel.querySelector(".bims-mega-search input");
+      if (find) find.focus({ preventScroll: true });
     }
 
     tabs.forEach(function (li) {
