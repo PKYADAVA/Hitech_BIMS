@@ -127,19 +127,20 @@
   /* Batches grid, compact: headers may take two lines, number boxes are as
      wide as their figures (no spinner arrows), Sr. is narrow, and the three
      dropdowns keep room for a name. */
-  /* Columns take their own width rather than being stretched across the
-     card: with warehouse rows only, the spare width went to Sector/Farm and
-     the buttons. */
-  #item-table { width: auto; }
+  /* The grid spans the card, and any spare width is shared across all the
+     columns rather than handed to Sector/Farm and the buttons: no column
+     carries a fixed width except Sr., the dropdowns' minimums and the row
+     buttons, which take only what they need. */
+  #item-table { width: 100%; }
+  #item-table thead th:last-child { width: 1%; white-space: nowrap; }
   #item-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
   #item-table th, #item-table td { padding: .3rem .25rem; }
   #item-table .m-num, #item-table .m-short { min-width: 0; }
-  #item-table thead th.m-num, #item-table thead th.m-short { width: 4.4rem; }
   #item-table thead th:first-child { width: 2.4rem; }
   #item-table .m-mid { min-width: 7.5rem; }
   /* Select2 fills its cell here (design-system), so the cell carries the width. */
-  #item-table thead th.col-dest { width: 11rem; min-width: 11rem; }
-  #item-table thead th.col-farm { width: 8.25rem; min-width: 8.25rem; }
+  #item-table thead th.col-dest { min-width: 11rem; }
+  #item-table thead th.col-farm { min-width: 8.25rem; }
   #item-table .form-control { padding-left: .35rem; padding-right: .35rem; min-width: 0; }
   #item-table input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   #item-table input[type=number]::-webkit-inner-spin-button,
