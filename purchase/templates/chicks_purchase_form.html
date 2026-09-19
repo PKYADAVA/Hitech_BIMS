@@ -97,13 +97,12 @@
               <th class="c-fit m-mid">Sector/Farm <span class="text-danger">*</span></th>
               <th class="c-fit m-mid col-farm d-none">Via Warehouse <span class="text-danger">*</span></th>
               <th class="c-fit m-mid col-farm d-none">Flock / Batch <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid">Batch</th>
               <th class="c-fit"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="9" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_qty">0.00</th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit col-farm d-none"></th><th class="c-fit col-farm d-none"></th><th class="c-fit" colspan="2"></th></tr>
+            <tr><th colspan="9" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_qty">0.00</th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit col-farm d-none"></th><th class="c-fit col-farm d-none"></th><th class="c-fit"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -379,11 +378,11 @@ function itemRow(row = {}) {
     <td><select class="form-select destination" required>${destinationOptions}</select></td>
     <td class="col-farm d-none"><select class="form-select via-warehouse">${warehouseOptions}</select></td>
     <td class="col-farm d-none"><select class="form-select flock" title="${row.placement_no ? 'Placement ' + escapeHtml(row.placement_no) : ''}"><option value="">select</option></select></td>
-    <td><input class="form-control batch" value="${row.batch || ''}"></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
+  tr.dataset.lot = row.batch || '';
   get('item-table').tBodies[0].append(tr);
   const destSel = tr.querySelector('.destination');
   if (row.farm) destSel.value = 'f:' + row.farm;
@@ -544,7 +543,8 @@ get('chicks-purchase-form').addEventListener('submit', function (e) {
     mortality: tr.querySelector('.mortality').value, shortage: tr.querySelector('.shortage').value,
     weaks: tr.querySelector('.weaks').value, excess_qty: tr.querySelector('.excess-qty').value,
     rate: tr.querySelector('.rate').value,
-    batch: tr.querySelector('.batch').value,
+    // The lot label is no longer asked for; one saved before stays with its line.
+    batch: tr.dataset.lot || '',
     ...(dest => dest.startsWith('f:')
         ? { farm: dest.slice(2), farm_warehouse: tr.querySelector('.via-warehouse').value,
             farm_batch: tr.querySelector('.flock').value }

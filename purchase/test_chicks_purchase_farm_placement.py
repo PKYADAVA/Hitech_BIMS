@@ -126,3 +126,8 @@ class ChicksPurchaseFarmPlacementTests(TestCase):
         self.assertIn('<optgroup label="Farms">', html)
         self.assertIn('value="f:%d">Green Valley Farm' % self.farm.id, html)
         self.assertIn('Flock / Batch <span class="text-danger">*</span>', html)
+
+    def test_the_lot_label_is_no_longer_asked_for(self):
+        html = self.client.get("/chicks-purchase/add/").content.decode()
+        self.assertNotIn('class="form-control batch"', html)
+        self.assertIn("tr.dataset.lot", html)   # a saved lot is carried back on edit
