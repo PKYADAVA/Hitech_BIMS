@@ -1396,12 +1396,14 @@ document.addEventListener("DOMContentLoaded", function () {
       if (menu) menu.classList.remove("show");
       li.querySelector(":scope > .nav-link").setAttribute("aria-expanded", "false");
     }
-    // The panel is as tall as its content, but never past the bottom of the
-    // window: each column's list is capped at the room left under its
-    // heading, and scrolls on its own when it has more.
+    // The panel is as tall as its content, up to about 60% of the window
+    // (never past its bottom) — a menu, not a page over the page. Each
+    // column's list is capped at the room left under its heading, and a long
+    // one scrolls on its own.
     function fitPanel() {
       if (!panel) return;
-      var room = Math.max(220, window.innerHeight - bar.getBoundingClientRect().bottom - 6 - 16);
+      var below = window.innerHeight - bar.getBoundingClientRect().bottom - 6 - 16;
+      var room = Math.max(220, Math.min(below, Math.round(window.innerHeight * 0.6)));
       panel.querySelectorAll(".bims-mega-col").forEach(function (col) {
         var head = col.querySelector(".bims-mega-head");
         col.list.style.maxHeight = Math.max(120, room - 32 - head.offsetHeight) + "px";
