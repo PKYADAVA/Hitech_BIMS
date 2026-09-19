@@ -136,6 +136,11 @@
   #item-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
   #item-table th, #item-table td { padding: .3rem .25rem; }
   #item-table .m-num, #item-table .m-short { min-width: 0; }
+  /* Number columns keep a readable width; when the farm columns join them
+     and the grid outgrows the card, it scrolls sideways instead of
+     squeezing Free % and Rate down to a digit. */
+  #item-table thead th.m-num, #item-table thead th.m-short { min-width: 4.75rem; }
+  #item-table thead th:first-child { min-width: 2.4rem; }
   #item-table thead th:first-child { width: 2.4rem; }
   #item-table .m-mid { min-width: 7.5rem; }
   /* Select2 fills its cell here (design-system), so the cell carries the width. */
