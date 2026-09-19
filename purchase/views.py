@@ -893,6 +893,8 @@ def _chicks_purchase_list_dict(cp):
         "id": cp.id, "date": cp.date.isoformat(), "bill_no": cp.bill_no, "dc_no": cp.dc_no,
         "supplier_name": cp.supplier.name,
         "item_code": cp.item.item_code,
+        # The register reads the item by name, as General Purchase's does.
+        "item_name": cp.item.description or cp.item.item_code,
         "quantity": str(cp.total_quantity()), "avg_rate": str(cp.avg_rate()),
         "net_amount": str(cp.net_amount), "farm_warehouse_names": warehouses,
     }

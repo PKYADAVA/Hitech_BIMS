@@ -57,3 +57,22 @@ class GeneralPurchaseListItemTests(TestCase):
         self.assertIn("function itemCell(row)", html)
         self.assertIn("data-export", html)
         self.assertIn("Farm/<wbr>Warehouse", html)
+
+
+class ChicksPurchaseListItemTests(TestCase):
+    """Chicks Purchase carries one item per bill; its register reads it by name too."""
+
+    def test_the_list_sends_the_item_name(self):
+        from purchase.models import ChicksPurchase
+
+        self.client.force_login(get_user_model().objects.create_superuser(
+            "cpadmin", "c@x.com", "Str0ngPass!"))
+        item = Item.objects.create(item_code="DOC-0001", description="Day Old Chicks",
+                                   category=ItemCategory.objects.create(name="Chicks"),
+                                   standard_cost_per_unit=0)
+        day = date(2026, 7, 18)
+        ChicksPurchase.objects.create(date=day, supplier=Supplier.objects.create(name="Hatch Co"),
+                                      item=item)
+        rows = self.client.get("/chicks_purchase_api/", {"from_date": day.isoformat(),
+                                                         "to_date": day.isoformat()}).json()
+        self.assertEqual((rows[0]["item_name"], rows[0]["item_code"]), ("Day Old Chicks", "DOC-0001"))

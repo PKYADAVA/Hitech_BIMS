@@ -98,7 +98,7 @@ $(function () {
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.bill_no) || "-"}</td>
         <td>${escapeHtml(row.supplier_name)}</td>
-        <td>${escapeHtml(row.item_code)}</td>
+        <td><span class="fw-medium" title="${escapeHtml(row.item_code)}">${escapeHtml(row.item_name || row.item_code)}</span></td>
         <td>${escapeHtml(row.quantity)}</td>
         <td class="text-end">${Number(row.avg_rate).toFixed(2)}</td>
         <td class="text-end">${Number(row.net_amount).toFixed(2)}</td>
