@@ -436,9 +436,15 @@ def _general_purchase_list_dict(gp):
     warehouses = ", ".join(dict.fromkeys(
         i.destination_name for i in gp.items.select_related("farm_warehouse", "farm") if i.destination_name
     ))
+    # Each line's item by name, for the register's Item column; read from the
+    # prefetched lines, so no query per purchase.
+    qty_field = "rcv_qty" if gp.calculation_based_on == "Received Quantity" else "sent_qty"
+    items = [{"code": i.item.item_code, "name": i.item.description or i.item.item_code,
+              "qty": str(getattr(i, qty_field)), "unit": i.unit}
+             for i in gp.items.all()]
     return {
         "id": gp.id, "date": gp.date.isoformat(), "bill_no": gp.bill_no, "dc_no": gp.dc_no,
-        "supplier_name": gp.supplier.name, "item_names": gp.item_names(),
+        "supplier_name": gp.supplier.name, "item_names": gp.item_names(), "items": items,
         "quantity": str(gp.total_quantity()), "no_of_bags": str(gp.no_of_bags),
         "avg_rate": str(gp.avg_rate()), "net_amount": str(gp.net_amount),
         "farm_warehouse_names": warehouses, "batch_no": gp.batch_no,

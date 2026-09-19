@@ -5,6 +5,31 @@
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='purchase' %}{% endblock %}
 {% block content %}
 {% include '_purchase_transaction_subnavbar.html' with active_tab='general_purchase' %}
+<style>
+  /* Item column: names, not codes. One purchase can carry a dozen lines, so
+     the first shows and the rest fold behind a "+N more" pill that opens them
+     in place — every row stays one line tall until someone asks. */
+  #purchase-table td.gp-item-cell { min-width: 9rem; max-width: 15rem; }
+  /* Headers may take two lines (FARM/ WAREHOUSE, FLOCK/ BATCH) rather than
+     each claiming its title's full width over cells that mostly read "-" —
+     that width is what the item names need. The date stays on one line. */
+  #purchase-table thead th { white-space: normal; vertical-align: bottom; line-height: 1.25; }
+  #purchase-table tbody td:first-child { white-space: nowrap; }
+  .gp-item-name { font-weight: 500; color: #1f2937; }
+  .gp-more { border: 0; border-radius: 999px; padding: 1px 8px; margin-left: 6px;
+             font-size: .72rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
+             color: #3730a3; background: #e0e7ff; cursor: pointer; vertical-align: 1px; }
+  .gp-more:hover { background: #c7d2fe; }
+  .gp-more:focus-visible { outline: 2px solid #4f46e5; outline-offset: 1px; }
+  .gp-rest { display: none; margin: 6px 0 0; padding: 6px 0 0; list-style: none;
+             border-top: 1px dashed #e2e8f0; font-size: .78rem; color: #475569; }
+  .gp-items.open .gp-rest { display: block; }
+  /* Name and quantity share a line when they fit; otherwise the quantity
+     drops below, right-aligned, and the name keeps the full width. */
+  .gp-rest li { display: flex; flex-wrap: wrap; column-gap: 10px; padding: 2px 0; }
+  .gp-rest li + li { border-top: 1px dotted #eef2f7; }
+  .gp-rest .gp-qty { margin-left: auto; color: #64748b; font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
 <div class="page-header">
   <div class="page-header-title"><i class="fas fa-file-invoice"></i> General Purchase</div>
   <div class="page-header-right"><div class="page-header-subtitle">General (non-egg) supplier purchase transactions</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'general_purchase_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>
@@ -51,8 +76,8 @@
         <thead class="table-dark">
           <tr>
             <th class="ds-mid">Date</th><th>Invoice</th><th>Supplier</th><th>Item</th>
-            <th class="ds-num">Quantity</th><th>Bags</th><th class="ds-num">Price</th><th class="ds-num">Amount</th>
-            <th>Farm/Warehouse</th><th>Flock/Batch</th><th>Vehicle</th><th>Driver</th>
+            <th class="ds-num">Quantity</th><th class="ds-num">Bags</th><th class="ds-num">Price</th><th class="ds-num">Amount</th>
+            <th>Farm/<wbr>Warehouse</th><th>Flock/<wbr>Batch</th><th>Vehicle</th><th>Driver</th>
             <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
@@ -104,6 +129,43 @@ $(function () {
       .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
+  // The Item cell: the first line's item by name (its code on hover), and the
+  // rest behind "+N more". data-export carries every name, so Copy / CSV /
+  // Excel / PDF / Print list them all rather than "+N more".
+  function itemCell(row) {
+    const items = row.items || [];
+    if (!items.length) return '<td class="gp-item-cell">-</td>';
+    const names = items.map(i => i.name || i.code);
+    const first = `<span class="gp-item-name" title="${escapeHtml(items[0].code)}">${escapeHtml(names[0])}</span>`;
+    const exportText = escapeHtml(names.join(", "));
+    if (items.length === 1) {
+      return `<td class="gp-item-cell" data-export="${exportText}">${first}</td>`;
+    }
+    const rest = items.slice(1).map(i => `<li><span title="${escapeHtml(i.code)}">${escapeHtml(i.name || i.code)}</span>`
+      + `<span class="gp-qty">${Number(i.qty).toFixed(2)}${i.unit ? " " + escapeHtml(i.unit) : ""}</span></li>`).join("");
+    return `<td class="gp-item-cell" data-export="${exportText}"><div class="gp-items">${first}`
+      + `<button type="button" class="gp-more" aria-expanded="false" data-more="+${items.length - 1} more">+${items.length - 1} more</button>`
+      + `<ul class="gp-rest">${rest}</ul></div></td>`;
+  }
+
+  $(document).on("click", ".gp-more", function () {
+    const box = $(this).closest(".gp-items").toggleClass("open");
+    const open = box.hasClass("open");
+    $(this).attr("aria-expanded", open).text(open ? "Show less" : $(this).data("more"));
+  });
+
+  // Exports take a cell's data-export where it has one (the Item column's full
+  // list of names), and the cell's plain text everywhere else — a custom body
+  // formatter replaces the built-in tag stripping, so it is done here.
+  const plainText = function (html) {
+    const el = document.createElement("div");
+    el.innerHTML = String(html);
+    return el.textContent.replace(/\s+/g, " ").trim();
+  };
+  const exportOptions = {
+    format: { body: (data, r, c, node) => (node && node.dataset && node.dataset.export) || plainText(data) },
+  };
+
   function renderRows(rows) {
     if (table) { table.destroy(); }
     const tbody = $("#purchase-table tbody");
@@ -113,9 +175,9 @@ $(function () {
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.bill_no) || "-"}</td>
         <td>${escapeHtml(row.supplier_name)}</td>
-        <td>${escapeHtml(row.item_names)}</td>
-        <td>${escapeHtml(row.quantity)}</td>
-        <td>${escapeHtml(row.no_of_bags)}</td>
+        ${itemCell(row)}
+        <td class="text-end">${escapeHtml(row.quantity)}</td>
+        <td class="text-end">${escapeHtml(row.no_of_bags)}</td>
         <td class="text-end">${Number(row.avg_rate).toFixed(2)}</td>
         <td class="text-end">${Number(row.net_amount).toFixed(2)}</td>
         <td>${escapeHtml(row.farm_warehouse_names) || "-"}</td>
@@ -134,7 +196,9 @@ $(function () {
     });
     table = $("#purchase-table").DataTable({
       responsive: true, order: [[0, "desc"]],
-      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      dom: "Bfrtip",
+      buttons: ["copy", "csv", "excel", "pdf", "print"].map(b => ({ extend: b, exportOptions: exportOptions }))
+        .concat(["colvis"]),
       columnDefs: [{ orderable: false, targets: -1 }],
       language: { emptyTable: "No data available in table" },
     });
