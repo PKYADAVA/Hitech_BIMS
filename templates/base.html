@@ -81,6 +81,27 @@
       {% endif %}
       {% block body %}{% endblock %}
       {% block content %}{% endblock %}
+      <script>
+        // A page's tab row belongs flush under the module bar, full width, with
+        // the breadcrumb below it. Every page renders its tabs at the top of
+        // its own content, which comes after the breadcrumb, so the row is
+        // moved up here and pulled out over the page's padding — read from the
+        // page itself, which varies with the window's width.
+        (function () {
+          var page = document.currentScript.parentElement;
+          var tabs = page.querySelector(":scope > .module-subnav");
+          if (!tabs) return;
+          page.insertBefore(tabs, page.firstChild);
+          tabs.classList.add("is-flush");
+          tabs.style.maxWidth = "none";   // the page caps its children at 100%
+          function fit() {
+            var cs = getComputedStyle(page);
+            tabs.style.margin = "-" + cs.paddingTop + " -" + cs.paddingRight + " 14px -" + cs.paddingLeft;
+          }
+          fit();
+          window.addEventListener("resize", fit);
+        })();
+      </script>
     </div>
 
     <!-- Footer -->
