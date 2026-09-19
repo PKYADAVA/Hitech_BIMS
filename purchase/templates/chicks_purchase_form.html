@@ -130,14 +130,16 @@
      columns and scrolls sideways once it outgrows the card. Widths are read
      from the header row. Received, Total and Amount are wider for
      seven-figure figures. */
-  #item-table { table-layout: fixed; width: 1px; }
+  /* At least the card's width: on a wider screen the spare room is shared
+     out across the columns rather than left blank beside the grid. */
+  #item-table { table-layout: fixed; width: 1px; min-width: calc(100% - 1px); }
   #item-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
   #item-table th, #item-table td { padding: .3rem .25rem; }
   /* Select2 hides the real select absolutely; anchored to its cell it stays
      inside the grid's scroll box instead of widening the whole page. */
   #item-table td { position: relative; }
   #item-table .m-num, #item-table .m-short, #item-table .m-mid { min-width: 0; }
-  #item-table thead th { width: 5.5rem; }
+  #item-table thead th { width: 5.4rem; }
   #item-table thead th:first-child { width: 2.5rem; }
   #item-table thead th:nth-child(8),
   #item-table thead th:nth-child(10),
