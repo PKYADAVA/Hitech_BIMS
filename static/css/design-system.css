@@ -147,8 +147,23 @@
 }
 .ds .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
   line-height: calc(var(--ds-control-h) - 2px);
-  padding-left: 12px;
+  padding-left: 0;
 }
+/* The box's own vertical padding (the theme's .375rem) sat under a text line
+   already as tall as the box, so every dropdown's text sat about 6px low; and
+   its left padding added to the text's, indenting it past the inputs beside
+   it. With the box's vertical padding gone the line centres the text, and the
+   box's left padding alone lines it up with an input's. Site-wide: it was
+   patched page by page on a dozen screens before this. */
+.ds .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
+
+/* Select2 hides the real <select> absolutely. Inside a table that scrolls
+   sideways it was positioned against the page rather than its cell, so it sat
+   past the right edge and scrolled the whole page sideways (Bird Sale, Chicks
+   Purchase, General Purchase ...). Anchored to its cell, it stays inside the
+   table's own scroll box. */
+.ds td:has(> .select2-hidden-accessible),
+.ds td:has(.select2-hidden-accessible) { position: relative; }
 
 /* -- buttons ------------------------------------------------------------ */
 .ds .btn {
@@ -874,3 +889,24 @@ body.ds-shell .content > footer { display: none; }
 .list-filter-row .form-label { margin-bottom: 2px; }
 .card-body:has(> .list-filter-row) { padding: .55rem .9rem .65rem; }
 .card:has(> .card-body > .list-filter-row) { margin-bottom: .75rem !important; }
+
+/* -- entry forms, compact by default ------------------------------------ */
+/* What General Purchase, Chicks Purchase and Payment were given one at a
+   time, for every form: every control sizes from --ds-control-h, so one
+   override shortens the boxes, dropdowns and file pickers together (grids
+   keep their own entry height), and the cards, gutters and labels close up to
+   match. Radios stand level with the boxes beside them. Phones keep their
+   larger touch targets: that rule sets a height of its own, not this one. */
+.ds form { --ds-control-h: 31px; }
+.ds form > .card,
+.ds form > .row > [class*="col"] > .card { margin-bottom: .75rem !important; }
+.ds form .card-header { padding-top: .55rem; padding-bottom: .55rem; }
+.ds form .card-body:not(.p-0) { padding: .65rem 1rem .8rem; }
+.ds form .card-body > .row { --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+.ds form .form-label { margin-bottom: 2px; }
+.ds form .form-text { margin-top: 2px; }
+.ds form .card-body .form-check-inline {
+  display: inline-flex; align-items: center; gap: .3rem;
+  height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0;
+}
+.ds form .card-body .form-check-inline .form-check-input { margin-top: 0; }

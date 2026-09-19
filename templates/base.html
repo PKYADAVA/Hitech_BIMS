@@ -46,7 +46,7 @@
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260919j" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260919k" />
 
   {% block css %}{% endblock %}
 
@@ -89,8 +89,22 @@
         // page itself, which varies with the window's width.
         (function () {
           var page = document.currentScript.parentElement;
-          var tabs = page.querySelector(":scope > .module-subnav");
+          var tabs = page.querySelector(".module-subnav");
           if (!tabs) return;
+          // Only a row that opens the page: at each level up it has to be the
+          // first element (styles and scripts aside), or it belongs to
+          // something further down and stays where it is.
+          var skip = { STYLE: 1, SCRIPT: 1, LINK: 1, NOSCRIPT: 1 };
+          function firstEl(parent) {
+            for (var n = parent.firstElementChild; n; n = n.nextElementSibling) {
+              if (!skip[n.tagName] && !n.classList.contains("ds-breadcrumb")) return n;
+            }
+            return null;
+          }
+          for (var el = tabs; el.parentElement !== page; el = el.parentElement) {
+            if (firstEl(el.parentElement) !== el) return;
+          }
+          if (firstEl(page) !== el) return;
           page.insertBefore(tabs, page.firstChild);
           tabs.classList.add("is-flush");
           tabs.style.maxWidth = "none";   // the page caps its children at 100%
