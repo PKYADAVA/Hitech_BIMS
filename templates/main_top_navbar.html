@@ -1162,7 +1162,51 @@ document.addEventListener("DOMContentLoaded", function () {
   // Bootstrap's default dropdown behavior (see main.js). Submenus below
   // open on hover on pointer devices AND on tap for touch/collapsed menus.
 
-  const submenus = document.querySelectorAll("#mainNavbar .dropdown-submenu");
+  // Both bars: the module menus (Broiler, Hatchery ...) live in #moduleBar,
+  // not #mainNavbar, and matching only the latter left every module fly-out
+  // to the stylesheet's :hover alone — no tap support, and nothing to fit.
+  const submenus = document.querySelectorAll("#mainNavbar .dropdown-submenu, #moduleBar .dropdown-submenu");
+
+  // A fly-out opens beside its row, and a long one (Broiler > Reports) ran
+  // past the bottom of the screen with no way to reach its last entries.
+  // Fitted each time it opens: lifted just enough to end on screen, and when
+  // taller than the window, pinned to the top and scrolled inside. A fly-out
+  // opening from inside a scrolling one is placed against the screen instead
+  // of its parent, which would otherwise clip it. The collapsed (phone) menu
+  // stacks its fly-outs in line, so it is left alone.
+  function fitToScreen(menu, item) {
+    menu.style.position = menu.style.left = menu.style.top = "";
+    menu.style.maxHeight = menu.style.overflowY = "";
+    if (getComputedStyle(menu).position !== "absolute") return;
+    const gap = 12, vh = window.innerHeight;
+    const parent = item.closest(".dropdown-menu");
+    if (parent && parent.style.overflowY === "auto") {
+      const row = item.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.left = row.right + "px";
+      menu.style.top = (row.top - 6) + "px";
+    }
+    let rect = menu.getBoundingClientRect();
+    if (rect.bottom <= vh - gap) return;
+    const lift = Math.min(rect.bottom - (vh - gap), rect.top - gap);
+    if (lift > 0) {
+      const top = parseFloat(getComputedStyle(menu).top) || 0;
+      menu.style.top = (top - lift) + "px";
+      rect = menu.getBoundingClientRect();
+    }
+    if (rect.bottom > vh - gap) {
+      menu.style.maxHeight = Math.max(160, vh - gap - rect.top) + "px";
+      menu.style.overflowY = "auto";
+    }
+  }
+  // Scrolling a fitted fly-out moves the rows a pinned child was placed
+  // against, so the child closes rather than float beside the wrong row.
+  document.querySelectorAll("#mainNavbar .dropdown-submenu > .dropdown-menu, #moduleBar .dropdown-submenu > .dropdown-menu").forEach(menu => {
+    menu.addEventListener("scroll", function () {
+      menu.querySelectorAll(":scope > .dropdown-submenu > .dropdown-menu.show")
+        .forEach(child => child.classList.remove("show"));
+    });
+  });
 
   // Hover behaviour for fine pointers (mouse) on the desktop fly-out menus.
   submenus.forEach(item => {
@@ -1170,7 +1214,7 @@ document.addEventListener("DOMContentLoaded", function () {
     item.addEventListener("mouseenter", function () {
       clearTimeout(closeTimer);
       const menu = this.querySelector(":scope > .dropdown-menu");
-      if (menu) menu.classList.add("show");
+      if (menu) { menu.classList.add("show"); fitToScreen(menu, this); }
     });
     item.addEventListener("mouseleave", function () {
       const menu = this.querySelector(":scope > .dropdown-menu");
@@ -1196,6 +1240,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .querySelectorAll(":scope > .dropdown-submenu > .dropdown-menu.show")
         .forEach(m => { if (m !== menu) m.classList.remove("show"); });
       menu.classList.toggle("show", !isOpen);
+      if (!isOpen) fitToScreen(menu, item);
     });
   });
 
