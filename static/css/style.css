@@ -147,15 +147,17 @@ footer { margin-top: auto; }
   flex-shrink: 0;
 }
 
-/* The Hi Tech mark, beside the name. Its lettering is green and the bar is
-   green, so it sits on a small white panel rather than straight on the bar. */
+/* The Hi Tech mark, reversed out in white (hitech-logo-white.png, made from
+   hitech-logo.png) so it sits straight on the green bar; a hairline divides
+   the company's mark from the product's name beside it. */
 .bims-navbar .brand-logo {
-  height: 38px;
+  height: 40px;
   width: auto;
-  border-radius: 6px;
-  object-fit: contain;
-  background: #ffffff;
-  padding: 2px 5px;
+  display: block;
+}
+.bims-navbar .brand-logo + .brand-text {
+  padding-left: 12px;
+  border-left: 1px solid rgba(255,255,255,0.22);
 }
 
 .bims-navbar .brand-text {

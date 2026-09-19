@@ -463,17 +463,17 @@ body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
   padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
-/* The Hi Tech mark on a white panel (its green lettering would vanish on the
-   dark sidebar). Collapsed to the 72px rail, the panel narrows to a square
-   and shows the "H" alone — the left of the mark. */
+/* The Hi Tech mark reversed out in white, straight on the dark sidebar, with
+   a hairline before the product's name. Collapsed to the 72px rail it shows
+   the hexagon "H" alone — the left of the mark. */
 .ds-sb-logo {
-  height: 38px; flex: 0 0 auto; border-radius: 7px;
-  background: #ffffff; padding: 2px 5px;
+  height: 36px; flex: 0 0 auto;
   display: flex; align-items: center; overflow: hidden;
 }
-.ds-sb-logo img { height: 34px; width: auto; display: block; }
-body.ds-sb-collapsed .ds-sb-logo { width: 38px; padding: 2px; justify-content: flex-start; }
-body.ds-sb-collapsed .ds-sb-logo img { width: 34px; object-fit: cover; object-position: left center; }
+.ds-sb-logo img { height: 36px; width: auto; display: block; }
+.ds-sb-logo + .ds-sb-brand-text { padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .18); }
+body.ds-sb-collapsed .ds-sb-logo { width: 36px; }
+body.ds-sb-collapsed .ds-sb-logo img { width: 36px; object-fit: cover; object-position: left center; }
 .ds-sb-brand-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
 .ds-sb-brand-text strong { font-size: 14px; color: #fff; font-weight: 600; }
 .ds-sb-brand-text small { font-size: 11px; color: rgba(255, 255, 255, .55); }
