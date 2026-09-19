@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Sidebar — 260px, collapsing to 72px.
 
@@ -11,7 +12,7 @@ rather than a per-page one.
 <aside class="ds-sidebar" id="dsSidebar">
 
   <div class="ds-sb-brand">
-    <span class="ds-sb-logo"><i class="fa-solid fa-feather-pointed"></i></span>
+    <span class="ds-sb-logo"><img src="{% static 'images/hitech-logo.png' %}" alt="Hi Tech — Makes Difference"></span>
     <span class="ds-sb-brand-text">
       <strong>Hi Tech Farms</strong>
       <small>BIMS PLATFORM</small>

@@ -147,13 +147,15 @@ footer { margin-top: auto; }
   flex-shrink: 0;
 }
 
+/* The Hi Tech mark, beside the name. Its lettering is green and the bar is
+   green, so it sits on a small white panel rather than straight on the bar. */
 .bims-navbar .brand-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius);
+  height: 38px;
+  width: auto;
+  border-radius: 6px;
   object-fit: contain;
-  background: rgba(255,255,255,0.10);
-  padding: 2px;
+  background: #ffffff;
+  padding: 2px 5px;
 }
 
 .bims-navbar .brand-text {
