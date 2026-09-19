@@ -29,8 +29,8 @@
 
   <div class="card mb-3">
     <div class="card-header">Purchase Details</div>
-    <div class="card-body gp-head-body">
-      <div class="row g-3 gp-head">
+    <div class="card-body">
+      <div class="row g-3">
         <div class="col-md-2">
           <label class="form-label">Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" name="date" id="date" value="{{ general_purchase.date|date:'Y-m-d'|default:today }}" required>
@@ -126,16 +126,32 @@
 
   <div class="card mb-3">
 <style>
-  /* Purchase Details, compact: every control sizes from --ds-control-h, so
-     one override shortens the boxes and dropdowns together; tighter gutters,
-     labels and padding do the rest. */
-  .gp-head { --ds-control-h: 31px; --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
-  .gp-head .form-label { margin-bottom: 2px; }
-  /* The Sent / Received radios stand on the same line as the boxes beside them. */
-  .gp-head .form-check-inline { display: inline-flex; align-items: center; gap: .3rem;
-                                height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0; }
-  .gp-head .form-check-inline .form-check-input { margin-top: 0; }
-  .card-body.gp-head-body { padding: .65rem 1rem .8rem; }
+  /* The whole form, compact — every section, not just Purchase Details.
+     Every control sizes from --ds-control-h, so one override shortens the
+     boxes, dropdowns and file pickers together; the Items grid keeps its own
+     entry height. Tighter card headers, padding, gutters and labels do the
+     rest, and radios stand level with the boxes beside them. */
+  #general-purchase-form { --ds-control-h: 31px; }
+  #general-purchase-form > .card { margin-bottom: .75rem !important; }
+  #general-purchase-form .card-header { padding-top: .55rem; padding-bottom: .55rem; }
+  #general-purchase-form .card-body:not(.p-0) { padding: .65rem 1rem .8rem; }
+  #general-purchase-form .card-body > .row { --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+  #general-purchase-form .form-label { margin-bottom: 2px; }
+  #general-purchase-form .form-text { margin-top: 2px; }
+  #general-purchase-form .card-body .form-check-inline {
+    display: inline-flex; align-items: center; gap: .3rem;
+    height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0; }
+  #general-purchase-form .card-body .form-check-inline .form-check-input { margin-top: 0; }
+  /* Bag / Batch Details holds seven fields; at xl they share one line rather
+     than leaving TDS Applicable on a row of its own. */
+  @media (min-width: 1200px) {
+    .gp-seven { flex-wrap: nowrap; }
+    .gp-seven > [class*="col-md-"] { flex: 1 1 0; width: auto; min-width: 0; }
+    .gp-seven > .gp-check { flex: 0 0 auto; }
+  }
+  .gp-check .form-check { display: flex; align-items: center; gap: .35rem;
+                          height: var(--ds-control-h); margin: 0; padding-left: 0; }
+  .gp-check .form-check-input { margin: 0; float: none; }
 
   /* Items grid. The footer's Flock / Batch cell hides with its column — left
      showing, it made a phantom fourteenth column past the edge of the grid.
@@ -231,7 +247,7 @@
   <div class="card mb-3">
     <div class="card-header">Bag / Batch Details</div>
     <div class="card-body">
-      <div class="row g-3">
+      <div class="row g-3 align-items-end gp-seven">
         <div class="col-md-2">
           <label class="form-label">Bag Type</label>
           <select class="form-select" name="bag_type">
@@ -261,8 +277,8 @@
           <label class="form-label">TDS Amount</label>
           <input type="number" min="0" step=".01" class="form-control" name="tds_amount" id="tds_amount" value="{{ general_purchase.tds_amount|default:'0' }}">
         </div>
-        <div class="col-md-2">
-          <div class="form-check mt-4">
+        <div class="col-md-2 gp-check">
+          <div class="form-check">
             <input class="form-check-input" type="checkbox" name="tds_applicable" id="tds_applicable" {% if general_purchase.tds_applicable %}checked{% endif %}>
             <label class="form-check-label" for="tds_applicable">TDS Applicable</label>
           </div>
