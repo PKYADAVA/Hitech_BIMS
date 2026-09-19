@@ -480,7 +480,7 @@ MODULE_REGISTRY = [
                     ("offline_sync_monitor", "Offline Sync Monitor"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
-                    ("duplicate_analyser", "Duplicate Entries", ("duplicate_record",)),
+                    ("duplicate_analyser", "Duplicate Entries", ("duplicate_record", "duplicate_dismiss", "duplicate_undo")),
                     ("picklists", "Picklists"),
                     ("field_bindings", "Field Bindings"),
                 ],
@@ -867,6 +867,10 @@ _ACTION_URL_OVERRIDES = {
     "farmers_bulk_status": ("branch_farm", "edit"),
     "farms_bulk_supervisor": ("branch_farm", "edit"),
     "farmer_duplicate_check": ("branch_farm", "view"),
+    # Keep both / Undo on Duplicate Entries hide or restore a group for
+    # everybody, so they are edits of that page rather than views of it.
+    "duplicate_dismiss": ("duplicate_analyser", "edit"),
+    "duplicate_undo": ("duplicate_analyser", "edit"),
     "farmer_next_code": ("branch_farm", "view"),
     "create_new_employee": ("employee_list", "add"),
     "edit_employee": ("employee_list", "view"),

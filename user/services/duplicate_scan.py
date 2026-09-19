@@ -52,6 +52,11 @@ class Group:
     date: str = ""
 
     @property
+    def ids(self) -> str:
+        """The rows' ids, sorted and comma separated — what "Keep both" records."""
+        return ",".join(str(i) for i in sorted(r.id for r in self.rows))
+
+    @property
     def numbers(self) -> str:
         """The rows' own numbers, comma separated, for ?records= on a register.
 
@@ -227,6 +232,7 @@ class Check:
     error: str = ""                              # set when the check could not run
     tab: str = ""                                # where these records are entered
     url: str = ""                                # that tab's page, when it can be reached
+    dismissed: int = 0                           # groups kept as "not duplicates"
 
     @property
     def count(self) -> int:
@@ -278,14 +284,18 @@ def _collect(queryset, fields, keys, cells, matched=None, limit=200):
     """
     if not keys:
         return []
-    if _COUNTS_ONLY:
-        # Placeholder rows, real counts: enough for "3 groups, 7 records", and
-        # cheap enough for a dashboard that renders on every page load.
-        return [Group(matched="", rows=[Row(id=0) for _ in range(n)])
-                for _key, n in keys[:limit]]
     match = Q()
     for key, _n in keys[:limit]:
         match |= Q(**key)
+    if _COUNTS_ONLY:
+        # Ids only, no cells: enough for "3 groups, 7 records", cheap enough for
+        # a dashboard that renders on every page load — and it has to be real
+        # ids, because a group somebody kept as "not duplicates" is recognised
+        # by them (see _drop_dismissed).
+        by_key: dict[tuple, Group] = {}
+        for row in queryset.filter(match).values_list("pk", *fields):
+            by_key.setdefault(tuple(row[1:]), Group(matched="")).rows.append(Row(id=row[0]))
+        return [g for g in by_key.values() if len(g.rows) > 1]
     grouped: dict[tuple, Group] = {}
     for obj in queryset.filter(match):
         signature = tuple(_value(obj, f) for f in fields)
@@ -1001,11 +1011,37 @@ def run(only: Optional[str] = None, module: Optional[str] = None,
         checks = _run_sources()
     finally:
         _COUNTS_ONLY = was
+    _drop_dismissed(checks)
     if only:
         checks = [c for c in checks if c.code == only]
     if module:
         checks = [c for c in checks if c.module == module]
     return checks
+
+
+def _drop_dismissed(checks: list[Check]) -> None:
+    """Take out the groups somebody kept as "not duplicates".
+
+    A group stays out while every record in it was among those kept together;
+    one more matching record brings it back, since that record is the one
+    nobody has looked at. Counted on the check, so the page can say how many
+    it is not showing.
+    """
+    from user.models import DuplicateDismissal
+
+    kept: dict[str, list[set]] = {}
+    for d in DuplicateDismissal.objects.filter(undone_at__isnull=True).only("check_code", "record_ids"):
+        kept.setdefault(d.check_code, []).append(d.ids)
+    if not kept:
+        return
+    for check in checks:
+        sets = kept.get(check.code)
+        if not sets:
+            continue
+        before = len(check.groups)
+        check.groups = [g for g in check.groups
+                        if not any({r.id for r in g.rows} <= s for s in sets)]
+        check.dismissed = before - len(check.groups)
 
 
 def _run_sources() -> list[Check]:
@@ -1034,6 +1070,7 @@ def summary(checks: list[Check]) -> dict:
         "with_findings": sum(1 for c in checks if c.count),
         "groups": sum(c.count for c in checks),
         "records": sum(c.records for c in checks),
+        "dismissed": sum(c.dismissed for c in checks),
         "entry_groups": sum(c.count for c in checks if c.kind == "entry"),
         "master_groups": sum(c.count for c in checks if c.kind == "master"),
         "entry_checks": sum(1 for c in checks if c.kind == "entry"),

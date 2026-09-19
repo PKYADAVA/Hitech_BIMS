@@ -110,6 +110,15 @@
   .dup-table td { padding: .35rem .6rem; border-bottom: 1px solid #f4f7fa; color: #0f172a; }
   .dup-table tr:last-child td { border-bottom: 0; }
   .dup-table-wrap { overflow-x: auto; }
+  .dup-keep { margin-left: auto; border: 1px solid #bbf7d0; background: #f0fdf4; color: #15803d;
+              font-size: .72rem; font-weight: 600; border-radius: 999px; padding: .15rem .6rem; cursor: pointer; }
+  .dup-keep:hover { background: #dcfce7; }
+  .dup-keep:focus-visible { outline: 2px solid #16a34a; outline-offset: 1px; }
+  .dup-badge.kept { background: #ecfdf5; color: #047857; }
+  .dup-badge.undone { background: #f1f5f9; color: #64748b; }
+  .dup-resolved { background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; }
+  .dup-resolved tr.is-undone td { color: #94a3b8; }
+  .dup-note-cell { max-width: 22rem; white-space: normal; }
   .dup-error { font-size: .78rem; color: #b42318; padding: 0 0 .5rem; }
 
   .dup-note { display: flex; align-items: flex-start; gap: .7rem; background: #f4f8ff; border: 1px solid #dbe7fb;
@@ -173,7 +182,7 @@
         <div>
           <div class="dup-tile-val">{{ totals.groups }}</div>
           <div class="dup-tile-lab">Possible duplicates</div>
-          <div class="dup-tile-note">Need review</div>
+          <div class="dup-tile-note">{% if totals.dismissed %}Need review · {{ totals.dismissed }} kept{% else %}Need review{% endif %}</div>
         </div>
       </div>
       <div class="dup-tile {% if totals.entry_groups %}amber{% else %}green{% endif %}">
@@ -200,6 +209,8 @@
           Transactional Entries ({{ totals.entry_checks }})</button>
         <button type="button" class="dup-tab" data-pane="masters">
           Master Records ({{ totals.master_checks }})</button>
+        <button type="button" class="dup-tab" data-pane="resolved">
+          Resolved ({{ resolved_active }})</button>
       </div>
       <div class="dup-filters">
         <select class="dup-select" id="dup-module" aria-label="Module">
@@ -250,6 +261,44 @@
       {% for check in master_checks %}{% include "_duplicate_check.html" with check=check counter=forloop.counter %}{% endfor %}
     </div>
 
+    {% comment %}
+    What has been decided: every group somebody kept as "not duplicates", who
+    kept it, when and why — and Undo, which puts the group back on the list if
+    its records still match. An undone decision stays here, stamped.
+    {% endcomment %}
+    <div class="dup-pane" id="dup-pane-resolved">
+      <div class="dup-band">
+        <div class="dup-band-icon"><i class="fas fa-clipboard-check"></i></div>
+        <div>
+          <div class="dup-band-title">Resolved</div>
+          <div class="dup-band-note">Groups kept as genuinely separate records. They are not listed while they hold only these records; a new matching record brings the group back.</div>
+        </div>
+      </div>
+      {% if resolved %}
+      <div class="dup-table-wrap dup-resolved">
+        <table class="dup-table">
+          <thead><tr><th>Check</th><th>Matched</th><th>Records</th><th>Note</th><th>Kept by</th><th>Status</th>{% if can_resolve %}<th></th>{% endif %}</tr></thead>
+          <tbody>
+            {% for d in resolved %}
+            <tr class="{% if d.undone_at %}is-undone{% endif %}">
+              <td><div class="fw-semibold">{{ d.check_title|default:d.check_code }}</div><div class="text-muted small">{{ d.module }}</div></td>
+              <td>{{ d.matched|default:"&mdash;" }}</td>
+              <td>{{ d.numbers|default:d.record_ids }}</td>
+              <td class="dup-note-cell">{{ d.note|default:"&mdash;" }}</td>
+              <td>{{ d.dismissed_by.get_full_name|default:d.dismissed_by.username|default:"&mdash;" }}<div class="text-muted small">{{ d.dismissed_at|date:"d-m-Y H:i" }}</div></td>
+              <td>{% if d.undone_at %}<span class="dup-badge undone">Undone</span><div class="text-muted small">{{ d.undone_by.get_full_name|default:d.undone_by.username }} · {{ d.undone_at|date:"d-m-Y H:i" }}</div>
+                  {% else %}<span class="dup-badge kept">Kept both</span>{% endif %}</td>
+              {% if can_resolve %}<td>{% if not d.undone_at %}<button type="button" class="btn btn-outline-secondary btn-sm dup-undo" data-id="{{ d.id }}"><i class="fas fa-rotate-left me-1"></i>Undo</button>{% endif %}</td>{% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="dup-clear"><i class="fas fa-circle-info me-1"></i>Nothing resolved yet. Use <b>Keep both</b> on a group that is genuinely two records.</div>
+      {% endif %}
+    </div>
+
     <div class="dup-note">
       <i class="fas fa-circle-info mt-1"></i>
       <div>
@@ -262,6 +311,31 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Keep both: record that a group is genuinely separate records -->
+<div class="modal fade" id="dupKeepModal" tabindex="-1" aria-labelledby="dupKeepLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dupKeepLabel"><i class="fas fa-check-double text-success me-1"></i>Keep both</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-muted mb-1" id="dup-keep-title"></div>
+        <div class="mb-2"><b>Records:</b> <span id="dup-keep-numbers"></span><br><b>Matched on:</b> <span id="dup-keep-matched"></span></div>
+        <p class="small mb-2">This group will stop being listed, on this page and on the dashboard, until another matching record appears. Nothing is changed or deleted.</p>
+        <label class="form-label small fw-semibold" for="dup-keep-note">Why they are not duplicates (optional)</label>
+        <textarea class="form-control" id="dup-keep-note" rows="2" maxlength="2000"
+                  placeholder="e.g. two different farmers with the same name"></textarea>
+        <div class="text-danger small mt-2" id="dup-keep-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success btn-sm" id="dup-keep-confirm"><i class="fas fa-check-double me-1"></i>Keep both</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -278,6 +352,55 @@
   </div>
 </div>
 
+<script>
+  // Keep both / Undo — each a POST, then the page reloads, which reruns the
+  // scan: the list, the tiles and the Resolved tab all come back consistent.
+  (function () {
+    var csrf = "{{ csrf_token }}";
+    var pending = null;
+    function post(url, body) {
+      return fetch(url, { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (d) { return r.ok ? d : Promise.reject(d.error || "Could not save."); }); });
+    }
+    document.addEventListener("click", function (event) {
+      var keep = event.target.closest(".dup-keep");
+      if (keep) {
+        event.stopPropagation();
+        pending = keep.dataset;
+        document.getElementById("dup-keep-title").textContent = (pending.module ? pending.module + " · " : "") + pending.title;
+        document.getElementById("dup-keep-numbers").textContent = pending.numbers || pending.ids;
+        document.getElementById("dup-keep-matched").textContent = pending.matched;
+        document.getElementById("dup-keep-note").value = "";
+        document.getElementById("dup-keep-error").hidden = true;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById("dupKeepModal")).show();
+        return;
+      }
+      var undo = event.target.closest(".dup-undo");
+      if (undo) {
+        if (!window.confirm("Put this group back on the list?")) return;
+        undo.disabled = true;
+        post("{% url 'duplicate_undo' %}", { id: undo.dataset.id })
+          .then(function () { location.reload(); })
+          .catch(function (msg) { undo.disabled = false; alert(msg); });
+      }
+    });
+    var confirmBtn = document.getElementById("dup-keep-confirm");
+    if (confirmBtn) confirmBtn.addEventListener("click", function () {
+      if (!pending) return;
+      confirmBtn.disabled = true;
+      post("{% url 'duplicate_dismiss' %}", {
+        check: pending.check, ids: pending.ids, numbers: pending.numbers, matched: pending.matched,
+        title: pending.title, module: pending.module, note: document.getElementById("dup-keep-note").value })
+        .then(function () { location.reload(); })
+        .catch(function (msg) {
+          confirmBtn.disabled = false;
+          var err = document.getElementById("dup-keep-error"); err.textContent = msg; err.hidden = false;
+        });
+    });
+  })();
+</script>
 <script>
   (function () {
     var page = document.getElementById("dup-page");

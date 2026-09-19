@@ -456,3 +456,44 @@ class AppRelease(models.Model):
 
     def __str__(self):
         return f"v{self.version} (code {self.version_code})"
+
+
+class DuplicateDismissal(models.Model):
+    """A group on the Duplicate Entries page someone has looked at and kept.
+
+    "Keep both": the records matched, but they are genuinely two — two
+    farmers who share a name, a bill number a supplier reused in a later year.
+    The group stops being listed (on the page, in its export and on the
+    dashboard card) for as long as it holds only these records; a further
+    matching record brings it back, because that one nobody has looked at.
+
+    Undo keeps the row and stamps it, so the Resolved history still says who
+    kept it and who changed their mind.
+    """
+    check_code = models.CharField(max_length=80, db_index=True)
+    #: The records kept together, as sorted ids "12,15".
+    record_ids = models.CharField(max_length=1000)
+    # What the page showed when it was kept — so the history still reads after
+    # the records themselves are edited or gone.
+    check_title = models.CharField(max_length=200, blank=True)
+    module = models.CharField(max_length=60, blank=True)
+    numbers = models.CharField(max_length=500, blank=True)
+    matched = models.CharField(max_length=255, blank=True)
+    note = models.TextField(blank=True)
+    dismissed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="duplicate_dismissals")
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+    undone_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name="duplicate_dismissals_undone")
+    undone_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-dismissed_at", "-id"]
+        indexes = [models.Index(fields=["check_code", "undone_at"])]
+
+    def __str__(self):
+        return f"{self.check_code}: {self.record_ids}"
+
+    @property
+    def ids(self) -> set:
+        return {int(i) for i in self.record_ids.split(",") if i.strip().isdigit()}

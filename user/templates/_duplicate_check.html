@@ -27,6 +27,7 @@ chevron would be the opposite of the point.
       {% else %}
         <span class="dup-badge clean">Nothing found</span>
       {% endif %}
+      {% if check.dismissed %}<span class="dup-badge kept" title="Groups kept as not duplicates — see Resolved">{{ check.dismissed }} kept</span>{% endif %}
       <i class="fas fa-chevron-down dup-chev"></i>
     </div>
   </div>
@@ -51,6 +52,13 @@ chevron would be the opposite of the point.
              target="_blank" rel="noopener">
             Open both in {{ check.tab_label|default:"the list" }}
             <i class="fas fa-arrow-up-right-from-square"></i></a>
+          {% endif %}
+          {% if can_resolve %}
+          <button type="button" class="dup-keep" data-check="{{ check.code }}" data-ids="{{ group.ids }}"
+                  data-numbers="{{ group.numbers }}" data-matched="{{ group.matched }}"
+                  data-title="{{ check.title }}" data-module="{{ check.module }}"
+                  title="These are genuinely separate records — stop listing this group">
+            <i class="fas fa-check-double"></i> Keep both</button>
           {% endif %}
         </div>
         <div class="dup-table-wrap">

@@ -53,5 +53,7 @@ urlpatterns = [
     path('ui-settings/toggle-nav-layout/', views.toggle_nav_layout, name='toggle_nav_layout'),
     path('duplicate-entries/', views.duplicate_analyser, name='duplicate_analyser'),
     path('duplicate-entries/record/', views.duplicate_record, name='duplicate_record'),
+    path('duplicate-entries/dismiss/', views.duplicate_dismiss, name='duplicate_dismiss'),
+    path('duplicate-entries/undo/', views.duplicate_undo, name='duplicate_undo'),
 
 ]

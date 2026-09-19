@@ -1812,10 +1812,10 @@ def duplicate_analyser(request):
     two records, so half a farmer's history sits under one code and half under
     another.
 
-    Reports only. Names legitimately repeat and a supplier can reuse a bill
-    number across years, so every group is a question for somebody who knows
-    the business rather than something to act on automatically — and merging
-    records is not an operation this system has.
+    Reports, plus one decision: names legitimately repeat and a supplier can
+    reuse a bill number across years, so somebody who knows the business can
+    "Keep both" — the group stops being listed until another matching record
+    joins it (see duplicate_dismiss). Nothing is deleted or merged from here.
     """
     from django.urls import NoReverseMatch, reverse
     from django.utils import timezone
@@ -1843,7 +1843,14 @@ def duplicate_analyser(request):
     if (request.GET.get("export") or "").strip() == "csv":
         return _duplicate_csv(checks)
 
+    from user.access import user_can
+    from user.models import DuplicateDismissal
+
+    resolved = list(DuplicateDismissal.objects.select_related("dismissed_by", "undone_by")[:300])
     return render(request, "duplicate_analyser.html", {
+        "can_resolve": user_can(request.user, "duplicate_analyser", "edit"),
+        "resolved": resolved,
+        "resolved_active": sum(1 for d in resolved if not d.undone_at),
         "entry_checks": entry_checks,
         "master_checks": master_checks,
         # So a section whose checks all came back clean can say so, rather than
@@ -1859,6 +1866,73 @@ def duplicate_analyser(request):
         # worse than none.
         "ran_at": timezone.localtime(),
     })
+
+
+def _json_body(request):
+    import json
+    try:
+        return json.loads(request.body or "{}")
+    except (ValueError, TypeError):
+        return {}
+
+
+@login_required
+@require_POST
+def duplicate_dismiss(request):
+    """"Keep both": the records in a group are genuinely separate.
+
+    Needs edit rights on Duplicate Entries, since it hides the group from
+    everybody. The ids are checked against the check's own model — two or
+    more, all present — so a request cannot record a group that is not there.
+    The labels come from the page and are kept only so the history reads.
+    """
+    from user.access import user_can
+    from user.models import DuplicateDismissal
+    from user.services import duplicate_scan
+
+    if not user_can(request.user, "duplicate_analyser", "edit"):
+        return JsonResponse({"error": "You do not have permission to resolve duplicates."}, status=403)
+    from django.apps import apps
+
+    data = _json_body(request)
+    code = str(data.get("check") or "").strip()
+    path = duplicate_scan.CHECK_MODELS.get(code)
+    model = apps.get_model(path) if path else None
+    try:
+        ids = sorted({int(i) for i in str(data.get("ids") or "").split(",") if str(i).strip()})
+    except ValueError:
+        ids = []
+    if model is None or len(ids) < 2:
+        return JsonResponse({"error": "That group could not be found."}, status=400)
+    if model.objects.filter(pk__in=ids).count() != len(ids):
+        return JsonResponse({"error": "Some of these records no longer exist. Run the checks again."}, status=400)
+    clip = lambda key, n: str(data.get(key) or "").strip()[:n]
+    d = DuplicateDismissal.objects.create(
+        check_code=code, record_ids=",".join(str(i) for i in ids),
+        check_title=clip("title", 200), module=clip("module", 60),
+        numbers=clip("numbers", 500), matched=clip("matched", 255),
+        note=str(data.get("note") or "").strip()[:2000], dismissed_by=request.user)
+    return JsonResponse({"message": "Kept both. This group will not be listed again unless another matching record appears.",
+                         "id": d.id})
+
+
+@login_required
+@require_POST
+def duplicate_undo(request):
+    """Put a kept group back on the list. The history row stays, stamped."""
+    from django.utils import timezone
+
+    from user.access import user_can
+    from user.models import DuplicateDismissal
+
+    if not user_can(request.user, "duplicate_analyser", "edit"):
+        return JsonResponse({"error": "You do not have permission to resolve duplicates."}, status=403)
+    d = DuplicateDismissal.objects.filter(pk=_json_body(request).get("id"), undone_at__isnull=True).first()
+    if d is None:
+        return JsonResponse({"error": "Already undone, or not found."}, status=404)
+    d.undone_by, d.undone_at = request.user, timezone.now()
+    d.save(update_fields=["undone_by", "undone_at"])
+    return JsonResponse({"message": "Undone. The group is listed again if its records still match."})
 
 
 @login_required
