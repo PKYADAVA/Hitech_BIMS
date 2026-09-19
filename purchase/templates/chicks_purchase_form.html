@@ -124,29 +124,28 @@
   #chicks-purchase-form .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
   #chicks-purchase-form .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left: 0; }
 
-  /* Batches grid, compact: headers may take two lines, number boxes are as
-     wide as their figures (no spinner arrows), Sr. is narrow, and the three
-     dropdowns keep room for a name. */
-  /* The grid spans the card, and any spare width is shared across all the
-     columns rather than handed to Sector/Farm and the buttons: no column
-     carries a fixed width except Sr., the dropdowns' minimums and the row
-     buttons, which take only what they need. */
-  #item-table { width: 100%; }
-  #item-table thead th:last-child { width: 1%; white-space: nowrap; }
+  /* Batches grid: fixed columns. Every column keeps one width whether or not
+     the farm columns are showing, so picking a farm adds Via Warehouse and
+     Flock / Batch without resizing anything; the grid is as wide as its
+     columns and scrolls sideways once it outgrows the card. Widths are read
+     from the header row. Received, Total and Amount are wider for
+     seven-figure figures. */
+  #item-table { table-layout: fixed; width: 1px; }
   #item-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
   #item-table th, #item-table td { padding: .3rem .25rem; }
-  #item-table .m-num, #item-table .m-short { min-width: 0; }
-  /* Number columns keep a readable width; when the farm columns join them
-     and the grid outgrows the card, it scrolls sideways instead of
-     squeezing Free % and Rate down to a digit. */
-  #item-table thead th.m-num, #item-table thead th.m-short { min-width: 4.75rem; }
-  #item-table thead th:first-child { min-width: 2.4rem; }
-  #item-table thead th:first-child { width: 2.4rem; }
-  #item-table .m-mid { min-width: 7.5rem; }
-  /* Select2 fills its cell here (design-system), so the cell carries the width. */
-  #item-table thead th.col-dest { min-width: 11rem; }
-  #item-table thead th.col-farm { min-width: 8.25rem; }
-  #item-table .form-control { padding-left: .35rem; padding-right: .35rem; min-width: 0; }
+  /* Select2 hides the real select absolutely; anchored to its cell it stays
+     inside the grid's scroll box instead of widening the whole page. */
+  #item-table td { position: relative; }
+  #item-table .m-num, #item-table .m-short, #item-table .m-mid { min-width: 0; }
+  #item-table thead th { width: 5.5rem; }
+  #item-table thead th:first-child { width: 2.5rem; }
+  #item-table thead th:nth-child(8),
+  #item-table thead th:nth-child(10),
+  #item-table thead th:nth-child(12) { width: 6.5rem; }
+  #item-table thead th.col-dest { width: 13rem; }
+  #item-table thead th.col-farm { width: 10rem; }
+  #item-table thead th:last-child { width: 5rem; }
+  #item-table .form-control { padding-left: .35rem; padding-right: .35rem; min-width: 0; width: 100%; }
   #item-table input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   #item-table input[type=number]::-webkit-inner-spin-button,
   #item-table input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
