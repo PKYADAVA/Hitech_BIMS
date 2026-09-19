@@ -29,8 +29,8 @@
   <div class="card mb-3">
     <div class="card-header">Purchase Details</div>
     <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-2">
+      <div class="row g-3 cp-head">
+        <div class="col-md-2 cp-fit">
           <label class="form-label">Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" name="date" value="{{ chicks_purchase.date|date:'Y-m-d'|default:today }}" required>
         </div>
@@ -45,7 +45,7 @@
           <label class="form-label">Bill No.</label>
           <input type="text" class="form-control" name="bill_no" value="{{ chicks_purchase.bill_no|default:'' }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 cp-fit">
           <label class="form-label">Purchase No.</label>
           <input type="text" class="form-control bg-light" readonly value="{{ chicks_purchase.purchase_no|default:next_purchase_no }}">
         </div>
@@ -111,6 +111,33 @@
 
   <div class="card mb-3">
 <style>
+  /* Purchase Details on one line at xl: Date and Purchase No. take what they
+     need, Supplier and Item share the most, the rest split what is left. */
+  @media (min-width: 1200px) {
+    .cp-head { flex-wrap: nowrap; }
+    .cp-head > [class*="col-md-"] { flex: 1 1 0; width: auto; min-width: 0; }
+    .cp-head > .cp-fit { flex: 0 0 9.5rem; }
+    .cp-head > .col-md-4 { flex-grow: 1.6; }
+  }
+  /* Dropdown text centred in its box (the theme's vertical padding under the
+     full-height line-height sat it low). */
+  #chicks-purchase-form .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
+  #chicks-purchase-form .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left: 0; }
+
+  /* Batches grid, compact: headers may take two lines, number boxes are as
+     wide as their figures (no spinner arrows), Sr. is narrow, and the three
+     dropdowns keep room for a name. */
+  #item-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+  #item-table th, #item-table td { padding: .3rem .25rem; }
+  #item-table .m-num, #item-table .m-short { min-width: 0; }
+  #item-table thead th.m-num, #item-table thead th.m-short { width: 4.6rem; }
+  #item-table thead th:first-child { width: 2.4rem; }
+  #item-table .m-mid { min-width: 7.5rem; }
+  #item-table .form-control { padding-left: .35rem; padding-right: .35rem; min-width: 0; }
+  #item-table input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  #item-table input[type=number]::-webkit-inner-spin-button,
+  #item-table input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
   /* Freight & Payment on one line, shared out rather than wrapped. Each field
      takes an equal share and is allowed to shrink — a select's intrinsic width
      would otherwise hold the row wider than the screen. */
