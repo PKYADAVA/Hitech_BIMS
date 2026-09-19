@@ -1123,7 +1123,7 @@ footer p { margin: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
   gap: 12px 24px;
 }
@@ -1153,6 +1153,11 @@ footer p { margin: 0; }
   color: var(--text-muted);
   margin: 0;
 }
+
+/* The header's buttons at control height rather than the 44px form-button
+   height: they are what set the header's height, and a 44px Add held the
+   whole band open. */
+.ds .page-header .btn { height: var(--ds-control-h, 36px); min-height: 0; }
 
 /* Right group: action button(s), horizontally aligned, vertically centred. */
 .page-header-right {

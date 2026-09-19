@@ -36,7 +36,7 @@
 
   <!-- BIMS Global Styles (bump ?v= when this file changes so browsers drop
        cached copies — same convention as main.js below) -->
-  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260919g" />
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260919i" />
 
   <!-- Responsiveness layer: adapts the existing design to every screen size -->
   <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260914a" />
@@ -46,7 +46,7 @@
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260919h" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260919j" />
 
   {% block css %}{% endblock %}
 
@@ -96,7 +96,7 @@
           tabs.style.maxWidth = "none";   // the page caps its children at 100%
           function fit() {
             var cs = getComputedStyle(page);
-            tabs.style.margin = "-" + cs.paddingTop + " -" + cs.paddingRight + " 14px -" + cs.paddingLeft;
+            tabs.style.margin = "-" + cs.paddingTop + " -" + cs.paddingRight + " 8px -" + cs.paddingLeft;
           }
           fit();
           window.addEventListener("resize", fit);
