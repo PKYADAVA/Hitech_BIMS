@@ -117,7 +117,7 @@
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="10" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit"></th></tr>
+            <tr><th colspan="10" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit col-batch d-none"></th><th class="c-fit"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -126,6 +126,16 @@
 
   <div class="card mb-3">
 <style>
+  /* Items grid. The footer's Flock / Batch cell hides with its column — left
+     showing, it made a phantom fourteenth column past the edge of the grid.
+     Sr. is only as wide as its number; the dropdown text sits centred in its
+     box; and Select2's hidden select is anchored to its cell, so it cannot
+     widen the page past the grid's own scroll box. */
+  #item-table thead th:first-child { width: 2.75rem; min-width: 2.75rem; }
+  #item-table td { position: relative; }
+  #general-purchase-form .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
+  #general-purchase-form .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left: 0; }
+
   /* Freight & Payment on one line, shared out rather than wrapped. Each field
      takes an equal share and is allowed to shrink — a select's intrinsic width
      would otherwise hold the row wider than the screen. */
