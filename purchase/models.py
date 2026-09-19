@@ -700,6 +700,23 @@ class ChicksPurchaseItem(models.Model):
                                        related_name="chicks_purchase_items")
     batch = models.CharField(max_length=100, blank=True)
 
+    # Chicks bought straight onto a farm. They are still booked in through
+    # ``farm_warehouse`` (a stock transfer needs somewhere to come from), and
+    # saving the purchase creates the Chicks Placement — a chick-category
+    # transfer into ``farm`` / ``farm_batch`` — that every placed-birds figure
+    # reads. ``placement`` is that transfer, kept in step on edit and delete
+    # (see purchase.services.chicks_placement); the Chicks Placement page
+    # refuses to change it on its own.
+    farm = models.ForeignKey("broiler.BroilerFarm", on_delete=models.PROTECT, null=True, blank=True,
+                             related_name="chicks_purchase_items",
+                             help_text="Farm the chicks were placed at, when bought straight onto one")
+    farm_batch = models.ForeignKey("broiler.BroilerBatch", on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name="chicks_purchase_items",
+                                   help_text="The flock at that farm the chicks were placed into")
+    placement = models.OneToOneField("inventory.StockTransfer", on_delete=models.SET_NULL,
+                                     null=True, blank=True, related_name="chicks_purchase_line",
+                                     help_text="The Chicks Placement this line created")
+
     class Meta:
         ordering = ["id"]
 

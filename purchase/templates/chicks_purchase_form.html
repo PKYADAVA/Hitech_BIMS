@@ -95,13 +95,15 @@
               <th class="c-num m-num ds-num">Rate <span class="text-danger">*</span></th>
               <th class="c-num m-num ds-num">Amount</th>
               <th class="c-fit m-mid">Sector/Farm <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid col-farm d-none">Via Warehouse <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid col-farm d-none">Flock / Batch <span class="text-danger">*</span></th>
               <th class="c-fit m-mid">Batch</th>
               <th class="c-fit"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="9" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_qty">0.00</th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit" colspan="3"></th></tr>
+            <tr><th colspan="9" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_qty">0.00</th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit col-farm d-none"></th><th class="c-fit col-farm d-none"></th><th class="c-fit" colspan="2"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -322,6 +324,41 @@
 <script>
 const existingItems = {{ existing_items_json|safe }};
 const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
+// Sector/Farm offers farms as well: chicks bought straight onto a farm are
+// booked in through a warehouse ("Via Warehouse") and placed into one of the
+// farm's open flocks — saving creates that Chicks Placement.
+const destinationOptions = `<option value="">select</option>`
+  + `<optgroup label="Warehouses">{% for w in warehouses %}<option value="w:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>`
+  + `<optgroup label="Farms">{% for f in farms %}<option value="f:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>`;
+const farmBatches = {{ farm_batches_json|safe }};
+const onlyWarehouse = {% if warehouses|length == 1 %}"{{ warehouses.0.id }}"{% else %}""{% endif %};
+
+// Via Warehouse and Flock / Batch are on screen only while some row goes to a farm.
+function refreshFarmColumns() {
+  const anyFarm = [...document.querySelectorAll('#item-table tbody .destination')].some(s => s.value.startsWith('f:'));
+  document.querySelectorAll('#item-table .col-farm').forEach(el => el.classList.toggle('d-none', !anyFarm));
+}
+
+// Fill one row's farm cells from its destination; a row switched back to a
+// warehouse drops its via-warehouse and flock.
+function refreshFarmCells(tr, keep = {}) {
+  const dest = tr.querySelector('.destination').value;
+  const via = tr.querySelector('.via-warehouse'), flock = tr.querySelector('.flock');
+  const toFarm = dest.startsWith('f:');
+  via.disabled = flock.disabled = !toFarm;
+  if (!toFarm) {
+    via.value = ''; flock.innerHTML = '<option value="">select</option>';
+  } else {
+    const list = farmBatches[dest.slice(2)] || [];
+    flock.innerHTML = '<option value="">' + (list.length ? 'select' : 'no open batch') + '</option>'
+      + list.map(([id, name]) => `<option value="${id}">${escapeHtml(name)}</option>`).join('');
+    // One open flock is the answer; more means the user picks.
+    flock.value = keep.farm_batch || (list.length === 1 ? String(list[0][0]) : '');
+    via.value = keep.farm_warehouse || via.value || onlyWarehouse;
+  }
+  if (window.jQuery) { jQuery(via).trigger('change.select2'); jQuery(flock).trigger('change.select2'); }
+  refreshFarmColumns();
+}
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 
@@ -339,14 +376,20 @@ function itemRow(row = {}) {
     <td><input class="form-control bg-light total-qty" readonly value="0.00"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
     <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
-    <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
+    <td><select class="form-select destination" required>${destinationOptions}</select></td>
+    <td class="col-farm d-none"><select class="form-select via-warehouse">${warehouseOptions}</select></td>
+    <td class="col-farm d-none"><select class="form-select flock" title="${row.placement_no ? 'Placement ' + escapeHtml(row.placement_no) : ''}"><option value="">select</option></select></td>
     <td><input class="form-control batch" value="${row.batch || ''}"></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
   get('item-table').tBodies[0].append(tr);
-  if (row.farm_warehouse) tr.querySelector('.farm-warehouse').value = row.farm_warehouse;
+  const destSel = tr.querySelector('.destination');
+  if (row.farm) destSel.value = 'f:' + row.farm;
+  else if (row.farm_warehouse) destSel.value = 'w:' + row.farm_warehouse;
+  refreshFarmCells(tr, row.farm ? { farm_warehouse: String(row.farm_warehouse), farm_batch: String(row.farm_batch || '') } : {});
+  $(destSel).on('change', () => refreshFarmCells(tr));
   calcRow(tr);
   renumberRows();
   refreshRowAddButtons();
@@ -425,7 +468,7 @@ get('item-table').addEventListener('input', e => {
   calcRow(tr);
 });
 get('item-table').addEventListener('click', e => {
-  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals(); }
+  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); refreshFarmColumns(); totals(); }
   if (e.target.closest('.add-row-inline')) { itemRow(); }
 });
 // --- Freight type drives the two fields beside it -------------------------
@@ -501,11 +544,24 @@ get('chicks-purchase-form').addEventListener('submit', function (e) {
     mortality: tr.querySelector('.mortality').value, shortage: tr.querySelector('.shortage').value,
     weaks: tr.querySelector('.weaks').value, excess_qty: tr.querySelector('.excess-qty').value,
     rate: tr.querySelector('.rate').value,
-    farm_warehouse: tr.querySelector('.farm-warehouse').value, batch: tr.querySelector('.batch').value,
+    batch: tr.querySelector('.batch').value,
+    ...(dest => dest.startsWith('f:')
+        ? { farm: dest.slice(2), farm_warehouse: tr.querySelector('.via-warehouse').value,
+            farm_batch: tr.querySelector('.flock').value }
+        : { farm_warehouse: dest.slice(2) })(tr.querySelector('.destination').value),
   }));
-  if (!rows.length || rows.some(r => !r.farm_warehouse)) {
+  if (!rows.length || rows.some(r => !r.farm && !r.farm_warehouse)) {
     e.preventDefault();
     alert('Add at least one batch row with Sector/Farm selected.');
+    return;
+  }
+  // A farm row places the chicks, so it needs the warehouse they come in
+  // through and the flock they go into; the server refuses it otherwise.
+  const incomplete = rows.map((r, i) => ({ r, n: i + 1 })).filter(({ r }) => r.farm && (!r.farm_warehouse || !r.farm_batch));
+  if (incomplete.length) {
+    e.preventDefault();
+    alert('Select the Via Warehouse and Flock / Batch for every farm row (row '
+          + incomplete.map(x => x.n).join(', ') + ').');
     return;
   }
   get('items_json').value = JSON.stringify(rows);

@@ -476,6 +476,7 @@ class StockTransfer(models.Model):
         if self._location_key('from') == self._location_key('to'):
             raise ValidationError("From Location and To Location must be different.")
         _require_farm_batches(self)
+        self._refuse_if_purchase_placement()
 
         # A transfer is valued at the Item Price Master rate, so refuse to save
         # one for an item that has no price defined for its date rather than
@@ -523,6 +524,36 @@ class StockTransfer(models.Model):
                 raise ValidationError(
                     f"Not enough stock: only {available} of {self.item} available at "
                     f"{where} as of {self.date} — cannot transfer {self.quantity}.")
+
+    def purchase_placing_it(self):
+        """The Chicks Purchase whose farm line created this placement, or None."""
+        if not self.pk:
+            return None
+        from purchase.models import ChicksPurchaseItem
+
+        line = (ChicksPurchaseItem.objects.filter(placement_id=self.pk)
+                .select_related("purchase").first())
+        return line.purchase if line else None
+
+    def _refuse_if_purchase_placement(self):
+        """A placement a Chicks Purchase made is that purchase's to change.
+
+        Edited or deleted here, the purchase would go on saying the chicks
+        went to a farm the placement no longer shows, and the next save of the
+        purchase would quietly put it back. The purchase's own sync sets
+        ``_purchase_sync`` and passes.
+        """
+        if getattr(self, "_purchase_sync", False):
+            return
+        purchase = self.purchase_placing_it()
+        if purchase:
+            raise ValidationError(
+                f"This placement was made by Chicks Purchase {purchase.purchase_no}. "
+                f"Change or delete it there.")
+
+    def delete(self, *args, **kwargs):
+        self._refuse_if_purchase_placement()
+        return super().delete(*args, **kwargs)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding

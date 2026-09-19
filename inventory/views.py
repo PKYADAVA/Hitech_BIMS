@@ -1535,7 +1535,11 @@ class StockTransferAPI(View):
         location_type = instance.from_location_type
         location_id = instance.from_warehouse_id or instance.from_farm_id
         item_id = instance.item_id
-        instance.delete()
+        try:
+            instance.delete()
+        except ValidationError as e:
+            # A placement a Chicks Purchase made is deleted with that purchase.
+            return JsonResponse({"error": " ".join(e.messages)}, status=400)
         _recompute_stock_transfer_chain(location_type, location_id, item_id)
         return JsonResponse({"message": "Stock transfer deleted"})
 

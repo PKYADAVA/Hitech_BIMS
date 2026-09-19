@@ -882,12 +882,17 @@ def _chicks_purchase_to_item_dict(row):
         "rate": str(row.rate), "amount": str(row.amount),
         "farm_warehouse": row.farm_warehouse_id, "farm_warehouse_name": row.farm_warehouse.name,
         "batch": row.batch,
+        "farm": row.farm_id or "", "farm_batch": row.farm_batch_id or "",
+        "placement_no": row.placement.trnum if row.placement_id else "",
     }
 
 
 def _chicks_purchase_list_dict(cp):
+    # Where the chicks ended up: the farm for a line placed straight onto one,
+    # the warehouse otherwise.
     warehouses = ", ".join(dict.fromkeys(
-        n for n in cp.items.values_list("farm_warehouse__name", flat=True) if n
+        n for n in (i.farm.farm_name if i.farm_id else (i.farm_warehouse.name if i.farm_warehouse_id else "")
+                    for i in cp.items.all()) if n
     ))
     return {
         "id": cp.id, "date": cp.date.isoformat(), "bill_no": cp.bill_no, "dc_no": cp.dc_no,
@@ -911,8 +916,13 @@ def _chicks_purchase_form_context(user, cp=None):
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
         "today": timezone.localdate().isoformat(),
         "existing_items_json": json.dumps(
-            [_chicks_purchase_to_item_dict(row) for row in cp.items.select_related("farm_warehouse")]
+            [_chicks_purchase_to_item_dict(row)
+             for row in cp.items.select_related("farm_warehouse", "placement")]
         ) if cp else "[]",
+        # Chicks can be bought straight onto a farm; its line then needs one
+        # of the farm's open flocks (the same list General Purchase offers).
+        "farms": farms_for(user, BroilerFarm.objects.order_by("farm_name")),
+        "farm_batches_json": json.dumps(_open_batches_by_farm(user)),
         "freight_type_choices": ChicksPurchase.FREIGHT_TYPE_CHOICES,
         "freight_settlement_choices": ChicksPurchase.FREIGHT_SETTLEMENT_CHOICES,
         "bag_type_choices": ChicksPurchase.BAG_TYPE_CHOICES,
@@ -974,11 +984,23 @@ def _save_chicks_purchase_items(instance, request):
 def _apply_chicks_purchase_items(instance, rows):
     """Same item application as _save_chicks_purchase_items, but rows-in
     rather than request-in — shared with the change-request replay, which has
-    no request to read items_json from."""
+    no request to read items_json from.
+
+    A line sent to a farm creates its Chicks Placement (see
+    purchase.services.chicks_placement); the farm lines are checked before
+    anything is written, and the placements synced after the lines are."""
+    from purchase.services import chicks_placement
+
+    problems = chicks_placement.farm_line_errors(rows, _batch_for_farm)
+    if problems:
+        raise ValidationError("For chicks placed at a farm, " + "; ".join(problems) + ".")
+    old_placements = chicks_placement.existing_placements(instance)
     instance.items.all().delete()
     for row in rows:
         if not row.get("farm_warehouse"):
             continue
+        farm_id = str(row.get("farm") or "")
+        to_farm = farm_id.isdigit()
         ChicksPurchaseItem.objects.create(
             purchase=instance,
             sent_qty=Decimal(str(row.get("sent_qty") or 0)),
@@ -990,7 +1012,10 @@ def _apply_chicks_purchase_items(instance, rows):
             rate=Decimal(str(row.get("rate") or 0)),
             farm_warehouse_id=row["farm_warehouse"],
             batch=row.get("batch") or "",
+            farm_id=int(farm_id) if to_farm else None,
+            farm_batch_id=_batch_for_farm(int(farm_id), row.get("farm_batch")) if to_farm else None,
         )
+    chicks_placement.sync(instance, old_placements)
     instance.net_amount = instance.compute_net_amount()
     # "remarks" is included so an auto-generated description picks up the total
     # that only became known once the line items were saved.
@@ -1073,9 +1098,9 @@ def edit_chicks_purchase(request, id, request_mode=False):
 @login_required(login_url="login")
 @require_POST
 def delete_chicks_purchase(request, id):
-    """Delete a Chicks Purchase transaction."""
+    """Delete a Chicks Purchase transaction, and the placements it made."""
     instance = get_object_or_404(ChicksPurchase, id=id)
-    instance.delete()
+    _delete_chicks_purchase(instance)
     messages.success(request, "Chicks purchase deleted successfully.")
     return redirect("chicks_purchase_list")
 
@@ -1088,7 +1113,7 @@ def chicks_purchase_api_list(request):
 
     qs = scope_any(request.user, ChicksPurchase.objects.filter(),
                    sectors="items__farm_warehouse_id").select_related("supplier", "item").prefetch_related(
-        "items__farm_warehouse")
+        "items__farm_warehouse", "items__farm")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -2398,6 +2423,16 @@ def _save_general_purchase(data, oid):
     return instance
 
 
+def _delete_chicks_purchase(instance):
+    """A purchase and the Chicks Placements its farm lines made go together —
+    left behind, the chicks would stay placed on a farm nobody bought them for."""
+    from purchase.services import chicks_placement
+
+    with transaction.atomic():
+        chicks_placement.remove(instance)
+        instance.delete()
+
+
 def _save_chicks_purchase(data, oid):
     """What an approved Chicks Purchase change request replays — same field
     application as edit_chicks_purchase()'s own save, dict-in rather than
@@ -2431,8 +2466,12 @@ def _save_chicks_purchase(data, oid):
         if data.get(field_name):
             setattr(instance, field_name, data[field_name])
     instance.full_clean(exclude=["purchase_no"])
-    instance.save()
-    _apply_chicks_purchase_items(instance, data.get("items") or [])
+    # One savepoint for header, lines and placements: the approval that
+    # replays this answers an error rather than raising it, so without it a
+    # refused placement would leave the header saved and the lines gone.
+    with transaction.atomic():
+        instance.save()
+        _apply_chicks_purchase_items(instance, data.get("items") or [])
     return instance
 
 
@@ -2496,6 +2535,7 @@ _CR_HANDLERS.update({
         "api": "",
         "label": "Chicks Purchase", "tab": "chicks_purchase_list", "model": ChicksPurchase,
         "save": _save_chicks_purchase,
+        "delete": _delete_chicks_purchase,
         "number": lambda obj: obj.purchase_no,
     },
 })
