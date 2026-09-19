@@ -2037,3 +2037,66 @@ img, svg, video, canvas {
 .bims-navbar .dropdown-item i.fa-virus,
 .bims-navbar .dropdown-item i.fa-user-times,
 .bims-navbar .dropdown-item i.fa-sign-out-alt    { --nav-icon: #dc2626; }
+
+/* ---------------------------------------------------------------------------
+   Module mega menu. Hovering a module tab opens its usual cascading menu;
+   clicking it opens this panel instead — every section of the module side by
+   side, every page in it listed at once. Built in main_top_navbar.html from
+   the module's own dropdown, so it shows exactly what that menu would (the
+   permissions included) and never drifts from it. Lives inside #moduleBar,
+   which gives its links the menu's icon colours for free.
+   --------------------------------------------------------------------------- */
+.bims-mega {
+  position: absolute; top: 100%; left: 16px; right: 16px; z-index: 1060;
+  margin-top: 6px;
+  max-height: calc(100vh - var(--navbar-height, 60px) - 32px - 24px);
+  overflow-y: auto;
+  display: grid; grid-template-columns: 230px 1fr;
+  background: #ffffff; border: 1px solid var(--border, #e5e7eb);
+  border-radius: 14px; box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
+  animation: bims-mega-in .14s ease-out;
+}
+@keyframes bims-mega-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bims-mega { animation: none; } }
+
+.bims-mega-intro {
+  padding: 22px 20px; border-right: 1px solid #eef1f5;
+  background: linear-gradient(180deg, #f3faf6 0%, #ffffff 70%);
+  border-radius: 14px 0 0 14px;
+}
+.bims-mega-icon {
+  width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center;
+  font-size: 28px; color: #ffffff; margin-bottom: 14px;
+  background: linear-gradient(135deg, #1B4B33 0%, #16a34a 100%);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, .25);
+}
+.bims-mega-name { font-size: 1.1rem; font-weight: 700; color: #0f172a; line-height: 1.25; }
+.bims-mega-desc { font-size: .8rem; color: #475569; margin-top: 6px; line-height: 1.45; }
+.bims-mega-count { font-size: .72rem; color: #64748b; margin-top: 12px; font-variant-numeric: tabular-nums; }
+
+.bims-mega-cols {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px 10px; padding: 16px 14px 18px;
+}
+.bims-mega-col { padding: 0 6px; }
+.bims-mega-col + .bims-mega-col { border-left: 1px solid #f1f4f8; }
+.bims-mega-head {
+  display: flex; align-items: center; gap: 10px;
+  font-size: .9rem; font-weight: 700; color: #0f172a; padding: 4px 6px 8px;
+}
+.bims-mega-head .bims-mega-hi {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 34px;
+}
+.bims-mega-head .bims-mega-hi i {
+  font-size: 15px; width: auto;
+  color: var(--nav-icon, #16a34a);
+}
+.bims-mega-head .bims-mega-hi { background: color-mix(in srgb, var(--hi, #16a34a) 13%, #ffffff); }
+.bims-mega .dropdown-item { padding: 6px 8px; font-size: .82rem; white-space: normal; }
+.bims-mega .dropdown-item.is-current { background: var(--primary-subtle, #ecfdf3); color: var(--primary, #15803d); font-weight: 600; }
+.bims-mega-sub { font-size: .7rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+                 letter-spacing: .5px; padding: 10px 8px 2px; }
+.bims-mega-sub + .dropdown-item, .bims-mega-sub ~ .dropdown-item { padding-left: 14px; }
+
+/* The tab whose panel is open stays lit, as a pressed tab would. */
+#moduleBar .nav-link.is-mega-open { background: rgba(255, 255, 255, .14); }
