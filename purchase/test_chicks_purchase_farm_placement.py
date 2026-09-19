@@ -131,3 +131,35 @@ class ChicksPurchaseFarmPlacementTests(TestCase):
         html = self.client.get("/chicks-purchase/add/").content.decode()
         self.assertNotIn('class="form-control batch"', html)
         self.assertIn("tr.dataset.lot", html)   # a saved lot is carried back on edit
+
+
+class ChicksPurchaseItemChoiceTests(ChicksPurchaseFarmPlacementTests):
+    """The Item a Chicks Purchase is for: chick items only."""
+
+    def setUp(self):
+        super().setUp()
+        self.feed = Item.objects.create(item_code="FD-0001", description="Pre-Starter Feed",
+                                        category=ItemCategory.objects.create(name="Broiler Feed"),
+                                        standard_cost_per_unit=0)
+
+    def test_the_dropdown_lists_chick_items_only(self):
+        html = self.client.get("/chicks-purchase/add/").content.decode()
+        self.assertIn("DOC-0001 - Day Old Chicks", html)
+        self.assertNotIn("FD-0001 - Pre-Starter Feed", html)
+
+    def test_a_non_chick_item_is_refused(self):
+        response = self.client.post("/chicks-purchase/add/", {
+            "date": self.day.isoformat(), "supplier": self.supplier.id, "item": self.feed.id,
+            "items_json": json.dumps([self.warehouse_line()])}, follow=True)
+        self.assertContains(response, "Choose a chicks item")
+        self.assertFalse(ChicksPurchase.objects.exists())
+
+    def test_an_older_purchase_keeps_its_item_on_edit(self):
+        old = ChicksPurchase.objects.create(date=self.day, supplier=self.supplier, item=self.feed)
+        html = self.client.get("/chicks-purchase/%d/edit/" % old.id).content.decode()
+        self.assertIn("FD-0001 - Pre-Starter Feed", html)
+        self.client.post("/chicks-purchase/%d/edit/" % old.id, {
+            "date": self.day.isoformat(), "supplier": self.supplier.id, "item": self.feed.id,
+            "bill_no": "KEPT", "items_json": json.dumps([self.warehouse_line()])})
+        old.refresh_from_db()
+        self.assertEqual(old.bill_no, "KEPT")

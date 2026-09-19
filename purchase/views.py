@@ -905,12 +905,39 @@ def _chicks_purchase_list_dict(cp):
     }
 
 
+def _chick_item_choices(keep=()):
+    """The Item a Chicks Purchase may be for: the active chick items, plus the
+    one a purchase being edited already carries, so it does not vanish from
+    its own dropdown."""
+    from inventory.item_families import chick_items
+
+    keep = [i for i in keep if i]
+    return (Item.objects.for_entry(keep=keep)
+            .filter(Q(id__in=chick_items().values("id")) | Q(id__in=keep))
+            .order_by("item_code"))
+
+
+def _require_chicks_item(instance, previous_item_id=None):
+    """Refuse a newly chosen item that is not a chick item.
+
+    A Chicks Purchase places chicks, and only chick items count as placed —
+    a farm line bought under any other item would place nothing anyone reads.
+    The item a purchase already carries is left alone, so an old one still
+    saves.
+    """
+    from inventory.item_families import chick_items
+
+    if (instance.item_id and str(instance.item_id) != str(previous_item_id or "")
+            and not chick_items().filter(id=instance.item_id).exists()):
+        raise ValidationError("Choose a chicks item: a Chicks Purchase is for chicks only.")
+
+
 def _chicks_purchase_form_context(user, cp=None):
     return {
         "chicks_purchase": cp,
         "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
         "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
-        "items": Item.objects.for_entry(keep=[cp.item_id] if cp else []).order_by("item_code"),
+        "items": _chick_item_choices(keep=[cp.item_id] if cp else []),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
@@ -936,7 +963,9 @@ def _apply_posted_chicks_purchase_fields(instance, request):
     instance.supplier_id = request.POST.get("supplier") or None
     # Hatchery was dropped from the form (the Supplier identifies it); it is
     # left untouched here so historic values survive an edit.
+    previous_item = instance.item_id
     instance.item_id = request.POST.get("item") or None
+    _require_chicks_item(instance, previous_item)
     instance.bill_no = request.POST.get("bill_no", "").strip()
     # DC No. was dropped from the form (it duplicated Bill No.); it is left
     # untouched here so historic values survive an edit.
@@ -2440,7 +2469,9 @@ def _save_chicks_purchase(data, oid):
     instance = get_object_or_404(ChicksPurchase, id=oid) if oid else ChicksPurchase()
     instance.date = data.get("date") or timezone.localdate()
     instance.supplier_id = data.get("supplier") or None
+    previous_item = instance.item_id
     instance.item_id = data.get("item") or None
+    _require_chicks_item(instance, previous_item)
     instance.bill_no = (data.get("bill_no") or "").strip()
     instance.vehicle_no = (data.get("vehicle_no") or "").strip()
     instance.driver_name = (data.get("driver_name") or "").strip()
