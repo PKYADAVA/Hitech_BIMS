@@ -319,6 +319,11 @@
      the rendered value left them a size of their own. */
   font-size: var(--ds-entry-fs);
 }
+/* The box's own side padding (the theme's .75rem / 2.25rem) came on top of
+   the text's 8px / 26px, so a grid dropdown gave up some 60px of its width
+   to padding and cut its value short ("Green Vall..."). The text's padding
+   alone is enough: 8px in, 26px clear of the arrow. */
+.ds table.ds-entry .select2-container--bootstrap-5 .select2-selection--single { padding-left: 0; padding-right: 0; }
 .ds table.ds-entry .select2-container--bootstrap-5 .select2-selection--single
   .select2-selection__rendered {
   line-height: calc(var(--ds-entry-h) - 2px);

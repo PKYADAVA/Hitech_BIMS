@@ -19,6 +19,38 @@
      `.ds table.ds-entry` in design-system.css. */
   #row-table { --ds-entry-h: 28px; --ds-entry-fs: .8rem; }
   #row-table th, #row-table td { padding: .25rem .35rem; white-space: nowrap; }
+  /* Fixed columns: each keeps its width whatever is typed into it (they used
+     to widen as a remark or a driver's name was entered, shifting the row),
+     and Date through Amount fit a laptop screen; Lifting Supervisor, Vehicle,
+     Driver and Remarks are a sideways scroll within the table. At least the
+     card's width, so a wide screen shares its spare room out. Headers may
+     take two lines. */
+  #row-table { table-layout: fixed; width: 1px; min-width: calc(100% - 1px); }
+  #row-table thead th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+  #row-table thead th:nth-child(1)  { width: 125px; }  /* Date */
+  #row-table thead th:nth-child(2)  { width: 155px; }  /* Customer / Farmer */
+  #row-table thead th:nth-child(3)  { width: 90px; }   /* Ledger Balance */
+  #row-table thead th:nth-child(4)  { width: 122px; }   /* Doc No. */
+  #row-table thead th:nth-child(5)  { width: 155px; }  /* Farm */
+  #row-table thead th:nth-child(6)  { width: 118px; }  /* Batch */
+  #row-table thead th:nth-child(7)  { width: 75px; }   /* Birds */
+  #row-table thead th:nth-child(8)  { width: 90px; }   /* Net Wt. */
+  #row-table thead th:nth-child(9)  { width: 70px; }   /* Avg Wt. */
+  #row-table thead th:nth-child(10) { width: 85px; }   /* Rate */
+  #row-table thead th:nth-child(11) { width: 85px; }   /* RoundOff */
+  #row-table thead th:nth-child(12) { width: 105px; }  /* Amount */
+  #row-table thead th:nth-child(13) { width: 140px; }  /* Lifting Supervisor */
+  #row-table thead th:nth-child(14) { width: 115px; }  /* Vehicle */
+  #row-table thead th:nth-child(15) { width: 130px; }  /* Driver */
+  #row-table thead th:nth-child(16) { width: 170px; }  /* Remarks */
+  #row-table thead th:nth-child(17) { width: 80px; }   /* row buttons */
+  #row-table .form-control { width: 100%; min-width: 0; }
+  /* Headers break between words, never inside one ("ROUNDOF F"). */
+  #row-table thead th { overflow-wrap: normal; word-break: normal; }
+  /* Number boxes as wide as their figures: no spinner arrows eating the room. */
+  #row-table input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  #row-table input[type=number]::-webkit-inner-spin-button,
+  #row-table input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   /* The totals read as a conclusion rather than as another line to fill in:
      a rule above them, a tint behind them, and their boxes in bold. */
   #row-table tfoot td { background: #f7f9fc; border-top: 2px solid #e3e9f2; }
