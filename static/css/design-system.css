@@ -96,7 +96,10 @@
 .ds .ds-breadcrumb {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   font-size: var(--ds-caption); color: var(--ds-muted);
-  margin: 0 0 8px;
+  /* The same room below as the page gives it above (.container-cstm's 14px
+     top padding), so it sits evenly between the module bar and the tabs
+     rather than crowding the tabs. */
+  margin: 0 0 14px;
 }
 .ds .ds-breadcrumb a { color: var(--ds-muted); text-decoration: none; }
 .ds .ds-breadcrumb a:hover { color: var(--ds-primary); }
