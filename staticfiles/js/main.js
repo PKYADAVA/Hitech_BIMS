@@ -198,7 +198,11 @@ $(function () {
 // straight to DataTables as before.
 // ---------------------------------------------------------------------------
 (function ($) {
-  if (!$ || !$.fn || !$.fn.dataTable) return;
+  // The test harness loads this file against a jQuery stub that carries
+  // `dataTable.defaults` and nothing else, so every piece used here is
+  // checked for rather than assumed.
+  if (!$ || !$.fn || !$.fn.dataTable || !$.fn.dataTable.ext
+      || !$.fn.dataTable.ext.search || !$.fn.dataTable.Api) return;
 
   // One filter for every table on the site; it stands aside unless that
   // table's box is holding a comma.
@@ -261,7 +265,7 @@ $(function () {
 // untouched, and so is every other option the page passed.
 // ---------------------------------------------------------------------------
 (function ($) {
-  if (!$ || !$.fn || !$.fn.dataTable) return;
+  if (!$ || !$.fn || !$.fn.dataTable || !window.matchMedia) return;
   var narrow = window.matchMedia("(max-width: 991.98px)");
 
   ["DataTable", "dataTable"].forEach(function (name) {
