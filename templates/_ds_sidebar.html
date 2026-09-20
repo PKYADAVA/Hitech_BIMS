@@ -77,9 +77,17 @@ rather than a per-page one.
     // looked up once the document has been parsed rather than here and now.
     var collapseBtn = null;
 
-    function setCollapsed(collapsed) {
+    // A rail folded to icons and opened by a module click is "peeking": it is
+    // showing a menu, not being set open. The difference is what gets
+    // remembered -- a peek leaves the stored choice alone, so the next page
+    // comes back folded -- and when it ends, which is as soon as the reader
+    // is done with the menu.
+    var peeking = false;
+
+    function setCollapsed(collapsed, remember) {
       document.body.classList.toggle("ds-sb-collapsed", collapsed);
-      localStorage.setItem(KEY, collapsed ? "1" : "0");
+      if (remember !== false) localStorage.setItem(KEY, collapsed ? "1" : "0");
+      if (collapsed || remember !== false) peeking = false;
       // The handle does both jobs, so it should not go on saying "Collapse"
       // while the only thing it can do is expand.
       if (!collapseBtn) return;
@@ -103,7 +111,9 @@ rather than a per-page one.
       collapseBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         if (wide.matches) {
-          setCollapsed(!document.body.classList.contains("ds-sb-collapsed"));
+          // The handle is the reader saying which way they want it, so this
+          // one is remembered even when it ends a peek.
+          setCollapsed(!document.body.classList.contains("ds-sb-collapsed"), true);
         } else {
           document.body.classList.toggle("ds-sb-open");
         }
@@ -118,9 +128,18 @@ rather than a per-page one.
 
     // The page behind the overlay pushes it back out.
     document.addEventListener("click", function (e) {
-      if (!document.body.classList.contains("ds-sb-open")) return;
-      if (e.target.closest(".ds-sidebar")) return;
-      document.body.classList.remove("ds-sb-open");
+      if (document.body.classList.contains("ds-sb-open") && !e.target.closest(".ds-sidebar")) {
+        document.body.classList.remove("ds-sb-open");
+      }
+      // And a peek ends the moment the reader is somewhere else -- a page
+      // picked from the rail, a tab in the row at the top, the page itself.
+      if (!peeking) return;
+      if (e.target.closest(".ds-sidebar") && !e.target.closest("a.ds-sb-link")) return;
+      if (e.target.closest("#dsSidebarToggle")) return;
+      setCollapsed(true, false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && peeking) setCollapsed(true, false);
     });
 
     // Collapsed, every item is a bare icon, so hovering has to say which
@@ -306,7 +325,8 @@ rather than a per-page one.
       // `is-open` it was carrying was invisible, so treating this as a close
       // would answer a click with nothing again.
       if (document.body.classList.contains("ds-sb-collapsed")) {
-        setCollapsed(false);
+        setCollapsed(false, false);
+        peeking = true;
         hideTip();
         sidebar.querySelectorAll(".ds-sb-group.is-open").forEach(function (g) {
           g.classList.remove("is-open");
