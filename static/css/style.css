@@ -469,12 +469,20 @@ footer { margin-top: auto; }
     padding-right: max(10px, env(safe-area-inset-right, 0px));
   }
   /* The bar is exactly the height it declares, so a menu hung under it can be
-     placed from the same number. */
-  #mainNavbar { height: var(--navbar-height, 60px); align-items: center; }
+     placed from the same number -- and it declares one that holds what is in
+     it. At 42px the brand lockup stood 43px tall and ran a clear 11px past
+     the bar's bottom edge, where the page painted over it: on a phone the
+     mark was cut off along the line "MAKES DIFFERENCE". */
+  :root { --navbar-height: 56px; }
+  #mainNavbar {
+    height: var(--navbar-height, 56px); align-items: center;
+    padding-top: 4px; padding-bottom: 4px;
+  }
+  #mainNavbar > a.navbar-brand { padding-top: 0 !important; padding-bottom: 0 !important; }
   #mainNavbar > a.navbar-brand { margin-right: 0 !important; min-width: 0; flex: 0 1 auto; }
   #mainNavbar > div { margin: 0 !important; flex: 0 0 auto; }
   #mainNavbar > .navbar-toggler { margin: 0 !important; flex: 0 0 auto; }
-  .bims-navbar .brand-logo { height: 34px; }
+  .bims-navbar .brand-logo { height: 30px; }
 }
 @media (max-width: 767.98px) {
   /* The words beside the mark are the first thing to go when the row is
