@@ -185,6 +185,67 @@ $(function () {
 });
 
 // ---------------------------------------------------------------------------
+// Register search: spaces mean "and", commas mean "or".
+//
+// DataTables' own smart search already ands the words you type across the
+// row -- "green valley 990" finds the one sale that has both. What it cannot
+// do is ask for two records at once: "2399,2398" looks for a row containing
+// that whole string and finds nothing.
+//
+// A comma now separates alternatives. Each alternative keeps the and
+// behaviour, so "green valley 990, abhinav" means (green and valley and 990)
+// or (abhinav). Without a comma nothing changes: the box hands the term
+// straight to DataTables as before.
+// ---------------------------------------------------------------------------
+(function ($) {
+  if (!$ || !$.fn || !$.fn.dataTable) return;
+
+  // One filter for every table on the site; it stands aside unless that
+  // table's box is holding a comma.
+  $.fn.dataTable.ext.search.push(function (settings, searchData) {
+    var groups = settings.__anyOf;
+    if (!groups || !groups.length) return true;
+    var row = searchData.join(" ").toLowerCase();
+    return groups.some(function (words) {
+      return words.every(function (word) { return row.indexOf(word) !== -1; });
+    });
+  });
+
+  function parse(value) {
+    return value.split(",")
+      .map(function (part) { return part.trim().toLowerCase(); })
+      .filter(Boolean)
+      .map(function (part) { return part.split(/\s+/); });
+  }
+
+  $(document).on("init.dt", function (e, settings) {
+    if (e.namespace !== "dt") return;
+    var api = new $.fn.dataTable.Api(settings);
+    var input = $(settings.nTableWrapper).find(".dataTables_filter input");
+    if (!input.length) return;
+
+    // The placeholder teaches the comma by showing it.
+    input.attr("placeholder", "2399, 2398");
+    input.attr("title", "Spaces narrow the search; a comma asks for either");
+
+    // DataTables' own handler would search for the comma string itself, so
+    // the box is rebound rather than listened to alongside.
+    input.off(".DT").on("input.bimsSearch", function () {
+      var value = this.value;
+      if (value.indexOf(",") === -1) {
+        settings.__anyOf = null;
+        api.search(value).draw();
+        return;
+      }
+      settings.__anyOf = parse(value);
+      // The alternatives are ours to apply; DataTables' own term would fight
+      // them, so it is cleared while a comma is in the box.
+      api.search("").draw();
+    });
+  });
+})(jQuery);
+
+// ---------------------------------------------------------------------------
 // Registers on a phone: the columns stay and the table scrolls sideways.
 //
 // DataTables Responsive folds the spare columns into a row you open instead.
