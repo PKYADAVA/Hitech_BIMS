@@ -11,6 +11,11 @@ rather than a per-page one.
 {% endcomment %}
 <aside class="ds-sidebar" id="dsSidebar">
 
+  {% comment %}
+  The product, and nothing else: the handle that folds the rail away sits in
+  the bar beside it (_ds_topbar.html), outside the rail, where it is the same
+  button that pulls the rail in on a phone.
+  {% endcomment %}
   <div class="ds-sb-brand">
     <span class="ds-sb-logo"><img src="{% static 'images/hitech-logo-white.png' %}" alt="Hi Tech — Makes Difference"></span>
     <span class="ds-sb-brand-text">
@@ -62,41 +67,60 @@ rather than a per-page one.
 
 </aside>
 
-{% comment %}
-Collapse handle, riding the rail's outer edge.
-
-It sits outside the <aside> because the sidebar clips its own overflow: drawn
-inside, a control straddling the boundary would be sliced in half down the
-edge. Fixed positioning against the same --ds-sb-w the rail is sized from
-keeps the two in step whether it is 260px or 72px wide.
-{% endcomment %}
-<button type="button" class="ds-sb-collapse" id="dsSidebarToggle"
-        title="Collapse menu" aria-label="Collapse menu">
-  <i class="fa-solid fa-angles-right"></i>
-</button>
-
 <script>
   (function () {
     var sidebar = document.getElementById("dsSidebar");
     if (!sidebar) return;
     var KEY = "ds-sidebar-collapsed";
 
-    var collapseBtn = document.getElementById("dsSidebarToggle");
+    // The handle lives in the bar, which is included after the rail, so it is
+    // looked up once the document has been parsed rather than here and now.
+    var collapseBtn = null;
 
     function setCollapsed(collapsed) {
       document.body.classList.toggle("ds-sb-collapsed", collapsed);
       localStorage.setItem(KEY, collapsed ? "1" : "0");
       // The handle does both jobs, so it should not go on saying "Collapse"
       // while the only thing it can do is expand.
+      if (!collapseBtn) return;
       var label = collapsed ? "Expand menu" : "Collapse menu";
       collapseBtn.title = label;
       collapseBtn.setAttribute("aria-label", label);
+      collapseBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
     }
 
     setCollapsed(localStorage.getItem(KEY) === "1");
 
-    collapseBtn.addEventListener("click", function () {
-      setCollapsed(!document.body.classList.contains("ds-sb-collapsed"));
+    // One button for two jobs, by width: wide enough for the rail to be
+    // pinned beside the page, it folds it to icons; narrow enough that the
+    // rail is an overlay, it pulls the overlay in and out.
+    var wide = window.matchMedia("(min-width: 1024px)");
+
+    function bindHandle() {
+      collapseBtn = document.getElementById("dsSidebarToggle");
+      if (!collapseBtn) return;
+      setCollapsed(document.body.classList.contains("ds-sb-collapsed"));
+      collapseBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (wide.matches) {
+          setCollapsed(!document.body.classList.contains("ds-sb-collapsed"));
+        } else {
+          document.body.classList.toggle("ds-sb-open");
+        }
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", bindHandle);
+    } else {
+      bindHandle();
+    }
+
+    // The page behind the overlay pushes it back out.
+    document.addEventListener("click", function (e) {
+      if (!document.body.classList.contains("ds-sb-open")) return;
+      if (e.target.closest(".ds-sidebar")) return;
+      document.body.classList.remove("ds-sb-open");
     });
 
     // Collapsed, every item is a bare icon, so hovering has to say which
@@ -172,7 +196,7 @@ keeps the two in step whether it is 260px or 72px wide.
       sec.parentElement.querySelectorAll(":scope > .ds-sb-sec.is-open")
         .forEach(function (g) { g.classList.remove("is-open"); });
       sec.classList.add("is-open");
-      BimsNavMenu.close();
+      if (window.BimsNavMenu) BimsNavMenu.close();
       // Narrow enough that the rail is an overlay: the pages have just
       // unfolded inside it, so there is nothing else to do.
       if (narrow.matches) return;
@@ -238,7 +262,7 @@ keeps the two in step whether it is 260px or 72px wide.
     }
 
     sidebar.addEventListener("mouseover", function (e) {
-      if (!canHover.matches || BimsNavMenu.panelOpen()) return;
+      if (!window.BimsNavMenu || !canHover.matches || BimsNavMenu.panelOpen()) return;
       BimsNavMenu.holdOpen();
 
       // A section: its pages, beside the row.
@@ -260,7 +284,7 @@ keeps the two in step whether it is 260px or 72px wide.
       flyFrom(group, specOf(group), toggle.getBoundingClientRect(), { cascade: true });
     });
     sidebar.addEventListener("mouseleave", function () {
-      if (BimsNavMenu.panelOpen()) return;
+      if (!window.BimsNavMenu || BimsNavMenu.panelOpen()) return;
       BimsNavMenu.closeSoon(200);
     });
 
@@ -273,7 +297,7 @@ keeps the two in step whether it is 260px or 72px wide.
       var wasOpen = group.classList.contains("is-open");
       // The sections are about to appear in the rail, so the menu the pointer
       // opened on its way to the click has nothing left to say.
-      BimsNavMenu.close();
+      if (window.BimsNavMenu) BimsNavMenu.close();
 
       // Clicking an icon on the collapsed rail opens the rail. Its sub-menu is
       // hidden at 72px, so without this the click lands on a module whose

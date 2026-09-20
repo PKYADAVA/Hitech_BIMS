@@ -499,7 +499,13 @@ body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
 .ds-sb-logo + .ds-sb-brand-text { padding-left: 9px; border-left: 1px solid rgba(255, 255, 255, .18); }
 body.ds-sb-collapsed .ds-sb-logo { width: 30px; }
 body.ds-sb-collapsed .ds-sb-logo img { width: 30px; object-fit: cover; object-position: left center; }
-.ds-sb-brand-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
+/* The wordmark gives way to the handle rather than pushing it off the rail,
+   which clips its own overflow and so cut the button in half at the edge. */
+.ds-sb-brand-text {
+  display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; overflow: hidden;
+}
+.ds-sb-brand-text strong, .ds-sb-brand-text small { overflow: hidden; text-overflow: ellipsis; }
 .ds-sb-brand-text strong { font-size: 12.5px; color: #fff; font-weight: 600; }
 .ds-sb-brand-text small { font-size: 9.5px; letter-spacing: .04em; color: rgba(255, 255, 255, .55); }
 
@@ -568,29 +574,9 @@ a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
-.ds-sb-collapse {
-  /* Pinned to the rail's outer edge and centred on it, so it reads as a handle
-     on the boundary rather than a button in either panel. `left` tracks the
-     same custom property the rail's width comes from, and shares its easing,
-     so handle and edge move together. */
-  position: fixed; z-index: 1045;
-  top: calc(var(--navbar-height, 60px) + 16px); left: var(--ds-sb-w, 212px);
-  transform: translateX(-50%);
-  transition: left .16s ease, background .15s ease, color .15s ease, border-color .15s ease;
-
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; padding: 0;
-  border: 1px solid rgba(255, 255, 255, .22); border-radius: 50%;
-  background: #1c4a33; color: rgba(255, 255, 255, .85);
-  font-size: 10px; line-height: 1; cursor: pointer;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, .3);
-}
-.ds-sb-collapse:hover {
-  background: #226039; border-color: rgba(255, 255, 255, .4); color: #fff;
-}
-.ds-sb-collapse i { transition: transform .16s ease; }
-/* Points right while the rail is open; flips as it closes. */
-body.ds-sb-collapsed .ds-sb-collapse i { transform: rotate(180deg); }
+/* The rail's handle is the bar's burger (`.ds-topbar-burger`), outside the
+   rail rather than on its edge: a control that folds the navigation away
+   belongs beside it, not over the page being read. */
 
 /* Hover tip for the collapsed rail. Lives on the body, so it is positioned in
    viewport coordinates by the sidebar's script rather than by this rule: the
@@ -633,7 +619,6 @@ body.ds-sb-collapsed .ds-sb-nav { padding: 7px 5px; }
 body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-left .16s ease; }
 
 @media (max-width: 1023.98px) {
-  .ds-sb-collapse { display: none; }
   body.ds-shell .content { margin-left: 0; }
   .ds-sidebar { transform: translateX(-100%); transition: transform .16s ease; }
   body.ds-sb-open .ds-sidebar { transform: none; }
@@ -917,16 +902,20 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   .ds-power-btn:hover { transform: none; }
 }
 
-/* Off-canvas handle. Desktop has the sidebar pinned, so there is nothing to
-   pull open and the button would only be a button that does nothing. */
+/* The rail's handle, first thing on the bar and hard against the rail it
+   folds. A tile rather than a bare glyph: it is a control, and the bar's
+   other controls are tiles too. */
 .ds-topbar-burger {
-  display: none; border: 0; background: transparent; color: var(--text, #0f172a);
-  font-size: 18px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--border, #e5e7eb); border-radius: 9px;
+  background: #fff; color: #334155; font-size: 15px; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
-.ds-topbar-burger:hover { background: var(--surface-hover, #f8fafc); }
+.ds-topbar-burger:hover { background: var(--surface-hover, #f6f8fa); border-color: #cbd5e1; color: #0f172a; }
+.ds-topbar-burger i { transition: transform .16s ease; }
 
 @media (max-width: 1023.98px) {
-  .ds-topbar-burger { display: inline-flex; align-items: center; }
   /* A flex item's automatic minimum is its content, so the search would not
      give up its last 259px and pushed the bell, sign-out and account off the
      side of a phone -- 104px past the edge of a 390px screen, on every page
@@ -936,7 +925,6 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   .ds-topbar .gs-wrap { flex: 1 1 auto; min-width: 0; max-width: none; }
   .ds-topbar .gs-box { min-width: 0; padding-left: 11px; }
   .ds-topbar .gs-input { min-width: 0; }
-  .ds-topbar-burger { padding: 6px 4px; }
 }
 
 /* The shell's own header replaces the navbar's spacing, so the first block on
