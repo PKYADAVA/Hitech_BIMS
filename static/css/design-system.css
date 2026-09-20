@@ -531,13 +531,16 @@ a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3
 .ds-sb-section:hover { color: rgba(255, 255, 255, .8); background: rgba(255, 255, 255, .05); }
 .ds-sb-sec-icon { width: 14px; flex: 0 0 14px; text-align: center; font-size: 11px; opacity: .8; }
 .ds-sb-sec-caret { margin-left: auto; font-size: 9px; opacity: .7; transition: transform .16s ease; }
-.ds-sb-sec.is-open > .ds-sb-section { color: rgba(255, 255, 255, .8); }
-.ds-sb-sec.is-open > .ds-sb-section .ds-sb-sec-caret { transform: rotate(90deg); }
+.ds-sb-sec.is-open > .ds-sb-section {
+  color: #fff; background: rgba(34, 197, 94, .16); box-shadow: inset 2px 0 0 #22c55e;
+}
 
 /* Folded by default; the section holding the current page is opened server
    side, so landing on a page never hides the page you are on. */
+/* The pages themselves are never drawn in the rail: they belong to the tab
+   row at the top of the page, and to the menu that hovering opens. They stay
+   in the markup because both of those are built from it. */
 .ds-sb-sec-items { display: none; }
-.ds-sb-sec.is-open > .ds-sb-sec-items { display: block; }
 /* Pages step in from their section, with a hairline running down the group so
    the eye can trace which heading a long list still belongs to. */
 .ds-sb-sec-items {
@@ -931,7 +934,7 @@ body.ds-shell .content > footer { display: none; }
   padding: 8px 8px 4px; font-size: .72rem; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; color: #64748b;
 }
-.bims-fly .bims-fly-head i { font-size: .8rem; color: #94a3b8; }
+.bims-fly .bims-fly-head i { font-size: .8rem; color: var(--nav-icon, #94a3b8); }
 .bims-fly .bims-fly-sub {
   padding: 6px 8px 2px; font-size: .68rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
@@ -941,7 +944,7 @@ body.ds-shell .content > footer { display: none; }
   padding: 6px 8px; border-radius: 6px; font-size: .82rem; color: #334155;
   text-decoration: none; white-space: normal;
 }
-.bims-fly .dropdown-item i { width: 16px; text-align: center; color: #94a3b8; font-size: .8rem; }
+.bims-fly .dropdown-item i { width: 16px; text-align: center; color: var(--nav-icon, #94a3b8); font-size: .8rem; }
 .bims-fly .dropdown-item:hover { background: #f1f5f9; color: #0f172a; }
 .bims-fly .dropdown-item.is-current { background: #ecfdf5; color: #15803d; font-weight: 600; }
 .bims-fly .dropdown-item.is-current i { color: #15803d; }
@@ -956,11 +959,10 @@ body.ds-shell .content > footer { display: none; }
   padding: 7px 9px; border: 0; border-radius: 8px; background: none;
   font-size: .84rem; color: #334155; text-align: left; cursor: pointer;
 }
-.bims-fly-row > i:first-child { width: 16px; text-align: center; font-size: .82rem; color: #94a3b8; }
+.bims-fly-row > i:first-child { width: 16px; text-align: center; font-size: .82rem; color: var(--nav-icon, #94a3b8); }
 .bims-fly-row > span { flex-grow: 1; }
 .bims-fly-row small { font-size: .68rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
 .bims-fly-caret { font-size: .62rem; color: #cbd5e1; }
 .bims-fly-row:hover, .bims-fly-row.is-open { background: #f1f5f9; color: #0f172a; }
 .bims-fly-row:hover .bims-fly-caret, .bims-fly-row.is-open .bims-fly-caret { color: #15803d; }
-.bims-fly-row.is-open > i:first-child, .bims-fly-row:hover > i:first-child { color: #15803d; }
 .bims-fly-child { box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }

@@ -1927,129 +1927,131 @@ img, svg, video, canvas {
    it sits in, so the same idea reads the same everywhere — a chart is always
    teal, money is always green, a bird is always amber.
 
-   Only `--nav-icon` is set here; `.bims-navbar .dropdown-item i` consumes it
-   and falls back to muted grey, so an icon added later still looks right
-   without being listed. Add new icons to whichever family fits.
+   Only `--nav-icon` is set here, and on the icon itself rather than on the
+   top bar's items: a custom property paints nothing on its own, so the colour
+   reaches whichever menu asks for it -- the bar's dropdowns, the rail's
+   flyouts, the module panel -- and stays muted grey in the ones that do not.
+   Add new icons to whichever family fits.
    --------------------------------------------------------------------------- */
 
 /* Masters & setup — indigo */
-.bims-navbar .dropdown-item i.fa-sliders-h,
-.bims-navbar .dropdown-item i.fa-sliders,
-.bims-navbar .dropdown-item i.fa-gear,
-.bims-navbar .dropdown-item i.fa-tools,
-.bims-navbar .dropdown-item i.fa-sitemap,
-.bims-navbar .dropdown-item i.fa-diagram-project,
-.bims-navbar .dropdown-item i.fa-code-branch,
-.bims-navbar .dropdown-item i.fa-layer-group,
-.bims-navbar .dropdown-item i.fa-tags,
-.bims-navbar .dropdown-item i.fa-tag,
-.bims-navbar .dropdown-item i.fa-ruler,
-.bims-navbar .dropdown-item i.fa-table-cells,
-.bims-navbar .dropdown-item i.fa-table-list,
-.bims-navbar .dropdown-item i.fa-folder,
-.bims-navbar .dropdown-item i.fa-draw-polygon,
-.bims-navbar .dropdown-item i.fa-pen        { --nav-icon: #6366f1; }
+i.fa-sliders-h,
+i.fa-sliders,
+i.fa-gear,
+i.fa-tools,
+i.fa-sitemap,
+i.fa-diagram-project,
+i.fa-code-branch,
+i.fa-layer-group,
+i.fa-tags,
+i.fa-tag,
+i.fa-ruler,
+i.fa-table-cells,
+i.fa-table-list,
+i.fa-folder,
+i.fa-draw-polygon,
+i.fa-pen        { --nav-icon: #6366f1; }
 
 /* Transactions & movement — blue */
-.bims-navbar .dropdown-item i.fa-exchange-alt,
-.bims-navbar .dropdown-item i.fa-right-left,
-.bims-navbar .dropdown-item i.fa-arrow-up,
-.bims-navbar .dropdown-item i.fa-arrow-down,
-.bims-navbar .dropdown-item i.fa-arrow-up-from-bracket,
-.bims-navbar .dropdown-item i.fa-arrow-down-to-bracket,
-.bims-navbar .dropdown-item i.fa-truck,
-.bims-navbar .dropdown-item i.fa-truck-loading,
-.bims-navbar .dropdown-item i.fa-route,
-.bims-navbar .dropdown-item i.fa-paper-plane { --nav-icon: #3b82f6; }
+i.fa-exchange-alt,
+i.fa-right-left,
+i.fa-arrow-up,
+i.fa-arrow-down,
+i.fa-arrow-up-from-bracket,
+i.fa-arrow-down-to-bracket,
+i.fa-truck,
+i.fa-truck-loading,
+i.fa-route,
+i.fa-paper-plane { --nav-icon: #3b82f6; }
 
 /* Money — green */
-.bims-navbar .dropdown-item i.fa-file-invoice-dollar,
-.bims-navbar .dropdown-item i.fa-money-bill-wave,
-.bims-navbar .dropdown-item i.fa-money-check-dollar,
-.bims-navbar .dropdown-item i.fa-hand-holding-dollar,
-.bims-navbar .dropdown-item i.fa-cash-register,
-.bims-navbar .dropdown-item i.fa-receipt,
-.bims-navbar .dropdown-item i.fa-percentage,
-.bims-navbar .dropdown-item i.fa-scale-balanced,
-.bims-navbar .dropdown-item i.fa-handshake,
-.bims-navbar .dropdown-item i.fa-file-contract,
-.bims-navbar .dropdown-item i.fa-file-invoice  { --nav-icon: #16a34a; }
+i.fa-file-invoice-dollar,
+i.fa-money-bill-wave,
+i.fa-money-check-dollar,
+i.fa-hand-holding-dollar,
+i.fa-cash-register,
+i.fa-receipt,
+i.fa-percentage,
+i.fa-scale-balanced,
+i.fa-handshake,
+i.fa-file-contract,
+i.fa-file-invoice  { --nav-icon: #16a34a; }
 
 /* Reports & analytics — teal */
-.bims-navbar .dropdown-item i.fa-chart-bar,
-.bims-navbar .dropdown-item i.fa-chart-pie,
-.bims-navbar .dropdown-item i.fa-chart-line,
-.bims-navbar .dropdown-item i.fa-chart-column,
-.bims-navbar .dropdown-item i.fa-gauge-high,
-.bims-navbar .dropdown-item i.fa-book,
-.bims-navbar .dropdown-item i.fa-book-open,
-.bims-navbar .dropdown-item i.fa-list-check,
-.bims-navbar .dropdown-item i.fa-list-alt,
-.bims-navbar .dropdown-item i.fa-file-alt,
-.bims-navbar .dropdown-item i.fa-clock-rotate-left { --nav-icon: #0d9488; }
+i.fa-chart-bar,
+i.fa-chart-pie,
+i.fa-chart-line,
+i.fa-chart-column,
+i.fa-gauge-high,
+i.fa-book,
+i.fa-book-open,
+i.fa-list-check,
+i.fa-list-alt,
+i.fa-file-alt,
+i.fa-clock-rotate-left { --nav-icon: #0d9488; }
 
 /* People & HR — pink */
-.bims-navbar .dropdown-item i.fa-users,
-.bims-navbar .dropdown-item i.fa-user,
-.bims-navbar .dropdown-item i.fa-user-check,
-.bims-navbar .dropdown-item i.fa-user-tie,
-.bims-navbar .dropdown-item i.fa-user-group,
-.bims-navbar .dropdown-item i.fa-user-cog,
-.bims-navbar .dropdown-item i.fa-id-card,
-.bims-navbar .dropdown-item i.fa-id-badge     { --nav-icon: #db2777; }
+i.fa-users,
+i.fa-user,
+i.fa-user-check,
+i.fa-user-tie,
+i.fa-user-group,
+i.fa-user-cog,
+i.fa-id-card,
+i.fa-id-badge     { --nav-icon: #db2777; }
 
 /* Livestock, feed & health — amber */
-.bims-navbar .dropdown-item i.fa-kiwi-bird,
-.bims-navbar .dropdown-item i.fa-dove,
-.bims-navbar .dropdown-item i.fa-egg,
-.bims-navbar .dropdown-item i.fa-wheat-awn,
-.bims-navbar .dropdown-item i.fa-tractor,
-.bims-navbar .dropdown-item i.fa-syringe       { --nav-icon: #d97706; }
+i.fa-kiwi-bird,
+i.fa-dove,
+i.fa-egg,
+i.fa-wheat-awn,
+i.fa-tractor,
+i.fa-syringe       { --nav-icon: #d97706; }
 
 /* Inventory & premises — orange */
-.bims-navbar .dropdown-item i.fa-warehouse,
-.bims-navbar .dropdown-item i.fa-boxes-stacked,
-.bims-navbar .dropdown-item i.fa-box,
-.bims-navbar .dropdown-item i.fa-shopping-basket,
-.bims-navbar .dropdown-item i.fa-building,
-.bims-navbar .dropdown-item i.fa-university     { --nav-icon: #ea580c; }
+i.fa-warehouse,
+i.fa-boxes-stacked,
+i.fa-box,
+i.fa-shopping-basket,
+i.fa-building,
+i.fa-university     { --nav-icon: #ea580c; }
 
 /* Places — cyan */
-.bims-navbar .dropdown-item i.fa-map-marker-alt,
-.bims-navbar .dropdown-item i.fa-map-marked-alt,
-.bims-navbar .dropdown-item i.fa-map-location-dot,
-.bims-navbar .dropdown-item i.fa-location-dot,
-.bims-navbar .dropdown-item i.fa-temperature-half { --nav-icon: #0891b2; }
+i.fa-map-marker-alt,
+i.fa-map-marked-alt,
+i.fa-map-location-dot,
+i.fa-location-dot,
+i.fa-temperature-half { --nav-icon: #0891b2; }
 
 /* Dates — sky */
-.bims-navbar .dropdown-item i.fa-calendar-check,
-.bims-navbar .dropdown-item i.fa-calendar-day,
-.bims-navbar .dropdown-item i.fa-calendar-alt,
-.bims-navbar .dropdown-item i.fa-comment-sms     { --nav-icon: #0284c7; }
+i.fa-calendar-check,
+i.fa-calendar-day,
+i.fa-calendar-alt,
+i.fa-comment-sms     { --nav-icon: #0284c7; }
 
 /* Devices & keys — violet */
-.bims-navbar .dropdown-item i.fa-microchip,
-.bims-navbar .dropdown-item i.fa-hub,
-.bims-navbar .dropdown-item i.fa-key             { --nav-icon: #7c3aed; }
+i.fa-microchip,
+i.fa-hub,
+i.fa-key             { --nav-icon: #7c3aed; }
 
 /* Icons written with the newer `fa-solid` prefix rather than `fas` — the
    selectors key off the icon class alone, so the prefix does not matter, but
    these were missed on the first pass. */
-.bims-navbar .dropdown-item i.fa-crow,
-.bims-navbar .dropdown-item i.fa-dna              { --nav-icon: #d97706; }
-.bims-navbar .dropdown-item i.fa-indian-rupee-sign { --nav-icon: #16a34a; }
-.bims-navbar .dropdown-item i.fa-shopping-cart     { --nav-icon: #ea580c; }
-.bims-navbar .dropdown-item i.fa-users-gear        { --nav-icon: #db2777; }
-.bims-navbar .dropdown-item i.fa-clipboard-check   { --nav-icon: #0d9488; }
-.bims-navbar .dropdown-item i.fa-home              { --nav-icon: #3b82f6; }
+i.fa-crow,
+i.fa-dna              { --nav-icon: #d97706; }
+i.fa-indian-rupee-sign { --nav-icon: #16a34a; }
+i.fa-shopping-cart     { --nav-icon: #ea580c; }
+i.fa-users-gear        { --nav-icon: #db2777; }
+i.fa-clipboard-check   { --nav-icon: #0d9488; }
+i.fa-home              { --nav-icon: #3b82f6; }
 
 /* Attention — the only reds, so a warning still stands out */
-.bims-navbar .dropdown-item i.fa-bell            { --nav-icon: #f59e0b; }
-.bims-navbar .dropdown-item i.fa-triangle-exclamation,
-.bims-navbar .dropdown-item i.fa-temperature-high,
-.bims-navbar .dropdown-item i.fa-virus,
-.bims-navbar .dropdown-item i.fa-user-times,
-.bims-navbar .dropdown-item i.fa-sign-out-alt    { --nav-icon: #dc2626; }
+i.fa-bell            { --nav-icon: #f59e0b; }
+i.fa-triangle-exclamation,
+i.fa-temperature-high,
+i.fa-virus,
+i.fa-user-times,
+i.fa-sign-out-alt    { --nav-icon: #dc2626; }
 
 /* ---------------------------------------------------------------------------
    Module mega menu. Hovering a module tab opens its usual cascading menu;
@@ -2108,16 +2110,17 @@ img, svg, video, canvas {
   font-size: 15px; width: auto;
   color: var(--nav-icon, #16a34a);
 }
-.bims-mega-head .bims-mega-hi { background: color-mix(in srgb, var(--hi, #16a34a) 13%, #ffffff); }
+.bims-mega-head .bims-mega-hi { background: color-mix(in srgb, var(--hi, var(--nav-icon, #16a34a)) 13%, #ffffff); }
 /* The panel is drawn on the page, not inside a navigation bar, so it cannot
-   borrow the bar's item styling (or its icon palette — each item's colour is
-   copied over when the panel is built). */
+   borrow the bar's item styling. Its icon colours come from the palette above,
+   which each icon carries on itself, or from the colour the top bar copies
+   over when the panel is built from one of its menus. */
 .bims-mega .dropdown-item {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 6px 8px; font-size: .82rem; white-space: normal;
   color: #334155; text-decoration: none; border-radius: 6px;
 }
-.bims-mega .dropdown-item i { width: 16px; flex: 0 0 16px; text-align: center; font-size: .8rem; margin-top: 2px; color: #94a3b8; }
+.bims-mega .dropdown-item i { width: 16px; flex: 0 0 16px; text-align: center; font-size: .8rem; margin-top: 2px; color: var(--nav-icon, #94a3b8); }
 .bims-mega .dropdown-item:hover { background: #f1f5f9; color: #0f172a; }
 .bims-mega .dropdown-item.is-current { background: var(--primary-subtle, #ecfdf3); color: var(--primary, #15803d); font-weight: 600; }
 .bims-mega-sub { font-size: .7rem; font-weight: 700; color: #64748b; text-transform: uppercase;
