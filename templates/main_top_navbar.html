@@ -854,9 +854,25 @@ layouts open it from the account menu.
           </li>
           {% endif %}
 
-          {% if 'hr_payroll' in allowed_sections %}<li><a class="dropdown-item" href="{% url 'payroll' %}">
-            <i class="fas fa-money-bill-wave"></i>Payroll
-          </a></li>{% endif %}
+          {% comment %}
+          Payroll is a section of its own, as it is in the nav registry the
+          sidebar is built from. Written here as a loose page it belonged to
+          no section at all: on the desktop it floated between Attendance and
+          Employee Trip, and the phone's menu -- which groups what it finds --
+          had to put it in a row named after the module itself, "HR 1".
+          {% endcomment %}
+          {% if 'hr_payroll' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="payrollDd">
+              <i class="fas fa-money-bill-wave"></i>Payroll
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'payroll' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'payroll' %}">
+                <i class="fas fa-money-bill-wave"></i>Payroll
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
 
           <!-- Employee Trip And Route Submenu -->
           {% if 'hr_employee_trip_and_route' in allowed_sections %}
