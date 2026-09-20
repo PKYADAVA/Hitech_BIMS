@@ -637,6 +637,11 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   body.ds-shell .content { margin-left: 0; }
   .ds-sidebar { transform: translateX(-100%); transition: transform .16s ease; }
   body.ds-sb-open .ds-sidebar { transform: none; }
+  /* On a phone the rail is the whole of the navigation: there is no hover to
+     open a menu beside it, and the tab row its pages would go to is itself
+     collapsed behind a button. So the pages unfold here, under their section,
+     as they did on every screen before the tab row took them. */
+  .ds-sb-sec.is-open > .ds-sb-sec-items { display: block; }
 }
 
 
@@ -922,8 +927,16 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 
 @media (max-width: 1023.98px) {
   .ds-topbar-burger { display: inline-flex; align-items: center; }
-  .ds-topbar .gs-wrap { flex: 1 1 auto; }
-  .ds-user-meta { display: none; }
+  /* A flex item's automatic minimum is its content, so the search would not
+     give up its last 259px and pushed the bell, sign-out and account off the
+     side of a phone -- 104px past the edge of a 390px screen, on every page
+     of this layout. It takes what is left of the row instead. */
+  .ds-topbar { padding: 0 10px; gap: 8px; }
+  .ds-topbar-right { gap: 8px; min-width: 0; }
+  .ds-topbar .gs-wrap { flex: 1 1 auto; min-width: 0; max-width: none; }
+  .ds-topbar .gs-box { min-width: 0; padding-left: 11px; }
+  .ds-topbar .gs-input { min-width: 0; }
+  .ds-topbar-burger { padding: 6px 4px; }
 }
 
 /* The shell's own header replaces the navbar's spacing, so the first block on

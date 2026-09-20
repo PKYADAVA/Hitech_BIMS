@@ -173,6 +173,9 @@ keeps the two in step whether it is 260px or 72px wide.
         .forEach(function (g) { g.classList.remove("is-open"); });
       sec.classList.add("is-open");
       BimsNavMenu.close();
+      // Narrow enough that the rail is an overlay: the pages have just
+      // unfolded inside it, so there is nothing else to do.
+      if (narrow.matches) return;
       // A page without that row -- a report, say -- has nowhere to put them,
       // so the menu beside the rail answers the click instead.
       if (!fillTopRow(sec)) {
@@ -187,6 +190,7 @@ keeps the two in step whether it is 260px or 72px wide.
     // rail, below it, and a section sends its pages to the tab row at the top
     // of the page. Nothing needs a pointer, so a tablet gets there too.
     var canHover = window.matchMedia("(hover: hover)");
+    var narrow = window.matchMedia("(max-width: 1023.98px)");
 
     function text(node) { return (node.textContent || "").replace(/\s+/g, " ").trim(); }
     function itemOf(a) {
