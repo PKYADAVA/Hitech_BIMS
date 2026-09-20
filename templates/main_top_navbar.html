@@ -14,8 +14,11 @@ layouts open it from the account menu.
   <!-- Brand -->
   <a class="navbar-brand me-4" href="{% url 'home' %}">
     <img class="brand-logo" src="{% static 'images/hitech-logo-white.png' %}" alt="Hi Tech — Makes Difference">
+    {% comment %}
+    The mark says Hi Tech; the words beside it only have to say which of its
+    systems this is. Same in the sidebar's header.
+    {% endcomment %}
     <div class="brand-text">
-      Hi Tech Farms
       <span>BIMS Platform</span>
     </div>
   </a>

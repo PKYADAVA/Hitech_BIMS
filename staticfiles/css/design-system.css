@@ -506,8 +506,14 @@ body.ds-sb-collapsed .ds-sb-logo img { width: 30px; object-fit: cover; object-po
   flex: 0 1 auto; min-width: 0; overflow: hidden;
 }
 .ds-sb-brand-text strong, .ds-sb-brand-text small { overflow: hidden; text-overflow: ellipsis; }
-.ds-sb-brand-text strong { font-size: 12.5px; color: #fff; font-weight: 600; }
-.ds-sb-brand-text small { font-size: 9.5px; letter-spacing: .04em; color: rgba(255, 255, 255, .55); }
+/* One line, so it carries the weight the name used to: a caption under a
+   title can be quiet, a label on its own has to be readable. */
+.ds-sb-brand-text small {
+  /* 10.5px at .07em fits the 103px left beside the mark on a 212px rail; at
+     11px and .1em it needed 105 and came out as "BIMS PLATFO...". */
+  font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
+  color: rgba(255, 255, 255, .82);
+}
 
 .ds-sb-nav { flex: 1; overflow-y: auto; padding: 7px 6px; }
 .ds-sb-nav::-webkit-scrollbar { width: 5px; }

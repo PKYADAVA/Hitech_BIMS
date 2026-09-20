@@ -168,12 +168,14 @@ footer { margin-top: auto; }
   line-height: 1.15;
 }
 
+/* One line, so it carries the weight the name used to: a caption under a
+   title can be quiet, a label on its own has to be readable. */
 .bims-navbar .brand-text span {
   display: block;
-  font-size:.62rem;
+  font-size: .7rem;
   line-height: 1.15;
-  font-weight: 500;
-  color: rgba(255,255,255,0.45);
+  font-weight: 600;
+  color: rgba(255,255,255,0.82);
   letter-spacing: 1px;
   text-transform: uppercase;
 }
