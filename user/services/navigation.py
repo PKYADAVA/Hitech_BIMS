@@ -21,10 +21,10 @@ from user.services.nav_icons import DEFAULT_TAB_ICON, TAB_ICONS
 #: renders, with a default.
 NAV_ICONS = {
     # Broiler rears the birds; the hatchery is where the eggs are. They were
-    # the other way round. The bird is a standing one (fa-crow): the kiwi it
-    # used to be is a round, long-beaked blob that at 14px in the rail reads
-    # as anything but poultry.
-    "broiler": "fa-solid fa-crow",
+    # the other way round. The bird is a hen drawn for this (style.css, "Drawn
+    # icons"): Font Awesome's free set has a kiwi, a dove and a crow, and none
+    # of them is the bird this module is about.
+    "broiler": "bims-ico bims-ico-hen",
     "hatchery": "fa-solid fa-egg",
     "purchase": "fa-solid fa-cart-shopping",
     "sales": "fa-solid fa-indian-rupee-sign",

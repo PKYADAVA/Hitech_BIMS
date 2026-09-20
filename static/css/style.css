@@ -1920,6 +1920,28 @@ img, svg, video, canvas {
 
 
 /* ---------------------------------------------------------------------------
+   Drawn icons
+   ---------------------------------------------------------------------------
+   Font Awesome's free set has no chicken: its nearest birds are a kiwi, a
+   dove and a crow, and a broiler operation wearing any of them says something
+   it does not mean. `icon-hen.svg` is drawn for this, and it is applied as a
+   mask rather than a background so it takes `currentColor` — which is what
+   lets it sit in a menu, a rail or a dark bar and be the colour everything
+   around it is, like the font icons beside it.
+   --------------------------------------------------------------------------- */
+.bims-ico {
+  display: inline-block; width: 1em; height: 1em; vertical-align: -.125em;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.bims-ico-hen {
+  -webkit-mask-image: url("../images/icon-hen.svg");
+  mask-image: url("../images/icon-hen.svg");
+}
+
+/* ---------------------------------------------------------------------------
    Navigation icon palette
    ---------------------------------------------------------------------------
    The menu icons were all one muted grey, which made long dropdowns hard to
@@ -2002,6 +2024,7 @@ i.fa-id-badge     { --nav-icon: #db2777; }
 
 /* Livestock, feed & health — amber */
 i.fa-kiwi-bird,
+i.bims-ico-hen,
 i.fa-crow,
 i.fa-dove,
 i.fa-egg,
