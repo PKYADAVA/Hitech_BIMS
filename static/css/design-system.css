@@ -942,6 +942,92 @@ body.ds-shell .content > footer { display: none; }
 
 
 /* ===========================================================================
+   On a phone
+   ---------------------------------------------------------------------------
+   Everything here answers something a real device does and a desktop does
+   not. Nothing is scoped to a layout: both of them are read on phones.
+   ======================================================================== */
+
+/* 1. Fields at 16px, which is the rule iOS enforces rather than a preference.
+      Safari zooms the page in when a field under 16px is focused and does not
+      zoom back out, so every tap on a form left the reader on a page one and
+      a half times too wide, scrolled somewhere else. This app's fields were
+      12 to 14px, 42 of them on a chicks purchase alone.
+
+      The controls grow to hold the larger text, which is what section 26 of
+      the spec asks for on mobile anyway: 44px touch targets. */
+@media (max-width: 1023.98px) {
+  .ds, .ds form { --ds-control-h: 44px; --ds-entry-h: 40px; --ds-button-h: 44px; }
+  .ds .form-control, .ds .form-select, .ds input, .ds select, .ds textarea,
+  .form-control, .form-select, input.form-control, select.form-select,
+  textarea.form-control, .dataTables_filter input, .dataTables_length select,
+  .gs-input, .ds-topbar .gs-input,
+  .form-control-sm, .form-select-sm, .ds .form-control-sm, .ds .form-select-sm {
+    font-size: 16px;
+  }
+  /* DataTables writes its own search box and prints its own rule for it,
+     later in the cascade than this file, so it is named outright. */
+  div.dataTables_wrapper div.dataTables_filter input.form-control,
+  div.dataTables_wrapper div.dataTables_length select.form-select { font-size: 16px; }
+  /* Select2 renders its own box over the select it replaces. */
+  .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered,
+  .select2-container--bootstrap-5 .select2-search__field { font-size: 16px; }
+  .select2-container--bootstrap-5 .select2-selection--single { min-height: 44px; }
+  .ds table.ds-entry .form-control, .ds table.ds-entry .form-select { font-size: 16px; }
+}
+
+/* 2. Things a finger has to hit. A 27px button is a miss on a phone, and the
+      dashboard had fifty of them. */
+@media (max-width: 767.98px) {
+  .ds .btn, .btn { min-height: 40px; }
+  .ds .btn-sm, .btn-sm { height: auto; min-height: 38px; }
+  .ar-btn { min-height: 38px; padding-top: 6px; padding-bottom: 6px; }
+  .dw-open { min-height: 34px; display: inline-flex; align-items: center; }
+  .ar-sum { min-height: 34px; }
+  .page-link, .paginate_button { min-height: 38px; display: inline-flex; align-items: center; }
+}
+
+/* 3. Type that can be read at arm's length. The dashboard's widgets run from
+      8.7px to 11.3px, which is a caption on a monitor and nothing at all on a
+      handset held at reading distance. */
+@media (max-width: 767.98px) {
+  .dw-label, .dw-sub, .dw-card-sub, .dw-rows-title, .qa-sub, .ar-chip,
+  .dw-kpi-label, .dw-foot { font-size: 12px; }
+  .dw-row-meta, .dw-row-value, .ar-msg, .ar-title { font-size: 12.5px; }
+  .ds .ds-subtitle, .ds .form-text { font-size: 12px; }
+}
+
+/* 4. A menu hung off a button near the left edge opens to the left of the
+      screen. The account menu is 292px wide and right-aligned to its button,
+      which in the top layout's collapsed bar sits at x=12 -- so it opened at
+      -213px, entirely off the side. On a phone it is pinned to the viewport
+      instead of to the button. */
+@media (max-width: 767.98px) {
+  .dropdown-menu.acct-menu {
+    /* Under the bar and against the right edge, both measured from the
+       viewport: left to its own devices a fixed box keeps the place it had in
+       the flow, which for this one was 850px down an 844px screen. */
+    position: fixed; left: auto; right: 8px;
+    top: calc(var(--navbar-height, 60px) + 6px);
+    width: min(292px, calc(100vw - 16px));
+    max-height: calc(100vh - var(--navbar-height, 60px) - 20px); overflow-y: auto;
+  }
+}
+
+/* 5. The parts of the screen a phone keeps for itself: the notch, the rounded
+      corners, the home indicator. The page declares `viewport-fit=cover`, so
+      it is drawn under all three unless it says otherwise. */
+@supports (padding: max(0px)) {
+  body.ds-shell .content { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .ds-topbar {
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+  .ds-sidebar { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .bims-navbar { padding-left: max(12px, env(safe-area-inset-left, 0px)); }
+}
+
+/* ===========================================================================
    Reports (spec section 25)
    ======================================================================== */
 .ds .co-stamp { font-size: 11px; color: var(--ds-muted); margin-top: 2px; }

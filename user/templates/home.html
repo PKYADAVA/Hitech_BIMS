@@ -558,6 +558,20 @@
                    background-size:400% 100%; animation:dw-shimmer 1.3s ease infinite; }
   @keyframes dw-shimmer { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
 
+  /* On a phone. The widgets are captioned at .62rem to .72rem, which is fine
+     on a monitor an arm away and unreadable on a handset; and their links and
+     buttons come out at 17px to 27px tall, which a finger misses. Held to a
+     floor here rather than in the design system, because these selectors are
+     the specific ones and would win anyway. */
+  @media (max-width: 767.98px) {
+    .dw-stat .dw-label, .dw-col-sale_overview .dw-stat .dw-label,
+    .dw-label, .dw-sub, .dw-card-sub, .dw-rows-title, .qa-sub, .ar-chip,
+    .dw-kpi-label, .dw-foot, .dw-empty span { font-size: 12px; }
+    .dw-row-meta, .dw-row-value, .ar-msg, .ar-title, .dw-stat b { font-size: 12.5px; }
+    .dw-open, .ar-sum { min-height: 34px; display: inline-flex; align-items: center; }
+    .ar-btn { min-height: 38px; font-size: 12px; padding-top: 6px; padding-bottom: 6px; }
+  }
+
 </style>
 {% endblock %}
 

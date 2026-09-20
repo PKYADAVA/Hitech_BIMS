@@ -455,6 +455,33 @@ footer { margin-top: auto; }
 }
 
 
+/* ---------- The bar on a phone ----------
+   The controls carry margin utilities tuned for the stacked xl menu
+   (`mt-3 mb-3`), and the bar wraps, so on a 390px screen the brand, the
+   toggler, the bell and sign-out took one line and the account pill dropped
+   onto another: a 149px bar with its own account button hanging off the
+   bottom of the green, over the page. One row, no vertical margins, and the
+   wordmark steps aside -- the mark alone identifies it at that width. */
+@media (max-width: 1199.98px) {
+  .bims-navbar {
+    flex-wrap: nowrap; gap: 6px;
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+  /* The bar is exactly the height it declares, so a menu hung under it can be
+     placed from the same number. */
+  #mainNavbar { height: var(--navbar-height, 60px); align-items: center; }
+  #mainNavbar > a.navbar-brand { margin-right: 0 !important; min-width: 0; flex: 0 1 auto; }
+  #mainNavbar > div { margin: 0 !important; flex: 0 0 auto; }
+  #mainNavbar > .navbar-toggler { margin: 0 !important; flex: 0 0 auto; }
+  .bims-navbar .brand-logo { height: 34px; }
+}
+@media (max-width: 767.98px) {
+  /* The words beside the mark are the first thing to go when the row is
+     short: the logo says whose system this is on its own. */
+  .bims-navbar .brand-logo + .brand-text { display: none; }
+}
+
 /* ---------- The bar's clock ---------- */
 /* Two short lines, sized like the wordmark's pair so the bar keeps one
    rhythm, and no taller than the 42px row that holds it. */
@@ -1749,7 +1776,13 @@ img, svg, video, canvas {
   }
   /* The open menu floats below the bar as a panel. In flow it would stretch
      the sticky navbar to the full viewport height and push the page out of
-     sight — with ~13 modules the menu is taller than most screens. */
+     sight — with ~13 modules the menu is taller than most screens.
+
+     `top: 100%` needs the bar to be what it is measured from. The modules
+     moved to a second bar of their own, which is positioned `static`, so the
+     panel was resolving against the page instead and opening 844px down --
+     one whole screen below the button that opens it. */
+  .bims-navbar, #moduleBar { position: relative; }
   .bims-navbar .navbar-collapse {
     position: absolute;
     top: 100%;
