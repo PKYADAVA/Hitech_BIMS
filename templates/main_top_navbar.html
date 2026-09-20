@@ -36,7 +36,7 @@ layouts open it from the account menu.
     Search, which had nowhere to sit while the modules filled this row. The
     sidebar layout has carried it for a while; the two share the one partial.
     {% endcomment %}
-    <div class="ms-auto d-none d-xl-flex me-3">{% include "_global_search.html" %}</div>
+    <div class="nav-search ms-auto d-none d-xl-flex me-3">{% include "_global_search.html" %}</div>
 
     <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
     {% include "_alerthub_bell.html" %}
@@ -1334,7 +1334,12 @@ document.addEventListener("DOMContentLoaded", function () {
           BimsNavMenu.openFlyout(specOf(li), {
             left: 8, width: Math.min(340, window.innerWidth - 16),
             top: Math.round(tier.bottom + 4), share: .78, lift: true
-          }, { onClose: function () { if (openLi) { lit(openLi, false); openLi = null; } } });
+          }, {
+            // Sections first, pages when one is picked: Broiler alone is
+            // forty-one pages, which is not a menu, it is a list.
+            cascade: true,
+            onClose: function () { if (openLi) { lit(openLi, false); openLi = null; } }
+          });
           return;
         }
         e.preventDefault();

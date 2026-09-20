@@ -536,6 +536,30 @@ footer { margin-top: auto; }
   /* The words beside the mark are the first thing to go when the row is
      short: the logo says whose system this is on its own. */
   .bims-navbar .brand-logo + .brand-text { display: none; }
+
+  /* And the search comes to the phone, which is where it is worth most: the
+     modules are a row you swipe and the pages are three taps in, while this
+     finds either by name. It was `d-none d-xl-flex` -- desktop only -- so
+     this layout had no search at all on a handset, though the sidebar one
+     has carried it for a while.
+
+     The room comes from the mark, cropped to its hexagon the way the folded
+     rail crops it, which gives the box the 170-odd pixels it needs. */
+  /* What is left of the row after the mark and the three controls, and no
+     more: at `flex: 1 1 auto` against siblings that cannot shrink it took
+     322px of 390 and pushed the bell, sign-out and account off the side. */
+  #mainNavbar .nav-search {
+    display: flex !important; flex: 1 1 60px; min-width: 0;
+    max-width: calc(100vw - 218px);
+    margin: 0 !important;
+  }
+  #mainNavbar .gs-wrap { flex: 1 1 auto; min-width: 0; max-width: none; margin: 0; }
+  #mainNavbar .gs-box { min-width: 0; border-radius: 999px; padding-left: 12px; padding-right: 8px; }
+  #mainNavbar .gs-input { min-width: 0; font-size: 16px; }
+  /* Cropped to the hexagon: at 34px a sliver of the wordmark came with it. */
+  .bims-navbar .brand-logo {
+    width: 29px; object-fit: cover; object-position: left center;
+  }
 }
 
 /* ---------- The bar's clock ---------- */

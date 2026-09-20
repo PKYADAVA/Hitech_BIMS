@@ -1207,3 +1207,21 @@ body.ds-shell .content > footer { display: none; }
 .bims-fly-row:hover, .bims-fly-row.is-open { background: #f1f5f9; color: #0f172a; }
 .bims-fly-row:hover .bims-fly-caret, .bims-fly-row.is-open .bims-fly-caret { color: #15803d; }
 .bims-fly-child { box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }
+
+/* The way back out of a section, on the screens where the menu drills in
+   place rather than opening a second card beside itself. */
+.bims-fly-back {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 9px; margin-bottom: 2px; border: 0; border-radius: 8px;
+  background: #f1f5f9; color: #334155; font-size: .82rem; font-weight: 600;
+  cursor: pointer; text-align: left;
+}
+.bims-fly-back:hover { background: #e2e8f0; color: #0f172a; }
+.bims-fly-back i { font-size: .7rem; color: #64748b; }
+
+@media (max-width: 767.98px) {
+  /* Rows a finger can hit, in both the sections list and the pages under it. */
+  .bims-fly-row { padding: 10px 10px; font-size: .88rem; }
+  .bims-fly .dropdown-item { padding: 10px 10px; font-size: .88rem; }
+  .bims-fly-back { padding: 10px; font-size: .85rem; }
+}

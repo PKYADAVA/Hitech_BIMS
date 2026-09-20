@@ -42,7 +42,13 @@ window.BIMS_MODULE_INTRO = {
 
 (function () {
   var panel = null, flyout = null, sub = null, onClose = null;
-  var hoverTimer = null, hoverMs = 0, subRow = null;
+  var hoverTimer = null, hoverMs = 0, subRow = null, flySpec = null, flyBox = null;
+
+  // Where a second card cannot stand beside the first: a phone. There the
+  // menu drills in place, which is the gesture that screen already uses.
+  function tooNarrowForTwo() {
+    return window.matchMedia("(max-width: 767.98px)").matches;
+  }
 
   function cancelClose() { clearTimeout(hoverTimer); }
 
@@ -234,9 +240,24 @@ window.BIMS_MODULE_INTRO = {
       var caret = el("i", "bims-fly-caret");
       caret.className = "fas fa-chevron-right bims-fly-caret";
       row.appendChild(caret);
-      row.addEventListener("mouseenter", function () { openSub(section, row); });
-      row.addEventListener("focus", function () { openSub(section, row); });
-      row.addEventListener("click", function (e) { e.preventDefault(); openSub(section, row); });
+      // Hover only where there is a pointer to hover with. A tap fires
+      // `mouseenter` too, and acting on it swapped the card's contents under
+      // the finger -- so the click that followed landed on whatever page had
+      // taken the row's place, and the menu "closed" by navigating.
+      row.addEventListener("mouseenter", function () {
+        if (!tooNarrowForTwo()) openSub(section, row);
+      });
+      row.addEventListener("focus", function () {
+        if (!tooNarrowForTwo()) openSub(section, row);
+      });
+      row.addEventListener("click", function (e) {
+        // The handler rebuilds the card, which detaches the row that was
+        // tapped; the document handler, running after it, would then find
+        // the target outside the menu and close the lot.
+        e.preventDefault();
+        e.stopPropagation();
+        openSub(section, row);
+      });
       root.appendChild(row);
     });
     return root;
@@ -245,7 +266,63 @@ window.BIMS_MODULE_INTRO = {
   // The pages of one section, drawn beside the row that asked for them. It is
   // its own element on the body rather than a child of the menu: the menu
   // scrolls when it is tall, and a child would be clipped at its edge.
+  // Drill: the same card, showing one section's pages, with the way back at
+  // the top. Beside is impossible at 390px -- a 340px card and a 238px one
+  // do not fit -- and a column of forty-one pages is what the sections were
+  // meant to save the reader from.
+  function drillInto(section) {
+    if (!flyout || !flySpec) return;
+    var back = el("button", "bims-fly-back");
+    back.type = "button";
+    back.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    back.appendChild(document.createTextNode(flySpec.title));
+    back.addEventListener("click", function (e) {
+      e.stopPropagation();
+      showCascade();
+    });
+    var head = el("div", "bims-fly-head");
+    if (section.icon) { var i = el("i"); i.className = section.icon; head.appendChild(i); }
+    head.appendChild(document.createTextNode(section.title));
+
+    flyout.innerHTML = "";
+    flyout.appendChild(back);
+    flyout.appendChild(head);
+    section.items.forEach(function (item) {
+      if (item.subheading) {
+        var s = el("div", "bims-fly-sub");
+        s.textContent = item.subheading;
+        flyout.appendChild(s);
+        return;
+      }
+      flyout.appendChild(linkNode(item));
+    });
+    flyout.scrollTop = 0;
+  }
+
+  function showCascade() {
+    if (!flyout || !flySpec) return;
+    var fresh = buildCascade(flySpec);
+    flyout.innerHTML = fresh.innerHTML;
+    flyout.className = fresh.className;
+    // The rebuilt rows need their own handlers back.
+    Array.prototype.forEach.call(flyout.querySelectorAll(".bims-fly-row"), function (row, i) {
+      var section = flySpec.sections[i];
+      row.addEventListener("click", function (e) {
+        // The handler rebuilds the card, which detaches the row that was
+        // tapped; the document handler, running after it, would then find
+        // the target outside the menu and close the lot.
+        e.preventDefault();
+        e.stopPropagation();
+        openSub(section, row);
+      });
+      row.addEventListener("mouseenter", function () { if (!tooNarrowForTwo()) openSub(section, row); });
+    });
+    flyout.scrollTop = 0;
+    if (flyBox) place(flyout, flyBox);
+  }
+
   function openSub(section, row) {
+    if (tooNarrowForTwo()) return drillInto(section);
     if (subRow === row && sub) return;
     if (sub) { sub.remove(); sub = null; }
     subRow = row;
@@ -317,6 +394,7 @@ window.BIMS_MODULE_INTRO = {
     clearTimeout(hoverTimer);
     hoverMs = 0;
     subRow = null;
+    flySpec = flyBox = null;
     [panel, flyout, sub].forEach(function (node) { if (node) node.remove(); });
     panel = flyout = sub = null;
     if (onClose) { var fn = onClose; onClose = null; fn(); }
@@ -336,7 +414,10 @@ window.BIMS_MODULE_INTRO = {
   function openFlyout(spec, box, opts) {
     opts = opts || {};
     closeAll();
-    flyout = opts.cascade && spec.sections.length > 1 ? buildCascade(spec) : buildFlyout(spec);
+    var cascade = opts.cascade && spec.sections.length > 1;
+    flySpec = cascade ? spec : null;
+    flyBox = cascade ? box : null;
+    flyout = cascade ? buildCascade(spec) : buildFlyout(spec);
     document.body.appendChild(flyout);
     place(flyout, box);
     onClose = opts.onClose || null;
