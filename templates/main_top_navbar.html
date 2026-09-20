@@ -1332,8 +1332,11 @@ document.addEventListener("DOMContentLoaded", function () {
           lit(li, true);
           var tier = bar.getBoundingClientRect();
           BimsNavMenu.openFlyout(specOf(li), {
+            // All the screen below the bars: a section can run to seventeen
+            // pages, and at 78% of the viewport four of them were below the
+            // card's edge with 86px of screen left empty underneath it.
             left: 8, width: Math.min(340, window.innerWidth - 16),
-            top: Math.round(tier.bottom + 4), share: .78, lift: true
+            top: Math.round(tier.bottom + 4), share: 1
           }, {
             // Sections first, pages when one is picked: Broiler alone is
             // forty-one pages, which is not a menu, it is a list.

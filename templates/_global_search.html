@@ -65,6 +65,16 @@ wrapper, so including this twice on one page is inert rather than broken.
   .gs-red{background:#ffecee;color:#dc465b}.gs-cyan{background:#e5f7fb;color:#0087a5}
   .gs-amber{background:#fef6e0;color:#b45309}
   @media (max-width:1599.98px) { .gs-kbd { display:none; } }
+
+  /* On a phone the panel is pinned to the screen rather than hung off the
+     box. It is wider than the box it belongs to and right-aligned to it, and
+     that box starts 47px into a 390px bar -- so the results opened with their
+     left edge 126px off the side. */
+  @media (max-width:767.98px) {
+    .gs-panel { position:fixed; left:8px; right:8px; width:auto;
+                top:calc(var(--navbar-height, 56px) + 6px);
+                max-height:calc(100vh - var(--navbar-height, 56px) - 20px); }
+  }
 </style>
 
 <script>

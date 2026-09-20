@@ -1220,6 +1220,12 @@ body.ds-shell .content > footer { display: none; }
 .bims-fly-back i { font-size: .7rem; color: #64748b; }
 
 @media (max-width: 767.98px) {
+  /* A phone hides its scrollbars, so a list longer than the card has to say
+     so some other way: the last row fades out under the edge. */
+  .bims-fly {
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+  }
   /* Rows a finger can hit, in both the sections list and the pages under it. */
   .bims-fly-row { padding: 10px 10px; font-size: .88rem; }
   .bims-fly .dropdown-item { padding: 10px 10px; font-size: .88rem; }
