@@ -287,6 +287,7 @@ window.BIMS_MODULE_INTRO = {
     flyout.innerHTML = "";
     flyout.appendChild(back);
     flyout.appendChild(head);
+    flyout.classList.remove("has-more", "at-end");
     section.items.forEach(function (item) {
       if (item.subheading) {
         var s = el("div", "bims-fly-sub");
@@ -297,6 +298,7 @@ window.BIMS_MODULE_INTRO = {
       flyout.appendChild(linkNode(item));
     });
     flyout.scrollTop = 0;
+    markScroll(flyout);
   }
 
   function showCascade() {
@@ -319,6 +321,7 @@ window.BIMS_MODULE_INTRO = {
     });
     flyout.scrollTop = 0;
     if (flyBox) place(flyout, flyBox);
+    markScroll(flyout);
   }
 
   function openSub(section, row) {
@@ -387,6 +390,23 @@ window.BIMS_MODULE_INTRO = {
       });
     } else {
       node.style.maxHeight = room + "px";
+      markScroll(node);
+    }
+  }
+
+  // A phone hides its scrollbars, so a list longer than its card has to say so
+  // some other way -- but the fade that says it was painting on every menu,
+  // including the short ones, which just looked washed out at the bottom.
+  function markScroll(node) {
+    if (!node) return;
+    var more = node.scrollHeight > node.clientHeight + 2;
+    node.classList.toggle("has-more", more);
+    if (!more) { node.classList.remove("at-end"); return; }
+    var atEnd = node.scrollTop + node.clientHeight >= node.scrollHeight - 2;
+    node.classList.toggle("at-end", atEnd);
+    if (!node.__scrollWatched) {
+      node.__scrollWatched = true;
+      node.addEventListener("scroll", function () { markScroll(node); });
     }
   }
 
