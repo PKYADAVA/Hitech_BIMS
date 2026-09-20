@@ -184,6 +184,42 @@ $(function () {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Registers on a phone: the columns stay and the table scrolls sideways.
+//
+// DataTables Responsive folds the spare columns into a row you open instead.
+// On a thirteen-column register that leaves four columns and nine numbers
+// behind a chevron -- Farm, Batch, Birds, Net Wt., Avg Wt., Rate, Amount --
+// which is most of what a register is read for. Swiping a wide table is the
+// gesture the module bar and the page tabs already use on that screen.
+//
+// `responsive: true` is written into sixty-seven registers one by one, so it
+// cannot be turned off from the defaults: this takes it out of the options as
+// each table is built, and only where the screen is narrow. Wider screens are
+// untouched, and so is every other option the page passed.
+// ---------------------------------------------------------------------------
+(function ($) {
+  if (!$ || !$.fn || !$.fn.dataTable) return;
+  var narrow = window.matchMedia("(max-width: 991.98px)");
+
+  ["DataTable", "dataTable"].forEach(function (name) {
+    var original = $.fn[name];
+    if (typeof original !== "function") return;
+    function patched(options) {
+      if (narrow.matches && options && options.responsive) {
+        options = $.extend({}, options, { responsive: false });
+      }
+      return original.apply(this, [options].concat(
+        Array.prototype.slice.call(arguments, 1)));
+    }
+    // The constructor carries the API on itself (defaults, ext, Api, version),
+    // and the rest of this file and every page reads them from there.
+    $.extend(patched, original);
+    patched.prototype = original.prototype;
+    $.fn[name] = patched;
+  });
+})(jQuery);
+
 // Applied to every DataTable on the site as soon as this script runs (i.e.
 // before any page's own $(document).ready() handler calls .DataTable()),
 // since defaults must be set before initialization, not inside a ready

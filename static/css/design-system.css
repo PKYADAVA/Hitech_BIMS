@@ -976,6 +976,20 @@ body.ds-shell .content > footer { display: none; }
   .ds table.ds-entry .form-control, .ds table.ds-entry .form-select { font-size: 16px; }
 }
 
+/* 1b. A register wider than the screen, scrolled sideways inside its card.
+       DataTables sizes the table to its container, which on a phone squeezes
+       thirteen columns into 358px; the columns take what they need instead
+       and the card's own scroller carries them. */
+@media (max-width: 991.98px) {
+  .table-responsive > .dataTables_wrapper > .dataTables_scroll,
+  .table-responsive > .dataTables_wrapper { min-width: 0; }
+  .table-responsive table.dataTable {
+    width: auto !important; min-width: 100%;
+  }
+  .table-responsive table.dataTable th,
+  .table-responsive table.dataTable td { white-space: nowrap; }
+}
+
 /* 2. Things a finger has to hit. A 27px button is a miss on a phone, and the
       dashboard had fifty of them. */
 @media (max-width: 767.98px) {

@@ -46,7 +46,7 @@
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260921x" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260921y" />
 
   {% block css %}{% endblock %}
 
@@ -176,7 +176,7 @@
     window.BIMS_MAP = JSON.parse(
       document.getElementById("bims-map-config").textContent);
   </script>
-  <script src="{% static 'js/main.js' %}?v=20260918g"></script>
+  <script src="{% static 'js/main.js' %}?v=20260921y"></script>
 
   <!-- Module menus, shared by the top bar and the sidebar (bump ?v= on edit) -->
   <script src="{% static 'js/nav_menu.js' %}?v=20260921t"></script>
