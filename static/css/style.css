@@ -1882,6 +1882,34 @@ img, svg, video, canvas {
   }
 }
 
+/* Tier three on a phone: the page's own tabs.
+   -----------------------------------------------------------------------
+   They were folded behind a small button of their own, which on a screen
+   that now shows both bars above them was a third way of hiding navigation
+   -- and the row the sidebar's sections write into, so with it shut a tap
+   there did nothing visible. It scrolls sideways instead, the same gesture
+   as the module tier. */
+@media (max-width: 991.98px) {
+  .module-subnav { padding: 0 10px; }
+  .module-subnav > .btn[data-bs-toggle="collapse"] { display: none !important; }
+  .module-subnav .collapse {
+    display: flex !important; height: auto !important; visibility: visible !important;
+    overflow: visible;
+  }
+  .module-subnav .subnav-tabs {
+    flex-wrap: nowrap; width: 100%; min-width: 0;
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .module-subnav .subnav-tabs::-webkit-scrollbar { display: none; }
+  .module-subnav .subnav-tab { flex: 0 0 auto; }
+  .module-subnav .subnav-tab a {
+    white-space: nowrap; padding: 8px 12px; min-height: 38px;
+    display: flex; align-items: center;
+  }
+}
+
 /* Sub-navigation: horizontal scroll fallback */
 @media (min-width: 992px) {
   .module-subnav .subnav-tabs {

@@ -1318,7 +1318,25 @@ document.addEventListener("DOMContentLoaded", function () {
       // Click: the panel. Caught before Bootstrap's own handler, which would
       // otherwise open the ordinary dropdown on the same click.
       toggle.addEventListener("click", function (e) {
-        if (!wide.matches) return;
+        // Narrow: the module row scrolls sideways, and a scroller clips what
+        // hangs out of it -- Bootstrap's own dropdown opened inside the row
+        // and was never painted, which reads as a tab that does nothing. The
+        // shared menu is drawn on the body instead, so nothing can clip it.
+        if (!wide.matches) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (openLi === li) { BimsNavMenu.close(); return; }
+          tabs.forEach(hideDropdown);
+          if (openLi) lit(openLi, false);
+          openLi = li;
+          lit(li, true);
+          var tier = bar.getBoundingClientRect();
+          BimsNavMenu.openFlyout(specOf(li), {
+            left: 8, width: Math.min(340, window.innerWidth - 16),
+            top: Math.round(tier.bottom + 4), share: .78, lift: true
+          }, { onClose: function () { if (openLi) { lit(openLi, false); openLi = null; } } });
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         if (openLi === li) { BimsNavMenu.close(); return; }

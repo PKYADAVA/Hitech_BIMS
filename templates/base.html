@@ -36,7 +36,7 @@
 
   <!-- BIMS Global Styles (bump ?v= when this file changes so browsers drop
        cached copies — same convention as main.js below) -->
-  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260921n" />
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260921o" />
 
   <!-- Responsiveness layer: adapts the existing design to every screen size -->
   <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260921l" />
@@ -180,6 +180,19 @@
 
   <!-- Module menus, shared by the top bar and the sidebar (bump ?v= on edit) -->
   <script src="{% static 'js/nav_menu.js' %}?v=20260920c"></script>
+  <script>
+    // The page's tabs scroll sideways on a phone, so the one being read can
+    // be off the end of the row: it is brought into view once, without
+    // scrolling the page itself.
+    document.addEventListener("DOMContentLoaded", function () {
+      var row = document.querySelector(".module-subnav .subnav-tabs");
+      if (!row || row.scrollWidth <= row.clientWidth + 1) return;
+      var here = row.querySelector("a.active");
+      if (!here) return;
+      var tab = here.parentElement;
+      row.scrollLeft = Math.max(0, tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2);
+    });
+  </script>
 
   <!-- Alerts & Notifications client: shared by the bell, the notification
        centre and the dashboard widget. Must load before the per-page js block
