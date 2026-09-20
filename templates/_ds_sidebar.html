@@ -145,6 +145,77 @@ keeps the two in step whether it is 260px or 72px wide.
       if (!wasOpen) group.classList.add("is-open");
     });
 
+    // Modules behave as they do in the top bar (nav_menu.js): hovering one
+    // opens its pages beside the rail, clicking it opens every page of it at
+    // once. The in-rail accordion below still runs for anyone without a
+    // pointer, and for the module holding the page being read, which the
+    // server opens.
+    var topbar = document.querySelector(".ds-topbar");
+    var canHover = window.matchMedia("(hover: hover)");
+    var hoverTimer = null;
+
+    function text(node) { return (node.textContent || "").replace(/\s+/g, " ").trim(); }
+    function itemOf(a) {
+      return { href: a.getAttribute("href"), label: text(a),
+               icon: (a.querySelector("i") || {}).className,
+               current: a.classList.contains("is-active") || a.pathname === location.pathname };
+    }
+    function specOf(group) {
+      var toggle = group.querySelector(":scope > .ds-sb-toggle");
+      var sections = [];
+      group.querySelectorAll(":scope > .ds-sb-sub > .ds-sb-sec").forEach(function (sec) {
+        var head = sec.querySelector(":scope > .ds-sb-section");
+        var icon = head.querySelector(".ds-sb-sec-icon");
+        var section = { title: text(head), icon: icon && icon.className, items: [] };
+        sec.querySelectorAll(":scope > .ds-sb-sec-items > a.ds-sb-link")
+          .forEach(function (a) { section.items.push(itemOf(a)); });
+        if (section.items.length) sections.push(section);
+      });
+      return { title: text(toggle.querySelector(".ds-sb-label") || toggle),
+               icon: (toggle.querySelector("i") || {}).className,
+               description: (window.BIMS_MODULE_INTRO || {})[group.dataset.module] || "",
+               sections: sections };
+    }
+    function railRight() { return sidebar.getBoundingClientRect().right; }
+
+    sidebar.addEventListener("mouseover", function (e) {
+      if (!canHover.matches || BimsNavMenu.panelOpen()) return;
+      var toggle = e.target.closest(".ds-sb-toggle");
+      if (!toggle) return;
+      clearTimeout(hoverTimer);
+      var group = toggle.parentElement;
+      if (group.dataset.flyOpen === "1") return;
+      sidebar.querySelectorAll("[data-fly-open]").forEach(function (g) { delete g.dataset.flyOpen; });
+      group.dataset.flyOpen = "1";
+      hideTip();
+      var row = toggle.getBoundingClientRect();
+      var node = BimsNavMenu.openFlyout(specOf(group),
+        { left: railRight() + 6, top: Math.min(row.top, window.innerHeight - 260), share: .8 },
+        { onClose: function () { delete group.dataset.flyOpen; } });
+      node.addEventListener("mouseenter", function () { clearTimeout(hoverTimer); });
+      node.addEventListener("mouseleave", function () { hoverTimer = setTimeout(BimsNavMenu.close, 160); });
+    });
+    sidebar.addEventListener("mouseleave", function () {
+      if (BimsNavMenu.panelOpen()) return;
+      hoverTimer = setTimeout(BimsNavMenu.close, 200);
+    });
+
+    // Click: the full panel, caught before the accordion handler below.
+    sidebar.addEventListener("click", function (e) {
+      var toggle = e.target.closest(".ds-sb-toggle");
+      if (!toggle || !canHover.matches) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var group = toggle.parentElement;
+      if (BimsNavMenu.panelOpen() && group.dataset.panelOpen === "1") { BimsNavMenu.close(); return; }
+      sidebar.querySelectorAll("[data-panel-open]").forEach(function (g) { delete g.dataset.panelOpen; });
+      group.dataset.panelOpen = "1";
+      hideTip();
+      var top = Math.max(topbar ? topbar.getBoundingClientRect().bottom : 0, 48) + 8;
+      BimsNavMenu.openPanel(specOf(group), { left: railRight() + 8, right: 16, top: top },
+        { onClose: function () { delete group.dataset.panelOpen; } });
+    }, true);
+
     // One module open at a time: the full list is 139 pages, and leaving them
     // all expanded turns the sidebar into a scroll race.
     sidebar.addEventListener("click", function (e) {

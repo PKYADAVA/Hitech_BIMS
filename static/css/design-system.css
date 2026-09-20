@@ -915,3 +915,33 @@ body.ds-shell .content > footer { display: none; }
   height: var(--ds-control-h); margin-top: 0 !important; margin-bottom: 0;
 }
 .ds form .card-body .form-check-inline .form-check-input { margin-top: 0; }
+
+/* -- sidebar module menus ----------------------------------------------- */
+/* Hovering a module in the rail opens its pages beside it, and clicking opens
+   the same panel the top bar's modules open (nav_menu.js). The flyout is one
+   narrow column: the rail is already a list, so this is its continuation. */
+.bims-fly {
+  position: fixed; z-index: 1065; width: 260px; overflow-y: auto;
+  background: #fff; border: 1px solid #e3e8ef; border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .2); padding: 8px;
+  scrollbar-width: thin;
+}
+.bims-fly .bims-fly-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 8px 4px; font-size: .72rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: #64748b;
+}
+.bims-fly .bims-fly-head i { font-size: .8rem; color: #94a3b8; }
+.bims-fly .bims-fly-sub {
+  padding: 6px 8px 2px; font-size: .68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
+}
+.bims-fly .dropdown-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; border-radius: 6px; font-size: .82rem; color: #334155;
+  text-decoration: none; white-space: normal;
+}
+.bims-fly .dropdown-item i { width: 16px; text-align: center; color: #94a3b8; font-size: .8rem; }
+.bims-fly .dropdown-item:hover { background: #f1f5f9; color: #0f172a; }
+.bims-fly .dropdown-item.is-current { background: #ecfdf5; color: #15803d; font-weight: 600; }
+.bims-fly .dropdown-item.is-current i { color: #15803d; }

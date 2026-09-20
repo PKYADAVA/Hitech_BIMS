@@ -2109,7 +2109,16 @@ img, svg, video, canvas {
   color: var(--nav-icon, #16a34a);
 }
 .bims-mega-head .bims-mega-hi { background: color-mix(in srgb, var(--hi, #16a34a) 13%, #ffffff); }
-.bims-mega .dropdown-item { padding: 6px 8px; font-size: .82rem; white-space: normal; }
+/* The panel is drawn on the page, not inside a navigation bar, so it cannot
+   borrow the bar's item styling (or its icon palette — each item's colour is
+   copied over when the panel is built). */
+.bims-mega .dropdown-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 8px; font-size: .82rem; white-space: normal;
+  color: #334155; text-decoration: none; border-radius: 6px;
+}
+.bims-mega .dropdown-item i { width: 16px; flex: 0 0 16px; text-align: center; font-size: .8rem; margin-top: 2px; color: #94a3b8; }
+.bims-mega .dropdown-item:hover { background: #f1f5f9; color: #0f172a; }
 .bims-mega .dropdown-item.is-current { background: var(--primary-subtle, #ecfdf3); color: var(--primary, #15803d); font-weight: 600; }
 .bims-mega-sub { font-size: .7rem; font-weight: 700; color: #64748b; text-transform: uppercase;
                  letter-spacing: .5px; padding: 10px 8px 2px; }

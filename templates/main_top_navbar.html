@@ -1257,262 +1257,100 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 </script>
-
 <script>
-  // Module tabs: hover opens the module's usual cascading menu; a click opens
-  // the mega panel — every section side by side, every page at once. The
-  // panel is built from the module's own dropdown, so it lists exactly what
-  // that menu would (permissions included) and cannot drift from it. Desktop
-  // only: the collapsed phone menu keeps its tap-to-open list.
+
+  // Module tabs: hovering opens the module's usual cascading menu; clicking
+  // opens every page of it at once, in the shared panel (nav_menu.js — the
+  // sidebar opens the same one). Desktop only: the collapsed phone menu keeps
+  // its tap-to-open list.
   (function () {
     var bar = document.getElementById("moduleBar");
     if (!bar) return;
     var wide = window.matchMedia("(min-width: 1200px)");
     var canHover = window.matchMedia("(hover: hover)");
-    var INTRO = {
-      broilerDd: "Flocks from chick placement to settlement: farms, daily records, feed, lifting and farmer growing charges.",
-      hatcheryDd: "Eggs in, chicks out: egg purchase and grading, setting, hatching, delivery and the machines' environment.",
-      purchaseDd: "What the business buys: suppliers, general and chicks purchases, payments, debit and credit notes.",
-      salesDd: "What the business sells: customers, sales, receipts and their notes.",
-      accountDd: "The books: chart of accounts, vouchers, ledgers and the statements built on them.",
-      inventoryDd: "Stock and where it is: items, warehouses, transfers, adjustments and valuation.",
-      hrDd: "People: employees, attendance, leave, payroll and field trips.",
-      notificationsDd: "Messages to farmers and staff: templates, sending and delivery history.",
-      alertsDd: "What needs attention: rules, the alert feed and who is told."
-    };
     var tabs = Array.prototype.slice.call(bar.querySelectorAll(".navbar-nav > li.dropdown"));
-    var panel = null, openLi = null;
+    var openLi = null;
 
     function text(el) { return (el.textContent || "").replace(/\s+/g, " ").trim(); }
-    function link(a) {
-      var copy = document.createElement("a");
-      copy.className = "dropdown-item";
-      copy.href = a.getAttribute("href");
-      if (a.target) copy.target = a.target;
-      if (a.rel) copy.rel = a.rel;
+    function itemOf(a) {
       var icon = a.querySelector("i");
-      if (icon) copy.appendChild(icon.cloneNode(true));
-      copy.appendChild(document.createTextNode(text(a)));
-      if (a.pathname === location.pathname) copy.classList.add("is-current");
-      return copy;
+      return { href: a.getAttribute("href"), label: text(a), target: a.target, rel: a.rel,
+               icon: icon && icon.className, colour: icon && getComputedStyle(icon).color,
+               current: a.pathname === location.pathname };
     }
-    function column(title, iconEl) {
-      var col = document.createElement("div");
-      col.className = "bims-mega-col";
-      var head = document.createElement("div");
-      head.className = "bims-mega-head";
-      var tile = document.createElement("span");
-      tile.className = "bims-mega-hi";
-      if (iconEl) {
-        var i = iconEl.cloneNode(true);
-        var colour = getComputedStyle(iconEl).color;
-        i.style.color = colour;
-        tile.style.setProperty("--hi", colour);
-        tile.appendChild(i);
-      }
-      head.appendChild(tile);
-      head.appendChild(document.createTextNode(title));
-      col.appendChild(head);
-      // The pages scroll on their own under the heading, so a long section
-      // (Broiler > Reports) scrolls in its column and the others stay put.
-      var list = document.createElement("div");
-      list.className = "bims-mega-list";
-      col.appendChild(list);
-      col.list = list;
-      return col;
-    }
-    function build(li) {
+    // The module's own dropdown is the source, so the panel lists exactly what
+    // that menu would — permissions included — and cannot drift from it.
+    function specOf(li) {
       var toggle = li.querySelector(":scope > .nav-link");
       var menu = li.querySelector(":scope > .dropdown-menu");
-      var el = document.createElement("div");
-      el.className = "bims-mega";
-      el.setAttribute("role", "menu");
-      el.setAttribute("aria-label", text(toggle) + " menu");
-      var cols = document.createElement("div");
-      cols.className = "bims-mega-cols";
-      var loose = null, pages = 0;
+      var sections = [], loose = null;
       Array.prototype.forEach.call(menu.children, function (child) {
         if (child.classList.contains("dropdown-submenu")) {
           var head = child.querySelector(":scope > .dropdown-toggle");
-          var col = column(text(head), head.querySelector("i"));
+          var icon = head.querySelector("i");
+          var section = { title: text(head), icon: icon && icon.className,
+                          colour: icon && getComputedStyle(icon).color, items: [] };
           Array.prototype.forEach.call(child.querySelector(":scope > .dropdown-menu").children, function (row) {
             if (row.classList.contains("dropdown-submenu")) {
-              // A menu within the section (Reports > Farm Route Planner): its
-              // pages listed under a small heading rather than hidden again.
-              var sub = document.createElement("div");
-              sub.className = "bims-mega-sub";
-              sub.textContent = text(row.querySelector(":scope > .dropdown-toggle"));
-              col.list.appendChild(sub);
-              row.querySelectorAll(":scope > .dropdown-menu > li > a.dropdown-item").forEach(function (a) {
-                col.list.appendChild(link(a)); pages++;
-              });
-            } else {
-              var a = row.querySelector(":scope > a.dropdown-item");
-              if (a) { col.list.appendChild(link(a)); pages++; }
+              section.items.push({ subheading: text(row.querySelector(":scope > .dropdown-toggle")) });
+              row.querySelectorAll(":scope > .dropdown-menu > li > a.dropdown-item")
+                .forEach(function (a) { section.items.push(itemOf(a)); });
+              return;
             }
+            var a = row.querySelector(":scope > a.dropdown-item");
+            if (a) section.items.push(itemOf(a));
           });
-          cols.appendChild(col);
+          sections.push(section);
         } else {
           var a = child.querySelector(":scope > a.dropdown-item");
           if (!a) return;
-          if (!loose) { loose = column(text(toggle), toggle.querySelector("i")); }
-          loose.list.appendChild(link(a)); pages++;
+          if (!loose) {
+            var ti = toggle.querySelector("i");
+            loose = { title: text(toggle), icon: ti && ti.className,
+                      colour: ti && getComputedStyle(ti).color, items: [] };
+            sections.unshift(loose);
+          }
+          loose.items.push(itemOf(a));
         }
       });
-      if (loose) cols.insertBefore(loose, cols.firstChild);
-      var intro = document.createElement("div");
-      intro.className = "bims-mega-intro";
-      var sections = cols.children.length;
-      // One row, one column per section, as a module reads left to right.
-      cols.style.gridTemplateColumns = "repeat(" + Math.max(sections, 1) + ", minmax(150px, 1fr))";
-      intro.innerHTML = '<div class="bims-mega-icon"></div><div class="bims-mega-name"></div>'
-        + '<div class="bims-mega-desc"></div><div class="bims-mega-count"></div>';
-      var bigIcon = toggle.querySelector("i");
-      if (bigIcon) {
-        var copy = bigIcon.cloneNode(true);
-        copy.classList.remove("me-1");
-        intro.firstChild.appendChild(copy);
-      }
-      intro.querySelector(".bims-mega-name").textContent = text(toggle);
-      intro.querySelector(".bims-mega-desc").textContent = INTRO[toggle.id] || "";
-      intro.querySelector(".bims-mega-count").textContent =
-        pages + " page" + (pages === 1 ? "" : "s") + " in " + sections + " section" + (sections === 1 ? "" : "s");
-      // Find a page by name: typing narrows every column at once; Enter opens
-      // the first match, and the down arrow steps into the list.
-      var find = document.createElement("div");
-      find.className = "bims-mega-search";
-      find.innerHTML = '<i class="fas fa-magnifying-glass"></i><input type="search" placeholder="Find a page..." aria-label="Find a page">';
-      intro.appendChild(find);
-      var none = document.createElement("div");
-      none.className = "bims-mega-none is-hidden";
-      none.textContent = "No page matches.";
-      cols.appendChild(none);
-      var input = find.querySelector("input");
-      input.addEventListener("input", function () {
-        var q = input.value.trim().toLowerCase(), any = false;
-        cols.querySelectorAll(".bims-mega-col").forEach(function (col) {
-          var shown = 0, sub = null, subShown = 0;
-          Array.prototype.forEach.call(col.list.children, function (el) {
-            if (el.classList.contains("bims-mega-sub")) {
-              if (sub) sub.classList.toggle("is-hidden", !subShown);
-              sub = el; subShown = 0; return;
-            }
-            var hit = !q || text(el).toLowerCase().indexOf(q) !== -1;
-            el.classList.toggle("is-hidden", !hit);
-            if (hit) { shown++; if (sub) subShown++; }
-          });
-          if (sub) sub.classList.toggle("is-hidden", !subShown);
-          col.classList.toggle("is-hidden", !shown);
-          if (shown) any = true;
-        });
-        none.classList.toggle("is-hidden", any);
-        // Only the columns still showing take a track, so a match does not sit
-        // in a narrow slot beside the empty ones it replaced.
-        var showing = cols.querySelectorAll(".bims-mega-col:not(.is-hidden)").length;
-        cols.style.gridTemplateColumns = q
-          ? "repeat(" + Math.max(showing, 1) + ", minmax(150px, 300px))"
-          : "repeat(" + Math.max(sections, 1) + ", minmax(150px, 1fr))";
-      });
-      input.addEventListener("keydown", function (e) {
-        var first = visibleLinks(cols)[0];
-        if (e.key === "Enter" && first) { e.preventDefault(); first.click(); }
-        if (e.key === "ArrowDown" && first) { e.preventDefault(); first.focus(); }
-      });
-      el.appendChild(intro);
-      el.appendChild(cols);
-      // It covers the screen, so there is nowhere left to click "outside":
-      // an explicit close, beside Esc and a second click on the tab.
-      var close = document.createElement("button");
-      close.type = "button";
-      close.className = "bims-mega-close";
-      close.setAttribute("aria-label", "Close menu");
-      close.title = "Close (Esc)";
-      close.innerHTML = '<i class="fas fa-xmark"></i>';
-      close.addEventListener("click", function (e) { e.stopPropagation(); closeMega(); });
-      el.appendChild(close);
-      return el;
+      return { title: text(toggle), icon: (toggle.querySelector("i") || {}).className,
+               description: (window.BIMS_MODULE_INTRO || {})[toggle.id.replace(/Dd$/, "")] || "",
+               sections: sections };
     }
-    function visibleLinks(scope) {
-      return Array.prototype.filter.call(scope.querySelectorAll("a.dropdown-item"),
-        function (a) { return a.offsetParent !== null; });
-    }
-    // Arrow keys inside the panel: up and down within a column, left and
-    // right to the neighbouring column at about the same row.
-    function arrowKeys(e) {
-      var a = e.target.closest && e.target.closest("a.dropdown-item");
-      if (!a || !panel || !panel.contains(a)) return;
-      var col = a.closest(".bims-mega-col");
-      var here = visibleLinks(col), i = here.indexOf(a);
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        var next = here[i + (e.key === "ArrowDown" ? 1 : -1)];
-        if (next) { e.preventDefault(); next.focus(); }
-        else if (e.key === "ArrowUp") { e.preventDefault(); panel.querySelector(".bims-mega-search input").focus(); }
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        var cols = Array.prototype.filter.call(panel.querySelectorAll(".bims-mega-col"),
-          function (c) { return !c.classList.contains("is-hidden"); });
-        var to = cols[cols.indexOf(col) + (e.key === "ArrowRight" ? 1 : -1)];
-        if (!to) return;
-        var there = visibleLinks(to);
-        var target = there[Math.min(i, there.length - 1)];
-        if (target) { e.preventDefault(); target.focus(); }
-      }
-    }
-
     function hideDropdown(li) {
       var menu = li.querySelector(":scope > .dropdown-menu");
       if (menu) menu.classList.remove("show");
       li.querySelector(":scope > .nav-link").setAttribute("aria-expanded", "false");
     }
-    // The panel is as tall as its content, up to about 60% of the window
-    // (never past its bottom) — a menu, not a page over the page. Each
-    // column's list is capped at the room left under its heading, and a long
-    // one scrolls on its own.
-    function fitPanel() {
-      if (!panel) return;
-      var below = window.innerHeight - bar.getBoundingClientRect().bottom - 6 - 16;
-      var room = Math.max(220, Math.min(below, Math.round(window.innerHeight * 0.6)));
-      panel.querySelectorAll(".bims-mega-col").forEach(function (col) {
-        var head = col.querySelector(".bims-mega-head");
-        col.list.style.maxHeight = Math.max(120, room - 32 - head.offsetHeight) + "px";
-      });
-    }
-    window.addEventListener("resize", fitPanel);
-
-    function closeMega() {
-      if (panel) { panel.remove(); panel = null; }
-      if (openLi) { openLi.querySelector(":scope > .nav-link").classList.remove("is-mega-open"); openLi = null; }
-    }
-    function openMega(li) {
-      closeMega();
-      tabs.forEach(hideDropdown);
-      openLi = li;
-      panel = build(li);
-      bar.appendChild(panel);
-      fitPanel();
+    function lit(li, on) {
       var toggle = li.querySelector(":scope > .nav-link");
-      toggle.classList.add("is-mega-open");
-      toggle.setAttribute("aria-expanded", "true");
-      panel.addEventListener("keydown", arrowKeys);
-      var find = panel.querySelector(".bims-mega-search input");
-      if (find) find.focus({ preventScroll: true });
+      toggle.classList.toggle("is-mega-open", on);
+      toggle.setAttribute("aria-expanded", on ? "true" : "false");
     }
 
     tabs.forEach(function (li) {
       var toggle = li.querySelector(":scope > .nav-link");
       var menu = li.querySelector(":scope > .dropdown-menu");
       var timer;
-      // Click: the mega panel. Caught before Bootstrap's own handler, which
-      // would otherwise open the ordinary dropdown on the same click.
+      toggle.setAttribute("data-nav-menu-anchor", "");
+      // Click: the panel. Caught before Bootstrap's own handler, which would
+      // otherwise open the ordinary dropdown on the same click.
       toggle.addEventListener("click", function (e) {
         if (!wide.matches) return;
         e.preventDefault();
         e.stopPropagation();
-        if (openLi === li) { closeMega(); return; }
-        openMega(li);
+        if (openLi === li) { BimsNavMenu.close(); return; }
+        tabs.forEach(hideDropdown);
+        if (openLi) lit(openLi, false);
+        openLi = li;
+        lit(li, true);
+        var box = bar.getBoundingClientRect();
+        BimsNavMenu.openPanel(specOf(li), { left: 16, right: 16, top: box.bottom + 6 },
+          { onClose: function () { if (openLi) { lit(openLi, false); openLi = null; } } });
       }, true);
       // Hover: the usual cascading menu, while no panel is open.
       li.addEventListener("mouseenter", function () {
-        if (!wide.matches || !canHover.matches || panel) return;
+        if (!wide.matches || !canHover.matches || BimsNavMenu.panelOpen()) return;
         clearTimeout(timer);
         tabs.forEach(function (other) { if (other !== li) hideDropdown(other); });
         if (menu) menu.classList.add("show");
@@ -1520,28 +1358,10 @@ document.addEventListener("DOMContentLoaded", function () {
       });
       li.addEventListener("mouseleave", function () {
         if (!wide.matches || !canHover.matches) return;
-        timer = setTimeout(function () { hideDropdown(li); }, 200);
+        timer = setTimeout(function () { if (openLi !== li) hideDropdown(li); }, 200);
       });
     });
-
-    document.addEventListener("click", function (e) {
-      if (!panel) return;
-      if (panel.contains(e.target)) {
-        // A page opening in a new tab leaves this one where it was: close.
-        if (e.target.closest("a.dropdown-item")) closeMega();
-        return;
-      }
-      if (openLi && openLi.contains(e.target)) return;
-      closeMega();
-    });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && panel) {
-        var toggle = openLi.querySelector(":scope > .nav-link");
-        closeMega();
-        toggle.focus();
-      }
-    });
-    wide.addEventListener("change", closeMega);
+    wide.addEventListener("change", function () { BimsNavMenu.close(); });
   })();
 </script>
 
