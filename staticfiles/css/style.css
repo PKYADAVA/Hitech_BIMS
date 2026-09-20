@@ -455,6 +455,54 @@ footer { margin-top: auto; }
 }
 
 
+/* ---------- Tier two on a phone ----------
+   The desktop has two bars: the identity and its controls, then the modules.
+   A phone folded the second one behind a burger, which hid the whole of the
+   navigation behind a button and left the bar looking like something else.
+   The modules stay a bar here as well, scrolled sideways -- eleven of them do
+   not fit across 390px and never will, and a row that scrolls is a row you
+   can see, which a drawer is not.
+
+   Each module still opens its own menu on tap, with its sections nested
+   inside it: that part was already built for the drawer and works better in
+   a panel hung under the tab than it did in a sheet. */
+@media (max-width: 1199.98px) {
+  #mainNavbar > .navbar-toggler { display: none !important; }
+
+  /* The row has to be given the screen's width to scroll inside: left to
+     size itself it grew to its 1103px of modules and the rest were simply
+     clipped -- eight of the twelve unreachable. */
+  #moduleBar .navbar-collapse {
+    display: flex !important;
+    position: static; max-height: none; overflow: visible;
+    background: transparent; border: 0; border-radius: 0; box-shadow: none;
+    padding: 0; left: auto; right: auto;
+    width: 100%; min-width: 0; flex: 1 1 auto;
+  }
+  #moduleBar .navbar-nav {
+    flex-direction: row; flex-wrap: nowrap; gap: 2px; width: 100%; min-width: 0;
+    margin: 0 !important; padding: 0;
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  #moduleBar .navbar-nav::-webkit-scrollbar { display: none; }
+  #moduleBar .navbar-nav > li { flex: 0 0 auto; }
+  /* 40px rows: a touch target, and no more of a 844px screen than it needs.
+     Left to the drawer's rhythm the tier came out 69px tall, against the
+     desktop tier's 32. */
+  #moduleBar .navbar-nav > li > .nav-link {
+    white-space: nowrap; padding: 5px 10px !important; font-size: .8rem;
+    min-height: 40px; display: flex; align-items: center;
+  }
+  /* The menu a tab opens: as wide as the screen allows, and no taller than
+     it, since a module runs to forty pages. */
+  #moduleBar .navbar-nav > li > .dropdown-menu {
+    width: min(320px, calc(100vw - 16px));
+    max-height: min(68vh, 520px); overflow-y: auto;
+  }
+}
+
 /* ---------- The bar on a phone ----------
    The controls carry margin utilities tuned for the stacked xl menu
    (`mt-3 mb-3`), and the bar wraps, so on a 390px screen the brand, the
@@ -559,13 +607,18 @@ footer { margin-top: auto; }
    this one, so it needs to be able to grow rather than hold a 40px line. */
 @media (max-width: 1199.98px) {
   .bims-modulebar {
-    position: static;
-    padding: 0 16px;
+    /* Sticky under the bar above, as on a desktop: it is the row of modules
+       there and the row of modules here, and it has to be a containing block
+       for the menus that hang from it. */
+    position: sticky;
+    top: var(--navbar-height);
+    background: #1B4B33;
+    /* Bootstrap's own navbar padding is half a rem top and bottom, which on
+       top of a 40px row made the tier 60px. */
+    padding: 0 10px !important;
     height: auto;
     min-height: 0;
   }
-  .bims-modulebar .navbar-nav { flex-wrap: wrap; }
-  .bims-modulebar .collapse:not(.show) { display: none; }
 }
 
 /* ---------- Sub Navbar (Module Tabs) ---------- */
@@ -1789,8 +1842,9 @@ img, svg, video, canvas {
      `top: 100%` needs the bar to be what it is measured from. The modules
      moved to a second bar of their own, which is positioned `static`, so the
      panel was resolving against the page instead and opening 844px down --
-     one whole screen below the button that opens it. */
-  .bims-navbar, #moduleBar { position: relative; }
+     one whole screen below the button that opens it. Both bars are sticky,
+     which is already a containing block; the modules' bar just was not, on a
+     phone, so that is what is restored below. */
   .bims-navbar .navbar-collapse {
     position: absolute;
     top: 100%;
