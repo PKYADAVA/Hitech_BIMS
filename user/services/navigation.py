@@ -20,8 +20,10 @@ from user.services.nav_icons import DEFAULT_TAB_ICON, TAB_ICONS
 #: structure, not looks, so the icons live here; a module with no entry still
 #: renders, with a default.
 NAV_ICONS = {
-    "broiler": "fa-solid fa-egg",
-    "hatchery": "fa-solid fa-kiwi-bird",
+    # Broiler rears the birds; the hatchery is where the eggs are. They were
+    # the other way round.
+    "broiler": "fa-solid fa-kiwi-bird",
+    "hatchery": "fa-solid fa-egg",
     "purchase": "fa-solid fa-cart-shopping",
     "sales": "fa-solid fa-indian-rupee-sign",
     "account": "fa-solid fa-file-invoice",
