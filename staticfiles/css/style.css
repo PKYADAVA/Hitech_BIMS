@@ -543,7 +543,9 @@ footer { margin-top: auto; }
 .module-subnav .subnav-tabs {
   display: flex;
   gap: 2px;
-  padding: 5px 0;
+  /* Room below for the active tab's pointer, and no more: this row is a
+     signpost, not a band. */
+  padding: 3px 0 4px;
   flex-wrap: wrap;
   list-style: none;
   margin: 0;
@@ -551,8 +553,8 @@ footer { margin-top: auto; }
 
 .module-subnav .subnav-tab a {
   display: block;
-  padding: 7px 16px;
-  font-size: 0.82rem;
+  padding: 4px 12px;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
@@ -2156,8 +2158,8 @@ img, svg, video, canvas {
 }
 .module-subnav .subnav-tab a.active::after {
   content: "";
-  position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
-  border: 5px solid transparent; border-bottom: 0; border-top-color: #15803d;
+  position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%);
+  border: 4px solid transparent; border-bottom: 0; border-top-color: #15803d;
 }
 .module-subnav .subnav-tab a.active i { color: #ffffff; }
 
