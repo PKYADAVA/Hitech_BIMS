@@ -45,28 +45,7 @@ its own light-ground styling for the same components.
         <i class="fa-solid fa-bars ds-user-bars" aria-hidden="true"></i>
         <span class="ds-user-avatar">{{ request.user|initials }}</span>
       </button>
-      <ul class="dropdown-menu dropdown-menu-end ds-user-menu" aria-labelledby="userMenuBtn">
-        <li><h6 class="dropdown-header">{{ request.user|display_name|default:"My Account" }}</h6></li>
-        {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
-          <i class="fas fa-tools"></i>Django Admin
-        </a></li>{% endif %}
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
-          <i class="fas fa-id-card"></i>View Profile
-        </a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li>
-          <form method="post" action="{% url 'toggle_nav_layout' %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <button type="submit" class="dropdown-item">
-              <i class="fa-solid fa-bars"></i>Switch to Top Navigation
-            </button>
-          </form>
-        </li>
-        <li><a class="dropdown-item" href="{% url 'update_password' %}">
-          <i class="fas fa-key"></i>Change Password
-        </a></li>
-      </ul>
+      {% include "_account_menu.html" %}
     </div>
 
     {% comment %}

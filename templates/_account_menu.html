@@ -1,0 +1,90 @@
+{% load user_extras %}
+{% comment %}
+The account menu, shared by both layouts.
+
+Who is signed in, what their account can reach, and the one preference that
+changes the shell itself — which navigation they get. Both bars open the same
+panel, so the menu does not change shape when someone switches layout, which
+is the very thing this menu is used to do.
+
+The layout tiles name the layout they set rather than flipping whatever is
+stored: two tiles on a page that has been open a while would otherwise both
+mean "the other one", and pressing the one already marked would turn it off.
+{% endcomment %}
+<ul class="dropdown-menu dropdown-menu-end acct-menu" aria-labelledby="userMenuBtn">
+
+  <li class="acct-head">
+    <span class="acct-avatar">{{ request.user|initials }}</span>
+    <span class="acct-who">
+      <strong>{{ request.user|display_name }}</strong>
+      <span class="acct-meta">
+        <small>{{ user_role_label }}</small>
+        {% if request.user.is_active %}
+        <span class="acct-status"><i class="fas fa-check"></i>Active</span>
+        {% endif %}
+      </span>
+    </span>
+  </li>
+
+  <li class="acct-label">Account</li>
+  {% if request.user.is_superuser %}
+  <li><a class="acct-row" href="/admin">
+    <span class="acct-ico acct-ico-admin"><i class="fas fa-screwdriver-wrench"></i></span>
+    <span class="acct-row-text">Django Admin</span>
+    <i class="fas fa-chevron-right acct-go"></i>
+  </a></li>
+  {% endif %}
+  <li><a class="acct-row" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
+    <span class="acct-ico acct-ico-profile"><i class="fas fa-id-card"></i></span>
+    <span class="acct-row-text">View Profile</span>
+    <i class="fas fa-chevron-right acct-go"></i>
+  </a></li>
+
+  <li class="acct-label">Preferences</li>
+  <li class="acct-pref">
+    <div class="acct-pref-head">
+      <span class="acct-ico acct-ico-layout"><i class="fa-solid fa-table-columns"></i></span>
+      <span>
+        <strong>Switch Navigation Style</strong>
+        <small>Choose your preferred navigation layout</small>
+      </span>
+    </div>
+    <form method="post" action="{% url 'toggle_nav_layout' %}" class="acct-tiles">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" name="layout" value="side"
+              class="acct-tile{% if ds_shell %} is-on{% endif %}"
+              {% if ds_shell %}aria-current="true"{% endif %}>
+        <span class="acct-art acct-art-side" aria-hidden="true">
+          <span class="acct-art-rail"></span>
+          <span class="acct-art-lines"><i></i><i></i><i></i></span>
+        </span>
+        <span class="acct-tile-name">Sidebar</span>
+        <small>Side menu navigation</small>
+        <span class="acct-pick" aria-hidden="true"></span>
+      </button>
+      <button type="submit" name="layout" value="top"
+              class="acct-tile{% if not ds_shell %} is-on{% endif %}"
+              {% if not ds_shell %}aria-current="true"{% endif %}>
+        <span class="acct-art acct-art-top" aria-hidden="true">
+          <span class="acct-art-bar"><i></i><i></i><i></i></span>
+          <span class="acct-art-body"></span>
+        </span>
+        <span class="acct-tile-name">Top Bar</span>
+        <small>Horizontal navigation</small>
+        <span class="acct-pick" aria-hidden="true"></span>
+      </button>
+    </form>
+  </li>
+
+  <li><a class="acct-row" href="{% url 'update_password' %}">
+    <span class="acct-ico acct-ico-key"><i class="fas fa-key"></i></span>
+    <span class="acct-row-text">Change Password</span>
+    <i class="fas fa-chevron-right acct-go"></i>
+  </a></li>
+
+  <li class="acct-tip">
+    <i class="fa-regular fa-lightbulb"></i>
+    <span>Your choice is saved to your account and used on every page from here on.</span>
+  </li>
+</ul>

@@ -774,10 +774,16 @@ def toggle_nav_layout(request):
     leaving the page you were on."""
     if request.method == "POST":
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
-        profile.nav_layout = (
-            UserProfile.NAV_SIDE if profile.nav_layout == UserProfile.NAV_TOP
-            else UserProfile.NAV_TOP
-        )
+        # The account menu's tiles say which layout they mean, so pressing the
+        # one already in use leaves it alone instead of flipping to the other.
+        wanted = request.POST.get("layout")
+        if wanted in (UserProfile.NAV_SIDE, UserProfile.NAV_TOP):
+            profile.nav_layout = wanted
+        else:
+            profile.nav_layout = (
+                UserProfile.NAV_SIDE if profile.nav_layout == UserProfile.NAV_TOP
+                else UserProfile.NAV_TOP
+            )
         profile.save(update_fields=["nav_layout"])
 
     next_url = request.POST.get("next", "")
