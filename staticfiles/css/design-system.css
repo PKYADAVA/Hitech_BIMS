@@ -466,70 +466,73 @@
    `ds-shell` is present, so the top navbar remains the layout until someone
    chooses otherwise, and switching back is one flag rather than a revert.
    ======================================================================== */
-body.ds-shell { --ds-sb-w: 260px; --ds-sb-w-collapsed: 72px; }
+/* 212px, down from 260: the rail lists modules and their sections, and the
+   pages that used to set its width are read in the tab row at the top of the
+   page. The longest thing in it is now a section heading at 10px. */
+body.ds-shell { --ds-sb-w: 212px; --ds-sb-w-collapsed: 60px; }
 body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
 
 .ds-sidebar {
-  position: fixed; inset: 0 auto 0 0; width: var(--ds-sb-w, 260px);
+  position: fixed; inset: 0 auto 0 0; width: var(--ds-sb-w, 212px);
   background: #123524; color: rgba(255, 255, 255, .72);
   display: flex; flex-direction: column;
   transition: width .16s ease; z-index: 1040; overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, .06);
 }
 .ds-sb-brand {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 9px;
   /* Same height as the top bar, from the same variable: the sidebar's header
      rule and the top bar's bottom border run into each other at the boundary,
      and 64 against 60 left them visibly 4px apart. */
   height: var(--navbar-height, 60px); flex: 0 0 var(--navbar-height, 60px);
-  padding: 0 16px;
+  padding: 0 10px;
   border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
 /* The Hi Tech mark reversed out in white, straight on the dark sidebar, with
-   a hairline before the product's name. Collapsed to the 72px rail it shows
+   a hairline before the product's name. Collapsed to the 60px rail it shows
    the hexagon "H" alone — the left of the mark. */
 .ds-sb-logo {
-  height: 36px; flex: 0 0 auto;
+  height: 30px; flex: 0 0 auto;
   display: flex; align-items: center; overflow: hidden;
 }
-.ds-sb-logo img { height: 36px; width: auto; display: block; }
-.ds-sb-logo + .ds-sb-brand-text { padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .18); }
-body.ds-sb-collapsed .ds-sb-logo { width: 36px; }
-body.ds-sb-collapsed .ds-sb-logo img { width: 36px; object-fit: cover; object-position: left center; }
+.ds-sb-logo img { height: 30px; width: auto; display: block; }
+.ds-sb-logo + .ds-sb-brand-text { padding-left: 9px; border-left: 1px solid rgba(255, 255, 255, .18); }
+body.ds-sb-collapsed .ds-sb-logo { width: 30px; }
+body.ds-sb-collapsed .ds-sb-logo img { width: 30px; object-fit: cover; object-position: left center; }
 .ds-sb-brand-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
-.ds-sb-brand-text strong { font-size: 14px; color: #fff; font-weight: 600; }
-.ds-sb-brand-text small { font-size: 11px; color: rgba(255, 255, 255, .55); }
+.ds-sb-brand-text strong { font-size: 12.5px; color: #fff; font-weight: 600; }
+.ds-sb-brand-text small { font-size: 9.5px; letter-spacing: .04em; color: rgba(255, 255, 255, .55); }
 
-.ds-sb-nav { flex: 1; overflow-y: auto; padding: 10px 8px; }
-.ds-sb-nav::-webkit-scrollbar { width: 6px; }
+.ds-sb-nav { flex: 1; overflow-y: auto; padding: 7px 6px; }
+.ds-sb-nav::-webkit-scrollbar { width: 5px; }
 .ds-sb-nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 3px; }
 
 .ds-sb-item {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 0 12px; height: 42px; border: 0; background: none;
-  color: #cbd5e1; font-size: 14px; font-weight: 500;
-  border-radius: 8px; text-decoration: none; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 0 9px; height: 34px; border: 0; background: none;
+  color: #cbd5e1; font-size: 12.8px; font-weight: 500;
+  border-radius: 7px; text-decoration: none; cursor: pointer; text-align: left;
 }
-.ds-sb-item > i:first-child { width: 22px; font-size: 16px; text-align: center; flex: 0 0 22px; }
+.ds-sb-item > i:first-child { width: 18px; font-size: 14px; text-align: center; flex: 0 0 18px; }
 .ds-sb-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 .ds-sb-item.is-active { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 600; }
 /* The Dashboard entry is a page, not a module, so it takes the page accent. */
 a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3px 0 0 #22c55e; }
-.ds-sb-caret { margin-left: auto; font-size: 10px; transition: transform .16s ease; opacity: .6; }
+.ds-sb-caret { margin-left: auto; font-size: 9px; transition: transform .16s ease; opacity: .6; }
 .ds-sb-group.is-open .ds-sb-caret { transform: rotate(90deg); }
 
-.ds-sb-sub { display: none; padding: 2px 0 6px 22px; }
+.ds-sb-sub { display: none; padding: 1px 0 4px 14px; }
 .ds-sb-group.is-open .ds-sb-sub { display: block; }
 .ds-sb-section {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 7px 10px 5px; margin-top: 2px;
+  padding: 5px 8px 4px; margin-top: 1px;
   border: 0; background: transparent; text-align: left; cursor: pointer;
-  font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; color: rgba(255, 255, 255, .45);
   border-radius: 6px; transition: color .15s ease, background .15s ease;
 }
 .ds-sb-section:hover { color: rgba(255, 255, 255, .8); background: rgba(255, 255, 255, .05); }
-.ds-sb-sec-icon { width: 14px; flex: 0 0 14px; text-align: center; font-size: 11px; opacity: .8; }
+.ds-sb-sec-icon { width: 13px; flex: 0 0 13px; text-align: center; font-size: 10.5px; opacity: .8; }
 .ds-sb-sec-caret { margin-left: auto; font-size: 9px; opacity: .7; transition: transform .16s ease; }
 .ds-sb-sec.is-open > .ds-sb-section {
   color: #fff; background: rgba(34, 197, 94, .16); box-shadow: inset 2px 0 0 #22c55e;
@@ -571,7 +574,7 @@ a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3
      same custom property the rail's width comes from, and shares its easing,
      so handle and edge move together. */
   position: fixed; z-index: 1045;
-  top: calc(var(--navbar-height, 60px) + 16px); left: var(--ds-sb-w, 260px);
+  top: calc(var(--navbar-height, 60px) + 16px); left: var(--ds-sb-w, 212px);
   transform: translateX(-50%);
   transition: left .16s ease, background .15s ease, color .15s ease, border-color .15s ease;
 
@@ -614,20 +617,20 @@ body.ds-sb-collapsed .ds-sb-caret { display: none; }
 /* The open module's sub-menu has to be hidden through a selector at least as
    specific as `.ds-sb-group.is-open .ds-sb-sub`, which opened it -- otherwise
    the module you last expanded keeps spilling its section headings into a
-   72px rail, where they wrap to "MA / GRO CHA / TRA" and read as nothing. */
+   60px rail, where they wrap to "MA / GRO CHA / TRA" and read as nothing. */
 body.ds-sb-collapsed .ds-sb-group.is-open .ds-sb-sub,
 body.ds-sb-collapsed .ds-sb-sub { display: none; }
 
 /* Centre what is left, and give the icon back the width the padding took. */
 body.ds-sb-collapsed .ds-sb-item { justify-content: center; padding: 0; gap: 0; }
 
-/* The mark stays on the rail -- at 72px it is the only thing identifying the
+/* The mark stays on the rail -- at 60px it is the only thing identifying the
    product -- and now has the header to itself. */
 body.ds-sb-collapsed .ds-sb-brand { justify-content: center; padding-left: 0; padding-right: 0; }
-body.ds-sb-collapsed .ds-sb-nav { padding: 10px 6px; }
+body.ds-sb-collapsed .ds-sb-nav { padding: 7px 5px; }
 
 /* The page sits beside the sidebar. */
-body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-left .16s ease; }
+body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-left .16s ease; }
 
 @media (max-width: 1023.98px) {
   .ds-sb-collapse { display: none; }
