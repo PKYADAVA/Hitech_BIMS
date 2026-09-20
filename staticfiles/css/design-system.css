@@ -661,7 +661,10 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   background: #fff;
   border-bottom: 1px solid var(--border, #e5e7eb);
 }
-.ds-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* The right block takes the row, so the search inside it can reach the 460px
+   it is capped at rather than the 280 that was left of its content width. */
+.ds-topbar-right { margin-left: auto; flex: 1 1 auto; display: flex; align-items: center;
+                   justify-content: flex-end; gap: 10px; }
 
 /* The search takes the free space, capped so it does not run the width of a
    wide monitor and leave the account button stranded at the far edge. */
@@ -678,43 +681,54 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 
 /* The bell and account button carry the responsive margin classes tuned for
    the full navbar's stacked mobile menu; in this single row they would push
-   both out of it. */
+   both out of it. Nothing but the search gives up width either: the three
+   controls had been shrinking to fit, which left sign-out an oval. */
 .ds-topbar #ahBellWrap,
 .ds-topbar .dropdown { margin: 0 !important; }
+.ds-topbar #ahBellWrap,
+.ds-topbar .ds-power-btn,
+.ds-topbar .dropdown,
+.ds-topbar .ds-nav-clock { flex: 0 0 auto; }
 
-/* And they have to fit the bar's height, which is the one the top-nav layout
-   sets. These came out 44px — taller than the 42px row holding them, and a
-   size and a half larger than the same two controls in the other layout,
-   where they are 34px.
-   The !important is not decoration: style.css carries `.btn { padding: 8px
-   !important }`, which one class or ten cannot outrank without it. */
-.ds-topbar .ah-bell-btn.btn,
-.ds-topbar .ds-user-btn.btn {
-  /* `.ds .btn` gives every button in the system a fixed 44px (--ds-button-h),
-     which is a touch target for a form, not a bar control — no amount of
-     padding can come out under it, so the height is what has to be said. */
-  height: 34px;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
+/* The three controls are 34px, the size they are on the top bar, and the two
+   that are Bootstrap buttons have to say so against three global rules:
+   `.ds .btn` sets 44px, `.btn { min-height: 38px }` outranks any height, and
+   `.btn { padding: 8px 16px !important }` re-inflates what is left. Hence
+   `.btn` in the selector for weight, `min-height` to release the floor, and
+   `!important` on padding to answer the one already there. None of those
+   global rules is touched: they size every other button in the ERP, and this
+   cluster is opting out, not changing them. */
+.ds-topbar .ah-bell-btn.btn {
+  width: 34px; height: 34px; min-height: 0; padding: 0 !important;
+  border-radius: 50%;                  /* a disc, like sign-out beside it */
+  font-size: .95rem;
+  background: #fff;
+  border: 1px solid var(--border, #e5e7eb);
+  /* Amber, as on the top bar, but the deeper --warning: that bar's amber-400
+     is mixed for a dark green ground and washes out on white. */
+  color: var(--warning, #d97706);
 }
-/* On white, the bell's own white-on-green colouring disappears. */
-/* Amber here too, so the bell means the same thing in both layouts — the
-   deeper --warning rather than the navbar's amber-400, because this bar is
-   white and the bright one washes out on it. */
-.ds-topbar .ah-bell-btn { color: var(--warning, #d97706); }
-.ds-topbar .ah-bell-btn:hover { color: #b45309; background: var(--surface-hover, #f8fafc); }
+.ds-topbar .ah-bell-btn.btn:hover,
+.ds-topbar .ah-bell-btn.btn:focus-visible {
+  color: #b45309; background: var(--surface-hover, #f8fafc); border-color: #cbd5e1;
+}
+.ds-topbar .ds-power-btn { width: 34px; height: 34px; font-size: .95rem; }
 
 /* Account handle: the menu bars and the person's initials, the pill the top
    navbar carries, drawn for a white ground. No caret -- the bars already say
-   it opens something, and a caret beside them is the same word twice. */
-.ds-user-btn {
+   it opens something, and a caret beside them is the same word twice. The
+   `.btn` in the selector is for the same three global rules as the bell: at
+   one class the pill came out 38px tall with an 8px radius, which is a
+   rounded box, not a pill. */
+.ds-topbar .ds-user-btn.btn {
   display: flex; align-items: center; gap: 9px;
-  padding: 3px 4px 3px 11px !important; border: 1px solid var(--border, #e5e7eb);
+  height: 34px; min-height: 0;
+  padding: 3px 4px 3px 12px !important; border: 1px solid var(--border, #e5e7eb);
   border-radius: 999px; background: #fff; box-shadow: none;
   color: var(--text-secondary, #475569);
 }
-.ds-user-btn:hover, .ds-user-btn:focus,
-.ds-user-btn.show { background: var(--surface-hover, #f8fafc); border-color: #cbd5e1; }
+.ds-topbar .ds-user-btn.btn:hover, .ds-topbar .ds-user-btn.btn:focus,
+.ds-topbar .ds-user-btn.btn.show { background: var(--surface-hover, #f8fafc); border-color: #cbd5e1; }
 .ds-user-btn::after { display: none; }   /* Bootstrap's caret */
 .ds-user-bars { font-size: .95rem; line-height: 1; opacity: .75; }
 .ds-user-btn:hover .ds-user-bars { opacity: 1; }
