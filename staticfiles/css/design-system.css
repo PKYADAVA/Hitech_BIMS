@@ -666,6 +666,15 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 /* The search takes the free space, capped so it does not run the width of a
    wide monitor and leave the account button stranded at the far edge. */
 .ds-topbar .gs-wrap { flex: 1 1 420px; max-width: 460px; margin: 0; }
+/* Rounded like the top bar's, with the same Ctrl + K hint: the shortcut works
+   on both layouts, so only one of them saying so is the odd one out. It is
+   hidden below 1600px for the dashboard's crowded toolbar; on a bar this
+   empty there is room for it from the desktop width up. */
+.ds-topbar .gs-box { border-radius: 999px; padding-left: 14px; padding-right: 6px; }
+.ds-topbar .gs-kbd { border-radius: 999px; padding: 1px 9px; }
+@media (min-width: 1200px) {
+  .ds-topbar .gs-wrap:not(.has-text) .gs-kbd { display: inline-block; }
+}
 
 /* The bell and account button carry the responsive margin classes tuned for
    the full navbar's stacked mobile menu; in this single row they would push
@@ -695,26 +704,38 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 .ds-topbar .ah-bell-btn { color: var(--warning, #d97706); }
 .ds-topbar .ah-bell-btn:hover { color: #b45309; background: var(--surface-hover, #f8fafc); }
 
-/* Account button: avatar, name over role, caret. */
+/* Account handle: the menu bars and the person's initials, the pill the top
+   navbar carries, drawn for a white ground. No caret -- the bars already say
+   it opens something, and a caret beside them is the same word twice. */
 .ds-user-btn {
   display: flex; align-items: center; gap: 9px;
-  padding: 5px 10px 5px 6px; border: 1px solid transparent; border-radius: 10px;
-  background: transparent; box-shadow: none;
+  padding: 3px 4px 3px 11px !important; border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px; background: #fff; box-shadow: none;
+  color: var(--text-secondary, #475569);
 }
 .ds-user-btn:hover, .ds-user-btn:focus,
-.ds-user-btn.show { background: var(--surface-hover, #f8fafc); border-color: var(--border, #e5e7eb); }
-.ds-user-btn::after { display: none; }   /* Bootstrap's caret; there is a real one */
+.ds-user-btn.show { background: var(--surface-hover, #f8fafc); border-color: #cbd5e1; }
+.ds-user-btn::after { display: none; }   /* Bootstrap's caret */
+.ds-user-bars { font-size: .95rem; line-height: 1; opacity: .75; }
+.ds-user-btn:hover .ds-user-bars { opacity: 1; }
 .ds-user-avatar {
   /* The tallest thing in the button, so it is what the bar's height comes
      down to. */
-  width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%;
+  width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%;
   display: grid; place-items: center;
-  background: #123524; color: #fff; font-size: 13px; font-weight: 600;
+  background: #123524; color: #fff; font-size: 12.5px; font-weight: 700;
 }
-.ds-user-meta { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
-.ds-user-meta strong { font-size: 12.5px; font-weight: 600; color: var(--text, #0f172a); }
-.ds-user-meta small { font-size: 11px; color: var(--text-secondary, #475569); }
-.ds-user-caret { font-size: 10px; color: var(--text-muted, #94a3b8); margin-left: 2px; }
+
+/* The clock, the top bar's two short lines on a white ground. */
+.ds-nav-clock {
+  align-items: center; gap: 8px; padding-left: 12px; margin-left: 2px;
+  border-left: 1px solid var(--border, #e5e7eb);
+  color: var(--text, #0f172a); white-space: nowrap;
+}
+.ds-nav-clock-icon { font-size: .9rem; color: #15803d; }
+.ds-nav-clock-text { display: flex; flex-direction: column; line-height: 1.15; }
+.ds-nav-clock-date { font-size: .72rem; font-weight: 600; }
+.ds-nav-clock-time { font-size: .62rem; color: var(--text-muted, #94a3b8); }
 
 /* Its menu, on a light ground. */
 .ds-user-menu {

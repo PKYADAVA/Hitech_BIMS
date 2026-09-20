@@ -32,24 +32,21 @@ its own light-ground styling for the same components.
             data-bs-target="#logoutConfirmModal"><i class="fa-solid fa-power-off"></i></button>
 
     <div class="dropdown">
-      <button class="ds-user-btn btn dropdown-toggle" type="button"
-              id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static">
-        {% comment %}
-          Initials rather than a generic person glyph: on a bar where every
-          other control is an outline icon, filled letters are the one thing
-          that says whose session this is. Through the same filter the top
-          navbar uses, so a person is not "A" on one layout and "AJ" on the
-          other.
-        {% endcomment %}
+      {% comment %}
+        The same handle the top navbar carries: the menu bars and the person's
+        initials, through the same filter, so a person is not "AJ" on one
+        layout and their full name and role on the other. The name is on the
+        tooltip and heads the menu, so nothing is lost.
+      {% endcomment %}
+      <button class="ds-user-btn btn" type="button"
+              id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static"
+              title="{{ request.user|display_name }}"
+              aria-label="Account menu for {{ request.user|display_name }}">
+        <i class="fa-solid fa-bars ds-user-bars" aria-hidden="true"></i>
         <span class="ds-user-avatar">{{ request.user|initials }}</span>
-        <span class="ds-user-meta">
-          <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
-          <small>{{ user_role_label }}</small>
-        </span>
-        <i class="fas fa-chevron-down ds-user-caret"></i>
       </button>
       <ul class="dropdown-menu dropdown-menu-end ds-user-menu" aria-labelledby="userMenuBtn">
-        <li><h6 class="dropdown-header">My Account</h6></li>
+        <li><h6 class="dropdown-header">{{ request.user|display_name|default:"My Account" }}</h6></li>
         {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
           <i class="fas fa-tools"></i>Django Admin
         </a></li>{% endif %}
@@ -70,6 +67,19 @@ its own light-ground styling for the same components.
           <i class="fas fa-key"></i>Change Password
         </a></li>
       </ul>
+    </div>
+
+    {% comment %}
+    The date and the time, at the end of the bar, as on the top one. The ids
+    are the ones its clock script looks for, and that script sits outside the
+    layout branch in main_top_navbar.html, so it ticks here too.
+    {% endcomment %}
+    <div class="ds-nav-clock d-none d-lg-flex" id="navBarClock" aria-hidden="true">
+      <i class="fa-regular fa-calendar ds-nav-clock-icon"></i>
+      <span class="ds-nav-clock-text">
+        <span class="ds-nav-clock-date" id="navBarClockDate"></span>
+        <span class="ds-nav-clock-time" id="navBarClockTime"></span>
+      </span>
     </div>
   </div>
 </header>
