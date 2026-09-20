@@ -46,6 +46,10 @@ def login(request):
             )  # Redirect to a dashboard or homepage after login
         else:
             messages.error(request, "Invalid username or password.")
+            # Handed back to the form: a mistyped password used to cost the
+            # username as well, which on a phone is the longer of the two.
+            # The password is not returned, ever.
+            return render(request, "login.html", {"username": username})
 
     return render(request, "login.html")
 

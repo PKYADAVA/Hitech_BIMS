@@ -6,9 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login — Hi Tech Farms Poultry ERP</title>
   <link rel="icon" href="{% static 'images/hitech-mark.png' %}">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link href="{% static 'css/login.css' %}?v=20260922d" rel="stylesheet">
+  <link rel="apple-touch-icon" href="{% static 'images/hitech-mark.png' %}">
+  <meta name="theme-color" content="#123524">
+  {% comment %}
+  Served from here, not from cdnjs and fonts.gstatic.com. Three outside hosts
+  stood between a farm's connection and the one page nobody can go round: on a
+  slow or filtered network the login arrived without its icons and without its
+  lettering. The typeface is the same Poppins, latin subset; the icons are the
+  thirteen this page uses, drawn as masks rather than fetched as 249kB of
+  webfont.
+  {% endcomment %}
+  <link href="{% static 'vendor/poppins.css' %}?v=20260922a" rel="stylesheet">
+  <link href="{% static 'vendor/login-icons.css' %}?v=20260922a" rel="stylesheet">
+  <link href="{% static 'css/login.css' %}?v=20260922e" rel="stylesheet">
 </head>
 <body>
   <div class="lang" title="English is the only language currently available">
@@ -61,7 +71,14 @@
           {% endfor %}
         {% endif %}
 
-        <form method="POST" autocomplete="off">
+        {% comment %}
+        `autocomplete` is on, and each field says what it holds: with it off,
+        a phone offers no saved password and no keychain, so staff typed an
+        Employee ID and a password by hand every morning. The username also
+        tells the keyboard to leave it alone -- iOS capitalises the first
+        letter otherwise, and the login then fails with nothing to explain it.
+        {% endcomment %}
+        <form method="POST">
           {% csrf_token %}
 
           <div class="field">
@@ -69,7 +86,10 @@
             <div class="control">
               <i class="fas fa-user lead-icon"></i>
               <input type="text" id="username" name="username"
-                     placeholder="Enter Employee ID or Username" required autofocus>
+                     value="{{ username|default:'' }}"
+                     placeholder="Enter Employee ID or Username" required autofocus
+                     autocomplete="username" autocapitalize="none"
+                     autocorrect="off" spellcheck="false">
             </div>
           </div>
 
@@ -78,7 +98,8 @@
             <div class="control">
               <i class="fas fa-lock lead-icon"></i>
               <input type="password" id="password" name="password"
-                     placeholder="Enter Password" required>
+                     placeholder="Enter Password" required
+                     autocomplete="current-password">
               <button type="button" class="reveal" id="reveal"
                       aria-label="Show password" aria-pressed="false">
                 <i class="fas fa-eye" id="revealIcon"></i>
@@ -174,5 +195,28 @@
       });
     })();
   </script>
+<script>
+  // A login takes a moment on farm mobile data, and a button that still says
+  // "Login" gets pressed again. It says what it is doing instead, and stops
+  // listening -- until the browser restores the page from its back-forward
+  // cache, where a disabled button would leave the reader stuck.
+  (function () {
+    var form = document.querySelector("form");
+    var button = document.querySelector(".btn-login");
+    if (!form || !button) return;
+    var idle = button.innerHTML;
+
+    form.addEventListener("submit", function () {
+      if (!form.checkValidity()) return;
+      button.disabled = true;
+      button.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Signing in\u2026';
+    });
+
+    window.addEventListener("pageshow", function () {
+      button.disabled = false;
+      button.innerHTML = idle;
+    });
+  })();
+</script>
 </body>
 </html>
