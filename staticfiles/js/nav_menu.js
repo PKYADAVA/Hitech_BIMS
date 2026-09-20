@@ -9,8 +9,15 @@
  *
  *   BimsNavMenu.openPanel(spec, box)   every section side by side, with a
  *                                      "Find a page" box and arrow keys
- *   BimsNavMenu.openFlyout(spec, box)  the same pages in one narrow column
+ *   BimsNavMenu.openFlyout(spec, box)  the same pages in one narrow column,
+ *                                      or, with { cascade: true }, a row per
+ *                                      section that opens its pages beside it
  *   BimsNavMenu.close()                closes whichever is open
+ *
+ * A menu opened with { hoverClose: ms } closes itself that long after the
+ * pointer leaves it, and its own rows, submenus and the rail that opened it
+ * hold it open between them: one timer for the lot, since a menu and the
+ * submenu it spawned are siblings on the body, not parent and child.
  *
  * A spec is { title, icon, description, sections: [{ title, icon, items: [
  * { href, label, icon, target, current } ] }] }, and a box is the rectangle
@@ -34,7 +41,22 @@ window.BIMS_MODULE_INTRO = {
 };
 
 (function () {
-  var panel = null, flyout = null, onClose = null;
+  var panel = null, flyout = null, sub = null, onClose = null;
+  var hoverTimer = null, hoverMs = 0, subRow = null;
+
+  function cancelClose() { clearTimeout(hoverTimer); }
+
+  function armClose(ms) {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(closeAll, ms || hoverMs || 180);
+  }
+
+  // Everything the pointer may rest on without the menu closing: the menu, a
+  // submenu it opened, and the module or section row it belongs to.
+  function holdsOpen(node) {
+    node.addEventListener("mouseenter", cancelClose);
+    node.addEventListener("mouseleave", function () { if (hoverMs) armClose(hoverMs); });
+  }
 
   function el(tag, cls) {
     var node = document.createElement(tag);
@@ -187,6 +209,61 @@ window.BIMS_MODULE_INTRO = {
     }
   }
 
+  // One row per section, each opening its own pages beside it -- what a
+  // module's menu does in the top bar, for the rail's menus too.
+  function buildCascade(spec) {
+    var root = el("div", "bims-fly bims-fly-rows");
+    root.setAttribute("role", "menu");
+    root.setAttribute("aria-label", spec.title + " menu");
+    spec.sections.forEach(function (section) {
+      var row = el("button", "bims-fly-row");
+      row.type = "button";
+      row.setAttribute("aria-haspopup", "true");
+      if (section.icon) {
+        var i = el("i");
+        i.className = section.icon;
+        if (section.colour) i.style.color = section.colour;
+        row.appendChild(i);
+      }
+      var label = el("span");
+      label.textContent = section.title;
+      row.appendChild(label);
+      var count = el("small");
+      count.textContent = section.items.filter(function (it) { return !it.subheading; }).length;
+      row.appendChild(count);
+      var caret = el("i", "bims-fly-caret");
+      caret.className = "fas fa-chevron-right bims-fly-caret";
+      row.appendChild(caret);
+      row.addEventListener("mouseenter", function () { openSub(section, row); });
+      row.addEventListener("focus", function () { openSub(section, row); });
+      row.addEventListener("click", function (e) { e.preventDefault(); openSub(section, row); });
+      root.appendChild(row);
+    });
+    return root;
+  }
+
+  // The pages of one section, drawn beside the row that asked for them. It is
+  // its own element on the body rather than a child of the menu: the menu
+  // scrolls when it is tall, and a child would be clipped at its edge.
+  function openSub(section, row) {
+    if (subRow === row && sub) return;
+    if (sub) { sub.remove(); sub = null; }
+    subRow = row;
+    if (flyout) {
+      flyout.querySelectorAll(".bims-fly-row.is-open").forEach(function (r) {
+        r.classList.remove("is-open");
+      });
+    }
+    row.classList.add("is-open");
+    sub = buildFlyout({ title: section.title, sections: [section] });
+    sub.classList.add("bims-fly-child");
+    document.body.appendChild(sub);
+    var from = (flyout || row).getBoundingClientRect(), here = row.getBoundingClientRect();
+    place(sub, { left: Math.round(from.right + 6), top: Math.round(here.top - 8), share: 0.8, lift: true });
+    holdsOpen(sub);
+    cancelClose();
+  }
+
   function buildFlyout(spec) {
     var root = el("div", "bims-fly");
     root.setAttribute("role", "menu");
@@ -217,7 +294,14 @@ window.BIMS_MODULE_INTRO = {
     node.style.top = box.top + "px";
     if (box.right != null) node.style.right = box.right + "px";
     if (box.width != null) node.style.width = box.width + "px";
-    var room = Math.max(220, Math.min(window.innerHeight - box.top - 12,
+    var top = box.top;
+    if (box.lift) {
+      // Tall enough to matter: lift it so it ends on screen, never above 8px.
+      var wanted = Math.min(node.scrollHeight + 4, Math.round(window.innerHeight * 0.8));
+      top = Math.max(8, Math.min(top, window.innerHeight - wanted - 12));
+      node.style.top = top + "px";
+    }
+    var room = Math.max(220, Math.min(window.innerHeight - top - 12,
                                       Math.round(window.innerHeight * (box.share || 0.6))));
     if (node.classList.contains("bims-mega")) {
       node.querySelectorAll(".bims-mega-col").forEach(function (col) {
@@ -230,8 +314,11 @@ window.BIMS_MODULE_INTRO = {
   }
 
   function closeAll() {
-    [panel, flyout].forEach(function (node) { if (node) node.remove(); });
-    panel = flyout = null;
+    clearTimeout(hoverTimer);
+    hoverMs = 0;
+    subRow = null;
+    [panel, flyout, sub].forEach(function (node) { if (node) node.remove(); });
+    panel = flyout = sub = null;
     if (onClose) { var fn = onClose; onClose = null; fn(); }
   }
 
@@ -247,11 +334,14 @@ window.BIMS_MODULE_INTRO = {
   }
 
   function openFlyout(spec, box, opts) {
+    opts = opts || {};
     closeAll();
-    flyout = buildFlyout(spec);
+    flyout = opts.cascade && spec.sections.length > 1 ? buildCascade(spec) : buildFlyout(spec);
     document.body.appendChild(flyout);
     place(flyout, box);
-    onClose = (opts || {}).onClose || null;
+    onClose = opts.onClose || null;
+    hoverMs = opts.hoverClose || 0;
+    if (hoverMs) holdsOpen(flyout);
     return flyout;
   }
 
@@ -274,6 +364,8 @@ window.BIMS_MODULE_INTRO = {
     openPanel: openPanel,
     openFlyout: openFlyout,
     close: closeAll,
+    holdOpen: cancelClose,
+    closeSoon: armClose,
     isOpen: function () { return !!(panel || flyout); },
     panelOpen: function () { return !!panel; },
   };

@@ -945,3 +945,22 @@ body.ds-shell .content > footer { display: none; }
 .bims-fly .dropdown-item:hover { background: #f1f5f9; color: #0f172a; }
 .bims-fly .dropdown-item.is-current { background: #ecfdf5; color: #15803d; font-weight: 600; }
 .bims-fly .dropdown-item.is-current i { color: #15803d; }
+
+/* A module's menu is a row per section, and the row opens that section's pages
+   beside it -- the two steps the top bar takes, in the rail. The pages sit in
+   their own card rather than inside this one, which scrolls when a module runs
+   long and would otherwise cut them off at its edge. */
+.bims-fly-rows { width: 228px; padding: 6px; }
+.bims-fly-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 9px; border: 0; border-radius: 8px; background: none;
+  font-size: .84rem; color: #334155; text-align: left; cursor: pointer;
+}
+.bims-fly-row > i:first-child { width: 16px; text-align: center; font-size: .82rem; color: #94a3b8; }
+.bims-fly-row > span { flex-grow: 1; }
+.bims-fly-row small { font-size: .68rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+.bims-fly-caret { font-size: .62rem; color: #cbd5e1; }
+.bims-fly-row:hover, .bims-fly-row.is-open { background: #f1f5f9; color: #0f172a; }
+.bims-fly-row:hover .bims-fly-caret, .bims-fly-row.is-open .bims-fly-caret { color: #15803d; }
+.bims-fly-row.is-open > i:first-child, .bims-fly-row:hover > i:first-child { color: #15803d; }
+.bims-fly-child { box-shadow: 0 16px 40px rgba(15, 23, 42, .18); }

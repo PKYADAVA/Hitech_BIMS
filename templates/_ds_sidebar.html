@@ -146,13 +146,13 @@ keeps the two in step whether it is 260px or 72px wide.
     });
 
     // Modules behave as they do in the top bar (nav_menu.js): hovering one
-    // opens its pages beside the rail, clicking it opens every page of it at
-    // once. The in-rail accordion below still runs for anyone without a
-    // pointer, and for the module holding the page being read, which the
-    // server opens.
+    // opens its sections beside the rail and hovering a section opens that
+    // section's pages, the same two steps the top bar's module menus take.
+    // Clicking a module still opens every page of it at once. The in-rail
+    // accordion below runs for anyone without a pointer, and for the module
+    // holding the page being read, which the server opens.
     var topbar = document.querySelector(".ds-topbar");
     var canHover = window.matchMedia("(hover: hover)");
-    var hoverTimer = null;
 
     function text(node) { return (node.textContent || "").replace(/\s+/g, " ").trim(); }
     function itemOf(a) {
@@ -176,28 +176,56 @@ keeps the two in step whether it is 260px or 72px wide.
                description: (window.BIMS_MODULE_INTRO || {})[group.dataset.module] || "",
                sections: sections };
     }
+    // One section of one module: what hovering a section row shows.
+    function sectionSpecOf(sec) {
+      var head = sec.querySelector(":scope > .ds-sb-section");
+      var icon = head.querySelector(".ds-sb-sec-icon");
+      var items = [];
+      sec.querySelectorAll(":scope > .ds-sb-sec-items > a.ds-sb-link")
+        .forEach(function (a) { items.push(itemOf(a)); });
+      return { title: text(head), icon: icon && icon.className, items: items };
+    }
     function railRight() { return sidebar.getBoundingClientRect().right; }
+
+    // Whatever the pointer is on, the menu hangs beside that row.
+    function flyFrom(owner, spec, row, opts) {
+      if (owner.dataset.flyOpen === "1") return;
+      sidebar.querySelectorAll("[data-fly-open]").forEach(function (g) { delete g.dataset.flyOpen; });
+      owner.dataset.flyOpen = "1";
+      hideTip();
+      var box = { left: railRight() + 6, top: Math.round(row.top - 8), share: .8, lift: true };
+      var settings = { onClose: function () { delete owner.dataset.flyOpen; }, hoverClose: 180 };
+      if (opts && opts.cascade) settings.cascade = true;
+      BimsNavMenu.openFlyout(spec, box, settings);
+    }
 
     sidebar.addEventListener("mouseover", function (e) {
       if (!canHover.matches || BimsNavMenu.panelOpen()) return;
+      BimsNavMenu.holdOpen();
+
+      // A section: its pages, beside the row. One already unfolded in the rail
+      // has its pages on show, so a menu repeating them would be in the way.
+      var head = e.target.closest(".ds-sb-section");
+      if (head) {
+        var sec = head.parentElement;
+        if (sec.classList.contains("is-open")) return BimsNavMenu.close();
+        return flyFrom(sec, { title: text(head), sections: [sectionSpecOf(sec)] },
+                       head.getBoundingClientRect());
+      }
+
+      // A module: its sections, each opening its own pages -- the top bar's
+      // cascade. The module already unfolded in the rail is skipped for the
+      // same reason as above: its sections are right there.
       var toggle = e.target.closest(".ds-sb-toggle");
       if (!toggle) return;
-      clearTimeout(hoverTimer);
       var group = toggle.parentElement;
-      if (group.dataset.flyOpen === "1") return;
-      sidebar.querySelectorAll("[data-fly-open]").forEach(function (g) { delete g.dataset.flyOpen; });
-      group.dataset.flyOpen = "1";
-      hideTip();
-      var row = toggle.getBoundingClientRect();
-      var node = BimsNavMenu.openFlyout(specOf(group),
-        { left: railRight() + 6, top: Math.min(row.top, window.innerHeight - 260), share: .8 },
-        { onClose: function () { delete group.dataset.flyOpen; } });
-      node.addEventListener("mouseenter", function () { clearTimeout(hoverTimer); });
-      node.addEventListener("mouseleave", function () { hoverTimer = setTimeout(BimsNavMenu.close, 160); });
+      if (group.classList.contains("is-open")
+          && !document.body.classList.contains("ds-sb-collapsed")) return BimsNavMenu.close();
+      flyFrom(group, specOf(group), toggle.getBoundingClientRect(), { cascade: true });
     });
     sidebar.addEventListener("mouseleave", function () {
       if (BimsNavMenu.panelOpen()) return;
-      hoverTimer = setTimeout(BimsNavMenu.close, 200);
+      BimsNavMenu.closeSoon(200);
     });
 
     // Click: the full panel, caught before the accordion handler below.
