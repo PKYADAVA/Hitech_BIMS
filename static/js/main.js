@@ -224,8 +224,9 @@ $(function () {
     var input = $(settings.nTableWrapper).find(".dataTables_filter input");
     if (!input.length) return;
 
-    // The placeholder teaches the comma by showing it.
-    input.attr("placeholder", "2399, 2398");
+    // Words, not numbers: a placeholder of "2399, 2398" reads as a value
+    // somebody already typed rather than as a hint about the box.
+    input.attr("placeholder", "comma for either");
     input.attr("title", "Spaces narrow the search; a comma asks for either");
 
     // DataTables' own handler would search for the comma string itself, so
