@@ -21,8 +21,10 @@ from user.services.nav_icons import DEFAULT_TAB_ICON, TAB_ICONS
 #: renders, with a default.
 NAV_ICONS = {
     # Broiler rears the birds; the hatchery is where the eggs are. They were
-    # the other way round.
-    "broiler": "fa-solid fa-kiwi-bird",
+    # the other way round. The bird is a standing one (fa-crow): the kiwi it
+    # used to be is a round, long-beaked blob that at 14px in the rail reads
+    # as anything but poultry.
+    "broiler": "fa-solid fa-crow",
     "hatchery": "fa-solid fa-egg",
     "purchase": "fa-solid fa-cart-shopping",
     "sales": "fa-solid fa-indian-rupee-sign",
