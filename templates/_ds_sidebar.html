@@ -279,7 +279,11 @@ rather than a per-page one.
       hideTip();
       var box = { left: railRight() + 6, top: Math.round(row.top - 8), share: .8, lift: true };
       var settings = { onClose: function () { delete owner.dataset.flyOpen; }, hoverClose: 180 };
-      if (opts && opts.cascade) settings.cascade = true;
+      if (opts && opts.cascade) {
+        settings.cascade = true;
+        // Folded to icons, the rail is not saying which module this is.
+        settings.named = document.body.classList.contains("ds-sb-collapsed");
+      }
       BimsNavMenu.openFlyout(spec, box, settings);
     }
 

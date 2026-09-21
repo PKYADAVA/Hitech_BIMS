@@ -222,18 +222,22 @@ window.BIMS_MODULE_INTRO = {
     root.setAttribute("role", "menu");
     root.setAttribute("aria-label", spec.title + " menu");
 
-    // The menu says which module it belongs to. Folded to icons the rail
-    // shows no names at all, and the tip that would give one is dismissed as
-    // the menu opens -- so a reader hovering the egg got Master, Transactions
-    // and Reports with nothing anywhere saying Hatchery.
-    var title = el("div", "bims-fly-title");
-    if (spec.icon) {
-      var ti = el("i");
-      ti.className = spec.icon;
-      title.appendChild(ti);
+    // The menu names its module only where that name is not already on
+    // screen: folded to icons the rail shows no names at all and the tip
+    // that would give one is dismissed as the menu opens, so the reader
+    // hovering the egg had nothing anywhere saying Hatchery. With the rail
+    // open, or a module tab lit above the menu, the name is right there and
+    // a heading repeating it is a line of menu spent on nothing.
+    if (spec.named === false || spec.named === undefined ? false : spec.named) {
+      var title = el("div", "bims-fly-title");
+      if (spec.icon) {
+        var ti = el("i");
+        ti.className = spec.icon;
+        title.appendChild(ti);
+      }
+      title.appendChild(document.createTextNode(spec.title));
+      root.appendChild(title);
     }
-    title.appendChild(document.createTextNode(spec.title));
-    root.appendChild(title);
 
     spec.sections.forEach(function (section) {
       var row = el("button", "bims-fly-row");
@@ -449,6 +453,7 @@ window.BIMS_MODULE_INTRO = {
     opts = opts || {};
     closeAll();
     var cascade = opts.cascade && spec.sections.length > 1;
+    if (cascade) spec.named = !!opts.named;
     flySpec = cascade ? spec : null;
     flyBox = cascade ? box : null;
     flyout = cascade ? buildCascade(spec) : buildFlyout(spec);
