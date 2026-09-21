@@ -54,6 +54,13 @@
     font-size: .8rem; background-position: right .1rem center; }
   .bl-filter .form-select:focus, .bl-filter .form-control:focus { box-shadow: none; }
   .bl-clear { align-self: center; }
+  /* Two dates need the room of two controls; the rest of the strip is one
+     each, so this cell spans two of the grid's tracks where there are two. */
+  .bl-dates { grid-column: span 2; }
+  @media (max-width: 575.98px) { .bl-dates { grid-column: span 1; } }
+  .bl-date-pair { display: flex; align-items: center; gap: .3rem; }
+  .bl-date-pair .form-control { font-size: .76rem; padding: 0; }
+  .bl-date-sep { font-size: .68rem; color: #94a3b8; }
 
   /* One search box, not two: the table's own is what carries the comma-for-
      either behaviour, so the strip's box drives it rather than replacing it. */
@@ -153,6 +160,17 @@
       </select>
     </div>
   </div>
+  <div class="bl-filter bl-dates">
+    <span class="bl-filter-icon" style="--bl-bg:#e7f7ee;--bl-fg:#067647"><i class="fas fa-calendar-day"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-from">Created between</label>
+      <div class="bl-date-pair">
+        <input type="date" id="bl-from" class="form-control" aria-label="Created on or after">
+        <span class="bl-date-sep">to</span>
+        <input type="date" id="bl-to" class="form-control" aria-label="Created on or before">
+      </div>
+    </div>
+  </div>
   <button type="button" class="btn btn-outline-secondary btn-sm bl-clear" id="bl-clear">
     <i class="fas fa-rotate-left"></i> Clear
   </button>
@@ -218,7 +236,19 @@ function none() { return '<span class="b-none">\u2014</span>'; }
 // The strip filters the table that is already loaded: branch, farm and unit
 // are matched against the row's own text, and status against what the badge
 // says, so what is filtered is what is on screen.
-const BATCH_FILTERS = { branch: "", farm: "", shed: "", status: "" };
+const BATCH_FILTERS = { branch: "", farm: "", shed: "", status: "",
+                        from: "", to: "" };
+
+// Dates compare as the strings they are: both ends are ISO, so "2026-09-16"
+// sorts and compares correctly without a Date object or a timezone.
+function batchDatePasses(row) {
+  if (!BATCH_FILTERS.from && !BATCH_FILTERS.to) return true;
+  const created = row ? (row.dataset.created || "") : "";
+  if (!created) return false;   // a row with no date is not in any range
+  if (BATCH_FILTERS.from && created < BATCH_FILTERS.from) return false;
+  if (BATCH_FILTERS.to && created > BATCH_FILTERS.to) return false;
+  return true;
+}
 
 function batchRowPasses(cells) {
   const like = (cell, want) => !want || (cell || "").trim() === want;
@@ -241,9 +271,10 @@ function registerBatchFilter() {
   registerBatchFilter.done = true;
   // Every list on the site shares this hook, so the table is named before
   // the rows are judged.
-  jQuery.fn.dataTable.ext.search.push(function (settings, cells) {
+  jQuery.fn.dataTable.ext.search.push(function (settings, cells, rowIndex) {
     if (settings.nTable.id !== "broiler-batch-table") return true;
-    return batchRowPasses(cells);
+    const row = settings.aoData[rowIndex] ? settings.aoData[rowIndex].nTr : null;
+    return batchRowPasses(cells) && batchDatePasses(row);
   });
 }
 
@@ -311,8 +342,9 @@ $(document).ready(function () {
           const modalId = `editBatchModal-${batch.id}`;
           const formId = `edit-batch-form-${batch.id}`;
 
+          const createdOn = (batch.created_at || "").slice(0, 10);
           const tableRow = `
-            <tr>
+            <tr data-created="${createdOn}">
               <td class="b-branch">${escapeHtml(batch.branch_name) || none()}</td>
               <td class="b-farm">${escapeHtml(batch.broiler_farm_name)}</td>
               <td>${escapeHtml(shedLabel(batch)) || none()}</td>
@@ -433,11 +465,13 @@ $(document).ready(function () {
     $("#broiler-batch-table_filter input").val(this.value).trigger("input");
   });
 
-  $("#bl-branch, #bl-farm, #bl-shed, #bl-status").on("change", function () {
+  $("#bl-branch, #bl-farm, #bl-shed, #bl-status, #bl-from, #bl-to").on("change input", function () {
     BATCH_FILTERS.branch = $("#bl-branch").val() || "";
     BATCH_FILTERS.farm = $("#bl-farm").val() || "";
     BATCH_FILTERS.shed = $("#bl-shed").val() || "";
     BATCH_FILTERS.status = $("#bl-status").val() || "";
+    BATCH_FILTERS.from = $("#bl-from").val() || "";
+    BATCH_FILTERS.to = $("#bl-to").val() || "";
     const table = $("#broiler-batch-table");
     if ($.fn.DataTable.isDataTable(table)) { table.DataTable().draw(); }
   });
@@ -446,6 +480,7 @@ $(document).ready(function () {
     $("#bl-search").val("");
     $("#broiler-batch-table_filter input").val("").trigger("input");
     $("#bl-branch, #bl-farm, #bl-shed, #bl-status").val("").trigger("change.select2");
+    $("#bl-from, #bl-to").val("");
     $("#bl-branch").trigger("change");
   });
 
