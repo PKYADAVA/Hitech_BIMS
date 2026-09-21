@@ -71,7 +71,10 @@
   .shed-toolbar #search-name { flex:1 1 auto; min-width:180px; }
   .shed-toolbar .form-select { flex:0 0 190px; width:190px; }
   @media (max-width:640px){ .shed-toolbar { flex-wrap:wrap; } .shed-toolbar .form-select{ flex:1 1 auto; width:auto; } }
-  .badge-type { font-weight:600; padding:.35em .6em; border-radius:.4rem; text-transform:capitalize; }
+  /* The type is one word: it breaks across two lines rather than
+     widening its column, so the word is kept whole. */
+  .badge-type { font-weight:600; padding:.35em .6em; border-radius:.4rem;
+    text-transform:capitalize; white-space:nowrap; }
   .bt-broiler{ background:#e7f0ff; color:#2b62c9; } .bt-breeder{ background:#f0e7ff; color:#7d3ec9; }
   .bt-layer{ background:#e2f7f4; color:#12a3b8; } .bt-grower{ background:#e6f7ea; color:#1a7f4b; }
   .bt-quarantine{ background:#ffe9e0; color:#c0562a; }
