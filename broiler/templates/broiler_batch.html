@@ -238,11 +238,13 @@ $(document).ready(function () {
 
   loadBatchList();
 
-  // A batch saved on the add page says so here, where it now appears.
+  // Batches saved on the add page say so here, where they now appear.
   const justSaved = sessionStorage.getItem("bims-batch-saved");
   if (justSaved !== null) {
     sessionStorage.removeItem("bims-batch-saved");
-    window.showToast('success', `Batch ${justSaved} created.`);
+    const many = justSaved.indexOf(",") !== -1;
+    window.showToast('success',
+      `Batch${many ? 'es' : ''} ${justSaved} created.`);
   }
 
   $(document).on("click", ".delete-button", function () {

@@ -84,7 +84,9 @@ urlpatterns = [
     path('broiler-batch/add/', BroilerBatchFormTemplateView.as_view(),
          name='broiler_batch_add'),  # The add form, on its own page
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
-    path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
+    path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),
+    path('create-batches/', views.broiler_batches_create,
+         name='broiler_batches_create'),  # Several flocks in one save  # For creating new broiler batch
     path('broiler_batch/<int:batch_id>/shed-headroom/', views.batch_shed_headroom,
          name='batch_shed_headroom'),  # Room left in the unit this flock is in
     path('broiler_batch/farm/<int:farm_id>/open/', views.farm_open_batches,

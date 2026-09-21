@@ -926,6 +926,58 @@ def batch_shed_headroom(request, batch_id):
 
 
 @login_required
+@require_POST
+def broiler_batches_create(request):
+    """Start several flocks at once, on any farms.
+
+    A placement round starts flocks on a handful of farms the same morning,
+    and doing that a batch at a time is the same form filled in five times.
+    Every row is checked before any of them is written, and a single bad row
+    refuses the lot with its own row number: a half-saved round would leave
+    someone to work out which farms had been done, and the numbering is
+    minted on save, so a retry cannot repeat one.
+    """
+    try:
+        rows = json.loads(request.body or "{}").get("rows") or []
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Could not read the rows."}, status=400)
+    if not rows:
+        return JsonResponse({"error": "Add at least one batch."}, status=400)
+
+    checked, errors = [], []
+    for index, row in enumerate(rows, start=1):
+        farm = BroilerFarm.objects.filter(id=row.get("broiler_farm_id") or 0).first()
+        if not farm:
+            errors.append({"row": index, "error": "Choose the farm."})
+            continue
+        shed_id = row.get("shed") or None
+        breed_id = row.get("breed") or None
+        error = _batch_row_error(farm, shed_id, breed_id)
+        if error:
+            errors.append({"row": index, "error": error})
+            continue
+        checked.append((farm, shed_id, breed_id, row))
+    if errors:
+        return JsonResponse({"error": errors[0]["error"], "errors": errors}, status=400)
+
+    created = []
+    with transaction.atomic():
+        for farm, shed_id, breed_id, row in checked:
+            # batch_name is minted in BroilerBatch.save(), per farm, so two
+            # rows on one farm take consecutive numbers rather than both
+            # taking the number the form showed.
+            batch = BroilerBatch.objects.create(
+                broiler_farm=farm, shed_id=shed_id, breed_id=breed_id,
+                book_number=row.get("book_number") or "",
+                lot_no=row.get("lot_no") or "",
+            )
+            created.append({"id": batch.id, "batch_name": batch.batch_name,
+                            "farm": farm.farm_name})
+        cache.delete("broiler_batch_list")
+    return JsonResponse({"created": created}, status=201)
+
+
+@login_required
 def farm_open_batches(request, farm_id):
     """The flocks still running on a farm, for the Add Batch form to show.
 
@@ -1777,6 +1829,29 @@ def farmer_farm_setup_request_reject(request, id):
     return JsonResponse({"message": "Rejected"})
 
 
+def _batch_row_error(farm, shed_id, breed_id):
+    """Why this batch cannot be started, or None.
+
+    A flock is housed somewhere and is of some breed: the shed is what
+    occupancy, placement and the growing charge all hang off, and the breed
+    is what the daily numbers are judged against. The unit must also be one
+    of that farm's own — the id arrives from a form, and a flock housed in a
+    shed its farm does not own is wrong everywhere it is later read.
+
+    One function so the browser form, the rows form and the phone give the
+    same answer; three copies would not stay in step.
+    """
+    missing = [name for name, value in (("shed", shed_id), ("breed", breed_id))
+               if not value]
+    if missing:
+        return ("Choose the "
+                + " and the ".join({"shed": "shed / unit", "breed": "breed"}[m]
+                                   for m in missing) + ".")
+    if not _shed_on_farm(shed_id, farm.id):
+        return f"That shed / unit is not on {farm.farm_name}."
+    return None
+
+
 def _shed_on_farm(shed_id, farm_id):
     """The shed, if it is one of `farm_id`'s; otherwise None.
 
@@ -1855,27 +1930,9 @@ class BroilerBatchAPI(BaseAPIView):
             data = request.POST
             farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
             shed_id = data.get("shed") or None
-            # A flock is housed somewhere and is of some breed: the shed is
-            # what occupancy, placement and the growing charge all hang off,
-            # and the breed is what the daily numbers are judged against.
-            # Enforced here rather than only in the markup, so the browser
-            # form, the inline edit and the phone all get the same answer.
-            missing = [name for name, value in
-                       (("shed", shed_id), ("breed", data.get("breed") or None))
-                       if not value]
-            if missing:
-                return JsonResponse(
-                    {"error": "Choose the "
-                              + " and the ".join({"shed": "shed / unit",
-                                                  "breed": "breed"}[m]
-                                                 for m in missing) + "."},
-                    status=400,
-                )
-            if not _shed_on_farm(shed_id, farm_obj.id):
-                return JsonResponse(
-                    {"error": f"That shed / unit is not on {farm_obj.farm_name}."},
-                    status=400,
-                )
+            error = _batch_row_error(farm_obj, shed_id, data.get("breed") or None)
+            if error:
+                return JsonResponse({"error": error}, status=400)
             with transaction.atomic():
                 # batch_name is auto-generated (<farm code minus FRM/>-<n>,
                 # e.g. BAH-0201-1) in BroilerBatch.save() — never accepted

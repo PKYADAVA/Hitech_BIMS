@@ -11,12 +11,23 @@
 {% include '_broiler_subnavbar.html' with active_tab='broiler_batch' %}
 
 <style>
-  /* What is already on the farm, under the buttons: a reference while the
-     form above is being filled in, not a second thing to fill in. */
+  /* One row per flock. The selects carry long names -- a farm and a unit
+     that names its farm again -- so the row scrolls sideways rather than
+     wrapping each cell into three lines. */
+  #batch-rows td, #batch-rows th { vertical-align: middle; white-space: nowrap; }
+  #batch-rows .form-select, #batch-rows .form-control { min-width: 150px; }
+  #batch-rows .col-branch .form-select { min-width: 140px; }
+  #batch-rows .col-number input { min-width: 120px; font-weight: 600; }
+  #batch-rows tr.row-bad td { background: #fdf0f0; }
+  .row-note { font-size: .78rem; color: #b02a37; white-space: normal; }
+
+  /* What is already on the farms in the rows: a reference while the rows
+     above are filled in, not a second thing to fill in. */
   .running-card .card-header { font-size: .9rem; }
   .running-empty { color: #6c757d; font-size: .9rem; padding: .85rem 1rem; margin: 0; }
   #running-table td, #running-table th { vertical-align: middle; }
   #running-table tr.this-unit td { background: #eef4ff; }
+  #running-table tr.farm-head td { background: #f4f7fb; font-weight: 600; }
   .unit-tag { font-size: .72rem; font-weight: 600; color: #2b62c9;
               background: #e7f0ff; border-radius: .35rem; padding: .15rem .4rem;
               margin-left: .4rem; white-space: nowrap; }
@@ -25,7 +36,7 @@
 <div class="page-header">
   <div class="page-header-main">
     <div class="page-header-title"><i class="fas fa-plus"></i> Add New Batch</div>
-    <div class="page-header-subtitle">Start a flock on a farm's shed / unit</div>
+    <div class="page-header-subtitle">Start flocks on one farm or on several, in one save</div>
   </div>
   <div class="page-header-right">
     <a href="{% url 'broiler_batch' %}" class="btn btn-outline-secondary">
@@ -37,69 +48,45 @@
 <form id="broiler-batch-form">
   {% csrf_token %}
   <div class="card mb-3">
-    <div class="card-header"><i class="fas fa-layer-group me-1"></i><strong>Batch Details</strong></div>
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label" for="branch">Branch</label>
-          <select id="branch" class="form-select">
-            <option value="">All branches</option>
-            {% for b in branches %}
-              <option value="{{ b.id }}">{{ b.branch_name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="broiler_farm">Broiler Farm<span class="text-danger">*</span></label>
-          <select id="broiler_farm" class="form-select" required>
-            <option value="" selected disabled>Select a broiler farm</option>
-            {% for farm in broiler_farms %}
-              <option value="{{ farm.id }}">{{ farm.farm_name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="shed">Shed / Unit<span class="text-danger">*</span></label>
-          <select id="shed" class="form-select" required disabled>
-            <option value="">Select a farm first</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="batch_name">Batch No.</label>
-          <input type="text" id="batch_name" class="form-control bg-light" readonly
-                 placeholder="Select a farm to see the number">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="book_number">Book Number</label>
-          <input type="text" id="book_number" class="form-control" placeholder="Enter book number">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="lot_no">Lot No</label>
-          <input type="text" id="lot_no" class="form-control" placeholder="Enter lot no">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" for="breed">Breed<span class="text-danger">*</span></label>
-          <select id="breed" class="form-select" required>
-            <option value="" selected disabled>select</option>
-            {% for b in breeds %}<option value="{{ b.id }}">{{ b.description }}</option>{% endfor %}
-          </select>
-        </div>
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <span><i class="fas fa-layer-group me-1"></i><strong>Batch Details</strong></span>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="add-row">
+        <i class="fas fa-plus"></i> Add Row
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="batch-rows">
+          <thead class="table-light">
+            <tr>
+              <th class="col-branch">Branch</th>
+              <th>Broiler Farm <span class="text-danger">*</span></th>
+              <th>Shed / Unit <span class="text-danger">*</span></th>
+              <th class="col-number">Batch No.</th>
+              <th>Breed <span class="text-danger">*</span></th>
+              <th>Book Number</th>
+              <th>Lot No</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </div>
 
   <div class="d-flex justify-content-end gap-2 mb-3">
     <a href="{% url 'broiler_batch' %}" class="btn btn-secondary"><i class="fas fa-times"></i>Cancel</a>
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Batch</button>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Batches</button>
   </div>
 </form>
 
-<!-- Under the buttons: the flocks already on the chosen farm. A placement is
-     made against what is on the ground, and a unit may now hold more than one
-     flock, so this says what is there before the save rather than after. -->
+<!-- Under the buttons: the flocks already running on the farms in the rows.
+     A placement is made against what is on the ground, and a unit may hold
+     more than one flock, so this says what is there before the save. -->
 <div class="card mb-4 running-card">
   <div class="card-header">
-    <i class="fas fa-kiwi-bird me-1"></i><strong id="running-title">Flocks already on this farm</strong>
+    <i class="fas fa-kiwi-bird me-1"></i><strong id="running-title">Flocks already on these farms</strong>
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
@@ -117,13 +104,24 @@
         <tbody></tbody>
       </table>
     </div>
-    <p class="running-empty" id="running-empty">Select a farm to see what is running on it.</p>
+    <p class="running-empty" id="running-empty">Choose a farm to see what is running on it.</p>
   </div>
 </div>
 
 <script>
 const FARMS = [{% for f in broiler_farms %}{ id: {{ f.id }}, name: "{{ f.farm_name|escapejs }}", branch_id: {{ f.branch_id|default:"null" }} },{% endfor %}];
 const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }}, occupied_by: "{{ s.occupied_by|escapejs }}" },{% endfor %}];
+const BRANCH_OPTIONS = `<option value="">All branches</option>{% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name|escapejs }}</option>{% endfor %}`;
+const BREED_OPTIONS = `<option value="" selected disabled>select</option>{% for b in breeds %}<option value="{{ b.id }}">{{ b.description|escapejs }}</option>{% endfor %}`;
+
+function farmOptions(branchId) {
+  const farms = branchId
+    ? FARMS.filter(f => String(f.branch_id) === String(branchId))
+    : FARMS;
+  return '<option value="" selected disabled>'
+    + (farms.length ? 'select farm' : 'no farms on this branch') + '</option>'
+    + farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
 
 // A unit already holding a flock stays selectable — placements may share a
 // shed — and says which flock is in there, so the choice is made knowingly.
@@ -147,130 +145,221 @@ function fmtDate(iso) {
 }
 
 $(document).ready(function () {
-  let running = [];
+  const nextName = {};   // farm id -> the number a first batch there would get
+  const running = {};    // farm id -> { farm, rows }
 
-  // Branch narrows the farm list. It is a filter, not a field the batch
-  // carries: a farm knows its own branch, so nothing is saved from here.
-  $("#branch").on("change", function () {
-    const branchId = $(this).val();
-    const farms = branchId
-      ? FARMS.filter(f => String(f.branch_id) === String(branchId))
-      : FARMS;
-    $("#broiler_farm").html(
-      '<option value="" selected disabled>'
-      + (farms.length ? 'Select a broiler farm' : 'No farms on this branch')
-      + '</option>'
-      + farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join(''))
-      .trigger("change");
+  function rowHtml() {
+    return `<tr class="batch-row">
+      <td class="col-branch"><select class="form-select branch">${BRANCH_OPTIONS}</select></td>
+      <td><select class="form-select farm" required>${farmOptions("")}</select></td>
+      <td><select class="form-select shed" required disabled><option value="">select a farm first</option></select></td>
+      <td class="col-number"><input type="text" class="form-control bg-light batch-no" readonly placeholder="on choosing a farm"></td>
+      <td><select class="form-select breed" required>${BREED_OPTIONS}</select></td>
+      <td><input type="text" class="form-control book-number" placeholder="book number"></td>
+      <td><input type="text" class="form-control lot-no" placeholder="lot no"></td>
+      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row"
+            aria-label="Remove this batch"><i class="fas fa-trash"></i></button></td>
+    </tr>`;
+  }
+
+  function addRow() {
+    $("#batch-rows tbody").append(rowHtml());
+  }
+
+  $("#add-row").on("click", addRow);
+
+  // The last row stays: a form with no rows has nothing to fill in.
+  $(document).on("click", ".remove-row", function () {
+    const $rows = $("#batch-rows tbody tr");
+    if ($rows.length > 1) {
+      $(this).closest("tr").remove();
+    } else {
+      $rows.replaceWith(rowHtml());
+    }
+    paintNumbers();
+    showRunning();
   });
 
-  $("#broiler_farm").on("change", function () {
-    const farmId = $(this).val();
+  $(document).on("change", ".branch", function () {
+    const $row = $(this).closest("tr");
+    $row.find(".farm").html(farmOptions($(this).val())).trigger("change");
+  });
+
+  $(document).on("change", ".farm", function () {
+    const $row = $(this).closest("tr");
+    const farmId = $row.find(".farm").val();
     const opts = shedOptions(farmId);
-    const $shed = $("#shed");
+    const $shed = $row.find(".shed");
     if (opts) {
-      $shed.html('<option value="">Select a shed / unit</option>' + opts).prop("disabled", false);
+      $shed.html('<option value="">select a shed / unit</option>' + opts).prop("disabled", false);
     } else {
-      // Changing the branch drops the chosen farm, and "no sheds for this
-      // farm" would then be answering about a farm nobody has picked.
       $shed.html('<option value="">'
-        + (farmId ? 'No sheds for this farm' : 'Select a farm first')
+        + (farmId ? 'no sheds on this farm' : 'select a farm first')
         + '</option>').prop("disabled", true);
     }
     $shed.trigger("change");
-    showNextBatchNo(farmId);
-    showRunning(farmId);
+    learnFarm(farmId);
   });
 
-  // Choosing the unit only re-marks the rows; the flocks are the farm's.
-  $("#shed").on("change", function () { paintRunning(); });
+  $(document).on("change", ".shed", function () { paintRunning(); });
 
-  // The number this batch will be given. Asked of the server rather than
-  // worked out here: the serial is per farm and someone else may have just
-  // taken one, and the answer comes from the same function the save uses.
-  function showNextBatchNo(farmId) {
-    const $box = $("#batch_name");
-    if (!farmId) { $box.val(""); return; }   // a branch change clears it
-    $.getJSON("{% url 'broiler_batch_next_name' 0 %}".replace("/0/", "/" + farmId + "/"))
-      .done(resp => $box.val(resp.name || ""))
-      .fail(() => $box.val(""));
-  }
-
-  // What is already growing on the farm, under the buttons.
-  function showRunning(farmId) {
-    if (!farmId) {
-      running = [];
-      $("#running-title").text("Flocks already on this farm");
-      paintRunning("Select a farm to see what is running on it.");
-      return;
+  // What this farm's next number is, and what is already growing there.
+  // Asked once per farm and kept, because several rows may name the same one.
+  function learnFarm(farmId) {
+    if (!farmId) { paintNumbers(); showRunning(); return; }
+    const jobs = [];
+    if (!(farmId in nextName)) {
+      jobs.push($.getJSON("{% url 'broiler_batch_next_name' 0 %}".replace("/0/", "/" + farmId + "/"))
+        .done(resp => { nextName[farmId] = resp.name || ""; })
+        .fail(() => { nextName[farmId] = ""; }));
     }
-    $.getJSON("{% url 'farm_open_batches' 0 %}".replace("/0/", "/" + farmId + "/"))
-      .done(function (resp) {
-        running = resp.rows || [];
-        $("#running-title").text(running.length
-          ? `${running.length} flock${running.length > 1 ? 's' : ''} already on ${resp.farm}`
-          : `Nothing running on ${resp.farm}`);
-        paintRunning(`No open flock on ${resp.farm} — this would be the first.`);
-      })
-      .fail(function () {
-        running = [];
-        paintRunning("Could not read what is on this farm.");
-      });
+    if (!(farmId in running)) {
+      jobs.push($.getJSON("{% url 'farm_open_batches' 0 %}".replace("/0/", "/" + farmId + "/"))
+        .done(resp => { running[farmId] = resp; })
+        .fail(() => { running[farmId] = { farm: "", rows: [] }; }));
+    }
+    $.when.apply($, jobs).always(function () {
+      paintNumbers();
+      showRunning();
+    });
   }
 
-  function paintRunning(emptyText) {
+  // Two rows on the same farm take consecutive numbers: the second cannot
+  // have the number the first is taking. The real ones are minted on save;
+  // these are what those will be if the rows are saved as they stand.
+  function paintNumbers() {
+    const seen = {};
+    $("#batch-rows tbody tr").each(function () {
+      const $row = $(this);
+      const farmId = $row.find(".farm").val();
+      const $box = $row.find(".batch-no");
+      if (!farmId || !nextName[farmId]) { $box.val(""); return; }
+      const used = seen[farmId] || 0;
+      seen[farmId] = used + 1;
+      const match = /^(.*?)(\d+)$/.exec(nextName[farmId]);
+      $box.val(match ? match[1] + (Number(match[2]) + used) : nextName[farmId]);
+    });
+  }
+
+  // The farms named in the rows, in the order they were named.
+  function farmsInRows() {
+    const ids = [];
+    $("#batch-rows tbody tr").each(function () {
+      const id = $(this).find(".farm").val();
+      if (id && ids.indexOf(id) === -1) { ids.push(id); }
+    });
+    return ids;
+  }
+
+  function showRunning() {
+    const ids = farmsInRows();
+    const flocks = ids.reduce((n, id) => n + ((running[id] || {}).rows || []).length, 0);
+    if (!ids.length) {
+      $("#running-title").text("Flocks already on these farms");
+    } else if (!flocks) {
+      $("#running-title").text(ids.length > 1
+        ? "Nothing running on any of these farms"
+        : `Nothing running on ${(running[ids[0]] || {}).farm || 'this farm'}`);
+    } else {
+      $("#running-title").text(`${flocks} flock${flocks > 1 ? 's' : ''} already on `
+        + (ids.length > 1 ? `${ids.length} farms` : (running[ids[0]] || {}).farm));
+    }
+    paintRunning();
+  }
+
+  function paintRunning() {
+    const ids = farmsInRows();
     const $table = $("#running-table");
     const $empty = $("#running-empty");
-    if (!running.length) {
+    const chosenSheds = $("#batch-rows tbody .shed").map(function () {
+      return $(this).val();
+    }).get().filter(Boolean);
+
+    const html = [];
+    ids.forEach(function (id) {
+      const farm = running[id];
+      if (!farm || !farm.rows.length) { return; }
+      // Named only when the rows cover more than one farm; on one farm the
+      // heading above has already said which.
+      if (ids.length > 1) {
+        html.push(`<tr class="farm-head"><td colspan="6">${escapeHtml(farm.farm)}</td></tr>`);
+      }
+      farm.rows.forEach(function (r) {
+        const here = chosenSheds.indexOf(String(r.shed_id)) !== -1;
+        html.push(`<tr class="${here ? 'this-unit' : ''}">`
+          + `<td>${escapeHtml(r.name)}</td>`
+          + `<td>${escapeHtml(r.shed || '-')}`
+          + `${here ? '<span class="unit-tag">a unit you picked</span>' : ''}</td>`
+          + `<td>${fmtDate(r.placed_on)}</td>`
+          + `<td class="text-end">${r.age_days === null ? '-' : r.age_days + ' d'}</td>`
+          + `<td class="text-end">${Number(r.live || 0).toLocaleString()}</td>`
+          + `<td><span class="badge bg-success">${escapeHtml(r.status)}</span></td>`
+          + `</tr>`);
+      });
+    });
+
+    if (!html.length) {
       $table.addClass("d-none").find("tbody").empty();
-      if (emptyText) { $empty.text(emptyText); }
-      $empty.removeClass("d-none");
+      $empty.text(ids.length
+        ? "No open flock on the farms in these rows — these would be the first."
+        : "Choose a farm to see what is running on it.")
+        .removeClass("d-none");
       return;
     }
-    const chosenShed = $("#shed").val();
-    $table.find("tbody").html(running.map(function (r) {
-      const here = chosenShed && String(r.shed_id) === String(chosenShed);
-      return `<tr class="${here ? 'this-unit' : ''}">`
-        + `<td>${escapeHtml(r.name)}</td>`
-        + `<td>${escapeHtml(r.shed || '-')}`
-        + `${here ? '<span class="unit-tag">the unit you picked</span>' : ''}</td>`
-        + `<td>${fmtDate(r.placed_on)}</td>`
-        + `<td class="text-end">${r.age_days === null ? '-' : r.age_days + ' d'}</td>`
-        + `<td class="text-end">${Number(r.live || 0).toLocaleString()}</td>`
-        + `<td><span class="badge bg-success">${escapeHtml(r.status)}</span></td>`
-        + `</tr>`;
-    }).join(''));
+    $table.find("tbody").html(html.join(''));
     $table.removeClass("d-none");
     $empty.addClass("d-none");
   }
 
+  function collectRows() {
+    return $("#batch-rows tbody tr").map(function () {
+      const $row = $(this);
+      return {
+        broiler_farm_id: $row.find(".farm").val() || "",
+        shed: $row.find(".shed").val() || "",
+        breed: $row.find(".breed").val() || "",
+        book_number: $row.find(".book-number").val(),
+        lot_no: $row.find(".lot-no").val(),
+      };
+    }).get();
+  }
+
   $("#broiler-batch-form").on("submit", function (e) {
     e.preventDefault();
+    const rows = collectRows();
+    $("#batch-rows tbody tr").removeClass("row-bad").find(".row-note").remove();
     const $save = $(this).find('button[type="submit"]');
     $save.prop("disabled", true);
     $.ajax({
-      url: "{% url 'broiler_batch_create' %}",
+      url: "{% url 'broiler_batches_create' %}",
       type: "POST",
+      contentType: "application/json",
       headers: { "X-CSRFToken": "{{ csrf_token }}" },
-      data: {
-        broiler_farm_id: $("#broiler_farm").val(),
-        shed: $("#shed").val(),
-        book_number: $("#book_number").val(),
-        lot_no: $("#lot_no").val(),
-        breed: $("#breed").val(),
-      },
+      data: JSON.stringify({ rows: rows }),
       success: function (resp) {
-        // The list is where a saved batch belongs; the toast rides along so
-        // the number it was given is the first thing read there.
-        sessionStorage.setItem("bims-batch-saved", resp.batch_name || "");
+        // The list is where saved batches belong; the numbers they were
+        // given ride along so they are the first thing read there.
+        const names = (resp.created || []).map(r => r.batch_name).join(", ");
+        sessionStorage.setItem("bims-batch-saved", names);
         window.location.href = "{% url 'broiler_batch' %}";
       },
       error: function (xhr) {
         $save.prop("disabled", false);
-        window.showToast('danger', xhr.responseJSON?.error || "Failed to add new batch.");
+        const body = xhr.responseJSON || {};
+        // Marked on the rows themselves: a message about "row 3" is no use
+        // while the eye is on row 3.
+        (body.errors || []).forEach(function (e) {
+          const $row = $("#batch-rows tbody tr").eq(e.row - 1);
+          $row.addClass("row-bad");
+          $row.find("td").first()
+            .append(`<div class="row-note">${escapeHtml(e.error)}</div>`);
+        });
+        window.showToast('danger', body.error || "Failed to add the batches.");
       },
     });
   });
+
+  addRow();
 });
 </script>
 {% endblock %}
