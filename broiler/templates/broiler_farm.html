@@ -9,13 +9,25 @@
 <style>
   .bf-page { display: flex; flex-direction: column; gap: .85rem; }
   .bf-head, .bf-filters, .bf-card { background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem; }
-  .bf-head { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; padding: .85rem 1rem; }
+  /* A banner, not a title page: this sat 76px tall above a screen whose
+     point is the two tables below it. The mark, the type and the padding all
+     come in, and the line under the title rides beside it rather than under
+     it once there is room. */
+  .bf-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .45rem .7rem; }
   .bf-head-icon {
-    width: 42px; height: 42px; flex: 0 0 42px; border-radius: .6rem; background: #0d7a5f; color: #fff;
-    display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+    width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem; background: #0d7a5f; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: .85rem;
   }
-  .bf-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; line-height: 1.2; }
-  .bf-sub { font-size: .8rem; color: #64748b; }
+  .bf-title { font-size: 1.02rem; font-weight: 700; color: #0f172a; line-height: 1.25; }
+  .bf-sub { font-size: .75rem; color: #64748b; line-height: 1.3; }
+  @media (min-width: 1200px) {
+    .bf-head > div:not(.bf-head-icon):not(.bf-head-actions) {
+      display: flex; align-items: baseline; gap: .6rem;
+    }
+    .bf-head > div:not(.bf-head-icon):not(.bf-head-actions) .bf-sub::before {
+      content: "—"; margin-right: .4rem; color: #cbd5e1;
+    }
+  }
   .bf-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
 
   .bf-tabs { display: flex; gap: .4rem; border: 0; margin: 0; }
