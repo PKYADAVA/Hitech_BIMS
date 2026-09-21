@@ -75,7 +75,13 @@
   </div>
 </div>
 
-<div class="row g-4">
+{% comment %}
+A row with gutters held the Shed List, and the tiles above it do not have
+any: the card came out 22px narrower on each side than the four KPIs it sits
+under, and the page read as two columns of different widths. The row is kept
+for the modal it also wraps, with its gutters taken off.
+{% endcomment %}
+<div class="row g-0">
     <!-- Modal -->
     <div class="modal fade" id="shedFormModal" tabindex="-1" aria-labelledby="shedFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
