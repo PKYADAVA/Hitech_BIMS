@@ -62,9 +62,12 @@
   .bl-date-pair .form-control { font-size: .76rem; padding: 0; }
   .bl-date-sep { font-size: .68rem; color: #94a3b8; }
 
-  /* One search box, not two: the table's own is what carries the comma-for-
-     either behaviour, so the strip's box drives it rather than replacing it. */
-  .bl-card .dataTables_filter { display: none; }
+  /* The search box stays in the table's own toolbar, where every register
+     on the site keeps it, and it is the one that carries comma-for-either. */
+  .bl-card .dataTables_filter { margin-left: auto; }
+  .bl-card .dataTables_filter label { display: flex; align-items: center;
+    gap: .4rem; margin-bottom: 0; }
+  .bl-card .dataTables_filter input { min-width: 220px; }
 
   /* The grid, at the farm page's sizes. */
   .ds .bl-card table.ds-grid thead th { font-size: .7rem; line-height: 1.2;
@@ -120,12 +123,15 @@
 </div>
 
 <div class="bl-filters">
-  <div class="bl-filter">
-    <span class="bl-filter-icon" style="--bl-bg:#e8f1fd;--bl-fg:#1d6fe0"><i class="fas fa-magnifying-glass"></i></span>
+  <div class="bl-filter bl-dates">
+    <span class="bl-filter-icon" style="--bl-bg:#e7f7ee;--bl-fg:#067647"><i class="fas fa-calendar-day"></i></span>
     <div class="bl-filter-body">
-      <label for="bl-search">Search</label>
-      <input type="search" id="bl-search" class="form-control"
-             placeholder="batch, book or lot — comma for either">
+      <label for="bl-from">Created between</label>
+      <div class="bl-date-pair">
+        <input type="date" id="bl-from" class="form-control" aria-label="Created on or after">
+        <span class="bl-date-sep">to</span>
+        <input type="date" id="bl-to" class="form-control" aria-label="Created on or before">
+      </div>
     </div>
   </div>
   <div class="bl-filter">
@@ -158,17 +164,6 @@
         <option value="active">Active</option>
         <option value="closed">Closed</option>
       </select>
-    </div>
-  </div>
-  <div class="bl-filter bl-dates">
-    <span class="bl-filter-icon" style="--bl-bg:#e7f7ee;--bl-fg:#067647"><i class="fas fa-calendar-day"></i></span>
-    <div class="bl-filter-body">
-      <label for="bl-from">Created between</label>
-      <div class="bl-date-pair">
-        <input type="date" id="bl-from" class="form-control" aria-label="Created on or after">
-        <span class="bl-date-sep">to</span>
-        <input type="date" id="bl-to" class="form-control" aria-label="Created on or before">
-      </div>
     </div>
   </div>
   <button type="button" class="btn btn-outline-secondary btn-sm bl-clear" id="bl-clear">
@@ -459,12 +454,6 @@ $(document).ready(function () {
 
   registerBatchFilter();
 
-  // The strip's own box drives the table's, which is what carries the
-  // comma-for-either search; two boxes would answer differently.
-  $("#bl-search").on("input", function () {
-    $("#broiler-batch-table_filter input").val(this.value).trigger("input");
-  });
-
   $("#bl-branch, #bl-farm, #bl-shed, #bl-status, #bl-from, #bl-to").on("change input", function () {
     BATCH_FILTERS.branch = $("#bl-branch").val() || "";
     BATCH_FILTERS.farm = $("#bl-farm").val() || "";
@@ -477,7 +466,8 @@ $(document).ready(function () {
   });
 
   $("#bl-clear").on("click", function () {
-    $("#bl-search").val("");
+    // The box is the table's own; clearing it through its own event keeps
+    // the comma-for-either handler in step with what is in it.
     $("#broiler-batch-table_filter input").val("").trigger("input");
     $("#bl-branch, #bl-farm, #bl-shed, #bl-status").val("").trigger("change.select2");
     $("#bl-from, #bl-to").val("");
