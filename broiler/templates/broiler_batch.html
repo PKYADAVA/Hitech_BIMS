@@ -57,7 +57,7 @@
             <div class="col-md-6">
               <label class="form-label" for="batch_name">Batch No.</label>
               <input type="text" id="batch_name" class="form-control bg-light" readonly
-                     placeholder="Auto-generated (e.g. BAH-0201-1)">
+                     placeholder="Select a farm to see the number">
             </div>
             <div class="col-md-6">
               <label class="form-label" for="book_number">Book Number</label>
@@ -176,7 +176,19 @@ $(document).ready(function () {
       $shed.html('<option value="">No sheds for this farm</option>').prop("disabled", true);
     }
     $shed.trigger("change");
+    showNextBatchNo($(this).val());
   });
+
+  // The number this batch will be given. Asked of the server rather than
+  // worked out here: the serial is per farm and someone else may have just
+  // taken one, and the answer comes from the same function the save uses.
+  function showNextBatchNo(farmId) {
+    const $box = $("#batch_name");
+    if (!farmId) { $box.val(""); return; }
+    $.getJSON("{% url 'broiler_batch_next_name' 0 %}".replace("/0/", "/" + farmId + "/"))
+      .done(resp => $box.val(resp.name || ""))
+      .fail(() => $box.val(""));
+  }
 
   function loadBatchList() {
     $.ajax({
@@ -334,6 +346,7 @@ $(document).ready(function () {
         $("#batchFormModal").modal("hide");
         $("#broiler-batch-form").trigger("reset");
         $("#shed").html('<option value="">Select a farm first</option>').prop("disabled", true);
+        $("#batch_name").val("");
         window.showToast('success', `Batch ${resp.batch_name} created.`);
       },
       error: function (xhr) {

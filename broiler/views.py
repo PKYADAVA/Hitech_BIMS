@@ -897,6 +897,19 @@ def batch_shed_options(farm_id=None) -> list[dict]:
     ]
 
 
+@login_required
+def broiler_batch_next_name(request, farm_id):
+    """The batch number a new batch on this farm would be given.
+
+    The Add Batch form shows it as soon as a farm is chosen, so the number
+    is known before the save rather than read off a toast afterwards. It
+    comes from the same function the save calls, and it is read live rather
+    than rendered with the page, so it cannot drift from what is assigned.
+    """
+    farm = get_object_or_404(BroilerFarm, id=farm_id)
+    return JsonResponse({"name": BroilerBatch.next_batch_name(farm)})
+
+
 @method_decorator(login_required, name="dispatch")
 class BroilerBatchTemplateView(View):
     """View for rendering the broiler batch template."""

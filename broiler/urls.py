@@ -83,6 +83,8 @@ urlpatterns = [
     path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
+    path('broiler_batch/next-name/<int:farm_id>/', views.broiler_batch_next_name,
+         name='broiler_batch_next_name'),  # The number the next batch on a farm gets
     path('broiler_batch/<int:id>/', BroilerBatchAPI.as_view(), name='broiler_batch_edit'),  # For editing broiler batch
     path('broiler_batch/<int:id>/delete/', BroilerBatchAPI.as_view(), name='broiler_batch_delete'), # For deleting broiler batch
     path('get-supervisors/', views.get_supervisors, name='get_supervisors'),
