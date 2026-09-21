@@ -28,6 +28,45 @@
   .pill-occ { background:#e6f7ea; color:#1a7f4b; } .pill-free { background:#e2f1fb; color:#1f74c4; }
   .shed-group-row td { background:#eef3f8 !important; font-weight:700; color:#2b4a6b; cursor:pointer; user-select:none; }
   .shed-group-row:hover td { background:#e3ebf4 !important; }
+
+  /* What opens a row, drawn as a button rather than a mark.
+     A chevron or a triangle beside a code reads as decoration -- part of the
+     heading, like a bullet -- and a reader has no reason to try pressing it.
+     A bordered square with a plus in it is a control, and the plus says what
+     pressing it does: there is more here. It turns into a minus while the row
+     is open. */
+  .shed-open {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; margin-right:.5rem; flex:0 0 20px;
+    border:1px solid #2b62c9; border-radius:.35rem; background:#2b62c9;
+    color:#fff; font-size:.62rem; line-height:1; cursor:pointer;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .shed-group-row:hover .shed-open,
+  .shed-open:hover { background:#1f4ba0; border-color:#1f4ba0; }
+
+  /* DataTables Responsive draws its own control on each shed row; the same
+     button, so both say the same thing. */
+  #shed-table td.dtr-control { cursor:pointer; }
+  #shed-table td.dtr-control:before {
+    content:"+" !important;
+    display:inline-flex !important; align-items:center; justify-content:center;
+    width:20px; height:20px; box-sizing:border-box;
+    border:1px solid #2b62c9 !important; border-radius:.35rem !important;
+    background:#2b62c9 !important; color:#fff !important;
+    font-family:inherit !important; font-size:.85rem; font-weight:700; line-height:1;
+    box-shadow:none !important; top:auto !important; left:auto !important;
+    margin-right:.4rem; text-indent:0 !important;
+  }
+  /* Open: the plus becomes a minus. Which class the plugin puts on the row
+     depends on its version, so both are named. */
+  #shed-table tr.dtr-expanded > td.dtr-control:before,
+  #shed-table tr.parent > td.dtr-control:before {
+    content:"−" !important;
+  }
+  #shed-table td.dtr-control:hover:before {
+    background:#1f4ba0 !important; border-color:#1f4ba0 !important;
+  }
   .shed-toolbar { display:flex; flex-wrap:nowrap; gap:.6rem; align-items:center; }
   .shed-toolbar #search-name { flex:1 1 auto; min-width:180px; }
   .shed-toolbar .form-select { flex:0 0 190px; width:190px; }
@@ -336,10 +375,11 @@ for the modal it also wraps, with its gutters taken off.
                                     const collapsed = !!collapsedGroups[group];
                                     const count = allSheds.filter(s =>
                                         ((s.farm_code || "") + " — " + (s.farm_name || "")) === group).length;
-                                    const caret = collapsed ? "fa-chevron-right" : "fa-chevron-down";
+                                    const caret = collapsed ? "fa-plus" : "fa-minus";
                                     $(rows).eq(i).before(
                                         '<tr class="shed-group-row" data-grp="' + gid + '" data-group="' + window.escapeHtml(group) + '">' +
-                                        '<td colspan="15"><i class="fas ' + caret + ' me-2 grp-caret"></i>' +
+                                        '<td colspan="15"><span class="shed-open grp-caret" role="button" ' +
+                                        'aria-label="Show or hide the sheds on this farm"><i class="fas ' + caret + '"></i></span>' +
                                         '<i class="fas fa-tractor me-2"></i>' + window.escapeHtml(group) +
                                         ' <span class="text-muted fw-normal">(' + count + ' shed' + (count === 1 ? '' : 's') + ')</span></td></tr>'
                                     );
@@ -379,7 +419,7 @@ for the modal it also wraps, with its gutters taken off.
             collapsedGroups[group] = !collapsedGroups[group];
             $('#shed-table tbody tr[data-grp="' + gid + '"]').not(".shed-group-row")
                 .toggle(!collapsedGroups[group]);
-            $(this).find(".grp-caret").toggleClass("fa-chevron-down fa-chevron-right");
+            $(this).find(".grp-caret i").toggleClass("fa-minus fa-plus");
         });
 
         function resetForm() {
