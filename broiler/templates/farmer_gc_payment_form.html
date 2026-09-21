@@ -95,7 +95,12 @@
 const existingLines = {{ existing_lines_json|safe }};
 const editingId = {% if payment %}{{ payment.id }}{% else %}null{% endif %};
 
-const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}{% if f.farmer %} — {{ f.farmer.farmer_name|escapejs }}{% endif %}</option>{% endfor %}`;
+// The farm, by its own name. It used to carry its farmer's name after it --
+// "Green Valley Farm - Test Farmer" -- which read as the same party twice in
+// a column headed Farm, and no other farm picker in the ERP does it: the
+// settlement form, bird sale and the rest all list the farm alone. The
+// farmer has a column of its own on the register.
+const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const payTypeOptions = `{% for value, label in pay_types %}<option value="{{ value|escapejs }}">{{ label|escapejs }}</option>{% endfor %}`;
 const modeOptions = `<option value="">select</option>{% for m in payment_modes %}<option value="{{ m|escapejs }}">{{ m|escapejs }}</option>{% endfor %}`;
 const MODE_MAP = {{ payment_mode_map_json|safe }};
