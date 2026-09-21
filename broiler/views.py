@@ -950,6 +950,11 @@ class BroilerBatchTemplateView(View):
             cache.set(cache_key, broiler_farms)
         context = {
             "broiler_farms": broiler_farms,
+            # Narrowed to the branches these farms are on, so the picker
+            # cannot offer a branch with nothing behind it.
+            "branches": Branch.objects.filter(
+                id__in={f["branch_id"] for f in broiler_farms if f["branch_id"]}
+            ).order_by("branch_name"),
             "breeds": Breed.objects.filter(is_active=True).order_by("description"),
             "sheds": batch_shed_options(),
         }

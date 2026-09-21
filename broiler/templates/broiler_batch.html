@@ -40,6 +40,15 @@
           {% csrf_token %}
           <div class="row g-3">
             <div class="col-md-6">
+              <label class="form-label" for="branch">Branch</label>
+              <select id="branch" class="form-select">
+                <option value="">All branches</option>
+                {% for b in branches %}
+                  <option value="{{ b.id }}">{{ b.branch_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
               <label class="form-label" for="broiler_farm">Broiler Farm<span class="text-danger">*</span></label>
               <select id="broiler_farm" class="form-select" required>
                 <option value="" selected disabled>Select a broiler farm</option>
@@ -121,6 +130,7 @@
 
 <script>
 const BREEDS = [{% for b in breeds %}{ id: {{ b.id }}, name: "{{ b.description|escapejs }}" },{% endfor %}];
+const FARMS = [{% for f in broiler_farms %}{ id: {{ f.id }}, name: "{{ f.farm_name|escapejs }}", branch_id: {{ f.branch_id|default:"null" }} },{% endfor %}];
 const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }}, occupied_by: "{{ s.occupied_by|escapejs }}" },{% endfor %}];
 
 // Options for the sheds belonging to `farmId`, optionally pre-selecting `selectedId`.
@@ -167,14 +177,36 @@ function shedLabel(batch) {
 }
 
 $(document).ready(function () {
+  // Branch narrows the farm list. It is a filter, not a field the batch
+  // carries: a farm knows its own branch, so nothing is saved from here.
+  // "All branches" is the opening state, which is also what a user who
+  // works one branch never has to touch.
+  $("#branch").on("change", function () {
+    const branchId = $(this).val();
+    const farms = branchId
+      ? FARMS.filter(f => String(f.branch_id) === String(branchId))
+      : FARMS;
+    $("#broiler_farm").html(
+      '<option value="" selected disabled>'
+      + (farms.length ? 'Select a broiler farm' : 'No farms on this branch')
+      + '</option>'
+      + farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join(''))
+      .trigger("change");
+  });
+
   // Repopulate the Add-modal Shed select whenever the farm changes.
   $("#broiler_farm").on("change", function () {
-    const opts = shedOptions($(this).val(), null);
+    const farmId = $(this).val();
+    const opts = shedOptions(farmId, null);
     const $shed = $("#shed");
     if (opts) {
       $shed.html('<option value="">Select a shed / unit</option>' + opts).prop("disabled", false);
     } else {
-      $shed.html('<option value="">No sheds for this farm</option>').prop("disabled", true);
+      // Changing the branch drops the chosen farm, and "no sheds for this
+      // farm" would then be answering about a farm nobody has picked.
+      $shed.html('<option value="">'
+        + (farmId ? 'No sheds for this farm' : 'Select a farm first')
+        + '</option>').prop("disabled", true);
     }
     $shed.trigger("change");
     showNextBatchNo($(this).val());
@@ -185,7 +217,7 @@ $(document).ready(function () {
   // taken one, and the answer comes from the same function the save uses.
   function showNextBatchNo(farmId) {
     const $box = $("#batch_name");
-    if (!farmId) { $box.val(""); return; }
+    if (!farmId) { $box.val(""); return; }   // a branch change clears it
     $.getJSON("{% url 'broiler_batch_next_name' 0 %}".replace("/0/", "/" + farmId + "/"))
       .done(resp => $box.val(resp.name || ""))
       .fail(() => $box.val(""));
