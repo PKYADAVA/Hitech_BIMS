@@ -11,14 +11,43 @@
 {% include '_broiler_subnavbar.html' with active_tab='broiler_batch' %}
 
 <style>
-  /* One row per flock. The selects carry long names -- a farm and a unit
-     that names its farm again -- so the row scrolls sideways rather than
-     wrapping each cell into three lines. */
+  /* One row per flock. The selects carry long names -- a farm, and a unit
+     that names its farm again -- so a row can still outgrow the screen; it
+     scrolls sideways rather than wrapping each cell into three lines, and
+     the widths below are what let it fit on an ordinary laptop. */
   #batch-rows td, #batch-rows th { vertical-align: middle; white-space: nowrap; }
-  #batch-rows .form-select, #batch-rows .form-control { min-width: 150px; }
-  #batch-rows .col-branch .form-select { min-width: 140px; }
-  #batch-rows .col-number input { min-width: 120px; font-weight: 600; }
-  #batch-rows tr.row-bad td { background: #fdf0f0; }
+  #batch-rows th { font-size: .74rem; letter-spacing: .02em; text-transform: uppercase;
+                   color: #5a6b7f; font-weight: 600; }
+  #batch-rows td { padding: .5rem .55rem; }
+  #batch-rows tbody tr:hover td { background: #fbfcfe; }
+  #batch-rows .form-select, #batch-rows .form-control { min-width: 128px; }
+  #batch-rows .col-branch .form-select { min-width: 124px; }
+  #batch-rows .col-farm .form-select { min-width: 150px; }
+  #batch-rows .col-shed .form-select { min-width: 176px; }
+  #batch-rows .col-book .form-control, #batch-rows .col-lot .form-control { min-width: 112px; }
+
+  /* The serial is given, not typed: it reads as a code rather than as one
+     more empty box waiting to be filled in. */
+  #batch-rows .col-number { width: 1%; }
+  #batch-rows .batch-no {
+    min-width: 104px; width: 104px; font-weight: 600; letter-spacing: .01em;
+    color: #1f4ba0; background: #eef4ff !important; border-color: #cfdcf3;
+    text-align: center; cursor: default;
+  }
+  #batch-rows .batch-no::placeholder { font-weight: 400; color: #9bacc4; letter-spacing: 0; }
+
+  /* Which row is which, so a refusal against row 2 lands on a row that
+     says 2, and the eye keeps its place while the table scrolls. */
+  #batch-rows .col-no { width: 1%; text-align: center; color: #8a97a8;
+                        font-weight: 600; font-size: .82rem; }
+
+  /* Add and delete stay under the thumb while the row scrolls. */
+  #batch-rows .col-act { position: sticky; right: 0; z-index: 2;
+                         background: #fff; box-shadow: -6px 0 6px -6px rgba(16,32,56,.18); }
+  #batch-rows thead .col-act { background: #f8f9fa; }
+  #batch-rows tbody tr:hover .col-act { background: #fbfcfe; }
+
+  #batch-rows tr.row-bad td, #batch-rows tr.row-bad .col-act { background: #fdf0f0; }
   .row-note { font-size: .78rem; color: #b02a37; white-space: normal; }
 
   /* What is already on the farms in the rows: a reference while the rows
@@ -28,9 +57,29 @@
   #running-table td, #running-table th { vertical-align: middle; }
   #running-table tr.this-unit td { background: #eef4ff; }
   #running-table tr.farm-head td { background: #f4f7fb; font-weight: 600; }
+  #running-table tbody tr:not(.farm-head):hover td { background: #f7faff; }
+  .farm-sum { font-weight: 500; font-size: .8rem; color: #6c7a8c; margin-left: .5rem; }
   .unit-tag { font-size: .72rem; font-weight: 600; color: #2b62c9;
               background: #e7f0ff; border-radius: .35rem; padding: .15rem .4rem;
               margin-left: .4rem; white-space: nowrap; }
+
+  /* Compact: this is a data-entry page, and the rows are read across, so
+     the air between them is what costs a screenful. Controls sit at the
+     size the register tables use rather than the form default. */
+  .page-header { margin-bottom: .6rem; }
+  .card + .card, form .card { margin-bottom: .6rem !important; }
+  .card-header { padding: .5rem .85rem; }
+  #batch-rows td { padding: .35rem .45rem; }
+  #batch-rows th { padding: .4rem .45rem; }
+  #batch-rows .form-select, #batch-rows .form-control {
+    font-size: .84rem; padding: .28rem 1.6rem .28rem .5rem; min-height: 0; height: 32px;
+  }
+  #batch-rows .form-control { padding-right: .5rem; }
+  #batch-rows .btn-sm { padding: .15rem .4rem; min-height: 26px; line-height: 1; }
+  #batch-rows .batch-no { font-size: .84rem; }
+  #running-table td, #running-table th { padding: .35rem .75rem; font-size: .86rem; }
+  .running-empty { padding: .55rem .85rem; }
+  form .d-flex.justify-content-end { margin-bottom: .6rem !important; }
 </style>
 
 <div class="page-header">
@@ -56,14 +105,15 @@
         <table class="table table-bordered mb-0" id="batch-rows">
           <thead class="table-light">
             <tr>
+              <th class="col-no">#</th>
               <th class="col-branch">Branch</th>
-              <th>Broiler Farm <span class="text-danger">*</span></th>
-              <th>Shed / Unit <span class="text-danger">*</span></th>
+              <th class="col-farm">Broiler Farm <span class="text-danger">*</span></th>
+              <th class="col-shed">Shed / Unit <span class="text-danger">*</span></th>
               <th class="col-number">Batch No.</th>
-              <th>Breed <span class="text-danger">*</span></th>
-              <th>Book Number</th>
-              <th>Lot No</th>
-              <th></th>
+              <th class="col-breed">Breed <span class="text-danger">*</span></th>
+              <th class="col-book">Book Number</th>
+              <th class="col-lot">Lot No</th>
+              <th class="col-act"></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -147,14 +197,15 @@ $(document).ready(function () {
 
   function rowHtml() {
     return `<tr class="batch-row">
+      <td class="col-no"></td>
       <td class="col-branch"><select class="form-select branch">${BRANCH_OPTIONS}</select></td>
-      <td><select class="form-select farm" required>${farmOptions("")}</select></td>
-      <td><select class="form-select shed" required disabled><option value="">select a farm first</option></select></td>
-      <td class="col-number"><input type="text" class="form-control bg-light batch-no" readonly placeholder="on choosing a farm"></td>
-      <td><select class="form-select breed" required>${BREED_OPTIONS}</select></td>
-      <td><input type="text" class="form-control book-number" placeholder="book number"></td>
-      <td><input type="text" class="form-control lot-no" placeholder="lot no"></td>
-      <td class="text-nowrap text-center">
+      <td class="col-farm"><select class="form-select farm" required>${farmOptions("")}</select></td>
+      <td class="col-shed"><select class="form-select shed" required disabled><option value="">select a farm first</option></select></td>
+      <td class="col-number"><input type="text" class="form-control batch-no" readonly placeholder="on a farm"></td>
+      <td class="col-breed"><select class="form-select breed" required>${BREED_OPTIONS}</select></td>
+      <td class="col-book"><input type="text" class="form-control book-number" placeholder="book number"></td>
+      <td class="col-lot"><input type="text" class="form-control lot-no" placeholder="lot no"></td>
+      <td class="col-act text-nowrap text-center">
         <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1"
                 title="Add Row"><i class="fas fa-plus"></i></button>
         <button type="button" class="btn btn-sm btn-outline-danger remove-row"
@@ -173,6 +224,7 @@ $(document).ready(function () {
   function refreshRowButtons() {
     const $rows = $("#batch-rows tbody tr");
     $rows.each(function (i) {
+      $(this).find(".col-no").text(i + 1);
       $(this).find(".add-row-inline").toggleClass("d-none", i !== $rows.length - 1);
       $(this).find(".remove-row").prop("disabled", $rows.length === 1);
     });
@@ -183,7 +235,7 @@ $(document).ready(function () {
   $(document).on("click", ".remove-row", function () {
     if ($("#batch-rows tbody tr").length === 1) { return; }
     $(this).closest("tr").remove();
-    refreshRowButtons();
+    refreshRowButtons();   // the numbers down the left close up
     paintNumbers();
     showRunning();
   });
@@ -290,7 +342,11 @@ $(document).ready(function () {
       // Named only when the rows cover more than one farm; on one farm the
       // heading above has already said which.
       if (ids.length > 1) {
-        html.push(`<tr class="farm-head"><td colspan="6">${escapeHtml(farm.farm)}</td></tr>`);
+        const live = farm.rows.reduce((n, r) => n + Number(r.live || 0), 0);
+        html.push(`<tr class="farm-head"><td colspan="6">${escapeHtml(farm.farm)}`
+          + `<span class="farm-sum">${farm.rows.length} flock`
+          + `${farm.rows.length > 1 ? 's' : ''} \u00b7 `
+          + `${live.toLocaleString()} live birds</span></td></tr>`);
       }
       farm.rows.forEach(function (r) {
         const here = chosenSheds.indexOf(String(r.shed_id)) !== -1;
@@ -332,11 +388,51 @@ $(document).ready(function () {
     }).get();
   }
 
+  // What the save is about to start, row by row, so it is checked against
+  // the screen rather than against memory. A placement is the one thing on
+  // this page that cannot be undone by editing it afterwards: the number is
+  // minted and the flock is on the farm.
+  function summarise() {
+    const lines = [];
+    $("#batch-rows tbody tr").each(function (i) {
+      const $row = $(this);
+      const farm = $row.find(".farm option:selected").text().trim();
+      const shed = $row.find(".shed option:selected").text().trim();
+      const no = $row.find(".batch-no").val() || "a new number";
+      lines.push(`${i + 1}. ${no} \u2014 ${farm || "no farm"}`
+        + (shed && $row.find(".shed").val() ? ` \u00b7 ${shed}` : ""));
+    });
+    return lines;
+  }
+
+  function askFirst() {
+    const lines = summarise();
+    const many = lines.length > 1;
+    // A long round is summed rather than listed to the last row: a dialog
+    // nobody can read to the end is not a check.
+    const shown = lines.length > 8
+      ? lines.slice(0, 8).concat([`\u2026 and ${lines.length - 8} more`])
+      : lines;
+    return window.bimsConfirm(
+      `Start ${lines.length} flock${many ? "s" : ""}?\n\n` + shown.join("\n")
+      + `\n\nThe numbers are given on saving and cannot be changed afterwards.`,
+      { title: many ? "Save these batches" : "Save this batch",
+        confirmText: many ? "Save batches" : "Save batch",
+        danger: false });   // a save, not a deletion
+  }
+
   $("#broiler-batch-form").on("submit", function (e) {
     e.preventDefault();
     const rows = collectRows();
     $("#batch-rows tbody tr").removeClass("row-bad").find(".row-note").remove();
     const $save = $(this).find('button[type="submit"]');
+    askFirst().then(function (go) {
+      if (!go) { return; }
+      send(rows, $save);
+    });
+  });
+
+  function send(rows, $save) {
     $save.prop("disabled", true);
     $.ajax({
       url: "{% url 'broiler_batches_create' %}",
@@ -365,7 +461,7 @@ $(document).ready(function () {
         window.showToast('danger', body.error || "Failed to add the batches.");
       },
     });
-  });
+  }
 
   addRow();
 });
