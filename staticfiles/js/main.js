@@ -639,6 +639,21 @@ $.extend(true, $.fn.dataTable.defaults, {
       .replace(/'/g, '&#039;');
   };
 
+  // How an open flock reads in a Batch dropdown. The number alone was enough
+  // while a farm ran one flock at a time; several can now be open at once,
+  // sharing a shed, and the placement date is what tells them apart.
+  window.batchOptionLabel = window.batchOptionLabel || function (batch) {
+    if (!batch || !batch.placed_on) { return (batch && batch.name) || ''; }
+    // Split rather than parsed: "2026-09-14" as a Date is midnight UTC, which
+    // reads as the day before in any timezone behind it.
+    var parts = String(batch.placed_on).split('-');
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var month = months[Number(parts[1]) - 1];
+    if (parts.length < 3 || !month) { return batch.name; }
+    return batch.name + ' · placed ' + Number(parts[2]) + ' ' + month;
+  };
+
   window.showToast = window.showToast || function (type, message) {
     if (typeof Toastify === 'undefined') { return; }
     Toastify({

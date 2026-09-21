@@ -901,6 +901,31 @@ def batch_shed_options(farm_id=None) -> list[dict]:
 
 
 @login_required
+def batch_shed_headroom(request, batch_id):
+    """How full the unit housing this batch is, and what is left in it.
+
+    Placement is what puts birds in a shed, and a unit may now hold more than
+    one flock, so the room left is the shed's capacity less every open flock
+    already in there — not just this one's. Reported rather than enforced: the
+    placement screen warns with the numbers and lets the user go ahead, because
+    a shed's capacity is a planning figure and the birds are already on the
+    lorry.
+    """
+    batch = get_object_or_404(BroilerBatch, id=batch_id)
+    shed = batch.shed
+    if not shed or not shed.capacity:
+        return JsonResponse({"capacity": None})
+    in_shed = sum(_flock_counts(b)["live"]
+                  for b in _open_batches_on_shed(shed.id))
+    return JsonResponse({
+        "shed": (shed.shed_name or shed.shed_code or f"Unit {shed.unit_no}"),
+        "capacity": shed.capacity,
+        "in_shed": in_shed,
+        "headroom": max(shed.capacity - in_shed, 0),
+    })
+
+
+@login_required
 def broiler_batch_next_name(request, farm_id):
     """The batch number a new batch on this farm would be given.
 
@@ -1695,6 +1720,19 @@ def farmer_farm_setup_request_reject(request, id):
     return JsonResponse({"message": "Rejected"})
 
 
+def _shed_on_farm(shed_id, farm_id):
+    """The shed, if it is one of `farm_id`'s; otherwise None.
+
+    A shed id arrives from a form and names a unit on some farm. Nothing
+    stops a posted id naming another farm's unit, and a flock housed in a
+    shed its own farm does not own is wrong everywhere it is later read —
+    occupancy, placement, the growing charge. Checked on the way in.
+    """
+    if not shed_id or not farm_id:
+        return None
+    return BroilerFarmShed.objects.filter(id=shed_id, farm_id=farm_id).first()
+
+
 def _open_batches_on_shed(shed_id, exclude_batch_id=None):
     """The open/active batches housed in `shed_id`, oldest placement first.
 
@@ -1776,6 +1814,11 @@ class BroilerBatchAPI(BaseAPIView):
                                                  for m in missing) + "."},
                     status=400,
                 )
+            if not _shed_on_farm(shed_id, farm_obj.id):
+                return JsonResponse(
+                    {"error": f"That shed / unit is not on {farm_obj.farm_name}."},
+                    status=400,
+                )
             with transaction.atomic():
                 # batch_name is auto-generated (<farm code minus FRM/>-<n>,
                 # e.g. BAH-0201-1) in BroilerBatch.save() — never accepted
@@ -1814,7 +1857,13 @@ class BroilerBatchAPI(BaseAPIView):
                 if "breed" in data:
                     broiler_batch.breed_id = data["breed"] or None
                 if "shed" in data:
-                    broiler_batch.shed_id = data["shed"] or None
+                    if not _shed_on_farm(data["shed"], broiler_batch.broiler_farm_id):
+                        return JsonResponse(
+                            {"error": "That shed / unit is not on "
+                                      f"{broiler_batch.broiler_farm.farm_name}."},
+                            status=400,
+                        )
+                    broiler_batch.shed_id = data["shed"]
                 broiler_batch.save()
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch updated"})

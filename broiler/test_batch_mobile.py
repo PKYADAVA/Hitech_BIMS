@@ -1,9 +1,9 @@
 """Batch Creation on the phone, delegating to the ERP's own batch API.
 
 The phone must not carry a second copy of these rules: the batch number is
-generated on save and never accepted from a form, a shed holding an open batch
-cannot take another, and an edit may change only the book number, lot number,
-breed and shed. Each of those is asserted here through the mobile endpoint, so
+generated on save and never accepted from a form, a shed must be one of the
+chosen farm's own units (though it may already hold a flock), and an edit may
+change only the book number, lot number, breed and shed. Each of those is asserted here through the mobile endpoint, so
 the delegation is what is tested — not a restatement of it.
 """
 from django.contrib.auth import get_user_model
@@ -91,6 +91,14 @@ class BatchWriteTests(TestCase):
             BroilerBatch.objects.filter(shed=self.shed, is_closed=False,
                                         end_date__isnull=True).count(), 2)
 
+    def test_a_shed_on_another_farm_is_refused(self):
+        # The id arrives from a form; a flock housed in a unit its own farm
+        # does not own is wrong everywhere it is read afterwards.
+        resp = self.create(shed=self.far_shed.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(self.farm.farm_name, str(resp.content))
+        self.assertEqual(BroilerBatch.objects.count(), 0)
+
     def test_a_batch_needs_a_shed_and_a_breed(self):
         # Required on the desktop form and here both — a flock is housed
         # somewhere, and is of some breed.
@@ -135,6 +143,15 @@ class BatchWriteTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         moving.refresh_from_db()
         self.assertEqual(moving.shed_id, self.shed.id)
+
+    def test_an_edit_cannot_move_a_batch_off_its_farm(self):
+        self.create()
+        batch = BroilerBatch.objects.get()
+        resp = self.client.put(f"{SAVE}/{batch.id}",
+                               {"shed": self.far_shed.id}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        batch.refresh_from_db()
+        self.assertEqual(batch.shed_id, self.shed.id)
 
     def test_an_edit_cannot_clear_the_shed_or_the_breed(self):
         self.create()

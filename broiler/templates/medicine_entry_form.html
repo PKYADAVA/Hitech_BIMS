@@ -105,7 +105,7 @@ function fillBatchSelect(sel, batches) {
     sel.value = String(list[0].id);
   } else {
     sel.innerHTML = '<option value="">select batch</option>' +
-      list.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+      list.map(b => `<option value="${b.id}">${escapeHtml(window.batchOptionLabel(b))}</option>`).join('');
     sel.value = '';
   }
   if (window.jQuery) jQuery(sel).trigger('change.select2');
