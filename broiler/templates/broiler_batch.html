@@ -79,8 +79,19 @@
   /* The toolbar above it: the same controls, at the grid's size. */
   .ds .bl-card .dataTables_length select, .ds .bl-card .dataTables_filter input {
     height: 30px; font-size: .78rem; }
-  .ds .bl-card .dt-buttons .btn { padding: .2rem .55rem; font-size: .78rem;
-    min-height: 30px; }
+  /* Show / entries, the export buttons and Search sit on one line at one
+     height. The buttons carry a !important padding and a 38px touch-target
+     floor from the site's own sheets, which is what left them 44px tall
+     beside a 30px control, so both are named here. */
+  .ds .bl-card .dt-buttons { display: inline-flex; gap: 0; margin-left: .5rem; }
+  .ds .bl-card .dt-buttons .btn {
+    height: 30px; min-height: 30px; padding: 0 10px !important;
+    font-size: .78rem; display: inline-flex; align-items: center;
+    justify-content: center; line-height: 1; }
+  .ds .bl-card .dataTables_length, .ds .bl-card .dataTables_filter {
+    display: flex; align-items: center; }
+  .ds .bl-card .dataTables_length label { display: flex; align-items: center;
+    gap: .4rem; margin-bottom: 0; }
   .ds .bl-card .dataTables_length, .ds .bl-card .dataTables_filter,
   .ds .bl-card .dataTables_info, .ds .bl-card .dataTables_paginate { font-size: .78rem; }
 
