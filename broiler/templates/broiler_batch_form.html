@@ -48,11 +48,8 @@
 <form id="broiler-batch-form">
   {% csrf_token %}
   <div class="card mb-3">
-    <div class="card-header d-flex align-items-center justify-content-between">
-      <span><i class="fas fa-layer-group me-1"></i><strong>Batch Details</strong></span>
-      <button type="button" class="btn btn-sm btn-outline-primary" id="add-row">
-        <i class="fas fa-plus"></i> Add Row
-      </button>
+    <div class="card-header">
+      <i class="fas fa-layer-group me-1"></i><strong>Batch Details</strong>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -157,25 +154,36 @@ $(document).ready(function () {
       <td><select class="form-select breed" required>${BREED_OPTIONS}</select></td>
       <td><input type="text" class="form-control book-number" placeholder="book number"></td>
       <td><input type="text" class="form-control lot-no" placeholder="lot no"></td>
-      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row"
-            aria-label="Remove this batch"><i class="fas fa-trash"></i></button></td>
+      <td class="text-nowrap text-center">
+        <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1"
+                title="Add Row"><i class="fas fa-plus"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger remove-row"
+                title="Delete"><i class="fas fa-trash"></i></button>
+      </td>
     </tr>`;
   }
 
   function addRow() {
     $("#batch-rows tbody").append(rowHtml());
+    refreshRowButtons();
   }
 
-  $("#add-row").on("click", addRow);
-
-  // The last row stays: a form with no rows has nothing to fill in.
-  $(document).on("click", ".remove-row", function () {
+  // Only the last row offers "+"; earlier rows just delete. The sole
+  // remaining row cannot be deleted -- no "+" would be left to add one back.
+  function refreshRowButtons() {
     const $rows = $("#batch-rows tbody tr");
-    if ($rows.length > 1) {
-      $(this).closest("tr").remove();
-    } else {
-      $rows.replaceWith(rowHtml());
-    }
+    $rows.each(function (i) {
+      $(this).find(".add-row-inline").toggleClass("d-none", i !== $rows.length - 1);
+      $(this).find(".remove-row").prop("disabled", $rows.length === 1);
+    });
+  }
+
+  $(document).on("click", ".add-row-inline", addRow);
+
+  $(document).on("click", ".remove-row", function () {
+    if ($("#batch-rows tbody tr").length === 1) { return; }
+    $(this).closest("tr").remove();
+    refreshRowButtons();
     paintNumbers();
     showRunning();
   });
