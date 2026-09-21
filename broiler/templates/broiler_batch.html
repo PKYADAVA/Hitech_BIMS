@@ -11,14 +11,44 @@
 {% include '_broiler_subnavbar.html' with active_tab='broiler_batch' %}
 
 <style>
-  /* Compact, and the same ink as the Add page this list now feeds. */
-  .page-header { margin-bottom: .6rem; }
-  .card-header { padding: .5rem .85rem; }
-  #broiler-batch-table th { font-size: .74rem; letter-spacing: .02em;
-    text-transform: uppercase; color: #5a6b7f; font-weight: 600;
-    white-space: nowrap; padding: .45rem .6rem; }
-  #broiler-batch-table td { padding: .3rem .6rem; font-size: .87rem;
-    vertical-align: middle; line-height: 1.35; }
+  /* The Broiler Farm page's measurements, so the two Broiler screens read
+     as one product: a banner rather than a title page, a card with the same
+     edge, and a grid at the same type sizes. */
+  .bl-page { display: flex; flex-direction: column; gap: .6rem; }
+  .bl-head, .bl-card { background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem; }
+  .bl-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .bl-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: #0d7a5f; color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .bl-title { font-size: 1.02rem; font-weight: 700; color: #0f172a; line-height: 1.25; }
+  .bl-sub { font-size: .75rem; color: #64748b; line-height: 1.3; }
+  @media (min-width: 1200px) {
+    /* The line under the title rides beside it once there is room. */
+    .bl-head > div:not(.bl-head-icon):not(.bl-head-actions) {
+      display: flex; align-items: baseline; gap: .6rem;
+    }
+    .bl-head > div:not(.bl-head-icon):not(.bl-head-actions) .bl-sub::before {
+      content: "\2014"; margin-right: .4rem; color: #cbd5e1;
+    }
+  }
+  .bl-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+  .bl-card > .card-header { padding: .4rem .7rem; font-size: .8rem; }
+
+  /* The grid, at the farm page's sizes. */
+  .ds .bl-card table.ds-grid thead th { font-size: .7rem; line-height: 1.2;
+    white-space: normal; padding: 0 6px; vertical-align: middle;
+    letter-spacing: .02em; text-transform: uppercase; color: #5a6b7f; }
+  .ds .bl-card table.ds-grid tbody td { font-size: .8rem; padding: 6px;
+    vertical-align: middle; line-height: 1.3; }
+
+  /* The toolbar above it: the same controls, at the grid's size. */
+  .ds .bl-card .dataTables_length select, .ds .bl-card .dataTables_filter input {
+    height: 30px; font-size: .78rem; }
+  .ds .bl-card .dt-buttons .btn { padding: .2rem .55rem; font-size: .78rem;
+    min-height: 30px; }
+  .ds .bl-card .dataTables_length, .ds .bl-card .dataTables_filter,
+  .ds .bl-card .dataTables_info, .ds .bl-card .dataTables_paginate { font-size: .78rem; }
 
   /* The branch is context for the farm beside it, not a heading of its own. */
   #broiler-batch-table .b-branch { color: #6c7a8c; white-space: nowrap; }
@@ -26,43 +56,40 @@
 
   /* The batch number is a minted code; on the Add page it reads as one
      before the save, and it should read the same afterwards. */
-  .batch-chip { display: inline-block; font-weight: 600; font-size: .82rem;
+  .batch-chip { display: inline-block; font-weight: 600; font-size: .76rem;
     color: #1f4ba0; background: #eef4ff; border: 1px solid #cfdcf3;
     border-radius: .35rem; padding: .1rem .45rem; white-space: nowrap; }
 
   /* Soft pills rather than solid blocks: a row of solid green shouts. */
   .bs-active { background: #e8f6ee; color: #1a7f43; }
   .bs-closed { background: #eef1f5; color: #5a6b7f; }
-  .bs-active, .bs-closed { font-weight: 600; font-size: .78rem;
+  .bs-active, .bs-closed { font-weight: 600; font-size: .72rem;
     border-radius: .35rem; padding: .18rem .5rem; white-space: nowrap; }
 
   /* Square icon buttons at the height of the text beside them, so the row
      is as tall as its content rather than as tall as a button. */
-  #broiler-batch-table .btn-sm { width: 28px; height: 28px; padding: 0;
+  #broiler-batch-table .btn-sm { width: 26px; height: 26px; padding: 0;
     min-height: 0; display: inline-flex; align-items: center;
-    justify-content: center; line-height: 1; font-size: .78rem; }
+    justify-content: center; line-height: 1; font-size: .72rem; }
   .b-none { color: #a9b4c2; }
 </style>
 
-<!-- Page Header -->
-<div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title">
-      <i class="fas fa-layer-group"></i>
-      Broiler Batch
-    </div>
-      <div class="page-header-subtitle">Manage broiler batch records</div>
-    </div>
-    <div class="page-header-right">
-      {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'broiler_batch_add' %}">
-    <i class="fas fa-plus"></i>
-    Add New Batch
-  </a>{% endif %}
-    </div>
+<div class="bl-page">
+<div class="bl-head">
+  <div class="bl-head-icon"><i class="fas fa-layer-group"></i></div>
+  <div>
+    <div class="bl-title">Broiler Batch</div>
+    <div class="bl-sub">Manage broiler batch records</div>
+  </div>
+  <div class="bl-head-actions">
+    {% if page_perms.add %}<a class="btn btn-primary btn-sm" href="{% url 'broiler_batch_add' %}">
+      <i class="fas fa-plus"></i> Add New Batch
+    </a>{% endif %}
+  </div>
 </div>
 
 <!-- Batch List Card -->
-<div class="card">
+<div class="card bl-card">
   <div class="card-header">
     <i class="fas fa-table"></i>
     Batch List
@@ -308,4 +335,6 @@ $(document).ready(function () {
   });
 });
 </script>
+</div><!-- /.bl-page -->
+
 {% endblock %}
