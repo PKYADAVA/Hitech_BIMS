@@ -35,6 +35,30 @@
   .bl-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
   .bl-card > .card-header { padding: .4rem .7rem; font-size: .8rem; }
 
+  /* The filter strip, as the Farms screen wears it: one row of small
+     labelled controls above the table, each with its own mark so the eye
+     finds the one it wants without reading all of them. */
+  .bl-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: .4rem; padding: .45rem; background: #fff; border: 1px solid #e3e8ef;
+    border-radius: .6rem; }
+  .bl-filter { display: flex; align-items: center; gap: .4rem; min-width: 0;
+    border: 1px solid #eef1f5; border-radius: .45rem; padding: .25rem .4rem; }
+  .bl-filter-icon { width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bl-bg); color: var(--bl-fg); font-size: .7rem; }
+  .bl-filter-body { flex: 1; min-width: 0; }
+  .bl-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: #475569; margin-bottom: 0; line-height: 1.2; }
+  .bl-filter .form-select, .bl-filter .form-control {
+    border: 0; box-shadow: none; padding: 0; height: auto; min-height: 0;
+    font-size: .8rem; background-position: right .1rem center; }
+  .bl-filter .form-select:focus, .bl-filter .form-control:focus { box-shadow: none; }
+  .bl-clear { align-self: center; }
+
+  /* One search box, not two: the table's own is what carries the comma-for-
+     either behaviour, so the strip's box drives it rather than replacing it. */
+  .bl-card .dataTables_filter { display: none; }
+
   /* The grid, at the farm page's sizes. */
   .ds .bl-card table.ds-grid thead th { font-size: .7rem; line-height: 1.2;
     white-space: normal; padding: 0 6px; vertical-align: middle;
@@ -86,6 +110,52 @@
       <i class="fas fa-plus"></i> Add New Batch
     </a>{% endif %}
   </div>
+</div>
+
+<div class="bl-filters">
+  <div class="bl-filter">
+    <span class="bl-filter-icon" style="--bl-bg:#e8f1fd;--bl-fg:#1d6fe0"><i class="fas fa-magnifying-glass"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-search">Search</label>
+      <input type="search" id="bl-search" class="form-control"
+             placeholder="batch, book or lot — comma for either">
+    </div>
+  </div>
+  <div class="bl-filter">
+    <span class="bl-filter-icon" style="--bl-bg:#e8f1fd;--bl-fg:#1d6fe0"><i class="fas fa-code-branch"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-branch">Branch</label>
+      <select id="bl-branch" class="form-select"><option value="">All</option></select>
+    </div>
+  </div>
+  <div class="bl-filter">
+    <span class="bl-filter-icon" style="--bl-bg:#f1ebfd;--bl-fg:#6941c6"><i class="fas fa-tractor"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-farm">Farm</label>
+      <select id="bl-farm" class="form-select"><option value="">All</option></select>
+    </div>
+  </div>
+  <div class="bl-filter">
+    <span class="bl-filter-icon" style="--bl-bg:#fff1db;--bl-fg:#b54708"><i class="fas fa-warehouse"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-shed">Shed / Unit</label>
+      <select id="bl-shed" class="form-select"><option value="">All</option></select>
+    </div>
+  </div>
+  <div class="bl-filter">
+    <span class="bl-filter-icon" style="--bl-bg:#e7f7ee;--bl-fg:#067647"><i class="fas fa-circle-check"></i></span>
+    <div class="bl-filter-body">
+      <label for="bl-status">Status</label>
+      <select id="bl-status" class="form-select">
+        <option value="">All</option>
+        <option value="active">Active</option>
+        <option value="closed">Closed</option>
+      </select>
+    </div>
+  </div>
+  <button type="button" class="btn btn-outline-secondary btn-sm bl-clear" id="bl-clear">
+    <i class="fas fa-rotate-left"></i> Clear
+  </button>
 </div>
 
 <!-- Batch List Card -->
@@ -145,6 +215,55 @@ function shedOptions(farmId, selectedId) {
 // the same ink as the data beside it.
 function none() { return '<span class="b-none">\u2014</span>'; }
 
+// The strip filters the table that is already loaded: branch, farm and unit
+// are matched against the row's own text, and status against what the badge
+// says, so what is filtered is what is on screen.
+const BATCH_FILTERS = { branch: "", farm: "", shed: "", status: "" };
+
+function batchRowPasses(cells) {
+  const like = (cell, want) => !want || (cell || "").trim() === want;
+  if (!like(cells[0], BATCH_FILTERS.branch)) return false;
+  if (!like(cells[1], BATCH_FILTERS.farm)) return false;
+  if (!like(cells[2], BATCH_FILTERS.shed)) return false;
+  if (BATCH_FILTERS.status) {
+    const isActive = (cells[6] || "").toLowerCase().indexOf("active") !== -1;
+    if (BATCH_FILTERS.status === "active" && !isActive) return false;
+    if (BATCH_FILTERS.status === "closed" && isActive) return false;
+  }
+  return true;
+}
+
+// The hook is registered once the page is up: DataTables is loaded after
+// this block is parsed, so pushing it here at parse time pushed nothing and
+// the strip's selects moved nothing.
+function registerBatchFilter() {
+  if (!window.jQuery || !jQuery.fn.dataTable || registerBatchFilter.done) return;
+  registerBatchFilter.done = true;
+  // Every list on the site shares this hook, so the table is named before
+  // the rows are judged.
+  jQuery.fn.dataTable.ext.search.push(function (settings, cells) {
+    if (settings.nTable.id !== "broiler-batch-table") return true;
+    return batchRowPasses(cells);
+  });
+}
+
+// The options are taken from the rows themselves, so the strip can only
+// offer what the table actually holds.
+function fillBatchFilters(rows) {
+  const fill = (id, values, keep) => {
+    const $sel = jQuery(id);
+    const chosen = keep ? $sel.val() : "";
+    $sel.html('<option value="">All</option>'
+      + [...new Set(values.filter(Boolean))].sort()
+        .map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join(''));
+    if (chosen && values.indexOf(chosen) !== -1) { $sel.val(chosen); }
+    $sel.trigger("change.select2");
+  };
+  fill("#bl-branch", rows.map(r => (r.branch_name || "").trim()), true);
+  fill("#bl-farm", rows.map(r => (r.broiler_farm_name || "").trim()), true);
+  fill("#bl-shed", rows.map(r => shedLabel(r).trim()), true);
+}
+
 function statusBadge(batch) {
   const active = !batch.end_date && !batch.is_closed;
   return active
@@ -183,6 +302,7 @@ $(document).ready(function () {
           table.DataTable().clear().destroy();
         }
         tableBody.empty();
+        fillBatchFilters(response);
 
         // Batch No. is an auto-generated code and the farm is fixed at
         // creation — only Book Number / Lot No are editable.
@@ -304,6 +424,30 @@ $(document).ready(function () {
   }
 
   loadBatchList();
+
+  registerBatchFilter();
+
+  // The strip's own box drives the table's, which is what carries the
+  // comma-for-either search; two boxes would answer differently.
+  $("#bl-search").on("input", function () {
+    $("#broiler-batch-table_filter input").val(this.value).trigger("input");
+  });
+
+  $("#bl-branch, #bl-farm, #bl-shed, #bl-status").on("change", function () {
+    BATCH_FILTERS.branch = $("#bl-branch").val() || "";
+    BATCH_FILTERS.farm = $("#bl-farm").val() || "";
+    BATCH_FILTERS.shed = $("#bl-shed").val() || "";
+    BATCH_FILTERS.status = $("#bl-status").val() || "";
+    const table = $("#broiler-batch-table");
+    if ($.fn.DataTable.isDataTable(table)) { table.DataTable().draw(); }
+  });
+
+  $("#bl-clear").on("click", function () {
+    $("#bl-search").val("");
+    $("#broiler-batch-table_filter input").val("").trigger("input");
+    $("#bl-branch, #bl-farm, #bl-shed, #bl-status").val("").trigger("change.select2");
+    $("#bl-branch").trigger("change");
+  });
 
   // Batches saved on the add page say so here, where they now appear.
   const justSaved = sessionStorage.getItem("bims-batch-saved");
