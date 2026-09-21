@@ -20,82 +20,11 @@
       <div class="page-header-subtitle">Manage broiler batch records</div>
     </div>
     <div class="page-header-right">
-      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#batchFormModal">
+      {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'broiler_batch_add' %}">
     <i class="fas fa-plus"></i>
     Add New Batch
-  </button>{% endif %}
+  </a>{% endif %}
     </div>
-</div>
-
-<!-- Add Batch Modal -->
-<div class="modal fade" id="batchFormModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add New Batch</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="broiler-batch-form">
-          {% csrf_token %}
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label" for="branch">Branch</label>
-              <select id="branch" class="form-select">
-                <option value="">All branches</option>
-                {% for b in branches %}
-                  <option value="{{ b.id }}">{{ b.branch_name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="broiler_farm">Broiler Farm<span class="text-danger">*</span></label>
-              <select id="broiler_farm" class="form-select" required>
-                <option value="" selected disabled>Select a broiler farm</option>
-                {% for farm in broiler_farms %}
-                  <option value="{{ farm.id }}">{{ farm.farm_name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="shed">Shed / Unit<span class="text-danger">*</span></label>
-              <select id="shed" class="form-select" required disabled>
-                <option value="">Select a farm first</option>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="batch_name">Batch No.</label>
-              <input type="text" id="batch_name" class="form-control bg-light" readonly
-                     placeholder="Select a farm to see the number">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="book_number">Book Number</label>
-              <input type="text" id="book_number" class="form-control" placeholder="Enter book number">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="lot_no">Lot No</label>
-              <input type="text" id="lot_no" class="form-control" placeholder="Enter lot no">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="breed">Breed<span class="text-danger">*</span></label>
-              <select id="breed" class="form-select" required>
-                <option value="" selected disabled>select</option>
-                {% for b in breeds %}<option value="{{ b.id }}">{{ b.description }}</option>{% endfor %}
-              </select>
-            </div>
-          </div>
-          <div class="d-flex justify-content-end gap-2 mt-4">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-              <i class="fas fa-times"></i>Cancel
-            </button>
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-save"></i>Save Batch
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Batch List Card -->
@@ -130,7 +59,6 @@
 
 <script>
 const BREEDS = [{% for b in breeds %}{ id: {{ b.id }}, name: "{{ b.description|escapejs }}" },{% endfor %}];
-const FARMS = [{% for f in broiler_farms %}{ id: {{ f.id }}, name: "{{ f.farm_name|escapejs }}", branch_id: {{ f.branch_id|default:"null" }} },{% endfor %}];
 const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }}, occupied_by: "{{ s.occupied_by|escapejs }}" },{% endfor %}];
 
 // Options for the sheds belonging to `farmId`, optionally pre-selecting `selectedId`.
@@ -177,52 +105,6 @@ function shedLabel(batch) {
 }
 
 $(document).ready(function () {
-  // Branch narrows the farm list. It is a filter, not a field the batch
-  // carries: a farm knows its own branch, so nothing is saved from here.
-  // "All branches" is the opening state, which is also what a user who
-  // works one branch never has to touch.
-  $("#branch").on("change", function () {
-    const branchId = $(this).val();
-    const farms = branchId
-      ? FARMS.filter(f => String(f.branch_id) === String(branchId))
-      : FARMS;
-    $("#broiler_farm").html(
-      '<option value="" selected disabled>'
-      + (farms.length ? 'Select a broiler farm' : 'No farms on this branch')
-      + '</option>'
-      + farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join(''))
-      .trigger("change");
-  });
-
-  // Repopulate the Add-modal Shed select whenever the farm changes.
-  $("#broiler_farm").on("change", function () {
-    const farmId = $(this).val();
-    const opts = shedOptions(farmId, null);
-    const $shed = $("#shed");
-    if (opts) {
-      $shed.html('<option value="">Select a shed / unit</option>' + opts).prop("disabled", false);
-    } else {
-      // Changing the branch drops the chosen farm, and "no sheds for this
-      // farm" would then be answering about a farm nobody has picked.
-      $shed.html('<option value="">'
-        + (farmId ? 'No sheds for this farm' : 'Select a farm first')
-        + '</option>').prop("disabled", true);
-    }
-    $shed.trigger("change");
-    showNextBatchNo($(this).val());
-  });
-
-  // The number this batch will be given. Asked of the server rather than
-  // worked out here: the serial is per farm and someone else may have just
-  // taken one, and the answer comes from the same function the save uses.
-  function showNextBatchNo(farmId) {
-    const $box = $("#batch_name");
-    if (!farmId) { $box.val(""); return; }   // a branch change clears it
-    $.getJSON("{% url 'broiler_batch_next_name' 0 %}".replace("/0/", "/" + farmId + "/"))
-      .done(resp => $box.val(resp.name || ""))
-      .fail(() => $box.val(""));
-  }
-
   function loadBatchList() {
     $.ajax({
       url: "{% url 'broiler_batch_list' %}",
@@ -356,41 +238,12 @@ $(document).ready(function () {
 
   loadBatchList();
 
-  $("#broiler-batch-form").on("submit", function (e) {
-    e.preventDefault();
-    $.ajax({
-      url: "{% url 'broiler_batch_create' %}",
-      type: "POST",
-      headers: { "X-CSRFToken": "{{ csrf_token }}" },
-      data: {
-        broiler_farm_id: $("#broiler_farm").val(),
-        shed: $("#shed").val(),
-        book_number: $("#book_number").val(),
-        lot_no: $("#lot_no").val(),
-        breed: $("#breed").val(),
-      },
-      success: function (resp) {
-        const usedShed = $("#shed").val();
-        if (usedShed) {
-          const s = SHEDS.find(x => String(x.id) === String(usedShed));
-          if (s) {
-            s.occupied = true;
-            s.occupied_by = s.occupied_by
-              ? `${s.occupied_by}, ${resp.batch_name}` : resp.batch_name;
-          }
-        }
-        loadBatchList();
-        $("#batchFormModal").modal("hide");
-        $("#broiler-batch-form").trigger("reset");
-        $("#shed").html('<option value="">Select a farm first</option>').prop("disabled", true);
-        $("#batch_name").val("");
-        window.showToast('success', `Batch ${resp.batch_name} created.`);
-      },
-      error: function (xhr) {
-        window.showToast('danger', xhr.responseJSON?.error || "Failed to add new batch.");
-      },
-    });
-  });
+  // A batch saved on the add page says so here, where it now appears.
+  const justSaved = sessionStorage.getItem("bims-batch-saved");
+  if (justSaved !== null) {
+    sessionStorage.removeItem("bims-batch-saved");
+    window.showToast('success', `Batch ${justSaved} created.`);
+  }
 
   $(document).on("click", ".delete-button", function () {
     const id = $(this).data("id");

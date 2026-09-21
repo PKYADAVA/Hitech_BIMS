@@ -5,7 +5,7 @@ from . import views_route_planner as route_planner
 from . import views_gc_payment as gc_payment
 from . import views_farmer_ledger as farmer_ledger
 
-from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmShedAPI, BroilerFarmShedTemplateView, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
+from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchFormTemplateView, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmShedAPI, BroilerFarmShedTemplateView, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
 
 urlpatterns = [
     path('farmer-group/', FarmerGroupTemplateView.as_view(), name='farmer_group'),
@@ -81,10 +81,14 @@ urlpatterns = [
     path('feed_phase_master_api/<int:id>/', views.FeedPhaseMasterAPI.as_view(), name='feed_phase_master_api'),
     path('feed_phase_master_api/<int:id>/duplicate/', views.FeedPhaseMasterDuplicateAPI.as_view(), name='feed_phase_master_duplicate'),
     path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
+    path('broiler-batch/add/', BroilerBatchFormTemplateView.as_view(),
+         name='broiler_batch_add'),  # The add form, on its own page
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
     path('broiler_batch/<int:batch_id>/shed-headroom/', views.batch_shed_headroom,
          name='batch_shed_headroom'),  # Room left in the unit this flock is in
+    path('broiler_batch/farm/<int:farm_id>/open/', views.farm_open_batches,
+         name='farm_open_batches'),  # What is already running on a farm
     path('broiler_batch/next-name/<int:farm_id>/', views.broiler_batch_next_name,
          name='broiler_batch_next_name'),  # The number the next batch on a farm gets
     path('broiler_batch/<int:id>/', BroilerBatchAPI.as_view(), name='broiler_batch_edit'),  # For editing broiler batch

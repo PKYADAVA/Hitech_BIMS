@@ -926,6 +926,36 @@ def batch_shed_headroom(request, batch_id):
 
 
 @login_required
+def farm_open_batches(request, farm_id):
+    """The flocks still running on a farm, for the Add Batch form to show.
+
+    Somebody adding a batch is about to put birds on a farm that may already
+    have some, possibly in the unit they are about to choose. This is what is
+    in there now — each flock's unit, when it was placed, how old it is today
+    and how many birds are left alive — so the new placement is made against
+    what is on the ground rather than from memory.
+    """
+    farm = get_object_or_404(BroilerFarm, id=farm_id)
+    today = timezone.localdate()
+    rows = []
+    for batch in _open_batches_for_farm(farm.id).select_related("shed"):
+        placed_on = _placement_date(batch)
+        shed = batch.shed
+        rows.append({
+            "id": batch.id,
+            "name": batch.batch_name,
+            "shed_id": batch.shed_id,
+            "shed": ((shed.shed_name or shed.shed_code or f"Unit {shed.unit_no}")
+                     if shed else ""),
+            "placed_on": placed_on.isoformat() if placed_on else None,
+            "age_days": (today - placed_on).days if placed_on else None,
+            "live": _flock_counts(batch)["live"],
+            "status": "Active",
+        })
+    return JsonResponse({"farm": farm.farm_name, "rows": rows})
+
+
+@login_required
 def broiler_batch_next_name(request, farm_id):
     """The batch number a new batch on this farm would be given.
 
@@ -938,27 +968,49 @@ def broiler_batch_next_name(request, farm_id):
     return JsonResponse({"name": BroilerBatch.next_batch_name(farm)})
 
 
+def _batch_form_context():
+    """Everything the Add Batch form picks from.
+
+    The list page needs the sheds for its inline edit rows, and the add page
+    needs all of it, so the two read the same answer rather than each
+    assembling their own.
+    """
+    cache_key = "broiler_farm_list"
+    broiler_farms = cache.get(cache_key)
+    if not broiler_farms:
+        broiler_farms = list(BroilerFarm.objects.values())
+        cache.set(cache_key, broiler_farms)
+    return {
+        "broiler_farms": broiler_farms,
+        # Narrowed to the branches these farms are on, so the picker
+        # cannot offer a branch with nothing behind it.
+        "branches": Branch.objects.filter(
+            id__in={f["branch_id"] for f in broiler_farms if f["branch_id"]}
+        ).order_by("branch_name"),
+        "breeds": Breed.objects.filter(is_active=True).order_by("description"),
+        "sheds": batch_shed_options(),
+    }
+
+
 @method_decorator(login_required, name="dispatch")
 class BroilerBatchTemplateView(View):
     """View for rendering the broiler batch template."""
 
     def get(self, request):
-        cache_key = "broiler_farm_list"
-        broiler_farms = cache.get(cache_key)
-        if not broiler_farms:
-            broiler_farms = list(BroilerFarm.objects.values())
-            cache.set(cache_key, broiler_farms)
-        context = {
-            "broiler_farms": broiler_farms,
-            # Narrowed to the branches these farms are on, so the picker
-            # cannot offer a branch with nothing behind it.
-            "branches": Branch.objects.filter(
-                id__in={f["branch_id"] for f in broiler_farms if f["branch_id"]}
-            ).order_by("branch_name"),
-            "breeds": Breed.objects.filter(is_active=True).order_by("description"),
-            "sheds": batch_shed_options(),
-        }
-        return render(request, "broiler_batch.html", context)
+        return render(request, "broiler_batch.html", _batch_form_context())
+
+
+@method_decorator(login_required, name="dispatch")
+class BroilerBatchFormTemplateView(View):
+    """Add New Batch, on its own page rather than in a dialog.
+
+    A dialog has to stay small, and this form has to show what is already
+    running on the farm underneath it — which is the thing a placement is
+    judged against.
+    """
+
+    def get(self, request):
+        return render(request, "broiler_batch_form.html", _batch_form_context())
 
 @method_decorator(login_required, name="dispatch")
 class BroilerDiseaseTemplateView(View):
