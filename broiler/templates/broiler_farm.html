@@ -732,8 +732,8 @@
                     </div>
 
                     <div class="col-md-3">
-                        <label for="farm_capacity" class="form-label">Farm (Capacity)</label>
-                        <input type="number" min="0" id="farm_capacity" class="form-control" placeholder="Birds, if known" />
+                        <label for="farm_capacity" class="form-label">Farm (Capacity) <small class="text-muted">(auto)</small></label>
+                        <input type="number" min="0" id="farm_capacity" class="form-control" placeholder="Total of the sheds" />
                     </div>
                     <div class="col-md-9">
                         <label class="form-label d-block">Farm Type<span class="text-danger">*</span></label>
@@ -816,8 +816,8 @@
                         <div class="form-text" id="other_documents_current"></div>
                     </div>
                     <div class="col-md-4">
-                        <label for="farm_sqft" class="form-label">Farm Sq.ft</label>
-                        <input type="text" id="farm_sqft" class="form-control" />
+                        <label for="farm_sqft" class="form-label">Farm Sq.ft <small class="text-muted">(auto)</small></label>
+                        <input type="text" id="farm_sqft" class="form-control" placeholder="Total of the sheds" />
                     </div>
                     {% comment %}
                     Visit priority. The Route Planner's Priority Route mode
@@ -879,9 +879,9 @@
                 <template id="shed-row-template">
                     <div class="row g-2 shed-row align-items-end mb-2">
                         <input type="hidden" class="shed-id" />
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">Shed Name <small class="text-muted">(auto)</small></label>
-                            <input type="text" class="form-control shed-name" placeholder="Auto: Farm + Shed no" />
+                            <input type="text" class="form-control shed-name" placeholder="Auto: Farm + Shed" />
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Type</label>
@@ -897,12 +897,16 @@
                             <label class="form-label">Width</label>
                             <input type="number" min="0" step="0.01" class="form-control shed-width" />
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-md-1">
                             <label class="form-label">Sq. Feet <small class="text-muted">(auto)</small></label>
                             <input type="text" class="form-control shed-sqfeet" placeholder="L × W" readonly />
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label">Capacity</label>
+                            <label class="form-label">Space / Bird <small class="text-muted">(sq ft)</small></label>
+                            <input type="number" min="0.01" step="0.01" class="form-control shed-space" value="1.50" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Capacity <small class="text-muted">(auto)</small></label>
                             <input type="number" min="0" class="form-control shed-capacity" />
                         </div>
                         <div class="col-md-1">
@@ -950,6 +954,7 @@ $(document).ready(function () {
         $row.find(".shed-length").val(shed.length != null ? shed.length : "");
         $row.find(".shed-width").val(shed.width != null ? shed.width : "");
         $row.find(".shed-sqfeet").val(shed.sq_feet || "");
+        $row.find(".shed-space").val(shed.space_per_bird != null ? shed.space_per_bird : "1.50");
         $row.find(".shed-capacity").val(shed.capacity != null ? shed.capacity : "");
         $("#shed-rows").append($row);
     }
@@ -960,16 +965,52 @@ $(document).ready(function () {
 
     $(document).on("click", ".remove-shed-row", function () {
         $(this).closest(".shed-row").remove();
+        syncFarmTotals();
     });
 
-    // Auto Sq. Feet = Length x Width, per row
-    $(document).on("input", ".shed-length, .shed-width", function () {
-        const $r = $(this).closest(".shed-row");
+    // Auto Sq. Feet = Length x Width, and capacity = area / space per bird.
+    //
+    // Capacity is filled in, not locked: the arithmetic is what a shed holds
+    // at that spacing, and the house may have a reason to stock it otherwise.
+    // Typing over it stands until a measurement changes, which is the point at
+    // which the old number is about the old shed.
+    function shedArea($r) {
         const l = parseFloat($r.find(".shed-length").val()) || 0;
         const w = parseFloat($r.find(".shed-width").val()) || 0;
-        const area = l * w;
+        return l * w;
+    }
+
+    function recalcShed($r) {
+        const area = shedArea($r);
         $r.find(".shed-sqfeet").val(area ? (Number.isInteger(area) ? area : area.toFixed(2)) : "");
+        const space = parseFloat($r.find(".shed-space").val());
+        // Birds are whole, and a part-bird's worth of floor is not a bird.
+        $r.find(".shed-capacity").val(area && space > 0 ? Math.floor(area / space) : "");
+    }
+
+    // Farm Identification carries the same two figures for the farm as a
+    // whole, and a farm is its sheds: they are the totals of the rows below,
+    // recomputed whenever a shed changes and left alone otherwise, so a farm
+    // opened for editing still shows what was saved for it.
+    let shedsLoading = false;
+
+    function syncFarmTotals() {
+        if (shedsLoading) return;
+        let area = 0, birds = 0;
+        $("#shed-rows .shed-row").each(function () {
+            area += shedArea($(this));
+            birds += parseInt($(this).find(".shed-capacity").val(), 10) || 0;
+        });
+        $("#farm_sqft").val(area ? (Number.isInteger(area) ? area : area.toFixed(2)) : "");
+        $("#farm_capacity").val(birds || "");
+    }
+
+    $(document).on("input", ".shed-length, .shed-width, .shed-space", function () {
+        recalcShed($(this).closest(".shed-row"));
+        syncFarmTotals();
     });
+    // A capacity typed over the arithmetic still counts towards the farm's.
+    $(document).on("input", ".shed-capacity", syncFarmTotals);
 
     function collectSheds() {
         const sheds = [];
@@ -987,6 +1028,7 @@ $(document).ready(function () {
                 shed_type: $(this).find(".shed-type").val(),
                 length: length,
                 width: width,
+                space_per_bird: $(this).find(".shed-space").val(),
                 capacity: capacity,
             });
         });
@@ -1562,12 +1604,17 @@ $(document).ready(function () {
                         : ""
                 );
 
+                // Loading, not editing: the farm's own capacity and sq ft are
+                // whatever was saved for it, and filling the rows in must not
+                // quietly rewrite them to the sum of the sheds.
+                shedsLoading = true;
                 $("#shed-rows").empty();
                 if (farm.sheds && farm.sheds.length) {
                     farm.sheds.forEach(function (shed) { addShedRow(shed); });
                 } else {
                     addShedRow();
                 }
+                shedsLoading = false;
 
                 $("#farm-save-btn").text("Update");
                 $("#farm-form-title").text("Edit Farm");

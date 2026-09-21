@@ -1960,6 +1960,7 @@ def _farm_shed_to_dict(s: BroilerFarmShed) -> dict:
         "width": str(s.width) if s.width is not None else "",
         "dimensions": s.dimensions or "",
         "sq_feet": s.sq_feet or "",
+        "space_per_bird": str(s.space_per_bird) if s.space_per_bird is not None else "",
         "capacity": s.capacity,
         "occupied": s.occupied,
         "free_space": s.free_space,
@@ -2193,6 +2194,10 @@ class BroilerFarmAPI(BaseAPIView):
         for shed in sheds:
             shed_name = (shed.get("shed_name") or "").strip()
             length, width = _dec(shed.get("length")), _dec(shed.get("width"))
+            # A shed saved before this field existed, or a row sent without
+            # it, keeps the house standard rather than a zero that would make
+            # its capacity meaningless.
+            space = _dec(shed.get("space_per_bird")) or Decimal("1.50")
             capacity = _int(shed.get("capacity"))
             shed_type = shed.get("shed_type") or "broiler"
             if shed_type not in valid_types:
@@ -2206,6 +2211,7 @@ class BroilerFarmAPI(BaseAPIView):
             obj.shed_name = shed_name
             obj.shed_type = shed_type
             obj.length, obj.width = length, width
+            obj.space_per_bird = space
             obj.capacity = capacity
             obj.save()  # auto: shed_code, unit_no, shed_name, org centre, sq_ft, status
             kept_ids.append(obj.id)

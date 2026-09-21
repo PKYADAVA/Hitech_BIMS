@@ -881,6 +881,15 @@ class BroilerFarmShed(models.Model):
         null=True,
         help_text=_("Auto-calculated area (length x width) in square feet")
     )
+    #: How much floor a bird is given. A shed's capacity is its area divided
+    #: by this, and the figure varies by house type and by season, so it is
+    #: kept per shed rather than assumed: 1.5 sq ft is the house standard here
+    #: and what a new shed starts at.
+    space_per_bird = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("1.50"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text=_("Floor area allowed per bird, in square feet")
+    )
     capacity = models.PositiveIntegerField(
         default=0, help_text=_("Bird holding capacity of the shed")
     )
