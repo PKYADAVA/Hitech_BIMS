@@ -691,7 +691,8 @@ $.extend(true, $.fn.dataTable.defaults, {
                 window.escapeHtml(title) + '</h5>' +
               '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
             '</div>' +
-            '<div class="modal-body">' + window.escapeHtml(message) + '</div>' +
+            '<div class="modal-body" style="white-space:pre-line">' +
+              window.escapeHtml(message) + '</div>' +
             '<div class="modal-footer">' +
               '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">' +
                 window.escapeHtml(cancelText) + '</button>' +
