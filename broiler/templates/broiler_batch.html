@@ -10,6 +10,40 @@
 {% block content %}
 {% include '_broiler_subnavbar.html' with active_tab='broiler_batch' %}
 
+<style>
+  /* Compact, and the same ink as the Add page this list now feeds. */
+  .page-header { margin-bottom: .6rem; }
+  .card-header { padding: .5rem .85rem; }
+  #broiler-batch-table th { font-size: .74rem; letter-spacing: .02em;
+    text-transform: uppercase; color: #5a6b7f; font-weight: 600;
+    white-space: nowrap; padding: .45rem .6rem; }
+  #broiler-batch-table td { padding: .3rem .6rem; font-size: .87rem;
+    vertical-align: middle; line-height: 1.35; }
+
+  /* The branch is context for the farm beside it, not a heading of its own. */
+  #broiler-batch-table .b-branch { color: #6c7a8c; white-space: nowrap; }
+  #broiler-batch-table .b-farm { font-weight: 600; }
+
+  /* The batch number is a minted code; on the Add page it reads as one
+     before the save, and it should read the same afterwards. */
+  .batch-chip { display: inline-block; font-weight: 600; font-size: .82rem;
+    color: #1f4ba0; background: #eef4ff; border: 1px solid #cfdcf3;
+    border-radius: .35rem; padding: .1rem .45rem; white-space: nowrap; }
+
+  /* Soft pills rather than solid blocks: a row of solid green shouts. */
+  .bs-active { background: #e8f6ee; color: #1a7f43; }
+  .bs-closed { background: #eef1f5; color: #5a6b7f; }
+  .bs-active, .bs-closed { font-weight: 600; font-size: .78rem;
+    border-radius: .35rem; padding: .18rem .5rem; white-space: nowrap; }
+
+  /* Square icon buttons at the height of the text beside them, so the row
+     is as tall as its content rather than as tall as a button. */
+  #broiler-batch-table .btn-sm { width: 28px; height: 28px; padding: 0;
+    min-height: 0; display: inline-flex; align-items: center;
+    justify-content: center; line-height: 1; font-size: .78rem; }
+  .b-none { color: #a9b4c2; }
+</style>
+
 <!-- Page Header -->
 <div class="page-header">
     <div class="page-header-main">
@@ -38,6 +72,7 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="broiler-batch-table">
         <thead>
           <tr>
+            <th>Branch</th>
             <th>Broiler Farm</th>
             <th>Shed / Unit</th>
             <th>Batch No.</th>
@@ -79,11 +114,15 @@ function shedOptions(farmId, selectedId) {
 
 // Active = still growing (no end date, not settled); otherwise Closed.
 // This is why one unit can list several batches — only one is ever Active.
+// A cell with nothing in it says so quietly rather than printing a dash in
+// the same ink as the data beside it.
+function none() { return '<span class="b-none">\u2014</span>'; }
+
 function statusBadge(batch) {
   const active = !batch.end_date && !batch.is_closed;
   return active
-    ? '<span class="badge bg-success">Active</span>'
-    : '<span class="badge bg-secondary">Closed</span>';
+    ? '<span class="bs-active">Active</span>'
+    : '<span class="bs-closed">Closed</span>';
 }
 
 // Format an ISO datetime into a readable "12 Jul 2026" date for the list.
@@ -127,14 +166,15 @@ $(document).ready(function () {
 
           const tableRow = `
             <tr>
-              <td>${batch.broiler_farm_name}</td>
-              <td>${escapeHtml(shedLabel(batch)) || "-"}</td>
-              <td>${batch.batch_name}</td>
-              <td>${escapeHtml(batch.book_number) || "-"}</td>
-              <td>${escapeHtml(batch.lot_no) || "-"}</td>
+              <td class="b-branch">${escapeHtml(batch.branch_name) || none()}</td>
+              <td class="b-farm">${escapeHtml(batch.broiler_farm_name)}</td>
+              <td>${escapeHtml(shedLabel(batch)) || none()}</td>
+              <td><span class="batch-chip">${escapeHtml(batch.batch_name)}</span></td>
+              <td>${escapeHtml(batch.book_number) || none()}</td>
+              <td>${escapeHtml(batch.lot_no) || none()}</td>
               <td>${statusBadge(batch)}</td>
               <td>${fmtDate(batch.created_at)}</td>
-              <td>${batch.closed_on ? fmtDate(batch.closed_on) : "-"}</td>
+              <td>${batch.closed_on ? fmtDate(batch.closed_on) : none()}</td>
               <td>
                 <div class="d-flex gap-1">
                   {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm"

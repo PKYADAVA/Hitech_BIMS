@@ -1911,12 +1911,13 @@ class BroilerBatchAPI(BaseAPIView):
             broiler_batches = list(
                 BroilerBatch.objects.select_related("broiler_farm", "breed", "shed")
                 .annotate(broiler_farm_name=F("broiler_farm__farm_name"),
+                          branch_name=F("broiler_farm__branch__branch_name"),
                           breed_name=F("breed__description"),
                           shed_name=F("shed__shed_name"),
                           shed_code=F("shed__shed_code"),
                           shed_unit_no=F("shed__unit_no"))
                 .values("id", "batch_name", "book_number", "lot_no", "broiler_farm_name",
-                        "broiler_farm_id", "breed_id", "breed_name",
+                        "branch_name", "broiler_farm_id", "breed_id", "breed_name",
                         "shed_id", "shed_name", "shed_code", "shed_unit_no",
                         "created_at", "end_date", "is_closed", "closed_on")
             )
