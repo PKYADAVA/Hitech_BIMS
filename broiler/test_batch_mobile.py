@@ -81,14 +81,15 @@ class BatchWriteTests(TestCase):
             BroilerBatch.objects.get(broiler_farm=self.other_farm).batch_name,
             f"{self.other_farm.farm_code.removeprefix('FRM/')}-1")
 
-    def test_an_occupied_shed_is_refused_by_name(self):
+    def test_a_second_flock_may_share_a_shed(self):
+        # Placements are staggered: a flock part way through does not stop
+        # the next one going in beside it, on its own placement date.
         self.create()
         resp = self.create()
-        self.assertEqual(resp.status_code, 400)
-        # Naming the batch in the way is the whole point of the message.
-        self.assertIn(BroilerBatch.objects.first().batch_name,
-                      str(resp.content))
-        self.assertEqual(BroilerBatch.objects.count(), 1)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(
+            BroilerBatch.objects.filter(shed=self.shed, is_closed=False,
+                                        end_date__isnull=True).count(), 2)
 
     def test_a_batch_needs_a_shed_and_a_breed(self):
         # Required on the desktop form and here both — a flock is housed
@@ -125,15 +126,15 @@ class BatchWriteTests(TestCase):
         self.assertEqual(batch.batch_name, original_name)
         self.assertEqual(batch.broiler_farm_id, self.farm.id)
 
-    def test_moving_onto_an_occupied_shed_is_refused(self):
+    def test_a_batch_may_be_moved_in_beside_another(self):
         self.create(shed=self.shed.id)
         self.create(shed=self.shed_b.id)
         moving = BroilerBatch.objects.get(shed=self.shed_b)
         resp = self.client.put(f"{SAVE}/{moving.id}", {"shed": self.shed.id},
                                format="json")
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200, resp.content)
         moving.refresh_from_db()
-        self.assertEqual(moving.shed_id, self.shed_b.id)
+        self.assertEqual(moving.shed_id, self.shed.id)
 
     def test_an_edit_cannot_clear_the_shed_or_the_breed(self):
         self.create()
@@ -200,6 +201,18 @@ class BatchWriteTests(TestCase):
         self.assertEqual(rows[self.shed.id]["occupied_by"], held)
         self.assertFalse(rows[self.shed_b.id]["occupied"])
         self.assertEqual(rows[self.shed_b.id]["occupied_by"], "")
+
+    def test_a_shared_shed_names_every_flock_in_it(self):
+        # Two placements in one unit: the picker says what a third would be
+        # joining, oldest placement first.
+        self.create()
+        self.create()
+        names = list(BroilerBatch.objects.filter(shed=self.shed)
+                     .order_by("start_date", "id")
+                     .values_list("batch_name", flat=True))
+        rows = {r["id"]: r for r in
+                self.client.get(SHEDS, {"farm": self.farm.id}).json()["data"]}
+        self.assertEqual(rows[self.shed.id]["occupied_by"], ", ".join(names))
 
     def test_a_closed_batch_frees_its_shed(self):
         # Occupancy means "still growing" — a settled batch is not in the way.

@@ -121,19 +121,20 @@
 
 <script>
 const BREEDS = [{% for b in breeds %}{ id: {{ b.id }}, name: "{{ b.description|escapejs }}" },{% endfor %}];
-const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }} },{% endfor %}];
+const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }}, occupied_by: "{{ s.occupied_by|escapejs }}" },{% endfor %}];
 
 // Options for the sheds belonging to `farmId`, optionally pre-selecting `selectedId`.
-// Units already holding an active batch are disabled + tagged "(occupied)",
-// except `selectedId` itself so an edit can keep its current shed.
+// A unit already holding a flock stays selectable — placements may share a
+// shed — and says which flock is in there, so the choice is made knowingly.
 function shedOptions(farmId, selectedId) {
   return SHEDS
     .filter(s => String(s.farm_id) === String(farmId))
     .map(s => {
       const isSelected = String(s.id) === String(selectedId);
-      const blocked = s.occupied && !isSelected;
-      return `<option value="${s.id}" ${isSelected ? 'selected' : ''} ${blocked ? 'disabled' : ''}>`
-           + `${escapeHtml(s.label)}${blocked ? ' (occupied)' : ''}</option>`;
+      const holds = !isSelected && s.occupied && s.occupied_by
+        ? ` · holds ${s.occupied_by}` : '';
+      return `<option value="${s.id}" ${isSelected ? 'selected' : ''}>`
+           + `${escapeHtml(s.label)}${escapeHtml(holds)}</option>`;
     })
     .join('');
 }
@@ -340,7 +341,11 @@ $(document).ready(function () {
         const usedShed = $("#shed").val();
         if (usedShed) {
           const s = SHEDS.find(x => String(x.id) === String(usedShed));
-          if (s) s.occupied = true;
+          if (s) {
+            s.occupied = true;
+            s.occupied_by = s.occupied_by
+              ? `${s.occupied_by}, ${resp.batch_name}` : resp.batch_name;
+          }
         }
         loadBatchList();
         $("#batchFormModal").modal("hide");

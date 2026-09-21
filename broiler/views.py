@@ -865,20 +865,22 @@ def batch_shed_options(farm_id=None) -> list[dict]:
     Every shed, deliberately NOT filtered on ``is_active``.
     ``BroilerFarmShed.is_active`` is occupancy-driven ("has birds in it"), and
     birds only arrive through chicks placement on a batch, so filtering on it
-    would hide exactly the vacant sheds a new batch needs. Sheds already
-    holding an open batch are flagged ``occupied`` instead, and the caller
-    renders them disabled — the same rule the create endpoint enforces, so a
-    picker cannot offer what the save will refuse.
+    would hide exactly the vacant sheds a new batch needs.
+
+    A unit already holding a flock is flagged ``occupied`` and named in
+    ``occupied_by``, but it stays selectable: placements may share a shed, so
+    a second flock can go in beside the first. The flag is there to tell
+    someone what they are placing next to, not to stop them.
 
     Lives here rather than in each front end because the browser and the phone
-    have to agree about which units are free; two copies of that would not
+    have to agree about what each unit holds; two copies of that would not
     stay in step.
     """
-    occupied = dict(
-        BroilerBatch.objects.filter(
-            shed__isnull=False, end_date__isnull=True, is_closed=False
-        ).values_list("shed_id", "batch_name")
-    )
+    occupied: dict[int, list[str]] = {}
+    for shed_id, batch_name in BroilerBatch.objects.filter(
+        shed__isnull=False, end_date__isnull=True, is_closed=False
+    ).order_by("start_date", "id").values_list("shed_id", "batch_name"):
+        occupied.setdefault(shed_id, []).append(batch_name)
     sheds = BroilerFarmShed.objects.order_by("farm__farm_code", "unit_no")
     if farm_id:
         sheds = sheds.filter(farm_id=farm_id)
@@ -889,9 +891,10 @@ def batch_shed_options(farm_id=None) -> list[dict]:
             "label": (s.shed_name or s.shed_code or f"Unit {s.unit_no}")
             + (f" · Unit {s.unit_no}" if s.unit_no else ""),
             "occupied": s.id in occupied,
-            # Which batch is in the way, so the phone can say so rather than
-            # leaving someone to guess why a unit is greyed out.
-            "occupied_by": occupied.get(s.id, ""),
+            # Which flock or flocks are already in there, so the picker can
+            # say what a new one would be joining rather than leave someone
+            # to find out after the save.
+            "occupied_by": ", ".join(occupied.get(s.id, [])),
         }
         for s in sheds
     ]
@@ -1692,19 +1695,23 @@ def farmer_farm_setup_request_reject(request, id):
     return JsonResponse({"message": "Rejected"})
 
 
-def _active_batch_on_shed(shed_id, exclude_batch_id=None):
-    """Return the open/active batch occupying `shed_id`, if any.
+def _open_batches_on_shed(shed_id, exclude_batch_id=None):
+    """The open/active batches housed in `shed_id`, oldest placement first.
+
     A batch is 'active' while it is still growing — end_date not set and not
-    yet closed by a growing-charge settlement. A shed can hold only one at a
-    time, so this gates creation / re-assignment onto an occupied unit."""
+    yet closed by a growing-charge settlement. A unit may hold more than one
+    at a time: placements are staggered, so a second flock can go in beside a
+    first that is part way through. This reports what is in there; it does not
+    gate placement.
+    """
     if not shed_id:
-        return None
+        return BroilerBatch.objects.none()
     qs = BroilerBatch.objects.filter(
         shed_id=shed_id, end_date__isnull=True, is_closed=False
-    )
+    ).order_by("start_date", "id")
     if exclude_batch_id:
         qs = qs.exclude(id=exclude_batch_id)
-    return qs.first()
+    return qs
 
 
 @method_decorator(login_required, name="dispatch")
@@ -1769,13 +1776,6 @@ class BroilerBatchAPI(BaseAPIView):
                                                  for m in missing) + "."},
                     status=400,
                 )
-            occupied_by = _active_batch_on_shed(shed_id)
-            if occupied_by:
-                return JsonResponse(
-                    {"error": f"This shed/unit already has an active batch "
-                              f"({occupied_by.batch_name}). Close it before starting a new one."},
-                    status=400,
-                )
             with transaction.atomic():
                 # batch_name is auto-generated (<farm code minus FRM/>-<n>,
                 # e.g. BAH-0201-1) in BroilerBatch.save() — never accepted
@@ -1814,16 +1814,7 @@ class BroilerBatchAPI(BaseAPIView):
                 if "breed" in data:
                     broiler_batch.breed_id = data["breed"] or None
                 if "shed" in data:
-                    new_shed_id = data["shed"] or None
-                    if new_shed_id and str(new_shed_id) != str(broiler_batch.shed_id):
-                        occupied_by = _active_batch_on_shed(new_shed_id, exclude_batch_id=broiler_batch.id)
-                        if occupied_by:
-                            return JsonResponse(
-                                {"error": f"This shed/unit already has an active batch "
-                                          f"({occupied_by.batch_name}). Close it before moving a batch here."},
-                                status=400,
-                            )
-                    broiler_batch.shed_id = new_shed_id
+                    broiler_batch.shed_id = data["shed"] or None
                 broiler_batch.save()
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch updated"})

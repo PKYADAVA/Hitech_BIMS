@@ -59,10 +59,9 @@ const shedField = (options: Shed[], farmChosen: boolean): FormField => ({
     : "Select a farm first",
   options: options.map((s) => ({
     value: String(s.id),
-    // Naming the batch in the way turns "why can't I pick this?" into an
-    // answer read off the screen.
-    label: s.occupied ? `${s.label} · occupied by ${s.occupied_by}` : s.label,
-    disabled: s.occupied,
+    // A unit holding a flock can still take another — placements may share
+    // a shed — so this names what is in there rather than ruling it out.
+    label: s.occupied ? `${s.label} · holds ${s.occupied_by}` : s.label,
   })),
 });
 const BATCH_NO: FormField = {
