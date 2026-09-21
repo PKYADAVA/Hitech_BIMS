@@ -1209,6 +1209,16 @@ body.ds-shell .content > footer { display: none; }
    their own card rather than inside this one, which scrolls when a module runs
    long and would otherwise cut them off at its edge. */
 .bims-fly-rows { width: 228px; padding: 6px; }
+/* Which module this menu belongs to, since the rail may not be saying it:
+   folded to 60px it shows icons alone, and the tip that names one is
+   dismissed the moment the menu opens. */
+.bims-fly-title {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px 9px; margin: 0 0 4px;
+  border-bottom: 1px solid #eef2f6;
+  font-size: .82rem; font-weight: 700; color: #0f172a;
+}
+.bims-fly-title i { width: 16px; text-align: center; font-size: .85rem; color: var(--nav-icon, #64748b); }
 .bims-fly-row {
   display: flex; align-items: center; gap: 9px; width: 100%;
   padding: 7px 9px; border: 0; border-radius: 8px; background: none;
