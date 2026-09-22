@@ -1289,23 +1289,54 @@ body.ds-shell .content > footer { display: none; }
 }
 
 
-/* The theme button on the bars: the same round control as the power button
-   beside it, so the end of the bar reads as one row of handles. */
-.theme-flip-form { display: flex; align-items: center; margin: 0 0 0 6px; }
-.theme-flip {
-  width: 34px; height: 34px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.10);
-  color: #fff; font-size: .82rem; line-height: 1; cursor: pointer;
-  transition: background .15s ease, border-color .15s ease;
-}
-.theme-flip:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.34); }
-.theme-flip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* Theme and navigation style: two switches for how the screen looks, so
+   they are drawn as one segmented control rather than two loose circles --
+   a pair of handles the eye takes in once, the way the two halves of a
+   toggle belong to the same question.
 
-/* On the slim bar the ground is light, so the same button is drawn in ink
-   rather than in white. */
+   The two are separate forms, since each posts its own choice; the pill is
+   made by rounding the outside edges of the pair and letting the inside
+   edges meet on a single hairline. */
+.theme-flip-form { display: flex; align-items: center; margin: 0 0 0 8px; }
+/* The pair has to touch. On the slim bar the row sets a 10px gap between
+   every child, and a margin cannot take a gap back, so the second form
+   pulls itself over by exactly that much. */
+.theme-flip-form + .theme-flip-form { margin-left: 0; }
+.ds-topbar-right .theme-flip-form { margin-left: 0; }
+.ds-topbar-right .theme-flip-form + .theme-flip-form { margin-left: -10px; }
+.theme-flip {
+  width: 36px; height: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,.20); background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.88); font-size: .8rem; line-height: 1; cursor: pointer;
+  border-radius: 0;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+.theme-flip-form:not(:has(+ .theme-flip-form)) .theme-flip {
+  border-radius: 0 999px 999px 0;
+}
+.theme-flip-form:has(+ .theme-flip-form) .theme-flip {
+  border-radius: 999px 0 0 999px; border-right-width: 0;
+}
+.theme-flip:hover {
+  background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.3);
+}
+.theme-flip:active { background: rgba(255,255,255,.26); }
+.theme-flip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; z-index: 1; }
+/* The hairline between them belongs to the second, so a hover on the first
+   cannot swallow it. */
+.theme-flip-form + .theme-flip-form .theme-flip { border-left-color: rgba(255,255,255,.2); }
+
+/* On the slim bar the ground is light, so the pair is drawn in ink. */
 .ds-topbar .theme-flip {
-  border-color: var(--ds-border, #e3e8ef); background: transparent;
+  border-color: var(--ds-border, #e3e8ef); background: #fff;
   color: var(--ds-muted, #6b7280);
 }
-.ds-topbar .theme-flip:hover { background: var(--ds-row-hover, #eff5ff); color: var(--ds-text, #111827); }
+.ds-topbar .theme-flip:hover {
+  background: var(--ds-row-hover, #eff5ff); color: var(--ds-text, #111827);
+  border-color: #cfdcf3;
+}
+.ds-topbar .theme-flip:active { background: #e3ecfb; }
+.ds-topbar .theme-flip-form + .theme-flip-form .theme-flip {
+  border-left-color: var(--ds-border, #e3e8ef);
+}

@@ -91,6 +91,22 @@ layouts open it from the account menu.
     </form>
 
     {% comment %}
+    The navigation style, one press, beside the theme. Same reasoning: the
+    menu still names both layouts for choosing, and this is for the switch
+    someone makes when the screen or the job changes. It says what it will
+    do -- a rail when you are on the bar, a bar when you are on the rail.
+    {% endcomment %}
+    <form method="post" action="{% url 'toggle_nav_layout' %}" class="theme-flip-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="layout" value="{% if ds_shell %}top{% else %}side{% endif %}">
+      <button type="submit" class="theme-flip nav-flip" title="{% if ds_shell %}Switch to the top bar{% else %}Switch to the side rail{% endif %}"
+              aria-label="{% if ds_shell %}Switch to the top bar navigation{% else %}Switch to the side rail navigation{% endif %}">
+        <i class="fa-solid {% if ds_shell %}fa-window-maximize{% else %}fa-table-columns{% endif %}" aria-hidden="true"></i>
+      </button>
+    </form>
+
+    {% comment %}
     The date and the time, at the end of the bar. It lived here once and was
     moved to the dashboard's welcome banner — which only the dashboard has, so
     every other page lost it. Back on the bar it is on every page again.

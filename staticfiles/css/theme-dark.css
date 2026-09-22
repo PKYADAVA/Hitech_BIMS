@@ -1229,3 +1229,17 @@ html[data-theme="dark"] .select2-results__option--highlighted,
 html[data-theme="dark"] .select2-results__option[aria-selected="true"] {
   background-color: #1d4ed8 !important; color: #fff !important;
 }
+
+/* The pair of display switches on a dark bar: the ground of a control, not
+   a wash of white over the bar. */
+html[data-theme="dark"] .theme-flip {
+  background: #171a1f !important; border-color: var(--border-strong) !important;
+  color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .theme-flip:hover {
+  background: #1f242b !important; color: var(--text) !important;
+}
+html[data-theme="dark"] .theme-flip:active { background: #262c34 !important; }
+html[data-theme="dark"] .theme-flip-form + .theme-flip-form .theme-flip {
+  border-left-color: var(--border-strong) !important;
+}
