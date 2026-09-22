@@ -574,3 +574,538 @@ html[data-theme="dark"] .acct-row, html[data-theme="dark"] .acct-label,
 html[data-theme="dark"] .acct-tip { color: var(--text-secondary); }
 html[data-theme="dark"] .acct-row:hover { background: var(--surface-hover); color: var(--text); }
 html[data-theme="dark"] .acct-who strong { color: var(--text); }
+
+/* -------------------------------------------------------------------------
+   The module menus.
+
+   The rail itself is dark in both themes -- it is the one piece of chrome
+   that was always dark -- but the panels it opens are drawn on the page, not
+   inside the bar, so they were built white: the module list, its sections,
+   the pages under them and the top bar's mega menu. On a dark page they were
+   a sheet of white thrown over it.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .bims-fly,
+html[data-theme="dark"] .bims-mega,
+html[data-theme="dark"] .bims-fly-sub {
+  background: var(--surface); border-color: var(--border);
+  box-shadow: 0 10px 30px rgba(0,0,0,.55);
+}
+html[data-theme="dark"] .bims-fly .bims-fly-head,
+html[data-theme="dark"] .bims-fly-row small,
+html[data-theme="dark"] .bims-fly .bims-fly-sub,
+html[data-theme="dark"] .bims-mega-count, html[data-theme="dark"] .bims-mega-sub,
+html[data-theme="dark"] .bims-mega-desc, html[data-theme="dark"] .bims-mega-none,
+html[data-theme="dark"] .bims-fly-back i { color: var(--text-secondary); }
+
+html[data-theme="dark"] .bims-fly .dropdown-item,
+html[data-theme="dark"] .bims-fly-row,
+html[data-theme="dark"] .bims-fly-title,
+html[data-theme="dark"] .bims-mega .dropdown-item,
+html[data-theme="dark"] .bims-mega-head, html[data-theme="dark"] .bims-mega-name {
+  color: var(--text);
+}
+
+/* What the pointer is on, and what the page already is. */
+html[data-theme="dark"] .bims-fly .dropdown-item:hover,
+html[data-theme="dark"] .bims-fly-row:hover,
+html[data-theme="dark"] .bims-fly-row.is-open,
+html[data-theme="dark"] .bims-mega .dropdown-item:hover,
+html[data-theme="dark"] .bims-fly-back:hover,
+html[data-theme="dark"] .bims-mega-close:hover {
+  background: var(--surface-hover); color: var(--text);
+}
+html[data-theme="dark"] .bims-fly .dropdown-item.is-current,
+html[data-theme="dark"] .bims-mega .dropdown-item.is-current {
+  background: #10281f; color: #6ee7b7;
+}
+html[data-theme="dark"] .bims-fly .dropdown-item.is-current i { color: #6ee7b7; }
+html[data-theme="dark"] .bims-fly-caret { color: var(--text-muted); }
+
+/* The mega menu's own furniture: its close button, its search box and the
+   wash behind its heading. */
+html[data-theme="dark"] .bims-mega-close {
+  background: var(--surface); border-color: var(--border); color: var(--text-secondary);
+}
+html[data-theme="dark"] .bims-mega-search input {
+  background: #101216; border-color: var(--border-strong); color: var(--text);
+}
+html[data-theme="dark"] .bims-mega-intro { background: #17191d; }
+
+/* The rail keeps its green in daylight; here it joins the page rather than
+   sitting on it as a colour of its own. */
+html[data-theme="dark"] .ds-sidebar { background: #101215; }
+html[data-theme="dark"] .ds-sb-item.is-active,
+html[data-theme="dark"] .ds-sb-link.is-active,
+html[data-theme="dark"] .ds-sb-sec.is-open > .ds-sb-section {
+  background: rgba(52, 211, 153, .16); color: #fff;
+}
+
+/* -------------------------------------------------------------------------
+   What a crawl of every page in the navigation turned up, by cause rather
+   than by page. Three families account for most of it.
+   ------------------------------------------------------------------------- */
+
+/* 1. Entry-grid headings. The design system's column classes carry a mid
+      slate written into them, and every transaction screen in the app uses
+      those classes, so one rule reaches all of them. */
+html[data-theme="dark"] .ds table.ds-entry th,
+html[data-theme="dark"] .ds table th,
+html[data-theme="dark"] th.c-fit, html[data-theme="dark"] th.c-num,
+html[data-theme="dark"] th.c-grow, html[data-theme="dark"] th.ds-mid,
+html[data-theme="dark"] .c-fit, html[data-theme="dark"] .c-num,
+html[data-theme="dark"] .c-grow, html[data-theme="dark"] table th {
+  color: var(--text-secondary);
+}
+
+/* 2. Bootstrap's own light surfaces, which a page reaches for when it wants
+      a panel a shade off the page. */
+html[data-theme="dark"] .bg-white, html[data-theme="dark"] .bg-light,
+html[data-theme="dark"] .bg-body, html[data-theme="dark"] .bg-body-tertiary,
+html[data-theme="dark"] .bg-body-secondary {
+  background-color: var(--surface) !important; color: var(--text);
+}
+
+/* 3. The screens with a card of their own: access matrices, duplicate
+      checks, the sales documents. Named by their families rather than one
+      by one -- each page prefixes its classes. */
+html[data-theme="dark"] [class^="da-"], html[data-theme="dark"] [class*=" da-"],
+html[data-theme="dark"] [class^="ma-"], html[data-theme="dark"] [class*=" ma-"],
+html[data-theme="dark"] [class^="oa-"], html[data-theme="dark"] [class*=" oa-"],
+html[data-theme="dark"] [class^="dup-"], html[data-theme="dark"] [class*=" dup-"],
+html[data-theme="dark"] [class^="si-"], html[data-theme="dark"] [class*=" si-"],
+html[data-theme="dark"] [class^="k-"], html[data-theme="dark"] [class*=" k-"] {
+  border-color: var(--border);
+}
+html[data-theme="dark"] .da-card, html[data-theme="dark"] .ma-card,
+html[data-theme="dark"] .oa-card, html[data-theme="dark"] .dup-card,
+html[data-theme="dark"] .dup-tile, html[data-theme="dark"] .si-card,
+html[data-theme="dark"] .si-panel, html[data-theme="dark"] .k-card,
+html[data-theme="dark"] .k-tile, html[data-theme="dark"] .da-row,
+html[data-theme="dark"] .ma-row, html[data-theme="dark"] .oa-row {
+  background: var(--surface) !important; color: var(--text);
+}
+html[data-theme="dark"] .da-count, html[data-theme="dark"] .ma-count,
+html[data-theme="dark"] .k-sub, html[data-theme="dark"] .dup-tile-note,
+html[data-theme="dark"] .oa-choice, html[data-theme="dark"] .si-sub {
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .si-title, html[data-theme="dark"] .da-title,
+html[data-theme="dark"] .ma-title, html[data-theme="dark"] h5, html[data-theme="dark"] h4,
+html[data-theme="dark"] h3, html[data-theme="dark"] h2, html[data-theme="dark"] h1 {
+  color: var(--text);
+}
+
+/* -------------------------------------------------------------------------
+   Second pass over the crawl. Again by cause.
+   ------------------------------------------------------------------------- */
+
+/* A register's cells. Pages paint cells white so a sticky column can cover
+   what scrolls under it and so a zebra row reads; on this ground that is a
+   white cell in a dark table. The cell goes back to carrying no colour of
+   its own, and the columns that must stay opaque take the card's surface. */
+html[data-theme="dark"] table tbody td,
+html[data-theme="dark"] table tbody th,
+html[data-theme="dark"] table tfoot td {
+  background-color: transparent;
+}
+html[data-theme="dark"] .sticky-1, html[data-theme="dark"] .sticky-2,
+html[data-theme="dark"] .sticky-3, html[data-theme="dark"] td.sticky,
+html[data-theme="dark"] th.sticky {
+  background-color: var(--surface) !important;
+}
+
+/* A light button carries dark ink, whatever its colour. White on this
+   theme's red, amber or cyan is the thinnest text on the screen. */
+html[data-theme="dark"] .btn-danger { color: #2b0f12; font-weight: 600; }
+html[data-theme="dark"] .btn-warning { color: #2a1d05; font-weight: 600; }
+html[data-theme="dark"] .btn-info { color: #052430; font-weight: 600; }
+
+/* The letterhead every report prints under: company, address, the stamp
+   saying when it was generated. It is a panel of its own, and it was the
+   single most common light surface left in the app. */
+html[data-theme="dark"] .co-head, html[data-theme="dark"] .co-band,
+html[data-theme="dark"] .co-stamp, html[data-theme="dark"] .co-letterhead,
+html[data-theme="dark"] [class^="co-"], html[data-theme="dark"] [class*=" co-"] {
+  background-color: transparent; color: var(--text-secondary);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .co-name, html[data-theme="dark"] .co-title {
+  color: var(--text);
+}
+
+/* Figures on a tile: the tile is dark now, so the number on it is not. */
+html[data-theme="dark"] .trk-num, html[data-theme="dark"] .al-kpi-value,
+html[data-theme="dark"] .fmp-value, html[data-theme="dark"] .k-val,
+html[data-theme="dark"] .v, html[data-theme="dark"] .val,
+html[data-theme="dark"] .itl-num, html[data-theme="dark"] .ipl-code,
+html[data-theme="dark"] .num { color: var(--text); }
+html[data-theme="dark"] .trk-lbl, html[data-theme="dark"] .fmp-label,
+html[data-theme="dark"] .al-kpi-label, html[data-theme="dark"] .s,
+html[data-theme="dark"] .ds-crumb-muted { color: var(--text-secondary); }
+
+/* Figures that mean something keep their meaning. */
+html[data-theme="dark"] .text-success, html[data-theme="dark"] .pl-pos { color: #34d399 !important; }
+html[data-theme="dark"] .text-danger, html[data-theme="dark"] .pl-neg { color: #f87171 !important; }
+html[data-theme="dark"] .text-warning { color: #fbbf24 !important; }
+html[data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
+html[data-theme="dark"] .gap-bad { background: #241417; color: #fca5a5; }
+html[data-theme="dark"] .gap-good { background: #10281f; color: #6ee7b7; }
+
+/* -------------------------------------------------------------------------
+   The reports.
+
+   Every report screen shares report.css, whose panels are a lavender wash
+   with purple ink -- the palette the Web-Access screens use. That one
+   stylesheet was behind more than half of everything the crawl found, and
+   the matrices under .wa- share its variables, so both move together.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] {
+  --wa-purple: #a78bfa;
+  --wa-purple-soft: #1b1830;
+  --wa-border: #2b2740;
+}
+html[data-theme="dark"] .rpt-head, html[data-theme="dark"] .rpt-filter,
+html[data-theme="dark"] .rpt-toolbar, html[data-theme="dark"] .rpt-kpi,
+html[data-theme="dark"] .rpt-kpis, html[data-theme="dark"] .rpt-scroll,
+html[data-theme="dark"] .rpt-empty, html[data-theme="dark"] .rpt-dt-wrap {
+  background: #1b1830; border-color: #2b2740; color: var(--text);
+}
+html[data-theme="dark"] .rpt-table, html[data-theme="dark"] .rpt-table td,
+html[data-theme="dark"] .rpt-table th {
+  background-color: transparent; color: var(--text); border-color: var(--border);
+}
+html[data-theme="dark"] .rpt-table thead th { color: var(--text-secondary); }
+html[data-theme="dark"] .rpt-link, html[data-theme="dark"] .rpt-doc-link { color: #a78bfa; }
+html[data-theme="dark"] .rpt-amount { color: var(--text); }
+html[data-theme="dark"] .rpt-neg { color: #f87171; }
+html[data-theme="dark"] .rpt-type, html[data-theme="dark"] .rpt-loc { color: var(--text-secondary); }
+html[data-theme="dark"] .rpt-pill { background: var(--neutral-subtle); color: var(--text-secondary); }
+html[data-theme="dark"] .rpt-pill-ok { background: #10281f; color: #6ee7b7; }
+html[data-theme="dark"] .rpt-pill-wait { background: #2a2113; color: #fcd34d; }
+html[data-theme="dark"] .k-1, html[data-theme="dark"] .k-2, html[data-theme="dark"] .k-3,
+html[data-theme="dark"] .k-4, html[data-theme="dark"] .k-5, html[data-theme="dark"] .k-6 {
+  background: var(--surface); border-color: var(--border); color: var(--text);
+}
+
+/* The letterhead on top of a report keeps its own panel; its ink follows. */
+html[data-theme="dark"] .co-name, html[data-theme="dark"] .pl-company { color: var(--text); }
+html[data-theme="dark"] .co-stamp, html[data-theme="dark"] .co-addr { color: var(--text-secondary); }
+
+/* An outline-dark button is black ink on a dark ground. */
+html[data-theme="dark"] .btn-outline-dark {
+  color: var(--text-secondary); border-color: var(--border-strong);
+}
+html[data-theme="dark"] .btn-outline-dark:hover {
+  background: var(--surface-hover); color: var(--text); border-color: var(--border-strong);
+}
+
+/* A footer row in a register: the total line under the numbers it totals. */
+html[data-theme="dark"] tfoot td, html[data-theme="dark"] tfoot th,
+html[data-theme="dark"] .ds table tfoot td { color: var(--text); }
+
+/* -------------------------------------------------------------------------
+   The last of them, from a sweep for large light surfaces page by page.
+
+   Two kinds: a page that paints its whole content area white under the
+   shell, and pages whose cards carry a prefix of their own.
+   ------------------------------------------------------------------------- */
+
+/* The content area itself, on the pages that paint it rather than letting
+   the canvas through. */
+html[data-theme="dark"] .content, html[data-theme="dark"] .content.ds,
+html[data-theme="dark"] .container-cstm {
+  background-color: transparent;
+}
+
+/* Production Cost, Activity Log and the growing-charge screens: each has its
+   own card prefix, and each drew them white. */
+html[data-theme="dark"] .pc-card, html[data-theme="dark"] .pc-drawer,
+html[data-theme="dark"] .al-card, html[data-theme="dark"] .al-clock,
+html[data-theme="dark"] .gcs-card, html[data-theme="dark"] .gc-card,
+html[data-theme="dark"] .bs-card {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text);
+}
+html[data-theme="dark"] .pc-kpi, html[data-theme="dark"] .al-kpi,
+html[data-theme="dark"] .pc-unit {
+  background: #17191d !important; border-color: var(--border) !important;
+  color: var(--text);
+}
+html[data-theme="dark"] .pc-grp, html[data-theme="dark"] .pc-bar,
+html[data-theme="dark"] th.pc-grp, html[data-theme="dark"] .gc-col-head,
+html[data-theme="dark"] .bs-col-head, html[data-theme="dark"] .bs-ctrl-col {
+  background: #191c21 !important; color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .gcs-title, html[data-theme="dark"] .al-title,
+html[data-theme="dark"] .pc-title { color: var(--text); }
+
+/* A drawer or sheet that slides over the page. */
+html[data-theme="dark"] .offcanvas, html[data-theme="dark"] aside[class*="drawer"],
+html[data-theme="dark"] .drawer {
+  background: var(--surface); color: var(--text); border-color: var(--border);
+}
+
+/* -------------------------------------------------------------------------
+   The register screens with a prefix of their own.
+
+   Item Price List, Items, Supplier List, Customer List, the attendance and
+   tracking boards: each was built as its own screen with its own card, its
+   own filter strip, its own KPI row and its own footer. They differ only in
+   the two letters at the front of every class, so they are named together.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .ipl-card, html[data-theme="dark"] .ipl-filters,
+html[data-theme="dark"] .ipl-head, html[data-theme="dark"] .itl-card,
+html[data-theme="dark"] .itl-filters, html[data-theme="dark"] .itl-head,
+html[data-theme="dark"] .pl-scroll, html[data-theme="dark"] .pl-filter,
+html[data-theme="dark"] .pl-card, html[data-theme="dark"] .pl-head,
+html[data-theme="dark"] .trk-tile, html[data-theme="dark"] .trk-card,
+html[data-theme="dark"] .att-kpi, html[data-theme="dark"] .att-card,
+html[data-theme="dark"] .rm-card, html[data-theme="dark"] .fmp-card,
+html[data-theme="dark"] .gcs-panel, html[data-theme="dark"] .bs-panel {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text);
+}
+html[data-theme="dark"] .pl-kpi, html[data-theme="dark"] .k-all,
+html[data-theme="dark"] .k-gst, html[data-theme="dark"] .k-lim,
+html[data-theme="dark"] .k-op, html[data-theme="dark"] .k-num {
+  background: #17191d !important; border-color: var(--border) !important;
+  color: var(--text);
+}
+/* A footer that totals in green keeps the meaning, at this ground's weight. */
+html[data-theme="dark"] .ipl-foot, html[data-theme="dark"] .itl-foot,
+html[data-theme="dark"] .pl-foot {
+  background: #10281f !important; color: #6ee7b7 !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .lbl, html[data-theme="dark"] .rm-detail,
+html[data-theme="dark"] .dup-tile-lab { color: var(--text-secondary); }
+html[data-theme="dark"] .dup-tile-val, html[data-theme="dark"] .fw-semibold.text-dark,
+html[data-theme="dark"] .text-dark { color: var(--text) !important; }
+
+/* Bootstrap's tinted card headers, which are a wash with dark ink on them. */
+html[data-theme="dark"] .card-header.bg-info { background: #10242e !important; color: #7dd3fc !important; }
+html[data-theme="dark"] .card-header.bg-warning { background: #2a2113 !important; color: #fcd34d !important; }
+html[data-theme="dark"] .card-header.bg-success { background: #10281f !important; color: #6ee7b7 !important; }
+html[data-theme="dark"] .card-header.bg-danger { background: #241417 !important; color: #fca5a5 !important; }
+
+/* A page that paints its own canvas grey under everything else. */
+html[data-theme="dark"] .gcs-page, html[data-theme="dark"] .gc-page,
+html[data-theme="dark"] .print-area, html[data-theme="dark"] .page-sheet {
+  background: transparent !important; color: var(--text);
+}
+
+/* -------------------------------------------------------------------------
+   Insisting.
+
+   A page's own <style> block is rendered inside the document, after this
+   file is linked in the head, so on equal specificity the page wins. Every
+   rule below is one a page states for itself, so each is stated harder --
+   which is the price of a theme laid over pages that were written for one.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .content, html[data-theme="dark"] .content.ds,
+html[data-theme="dark"] .container-cstm, html[data-theme="dark"] .dup-page {
+  background-color: transparent !important;
+}
+
+/* The map planner's legend, its figures and the chips on its cells. */
+html[data-theme="dark"] .fmp-legend, html[data-theme="dark"] .fmp-stat,
+html[data-theme="dark"] .fmp-chip, html[data-theme="dark"] .fmp-cell,
+html[data-theme="dark"] .fmp-panel {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Duplicate Entries: a note strip, a head, a band and its tabs. */
+html[data-theme="dark"] .dup-head, html[data-theme="dark"] .dup-tab,
+html[data-theme="dark"] .dup-select, html[data-theme="dark"] .dup-pane {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .dup-note { background: #15202f !important; color: var(--text-secondary) !important; }
+html[data-theme="dark"] .dup-band { background: #1b1830 !important; color: var(--text) !important; }
+html[data-theme="dark"] .dup-tab.active {
+  background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important;
+}
+
+/* A cell tinted to say a number is out of line keeps saying it. */
+html[data-theme="dark"] td.gap-bad, html[data-theme="dark"] .gap-bad {
+  background: #241417 !important; color: #fca5a5 !important;
+}
+html[data-theme="dark"] td.gap-good, html[data-theme="dark"] .gap-good {
+  background: #10281f !important; color: #6ee7b7 !important;
+}
+
+/* -------------------------------------------------------------------------
+   The last of the ink.
+
+   The cards on these screens are dark now; what is left is the ink their
+   pages wrote for a white card -- titles, names, labels and the figure
+   chips on an entry row. Each is stated over the page's own rule.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .ipl-title, html[data-theme="dark"] .ipl-name,
+html[data-theme="dark"] .itl-title, html[data-theme="dark"] .itl-name,
+html[data-theme="dark"] .dup-title, html[data-theme="dark"] .dup-band-title,
+html[data-theme="dark"] .gcs-name, html[data-theme="dark"] .bs-title,
+html[data-theme="dark"] .gc-title, html[data-theme="dark"] .pc-name,
+html[data-theme="dark"] .fmp-title, html[data-theme="dark"] .trk-title {
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .ipl-sub, html[data-theme="dark"] .itl-sub,
+html[data-theme="dark"] .ipl-last, html[data-theme="dark"] .itl-last,
+html[data-theme="dark"] .fmp-label, html[data-theme="dark"] .trk-lbl,
+html[data-theme="dark"] .dup-sub {
+  color: var(--text-secondary) !important;
+}
+
+/* A grid's grouping band: a grey strip across the header row. */
+html[data-theme="dark"] table thead th[class*="grp"],
+html[data-theme="dark"] .pc-grp, html[data-theme="dark"] th.num,
+html[data-theme="dark"] table thead tr:first-child th {
+  background-color: #191c21 !important;
+}
+
+/* The figure chips on a daily entry row: a near-white pill with the day's
+   number in it. */
+html[data-theme="dark"] .val, html[data-theme="dark"] .chip-val,
+html[data-theme="dark"] .de-val {
+  background-color: #17191d !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* Muted text sat a shade too far back on a card rather than on the canvas. */
+html[data-theme="dark"] { --text-muted: #8b94a1; }
+
+/* -------------------------------------------------------------------------
+   The tail.
+
+   What is left is small and particular: a dialog a page styles itself, the
+   strips along the top and bottom of a register, a map's own controls, and
+   a handful of figures that carry meaning in colour.
+   ------------------------------------------------------------------------- */
+
+/* Dialogs. A page that styles its own modal beats the shell's rule, and a
+   white dialog over a dark page is the most jarring thing in the app. */
+html[data-theme="dark"] .modal-content, html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] .modal-body, html[data-theme="dark"] .modal-footer {
+  background-color: var(--surface) !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .modal-title, html[data-theme="dark"] .modal-content h5,
+html[data-theme="dark"] .modal-content h4, html[data-theme="dark"] .modal-content .mb-0 {
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .modal-backdrop.show { opacity: .7; }
+
+/* The strips a register wears above and below itself, whatever a page calls
+   them: filters, toolbars, totals, summaries, footers. */
+html[data-theme="dark"] [class*="-filter"], html[data-theme="dark"] [class*="-toolbar"],
+html[data-theme="dark"] [class*="-foot"], html[data-theme="dark"] [class*="-total"],
+html[data-theme="dark"] [class*="-sum"], html[data-theme="dark"] [class*="-strip"],
+html[data-theme="dark"] [class*="-head"]:not(.card-header):not(.modal-header) {
+  background-color: #17191d !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* A map draws its own buttons, in its own white. */
+html[data-theme="dark"] .leaflet-control a, html[data-theme="dark"] .leaflet-bar a,
+html[data-theme="dark"] .leaflet-control-layers, html[data-theme="dark"] .leaflet-popup-content-wrapper,
+html[data-theme="dark"] .leaflet-popup-tip {
+  background: var(--surface) !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* Figures that say something: a price, a margin below cost, a negative. */
+html[data-theme="dark"] .itl-price, html[data-theme="dark"] .ipl-price,
+html[data-theme="dark"] .itl-code-link, html[data-theme="dark"] .ipl-code-link {
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .itl-neg, html[data-theme="dark"] .ipl-neg,
+html[data-theme="dark"] .ipl-margin.below { color: #f87171 !important; }
+html[data-theme="dark"] .ipl-undefined, html[data-theme="dark"] .itl-undefined,
+html[data-theme="dark"] .lbl { color: var(--text-secondary) !important; }
+html[data-theme="dark"] .ds-badge.is-inactive {
+  background: var(--neutral-subtle) !important; color: var(--text-secondary) !important;
+}
+
+/* A heading on a band inside a card: one step further forward than the
+   band's own text, which was sitting just under readable. */
+html[data-theme="dark"] .ds table.ds-entry th,
+html[data-theme="dark"] table thead th { color: #b7bfca; }
+
+/* A few named by a surface sweep rather than by their text: a chip in a
+   tracking summary, the two panels on Employee Organization Access, and a
+   read-only field on the settlement form. */
+html[data-theme="dark"] .trk-chip, html[data-theme="dark"] .trk-summary,
+html[data-theme="dark"] .oa-list, html[data-theme="dark"] .oa-body,
+html[data-theme="dark"] .oa-panel {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .oa-note { background: #10242e !important; color: #7dd3fc !important; }
+html[data-theme="dark"] .gcs-ro, html[data-theme="dark"] input[readonly] {
+  background-color: #17191d !important; color: var(--text-secondary) !important;
+}
+
+/* Three screens paint the document itself white, with an !important, in
+   their own style block: "html, body, .content, .container-cstm". A rule on
+   .content cannot answer that -- the white is on html and body, showing
+   through everything transparent above it -- so the root is stated here. */
+html[data-theme="dark"], html[data-theme="dark"] body {
+  background-color: var(--bg) !important;
+}
+
+/* -------------------------------------------------------------------------
+   The last ten.
+   ------------------------------------------------------------------------- */
+
+/* An entry grid's column headings, stated over the classes that set them. */
+html[data-theme="dark"] .c-fit, html[data-theme="dark"] .c-num,
+html[data-theme="dark"] .c-grow, html[data-theme="dark"] th.ds-mid,
+html[data-theme="dark"] .ds table.ds-entry thead th {
+  color: #b7bfca !important;
+}
+
+/* A totals row on an entry sheet: it tints itself to sit apart from the rows
+   above, and a near-white tint on this ground is a lit strip. A field inside
+   a row keeps its own dark box. */
+html[data-theme="dark"] tr.total-row td, html[data-theme="dark"] tr.totals td,
+html[data-theme="dark"] .ds table.ds-entry tfoot td,
+html[data-theme="dark"] .ds table.ds-entry tr:last-child td.text-end {
+  background-color: #191c21 !important; color: var(--text) !important;
+}
+html[data-theme="dark"] .ds table.ds-entry td input.form-control,
+html[data-theme="dark"] table td input.form-control,
+html[data-theme="dark"] table td select.form-select {
+  background-color: #101216 !important; color: var(--text) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* Two labels a shade under: a status on an item row, a section heading. */
+html[data-theme="dark"] .itl-notpriced, html[data-theme="dark"] .ipl-notpriced {
+  color: #fcd34d !important;
+}
+html[data-theme="dark"] .itl-section-title, html[data-theme="dark"] .ipl-section-title,
+html[data-theme="dark"] .pc-label, html[data-theme="dark"] .pc-head span {
+  color: var(--text) !important;
+}
+
+/* A label drawn on the map itself, which Leaflet paints on white. */
+html[data-theme="dark"] .fmp-label, html[data-theme="dark"] .leaflet-tooltip,
+html[data-theme="dark"] .leaflet-div-icon {
+  background: var(--surface) !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* The per-unit block on the Production Cost report: a row of "label / value"
+   pairs where the label is a plain span the page greys. */
+html[data-theme="dark"] .pc-unit .grid span,
+html[data-theme="dark"] .pc-unit span { color: var(--text-secondary) !important; }
+html[data-theme="dark"] .pc-unit b { color: var(--text) !important; }
+
+/* The note strip on the two access matrices, found by a surface sweep: their
+   own scripts break the text audit on those pages, so they are the two the
+   crawl cannot measure and the only two checked this way. */
+html[data-theme="dark"] .da-note, html[data-theme="dark"] .ma-note {
+  background: #15202f !important; color: var(--text-secondary) !important;
+  border-color: var(--border) !important;
+}
