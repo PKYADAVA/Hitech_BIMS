@@ -1167,12 +1167,15 @@ html[data-theme="dark"] .gs-box .fa-magnifying-glass { color: var(--text-muted) 
    Daily Entry's feed columns.
 
    The two feed groups are tinted so the eye can tell Feed 1's three columns
-   from Feed 2's while reading across a wide row. The tints are a pale blue
-   and a pale violet, which on this ground are two lit bands across a dark
-   table; they become the same two hues at this ground's weight, still
-   telling the groups apart.
+   from Feed 2's while reading across a wide row.
    ------------------------------------------------------------------------- */
-html[data-theme="dark"] .dr-table td.fg1 { background: #121a24 !important; }
-html[data-theme="dark"] .dr-table td.fg2 { background: #191527 !important; }
-html[data-theme="dark"] .dr-table thead th.fg1 { background: #16202d !important; }
-html[data-theme="dark"] .dr-table thead th.fg2 { background: #1d1832 !important; }
+/*
+   In daylight the two groups are told apart by hue -- a pale blue and a pale
+   violet. Carried over as hue, the violet reads as a purple band across the
+   row, which is a colour the page never meant to say anything with. On this
+   ground the two are told apart by lightness instead: one group sits a step
+   above the row, the other two steps, and neither is a colour. */
+html[data-theme="dark"] .dr-table td.fg1 { background: #15171b !important; }
+html[data-theme="dark"] .dr-table td.fg2 { background: #1b1e23 !important; }
+html[data-theme="dark"] .dr-table thead th.fg1 { background: #1a1d22 !important; }
+html[data-theme="dark"] .dr-table thead th.fg2 { background: #20242a !important; }
