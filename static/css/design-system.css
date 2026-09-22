@@ -1289,6 +1289,59 @@ body.ds-shell .content > footer { display: none; }
 }
 
 
+/* The settings form: tiles are radios drawn as pictures, so the mark on the
+   one in use comes from the input rather than from a class the server had to
+   put there. */
+.acct-settings-form { display: block; }
+.acct-tile { position: relative; }
+.acct-tile input[type="radio"] {
+  position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
+}
+.acct-tile:has(input:checked) {
+  border-color: #16a34a; box-shadow: 0 0 0 1px #16a34a inset; background: #f6fcf8;
+}
+.acct-tile:has(input:checked) .acct-pick {
+  border-color: #16a34a; box-shadow: inset 0 0 0 2.5px #16a34a;
+}
+.acct-tile:has(input:checked) .acct-art { background: #e2f3e9; }
+.acct-tile:has(input:checked) .acct-art-rail,
+.acct-tile:has(input:checked) .acct-art-bar { background: #15803d; }
+.acct-tile:has(input:focus-visible) { outline: 2px solid #1d6fe0; outline-offset: 2px; }
+
+/* Save and Cancel, at the foot of the pane. */
+.acct-actions {
+  display: flex; gap: 6px; justify-content: flex-end;
+  padding: 2px 10px 8px; margin-top: 2px;
+}
+.acct-btn {
+  border-radius: 8px; font-size: 11.5px; font-weight: 600; padding: 6px 12px;
+  border: 1px solid transparent; cursor: pointer; line-height: 1.2;
+}
+.acct-btn-save { background: #16a34a; border-color: #16a34a; color: #fff; }
+.acct-btn-save:hover { background: #15803d; border-color: #15803d; }
+.acct-btn-ghost { background: transparent; border-color: var(--border, #e5e7eb); color: var(--text-secondary, #475569); }
+.acct-btn-ghost:hover { background: #f1f5f9; color: var(--text, #0f172a); }
+
+/* The account menu holds two panes: the account, and its settings. Only one
+   is ever on show, and the menu keeps its width so opening the second does
+   not make the first jump. */
+.acct-pane { display: block; }
+.acct-list { list-style: none; margin: 0; padding: 0; }
+.acct-menu .acct-pane-settings { display: none; }
+.acct-menu.is-settings .acct-pane-main { display: none; }
+.acct-menu.is-settings .acct-pane-settings { display: block; }
+
+/* The row that opens it is a button, not a link: it goes nowhere. */
+button.acct-row { width: 100%; text-align: left; background: none; border: 0; }
+.acct-ico-settings { background: #eef2ff; color: #4f46e5; }
+.acct-back { font-weight: 600; }
+.acct-back-ico {
+  width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #eef1f5; color: #475569; font-size: .72rem;
+}
+.acct-back:hover .acct-back-ico { background: #e2e8f0; color: #0f172a; }
+
 /* Theme and navigation style: two switches for how the screen looks, so
    they are drawn as one segmented control rather than two loose circles --
    a pair of handles the eye takes in once, the way the two halves of a

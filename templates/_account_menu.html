@@ -13,6 +13,9 @@ mean "the other one", and pressing the one already marked would turn it off.
 {% endcomment %}
 <ul class="dropdown-menu dropdown-menu-end acct-menu" aria-labelledby="userMenuBtn">
 
+  <li class="acct-pane acct-pane-main">
+  <ul class="acct-list">
+
   <li class="acct-head">
     <span class="acct-avatar">{{ request.user|initials }}</span>
     <span class="acct-who">
@@ -40,74 +43,11 @@ mean "the other one", and pressing the one already marked would turn it off.
     <i class="fas fa-chevron-right acct-go"></i>
   </a></li>
 
-  <li class="acct-label">Preferences</li>
-  <li class="acct-pref">
-    <div class="acct-pref-head">
-      <span class="acct-ico acct-ico-layout"><i class="fa-solid fa-table-columns"></i></span>
-      <span>
-        <strong>Switch Navigation Style</strong>
-        <small>Choose your preferred navigation layout</small>
-      </span>
-    </div>
-    <form method="post" action="{% url 'toggle_nav_layout' %}" class="acct-tiles">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.path }}">
-      <button type="submit" name="layout" value="side"
-              class="acct-tile{% if ds_shell %} is-on{% endif %}"
-              {% if ds_shell %}aria-current="true"{% endif %}>
-        <span class="acct-art acct-art-side" aria-hidden="true">
-          <span class="acct-art-rail"></span>
-          <span class="acct-art-lines"><i></i><i></i><i></i></span>
-        </span>
-        <span class="acct-tile-name">Sidebar</span>
-        <span class="acct-pick" aria-hidden="true"></span>
-      </button>
-      <button type="submit" name="layout" value="top"
-              class="acct-tile{% if not ds_shell %} is-on{% endif %}"
-              {% if not ds_shell %}aria-current="true"{% endif %}>
-        <span class="acct-art acct-art-top" aria-hidden="true">
-          <span class="acct-art-bar"><i></i><i></i><i></i></span>
-          <span class="acct-art-body"></span>
-        </span>
-        <span class="acct-tile-name">Top Bar</span>
-        <span class="acct-pick" aria-hidden="true"></span>
-      </button>
-    </form>
-  </li>
-
-  <li class="acct-pref">
-    <div class="acct-pref-head">
-      <span class="acct-ico acct-ico-theme"><i class="fa-solid fa-circle-half-stroke"></i></span>
-      <span>
-        <strong>Appearance</strong>
-        <small>Light or dark, on every device you sign in on</small>
-      </span>
-    </div>
-    <form method="post" action="{% url 'toggle_theme' %}" class="acct-tiles">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.path }}">
-      <button type="submit" name="theme" value="light"
-              class="acct-tile{% if user_theme != 'dark' %} is-on{% endif %}"
-              {% if user_theme != 'dark' %}aria-current="true"{% endif %}>
-        <span class="acct-art acct-art-light" aria-hidden="true">
-          <span class="acct-art-sky"></span>
-          <span class="acct-art-lines"><i></i><i></i><i></i></span>
-        </span>
-        <span class="acct-tile-name">Light</span>
-        <span class="acct-pick" aria-hidden="true"></span>
-      </button>
-      <button type="submit" name="theme" value="dark"
-              class="acct-tile{% if user_theme == 'dark' %} is-on{% endif %}"
-              {% if user_theme == 'dark' %}aria-current="true"{% endif %}>
-        <span class="acct-art acct-art-dark" aria-hidden="true">
-          <span class="acct-art-sky"></span>
-          <span class="acct-art-lines"><i></i><i></i><i></i></span>
-        </span>
-        <span class="acct-tile-name">Dark</span>
-        <span class="acct-pick" aria-hidden="true"></span>
-      </button>
-    </form>
-  </li>
+  <li><button type="button" class="acct-row acct-to-settings">
+    <span class="acct-ico acct-ico-settings"><i class="fas fa-sliders"></i></span>
+    <span class="acct-row-text">Settings</span>
+    <i class="fas fa-chevron-right acct-go"></i>
+  </button></li>
 
   <li><a class="acct-row" href="{% url 'update_password' %}">
     <span class="acct-ico acct-ico-key"><i class="fas fa-key"></i></span>
@@ -115,8 +55,155 @@ mean "the other one", and pressing the one already marked would turn it off.
     <i class="fas fa-chevron-right acct-go"></i>
   </a></li>
 
+  </ul>
+  </li>
+
+  {% comment %}
+  The second pane. It is in the same menu rather than a page of its own:
+  these two choices change the screen you are looking at, so they are made
+  while looking at it, and the way back is one press rather than a
+  navigation.
+  {% endcomment %}
+  <li class="acct-pane acct-pane-settings">
+  <ul class="acct-list">
+
+  <li><button type="button" class="acct-row acct-back">
+    <i class="fas fa-chevron-left acct-back-ico"></i>
+    <span class="acct-row-text">Settings</span>
+  </button></li>
+
+  <li class="acct-label">Preferences</li>
+
+  {% comment %}
+  One form for both choices, and nothing saved until Save is pressed. The
+  tiles are radios drawn as pictures rather than buttons that submit: a
+  press here is picking, not applying, so a menu opened and closed again
+  leaves the screen as it was.
+  {% endcomment %}
+  <li>
+  <form method="post" action="{% url 'save_preferences' %}" class="acct-settings-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}">
+
+    <div class="acct-pref">
+      <div class="acct-pref-head">
+        <span class="acct-ico acct-ico-layout"><i class="fa-solid fa-table-columns"></i></span>
+        <span>
+          <strong>Navigation Style</strong>
+          <small>Where the module menu lives</small>
+        </span>
+      </div>
+      <div class="acct-tiles">
+        <label class="acct-tile">
+          <input type="radio" name="layout" value="side"{% if ds_shell %} checked{% endif %}>
+          <span class="acct-art acct-art-side" aria-hidden="true">
+            <span class="acct-art-rail"></span>
+            <span class="acct-art-lines"><i></i><i></i><i></i></span>
+          </span>
+          <span class="acct-tile-name">Sidebar</span>
+          <span class="acct-pick" aria-hidden="true"></span>
+        </label>
+        <label class="acct-tile">
+          <input type="radio" name="layout" value="top"{% if not ds_shell %} checked{% endif %}>
+          <span class="acct-art acct-art-top" aria-hidden="true">
+            <span class="acct-art-bar"><i></i><i></i><i></i></span>
+            <span class="acct-art-body"></span>
+          </span>
+          <span class="acct-tile-name">Top Bar</span>
+          <span class="acct-pick" aria-hidden="true"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="acct-pref">
+      <div class="acct-pref-head">
+        <span class="acct-ico acct-ico-theme"><i class="fa-solid fa-circle-half-stroke"></i></span>
+        <span>
+          <strong>Appearance</strong>
+          <small>Light or dark, on every device</small>
+        </span>
+      </div>
+      <div class="acct-tiles">
+        <label class="acct-tile">
+          <input type="radio" name="theme" value="light"{% if user_theme != 'dark' %} checked{% endif %}>
+          <span class="acct-art acct-art-light" aria-hidden="true">
+            <span class="acct-art-sky"></span>
+            <span class="acct-art-lines"><i></i><i></i><i></i></span>
+          </span>
+          <span class="acct-tile-name">Light</span>
+          <span class="acct-pick" aria-hidden="true"></span>
+        </label>
+        <label class="acct-tile">
+          <input type="radio" name="theme" value="dark"{% if user_theme == 'dark' %} checked{% endif %}>
+          <span class="acct-art acct-art-dark" aria-hidden="true">
+            <span class="acct-art-sky"></span>
+            <span class="acct-art-lines"><i></i><i></i><i></i></span>
+          </span>
+          <span class="acct-tile-name">Dark</span>
+          <span class="acct-pick" aria-hidden="true"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="acct-actions">
+      <button type="button" class="acct-btn acct-btn-ghost acct-back">Cancel</button>
+      <button type="submit" class="acct-btn acct-btn-save">
+        <i class="fas fa-check"></i> Save settings
+      </button>
+    </div>
+  </form>
+  </li>
+
   <li class="acct-tip">
     <i class="fa-regular fa-lightbulb"></i>
     <span>Your choice is saved to your account and used on every page from here on.</span>
   </li>
+
+  </ul>
+  </li>
 </ul>
+
+<script>
+// One handler for both bars' copies of this menu, bound once.
+if (!window.__acctPanes) {
+  window.__acctPanes = true;
+  // Bound on the way down, not on the way up: Bootstrap closes the dropdown
+  // from its own listener on the document, and a listener added later
+  // bubbles after it -- stopping propagation there is too late, and the menu
+  // shut on the very press that opened the settings.
+  document.addEventListener("click", function (e) {
+    // Picking a tile is picking, not leaving: Bootstrap closes a dropdown on
+    // any click inside it, which shut the menu on the first choice and threw
+    // the second away. Everything inside the settings form is kept, and the
+    // Save button still submits -- the default is untouched, only the
+    // journey up to Bootstrap's listener is stopped.
+    if (e.target.closest(".acct-settings-form")) {
+      e.stopPropagation();
+      if (!e.target.closest(".acct-back")) { return; }
+    }
+    const open = e.target.closest(".acct-to-settings");
+    const back = e.target.closest(".acct-back");
+    if (!open && !back) { return; }
+    e.preventDefault();
+    e.stopPropagation();
+    const menu = (open || back).closest(".acct-menu");
+    if (!menu) { return; }
+    menu.classList.toggle("is-settings", !!open);
+    // Focus follows the pane. Beyond keyboard use, it is what keeps Escape
+    // working: Bootstrap closes a dropdown from a keydown it only acts on
+    // while focus is inside the menu, and a press that changes the pane
+    // takes focus with it.
+    const land = menu.querySelector(open ? ".acct-back" : ".acct-to-settings");
+    if (land) { land.focus(); }
+  }, true);
+
+  // A menu left on its settings pane opens on the account next time: the
+  // pane is where you were, not what you chose. The event fires on the
+  // toggle's wrapper, not on the menu, so every open menu is reset rather
+  // than reaching from the target to one.
+  document.addEventListener("hidden.bs.dropdown", function () {
+    document.querySelectorAll(".acct-menu.is-settings")
+      .forEach(function (m) { m.classList.remove("is-settings"); });
+  });
+}
+</script>

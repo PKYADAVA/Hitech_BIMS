@@ -1243,3 +1243,24 @@ html[data-theme="dark"] .theme-flip:active { background: #262c34 !important; }
 html[data-theme="dark"] .theme-flip-form + .theme-flip-form .theme-flip {
   border-left-color: var(--border-strong) !important;
 }
+
+/* The account menu's settings pane, in dark. */
+html[data-theme="dark"] .acct-ico-settings { background: #1a1b2e !important; color: #a5b4fc !important; }
+html[data-theme="dark"] .acct-back-ico { background: #1e2127 !important; color: var(--text-secondary) !important; }
+html[data-theme="dark"] .acct-back:hover .acct-back-ico { background: #262c34 !important; color: var(--text) !important; }
+html[data-theme="dark"] button.acct-row { color: var(--text-secondary) !important; }
+html[data-theme="dark"] button.acct-row:hover { background: var(--surface-hover) !important; color: var(--text) !important; }
+
+/* The settings form in dark: the chosen tile, and the two buttons. */
+html[data-theme="dark"] .acct-tile:has(input:checked) {
+  background: #10281f !important; border-color: #34d399 !important;
+  box-shadow: 0 0 0 1px #34d399 inset !important;
+}
+html[data-theme="dark"] .acct-tile:has(input:checked) .acct-pick {
+  border-color: #34d399 !important; box-shadow: inset 0 0 0 2.5px #34d399 !important;
+}
+html[data-theme="dark"] .acct-tile:has(input:checked) .acct-art { background: #16302a !important; }
+html[data-theme="dark"] .acct-btn-save { background: #15803d !important; border-color: #15803d !important; color: #fff !important; }
+html[data-theme="dark"] .acct-btn-save:hover { background: #16a34a !important; border-color: #16a34a !important; }
+html[data-theme="dark"] .acct-btn-ghost { border-color: var(--border-strong) !important; color: var(--text-secondary) !important; }
+html[data-theme="dark"] .acct-btn-ghost:hover { background: var(--surface-hover) !important; color: var(--text) !important; }

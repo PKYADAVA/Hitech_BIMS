@@ -771,6 +771,35 @@ def ui_settings(request):
 
 
 @login_required
+def save_preferences(request):
+    """Both display preferences, saved together from the Settings pane.
+
+    The bars' own buttons still switch one thing on sight; this is the other
+    way of making the same choice -- pick the pair, look at them, then apply.
+    Nothing is written until Save, so a menu opened and closed again leaves
+    the screen as it was.
+    """
+    if request.method == "POST":
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        fields = []
+        theme = request.POST.get("theme")
+        if theme in (UserProfile.THEME_LIGHT, UserProfile.THEME_DARK):
+            profile.theme = theme
+            fields.append("theme")
+        layout = request.POST.get("layout")
+        if layout in (UserProfile.NAV_SIDE, UserProfile.NAV_TOP):
+            profile.nav_layout = layout
+            fields.append("nav_layout")
+        if fields:
+            profile.save(update_fields=fields)
+            messages.success(request, "Your settings are saved.")
+
+    next_url = request.POST.get("next", "")
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
+    return redirect(next_url)
+
+
 def toggle_theme(request):
     """Light or dark, from the account menu, without leaving the page.
 

@@ -52,6 +52,7 @@ urlpatterns = [
     path('ui-settings/', views.ui_settings, name='ui_settings'),
     path('ui-settings/toggle-nav-layout/', views.toggle_nav_layout, name='toggle_nav_layout'),
     path('ui-settings/toggle-theme/', views.toggle_theme, name='toggle_theme'),
+    path('ui-settings/save/', views.save_preferences, name='save_preferences'),
     path('duplicate-entries/', views.duplicate_analyser, name='duplicate_analyser'),
     path('duplicate-entries/record/', views.duplicate_record, name='duplicate_record'),
     path('duplicate-entries/dismiss/', views.duplicate_dismiss, name='duplicate_dismiss'),
