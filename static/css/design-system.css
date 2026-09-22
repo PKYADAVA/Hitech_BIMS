@@ -829,20 +829,23 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 /* The navigation preference: a card holding the two layouts as pictures, so
    the choice is made by recognising the shape rather than reading a label
    that says "switch to the other one". */
-.acct-pref { margin: 2px 10px 8px; padding: 9px; border-radius: 11px; background: #f6f8fa; }
-.acct-pref-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 8px; }
-.acct-pref-head strong { display: block; font-size: 12.3px; color: var(--text, #0f172a); }
-.acct-pref-head small { display: block; font-size: 11px; color: var(--text-secondary, #475569); line-height: 1.3; }
-.acct-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* Two preference cards now, not one, so each gives back what the second
+   costs: smaller pictures, one line of explanation instead of two, and the
+   padding down a notch. The menu still opens in one screenful. */
+.acct-pref { margin: 2px 10px 6px; padding: 7px; border-radius: 10px; background: #f6f8fa; }
+.acct-pref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.acct-pref-head strong { display: block; font-size: 11.8px; color: var(--text, #0f172a); }
+.acct-pref-head small { display: block; font-size: 10.2px; color: var(--text-secondary, #475569); line-height: 1.25; }
+.acct-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .acct-tile {
   position: relative; display: block; width: 100%; text-align: left;
-  padding: 8px 8px 7px; border-radius: 9px; cursor: pointer;
+  padding: 6px 7px 5px; border-radius: 8px; cursor: pointer;
   background: #fff; border: 1px solid var(--border, #e5e7eb);
 }
 .acct-tile:hover { border-color: #b9c6d2; }
 .acct-tile.is-on { border-color: #16a34a; box-shadow: 0 0 0 1px #16a34a inset; background: #f6fcf8; }
-.acct-tile-name { display: block; font-size: 12px; font-weight: 700; color: var(--text, #0f172a); }
-.acct-tile small { display: block; font-size: 10px; color: var(--text-secondary, #475569); line-height: 1.25; }
+.acct-tile-name { display: block; font-size: 11.5px; font-weight: 700; color: var(--text, #0f172a); }
+.acct-tile small { display: block; font-size: 9.6px; color: var(--text-secondary, #475569); line-height: 1.2; }
 /* The radio is drawn, not an input: the tile itself is the button that
    submits, and a real input beside it would be a second thing to press. */
 .acct-pick {
@@ -852,7 +855,7 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 .acct-tile.is-on .acct-pick { border-color: #16a34a; box-shadow: inset 0 0 0 2.5px #16a34a; }
 
 /* Each layout as a small picture of itself. */
-.acct-art { display: flex; width: 36px; height: 26px; margin-bottom: 6px;
+.acct-art { display: flex; width: 30px; height: 21px; margin-bottom: 4px;
             border-radius: 4px; overflow: hidden; background: #e8edf2; }
 .acct-art-side { gap: 2px; padding: 2.5px; }
 .acct-art-rail { width: 9px; border-radius: 2px; background: #334155; }
@@ -1280,3 +1283,25 @@ body.ds-shell .content > footer { display: none; }
   .bims-fly .dropdown-item { padding: 10px 10px; font-size: .88rem; }
   .bims-fly-back { padding: 10px; font-size: .85rem; }
 }
+
+
+/* The theme button on the bars: the same round control as the power button
+   beside it, so the end of the bar reads as one row of handles. */
+.theme-flip-form { display: flex; align-items: center; margin: 0 0 0 6px; }
+.theme-flip {
+  width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.10);
+  color: #fff; font-size: .82rem; line-height: 1; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.theme-flip:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.34); }
+.theme-flip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* On the slim bar the ground is light, so the same button is drawn in ink
+   rather than in white. */
+.ds-topbar .theme-flip {
+  border-color: var(--ds-border, #e3e8ef); background: transparent;
+  color: var(--ds-muted, #6b7280);
+}
+.ds-topbar .theme-flip:hover { background: var(--ds-row-hover, #eff5ff); color: var(--ds-text, #111827); }

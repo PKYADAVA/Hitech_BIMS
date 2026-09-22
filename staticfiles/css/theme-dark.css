@@ -418,3 +418,159 @@ html[data-theme="dark"] .table-bordered > :not(caption) > * > * {
 html[data-theme="dark"] .bl-filter, html[data-theme="dark"] .bf-filter {
   background: #17191d; border-color: transparent;
 }
+
+/* -------------------------------------------------------------------------
+   The dashboard.
+
+   It is the page with the most of its own colours -- its own ink, its own
+   card white, its own tints -- because it was drawn as a page rather than
+   assembled from the shell's parts. Each family gets its dark counterpart
+   here; the numbers and their semantic colours are left alone, since those
+   are the data.
+   ------------------------------------------------------------------------- */
+
+/* Cards and panels: white to the same step of light the rest of the app uses. */
+html[data-theme="dark"] .dash-panel,
+html[data-theme="dark"] .dash-mini-stat,
+html[data-theme="dark"] .dw-card, html[data-theme="dark"] .dw-stat,
+html[data-theme="dark"] .dw-range, html[data-theme="dark"] .dw-skel,
+html[data-theme="dark"] .dw-act-tab, html[data-theme="dark"] .dw-act-foot-tile,
+html[data-theme="dark"] .qa-card, html[data-theme="dark"] .home-trk-tile,
+html[data-theme="dark"] .home-cal-card, html[data-theme="dark"] .dupw-tile,
+html[data-theme="dark"] .dupw-section {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+  box-shadow: none;
+}
+html[data-theme="dark"] .qa-card:hover,
+html[data-theme="dark"] .dw-act-tab:hover,
+html[data-theme="dark"] .dash-mini-stat:hover {
+  background: var(--surface-hover) !important;
+}
+
+/* Ink: the page's near-navy heading colour and its two greys. */
+html[data-theme="dark"] .dashboard-shell,
+html[data-theme="dark"] .dash-welcome h1,
+html[data-theme="dark"] .dash-section-title,
+html[data-theme="dark"] .dw-rows-title, html[data-theme="dark"] .dw-act-main span,
+html[data-theme="dark"] .dupw-find-title, html[data-theme="dark"] .dupw-tile-value,
+html[data-theme="dark"] .dw-act-foot-value, html[data-theme="dark"] .dw-legend-value,
+html[data-theme="dark"] .trk-num, html[data-theme="dark"] .qa-card,
+html[data-theme="dark"] .dash-mini-stat span { color: var(--text); }
+
+html[data-theme="dark"] .dash-welcome p,
+html[data-theme="dark"] .dash-section-copy,
+html[data-theme="dark"] .dash-activity span,
+html[data-theme="dark"] .dw-note, html[data-theme="dark"] .dw-stat .dw-label,
+html[data-theme="dark"] .dw-stat .dw-sub, html[data-theme="dark"] .dw-act-time,
+html[data-theme="dark"] .dw-act-foot-label, html[data-theme="dark"] .dw-act-foot-sub,
+html[data-theme="dark"] .dw-act-loc span, html[data-theme="dark"] .dw-act-metric span,
+html[data-theme="dark"] .dw-row .dw-row-meta, html[data-theme="dark"] .dw-legend-label,
+html[data-theme="dark"] .dw-legend-pct, html[data-theme="dark"] .dupw-legend,
+html[data-theme="dark"] .dupw-tile-label, html[data-theme="dark"] .dupw-checked,
+html[data-theme="dark"] .trk-lbl, html[data-theme="dark"] .ar-when,
+html[data-theme="dark"] .dash-mini-stat i { color: var(--text-secondary); }
+
+/* The pale tints behind a warning or an error row, as tints of this ground. */
+html[data-theme="dark"] [class*="dw-c-"], html[data-theme="dark"] .is-error,
+html[data-theme="dark"] .ar-row, html[data-theme="dark"] .dash-activity {
+  background-color: transparent;
+}
+html[data-theme="dark"] .ar-row.is-warn, html[data-theme="dark"] .t-warn { background: #241d10; }
+html[data-theme="dark"] .ar-row.is-bad, html[data-theme="dark"] .t-bad,
+html[data-theme="dark"] .t-red, html[data-theme="dark"] .is-error { background: #241417; }
+
+/* A green button with white on it is thin at this size; the ink goes dark,
+   which is what a light button wants on any ground. */
+html[data-theme="dark"] .btn-success { color: #06281c; font-weight: 600; }
+html[data-theme="dark"] .home-cal-day { color: var(--text-secondary); }
+html[data-theme="dark"] .home-cal-card .card-header { color: var(--text); }
+
+/* -------------------------------------------------------------------------
+   Alerts: the bell's menu, the feed and the dashboard's recent-activity
+   card. Its own stylesheet, its own white, so it is named the same way.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .ah-bell-menu, html[data-theme="dark"] .ah-bell-head,
+html[data-theme="dark"] .ah-bell-foot, html[data-theme="dark"] .ah-card,
+html[data-theme="dark"] .ah-form-card, html[data-theme="dark"] .ah-frow,
+html[data-theme="dark"] .ah-frow-menu, html[data-theme="dark"] .ah-feed,
+html[data-theme="dark"] .ah-filters, html[data-theme="dark"] .ar-row,
+html[data-theme="dark"] .ar-card, html[data-theme="dark"] .ah-detail-grid {
+  background: var(--surface); border-color: var(--border); color: var(--text);
+}
+html[data-theme="dark"] .ah-frow:hover, html[data-theme="dark"] .ar-row:hover {
+  background: var(--surface-hover);
+}
+html[data-theme="dark"] .ah-empty, html[data-theme="dark"] .ah-foot-time,
+html[data-theme="dark"] .ah-frow-meta, html[data-theme="dark"] .ah-field-l,
+html[data-theme="dark"] .ah-count-l, html[data-theme="dark"] .ar-msg,
+html[data-theme="dark"] .ar-when { color: var(--text-secondary); }
+html[data-theme="dark"] .ah-field-v, html[data-theme="dark"] .ah-count-n {
+  color: var(--text);
+}
+html[data-theme="dark"] .ah-chip { background: var(--neutral-subtle); color: var(--text-secondary); }
+
+/* Chart furniture on the dashboard's cards: a mid slate that reads on white
+   and sits too close to this ground. */
+html[data-theme="dark"] .dw-range-title,
+html[data-theme="dark"] .dw-legend span,
+html[data-theme="dark"] .dw-axis, html[data-theme="dark"] .dw-tick {
+  color: var(--text-secondary);
+}
+
+/* Field labels. A mid slate that reads on white and all but disappears here
+   -- and this is the class the report filter bars label every control with,
+   so it is a line that fixes a screen at a time. */
+html[data-theme="dark"] .form-label,
+html[data-theme="dark"] label { color: var(--text-secondary); }
+
+/* Select2 draws its own box over a select, with its own ink and its own
+   placeholder grey, so a select styled for dark still showed a grey value. */
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection__rendered,
+html[data-theme="dark"] .select2-container .select2-selection__rendered {
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection__placeholder,
+html[data-theme="dark"] .select2-container .select2-selection__placeholder {
+  color: var(--text-muted) !important;
+}
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single,
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection--multiple {
+  background-color: #101216; border-color: var(--border-strong);
+}
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown,
+html[data-theme="dark"] .select2-search__field {
+  background-color: #101216; color: var(--text); border-color: var(--border-strong);
+}
+
+/* The two alert cards' own headings, which are the darkest ink on the page. */
+html[data-theme="dark"] .ar-title, html[data-theme="dark"] .ah-widget-title,
+html[data-theme="dark"] .ar-name, html[data-theme="dark"] .ar-head,
+html[data-theme="dark"] .ah-head { color: var(--text); }
+html[data-theme="dark"] .dw-legend, html[data-theme="dark"] .dw-range span {
+  color: var(--text-secondary);
+}
+
+/* The chart's series keys -- "Birds", "Weight" -- which name the colours
+   under them and so have to be read, not just seen. */
+html[data-theme="dark"] .dw-legend-series,
+html[data-theme="dark"] .dw-legend-series span { color: var(--text-secondary); }
+
+/* The theme button on the slim bar, once that bar is dark. */
+html[data-theme="dark"] .ds-topbar .theme-flip {
+  border-color: var(--border-strong); color: var(--text-secondary);
+}
+html[data-theme="dark"] .ds-topbar .theme-flip:hover {
+  background: var(--surface-hover); color: var(--text);
+}
+html[data-theme="dark"] .acct-pref { background: #17191d; }
+html[data-theme="dark"] .acct-tile { background: var(--surface); border-color: var(--border); }
+html[data-theme="dark"] .acct-tile.is-on { background: #10281f; border-color: #34d399; box-shadow: 0 0 0 1px #34d399 inset; }
+html[data-theme="dark"] .acct-tile-name, html[data-theme="dark"] .acct-pref-head strong { color: var(--text); }
+html[data-theme="dark"] .acct-tile small, html[data-theme="dark"] .acct-pref-head small { color: var(--text-secondary); }
+html[data-theme="dark"] .acct-menu { background: var(--surface); border-color: var(--border); }
+html[data-theme="dark"] .acct-row, html[data-theme="dark"] .acct-label,
+html[data-theme="dark"] .acct-tip { color: var(--text-secondary); }
+html[data-theme="dark"] .acct-row:hover { background: var(--surface-hover); color: var(--text); }
+html[data-theme="dark"] .acct-who strong { color: var(--text); }
