@@ -20,21 +20,27 @@
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces: canvas, the cards on it, and what a row does under the mouse. */
-  --bg:             #0f1620;
-  --bg-white:       #161f2b;
-  --surface:        #161f2b;
-  --surface-hover:  #1d2836;
-  --bg-subtle:      #131c27;
+  /* Surfaces. Near-black and near-neutral -- a whisper of blue in it, not a
+     navy -- so the only colour on the screen is the data's own. A card is a
+     step of light above the canvas rather than a box drawn on it, and the
+     steps are small and even: canvas, card, the band inside a card, hover. */
+  --bg:             #0b0d10;
+  --bg-white:       #141619;
+  --surface:        #141619;
+  --surface-hover:  #1b1e23;
+  --bg-subtle:      #17191d;
 
-  /* Ink. Not pure white: on a dark ground it haloes and tires the eye. */
-  --text:           #e6edf6;
-  --text-secondary: #a9b7c9;
-  --text-muted:     #7c8ba0;
+  /* Ink. Not pure white: on a ground this dark it haloes and tires the eye. */
+  --text:           #e8eaed;
+  --text-secondary: #a6adb8;
+  --text-muted:     #767d89;
 
-  /* Lines carry the structure a light theme gets from shadow. */
-  --border:         #27333f;
-  --border-strong:  #35465a;
+  /* Lines are nearly gone. On a light theme a border is what separates two
+     white things; here the step between surfaces does that work, and a drawn
+     line at the same weight reads as a wire fence around every card. What is
+     left is for the places a step cannot help: a field's edge, a grid's rows. */
+  --border:         #22252b;
+  --border-strong:  #333942;
   --border-focus:   #4f8cf7;
   --focus-ring:     0 0 0 3px rgba(79,140,247,0.28);
 
@@ -45,7 +51,7 @@ html[data-theme="dark"] {
   --primary-hover:  #60a5fa;
   --primary-dark:   #2563eb;
   --primary-light:  #93c5fd;
-  --primary-subtle: #16233a;
+  --primary-subtle: #15202f;
   --accent:         #38bdf8;
 
   --success:        #34d399;
@@ -60,7 +66,7 @@ html[data-theme="dark"] {
   --info:           #38bdf8;
   --info-subtle:    #10242e;
   --info-text:      #7dd3fc;
-  --neutral-subtle: #1c2735;
+  --neutral-subtle: #1e2127;
   --neutral-text:   #a9b7c9;
 }
 
@@ -69,21 +75,21 @@ html[data-theme="dark"] {
    uses for the same ideas; a guessed name defines a token nothing reads and
    leaves the card it was meant to darken white. */
 html[data-theme="dark"] .ds {
-  --ds-bg:          #0f1620;
-  --ds-card:        #161f2b;
-  --ds-border:      #27333f;
-  --ds-header-bg:   #1a2534;
-  --ds-row-hover:   #1d2b3d;
+  --ds-bg:          #0b0d10;
+  --ds-card:        #141619;
+  --ds-border:      #22252b;
+  --ds-header-bg:   #191c21;
+  --ds-row-hover:   #1b1e23;
   --ds-text:        #e6edf6;
   --ds-muted:       #a9b7c9;
   --ds-label-text:  #c3cfdd;
-  --ds-input:       #101924;
-  --ds-placeholder: #7c8ba0;
-  --ds-disabled:    #141d29;
+  --ds-input:       #101216;
+  --ds-placeholder: #767d89;
+  --ds-disabled:    #17191d;
 
   /* The softs are tints of white in daylight; here they are tints of the
      ground, or every badge on the page would glow. */
-  --ds-primary:      #3b82f6;   --ds-primary-soft: #16233a;
+  --ds-primary:      #3b82f6;   --ds-primary-soft: #15202f;
   --ds-success:      #34d399;   --ds-success-soft: #10281f;
   --ds-warning:      #fbbf24;   --ds-warning-soft: #2a2113;
   --ds-danger:       #f87171;   --ds-danger-soft:  #2c1719;
@@ -142,14 +148,14 @@ html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection,
 html[data-theme="dark"] .select2-dropdown,
 html[data-theme="dark"] .dataTables_wrapper input,
 html[data-theme="dark"] .dataTables_wrapper select {
-  background-color: #101924;
+  background-color: #101216;
   border-color: var(--border-strong);
   color: var(--text);
 }
 html[data-theme="dark"] .form-control::placeholder { color: var(--text-muted); }
 html[data-theme="dark"] .form-control:disabled,
 html[data-theme="dark"] .form-control[readonly] {
-  background-color: #141d29; color: var(--text-secondary);
+  background-color: #17191d; color: var(--text-secondary);
 }
 html[data-theme="dark"] .select2-container--bootstrap-5 .select2-results__option--highlighted {
   background-color: var(--primary-dark);
@@ -162,7 +168,7 @@ html[data-theme="dark"] .bims-navbar,
 html[data-theme="dark"] .bims-modulebar,
 html[data-theme="dark"] .ds-sidebar,
 html[data-theme="dark"] .ds-topbar {
-  background: #12202a;
+  background: #101215;
   border-color: var(--border);
 }
 
@@ -207,13 +213,13 @@ html[data-theme="dark"] .b-none { color: var(--text-muted); }
 /* The batch number, as a code on a dark ground. */
 html[data-theme="dark"] .batch-chip,
 html[data-theme="dark"] #batch-rows .batch-no {
-  background: #16233a !important; border-color: #2b3f63; color: #93c5fd;
+  background: #16202c !important; border-color: #27313d; color: #8ab4f8;
 }
 html[data-theme="dark"] #batch-rows .batch-no::placeholder { color: #64748b; }
 
 /* Status pills keep their meaning, at this ground's weight. */
 html[data-theme="dark"] .bs-active { background: #10281f; color: #6ee7b7; }
-html[data-theme="dark"] .bs-closed { background: #1c2735; color: #a9b7c9; }
+html[data-theme="dark"] .bs-closed { background: #1e2127; color: #a6adb8; }
 
 /* The rows form: the sticky add/delete cell was white, which on this canvas
    reads as a hole punched in the row. */
@@ -227,10 +233,10 @@ html[data-theme="dark"] .row-note { color: #fca5a5; }
 html[data-theme="dark"] #batch-rows .col-no { color: var(--text-muted); }
 
 /* What is already on the farm, under the buttons. */
-html[data-theme="dark"] #running-table tr.farm-head td { background: var(--bg-subtle); }
-html[data-theme="dark"] #running-table tr.this-unit td { background: #16233a; }
+html[data-theme="dark"] #running-table tr.farm-head td { background: #191c21; }
+html[data-theme="dark"] #running-table tr.this-unit td { background: #16202c; }
 html[data-theme="dark"] #running-table tbody tr:not(.farm-head):hover td { background: var(--surface-hover); }
-html[data-theme="dark"] .unit-tag { background: #16233a; color: #93c5fd; }
+html[data-theme="dark"] .unit-tag { background: #16202c; color: #8ab4f8; }
 html[data-theme="dark"] .farm-sum,
 html[data-theme="dark"] .running-empty { color: var(--text-secondary); }
 
@@ -250,7 +256,7 @@ html[data-theme="dark"] .btn-outline-secondary:hover {
   background: var(--surface-hover); color: var(--text);
 }
 html[data-theme="dark"] .btn-secondary {
-  background: #24303f; border-color: var(--border-strong); color: var(--text);
+  background: #22262c; border-color: var(--border-strong); color: var(--text);
 }
 html[data-theme="dark"] .dataTables_wrapper .paginate_button,
 html[data-theme="dark"] .page-link {
@@ -293,7 +299,7 @@ html[data-theme="dark"] .gs-panel {
   background: #101924; color: var(--text); border-color: var(--border-strong);
 }
 html[data-theme="dark"] .gs-kbd {
-  background: #1c2735; color: var(--text-secondary); border-color: var(--border-strong);
+  background: #1e2127; color: var(--text-secondary); border-color: var(--border-strong);
 }
 html[data-theme="dark"] .gs-row:hover, html[data-theme="dark"] .gs-row.is-on {
   background: var(--surface-hover);
@@ -315,7 +321,7 @@ html[data-theme="dark"] .bf-name { color: var(--text); }
 html[data-theme="dark"] .bf-code,
 html[data-theme="dark"] .bf-rownum,
 html[data-theme="dark"] .bf-meta { color: var(--text-secondary); }
-html[data-theme="dark"] .bf-count { background: #1c2735; color: var(--text-secondary); }
+html[data-theme="dark"] .bf-count { background: #1e2127; color: var(--text-secondary); }
 html[data-theme="dark"] .bf-tabs .nav-link {
   background: var(--surface); color: var(--text-secondary); border-color: var(--border);
 }
@@ -366,10 +372,49 @@ html[data-theme="dark"] .bf-tabs .nav-link.active .bf-count {
    KPI reads on either ground, and dulling them would cost the row the one
    thing that makes it scannable. */
 html[data-theme="dark"] #shed-table .shed-group-row td,
-html[data-theme="dark"] .shed-group-row td { background: #1a2534 !important; color: var(--text); }
-html[data-theme="dark"] .shed-group-row:hover td { background: #1f2c3d !important; }
+html[data-theme="dark"] .shed-group-row td { background: #191c21 !important; color: var(--text); }
+html[data-theme="dark"] .shed-group-row:hover td { background: #1e2127 !important; }
 html[data-theme="dark"] #shed-table td.dtr-control:before {
   background: #2b62c9 !important; border-color: #2b62c9 !important; color: #fff !important;
 }
 html[data-theme="dark"] .shed-toolbar .form-control,
 html[data-theme="dark"] .shed-toolbar .form-select { color: var(--text); }
+
+
+/* -------------------------------------------------------------------------
+   Blending: what makes the reference read as one dark screen rather than a
+   set of dark panels. A card is a step of light, its header a step above
+   that, its edges nearly invisible, and no shadow -- a drop shadow on a dark
+   ground is a smudge, since there is nothing darker for it to fall on.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .bl-card, html[data-theme="dark"] .bf-card,
+html[data-theme="dark"] .bl-head, html[data-theme="dark"] .bf-head,
+html[data-theme="dark"] .bl-filters, html[data-theme="dark"] .bf-filters,
+html[data-theme="dark"] .running-card, html[data-theme="dark"] .page-header,
+html[data-theme="dark"] .stat-card, html[data-theme="dark"] .ds .ds-kpi {
+  box-shadow: none;
+  border-color: var(--border);
+}
+html[data-theme="dark"] .card-header,
+html[data-theme="dark"] .bl-card > .card-header,
+html[data-theme="dark"] .running-card .card-header {
+  background: #191c21; border-bottom-color: var(--border);
+}
+
+/* Grid rows: the divider is the quietest line on the page that still
+   separates two numbers, which is what a register is read down. */
+html[data-theme="dark"] .ds table.ds-grid tbody td,
+html[data-theme="dark"] #broiler-batch-table td,
+html[data-theme="dark"] .table > :not(caption) > * > * {
+  border-bottom-color: #1e2127;
+}
+html[data-theme="dark"] .table-bordered > :not(caption) > * > * {
+  border-color: #1e2127;
+}
+
+/* A filter cell inside the strip: a box drawn inside a box drawn on the
+   canvas was three borders deep. The inner one goes. */
+html[data-theme="dark"] .bl-filter, html[data-theme="dark"] .bf-filter {
+  background: #17191d; border-color: transparent;
+}
