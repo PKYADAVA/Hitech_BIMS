@@ -56,6 +56,24 @@ SECTION_ICONS = {
 DEFAULT_SECTION_ICON = "fas fa-folder-open"
 
 
+def theme_for(user):
+    """This person's theme: ``"light"`` or ``"dark"``.
+
+    Read the same way as the layout, and for the same reason: profiles are
+    made on demand, so most accounts have no row and fall back to the
+    deployment default rather than to whatever the last person chose.
+    """
+    from django.conf import settings
+
+    from user.models import UserProfile
+
+    default = getattr(settings, "DEFAULT_THEME", UserProfile.THEME_LIGHT)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return default
+    profile = UserProfile.objects.filter(user=user).only("theme").first()
+    return profile.theme if profile else default
+
+
 def nav_layout_for(user):
     """This person's chrome: ``"top"`` or ``"side"``.
 

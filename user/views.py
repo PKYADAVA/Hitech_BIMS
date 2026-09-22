@@ -771,6 +771,31 @@ def ui_settings(request):
 
 
 @login_required
+def toggle_theme(request):
+    """Light or dark, from the account menu, without leaving the page.
+
+    The tiles name the theme they set rather than flipping whatever is
+    stored, for the same reason the layout tiles do: two tiles on a page
+    that has been open a while would otherwise both mean "the other one".
+    """
+    if request.method == "POST":
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        wanted = request.POST.get("theme")
+        if wanted in (UserProfile.THEME_LIGHT, UserProfile.THEME_DARK):
+            profile.theme = wanted
+        else:
+            profile.theme = (
+                UserProfile.THEME_DARK if profile.theme == UserProfile.THEME_LIGHT
+                else UserProfile.THEME_LIGHT
+            )
+        profile.save(update_fields=["theme"])
+
+    next_url = request.POST.get("next", "")
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
+    return redirect(next_url)
+
+
 def toggle_nav_layout(request):
     """One-click flip of the same choice `ui_settings` saves, from a button
     that lives in the navbar itself rather than a page someone has to visit.

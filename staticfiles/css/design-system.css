@@ -868,6 +868,29 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 .acct-tile.is-on .acct-art { background: #e2f3e9; }
 .acct-tile.is-on .acct-art-rail, .acct-tile.is-on .acct-art-bar { background: #15803d; }
 
+/* The Appearance tiles: a page in each theme, drawn the way the layout
+   tiles draw a rail and a bar rather than described in words. */
+.acct-ico-theme { background: #e8eaf6; color: #3f51b5; }
+.acct-art-light .acct-art-sky, .acct-art-dark .acct-art-sky {
+  position: absolute; inset: 0; border-radius: inherit;
+}
+.acct-art-light .acct-art-sky { background: #ffffff; }
+.acct-art-dark .acct-art-sky { background: #161f2b; }
+.acct-art-light .acct-art-lines, .acct-art-dark .acct-art-lines {
+  position: absolute; inset: 22% 18%; display: flex; flex-direction: column;
+  justify-content: space-between;
+}
+.acct-art-light .acct-art-lines i { background: #cbd5e1; }
+.acct-art-dark .acct-art-lines i { background: #3b4a5f; }
+.acct-art-light .acct-art-lines i, .acct-art-dark .acct-art-lines i {
+  display: block; height: 3px; border-radius: 2px;
+}
+.acct-art-light .acct-art-lines i:nth-child(2),
+.acct-art-dark .acct-art-lines i:nth-child(2) { width: 70%; }
+.acct-art-light .acct-art-lines i:nth-child(3),
+.acct-art-dark .acct-art-lines i:nth-child(3) { width: 45%; }
+.acct-art-light, .acct-art-dark { position: relative; overflow: hidden; }
+
 .acct-tip {
   display: flex; align-items: flex-start; gap: 7px; margin: 0 10px 10px;
   padding: 7px 9px; border-radius: 9px;

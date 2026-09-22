@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 {% load static %}
-<html lang="en">
+<!-- The theme is stamped here, not on <body>: the page background is
+     painted from the root, so a stamp any lower leaves a white band
+     behind the content while it scrolls. -->
+<html lang="en" data-theme="{{ user_theme|default:'light' }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -47,6 +50,11 @@
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
   <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260922e" />
+
+  <!-- Dark. Last, so its token values win over the light ones above, and
+       harmless when the theme is light: every rule in it is behind
+       html[data-theme="dark"]. -->
+  <link rel="stylesheet" href="{% static 'css/theme-dark.css' %}?v=20260922d" />
 
   {% block css %}{% endblock %}
 
@@ -176,7 +184,7 @@
     window.BIMS_MAP = JSON.parse(
       document.getElementById("bims-map-config").textContent);
   </script>
-  <script src="{% static 'js/main.js' %}?v=20260922c"></script>
+  <script src="{% static 'js/main.js' %}?v=20260922e"></script>
 
   <!-- Module menus, shared by the top bar and the sidebar (bump ?v= on edit) -->
   <script src="{% static 'js/nav_menu.js' %}?v=20260922f"></script>

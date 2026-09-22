@@ -29,6 +29,17 @@ class UserProfile(models.Model):
         help_text="Where the module menu lives for this user.",
     )
 
+    THEME_LIGHT = "light"
+    THEME_DARK = "dark"
+    THEME_CHOICES = [
+        (THEME_LIGHT, "Light"),
+        (THEME_DARK, "Dark"),
+    ]
+    theme = models.CharField(
+        max_length=8, choices=THEME_CHOICES, default=THEME_LIGHT,
+        help_text="Light or dark, for this user on every device they sign in on.",
+    )
+
     def __str__(self):
         return self.user.username
 

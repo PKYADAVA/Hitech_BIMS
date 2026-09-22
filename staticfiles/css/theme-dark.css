@@ -1,0 +1,272 @@
+/* =========================================================================
+   Dark theme
+   =========================================================================
+
+   The shell is built from the tokens in style.css and design-system.css, so
+   dark is those tokens given other values rather than a second stylesheet
+   describing the same components again. Everything that reads a token comes
+   with it; anything that hard-codes a colour of its own does not, which is
+   what the sweep through the page style blocks is for.
+
+   Stamped on <html> rather than <body>: the page background is painted from
+   the root element, so a stamp any lower leaves a white band behind the
+   content while it scrolls.
+
+   Surfaces are lifted in steps rather than by opacity -- canvas, card, hover
+   -- because a card on this canvas has to read as nearer, and a translucent
+   white over a dark ground greys the text sitting on it.
+   ========================================================================= */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces: canvas, the cards on it, and what a row does under the mouse. */
+  --bg:             #0f1620;
+  --bg-white:       #161f2b;
+  --surface:        #161f2b;
+  --surface-hover:  #1d2836;
+  --bg-subtle:      #131c27;
+
+  /* Ink. Not pure white: on a dark ground it haloes and tires the eye. */
+  --text:           #e6edf6;
+  --text-secondary: #a9b7c9;
+  --text-muted:     #7c8ba0;
+
+  /* Lines carry the structure a light theme gets from shadow. */
+  --border:         #27333f;
+  --border-strong:  #35465a;
+  --border-focus:   #4f8cf7;
+  --focus-ring:     0 0 0 3px rgba(79,140,247,0.28);
+
+  /* Brand and semantics: lifted, because a mid-weight hue that reads on
+     white disappears on this ground. The subtle tints become tinted darks
+     rather than pale washes, or a badge would glow. */
+  --primary:        #3b82f6;
+  --primary-hover:  #60a5fa;
+  --primary-dark:   #2563eb;
+  --primary-light:  #93c5fd;
+  --primary-subtle: #16233a;
+  --accent:         #38bdf8;
+
+  --success:        #34d399;
+  --success-subtle: #10281f;
+  --success-text:   #6ee7b7;
+  --warning:        #fbbf24;
+  --warning-subtle: #2a2113;
+  --warning-text:   #fcd34d;
+  --danger:         #f87171;
+  --danger-subtle:  #2c1719;
+  --danger-text:    #fca5a5;
+  --info:           #38bdf8;
+  --info-subtle:    #10242e;
+  --info-text:      #7dd3fc;
+  --neutral-subtle: #1c2735;
+  --neutral-text:   #a9b7c9;
+}
+
+/* The design system keeps its own token set for grids, cards and controls.
+   The names here are its names -- ds-card, ds-muted -- not the ones style.css
+   uses for the same ideas; a guessed name defines a token nothing reads and
+   leaves the card it was meant to darken white. */
+html[data-theme="dark"] .ds {
+  --ds-bg:          #0f1620;
+  --ds-card:        #161f2b;
+  --ds-border:      #27333f;
+  --ds-header-bg:   #1a2534;
+  --ds-row-hover:   #1d2b3d;
+  --ds-text:        #e6edf6;
+  --ds-muted:       #a9b7c9;
+  --ds-label-text:  #c3cfdd;
+  --ds-input:       #101924;
+  --ds-placeholder: #7c8ba0;
+  --ds-disabled:    #141d29;
+
+  /* The softs are tints of white in daylight; here they are tints of the
+     ground, or every badge on the page would glow. */
+  --ds-primary:      #3b82f6;   --ds-primary-soft: #16233a;
+  --ds-success:      #34d399;   --ds-success-soft: #10281f;
+  --ds-warning:      #fbbf24;   --ds-warning-soft: #2a2113;
+  --ds-danger:       #f87171;   --ds-danger-soft:  #2c1719;
+  --ds-info:         #38bdf8;   --ds-info-soft:    #10242e;
+}
+
+/* KPI tiles and stat cards read their surface from those tokens, so they
+   come with the theme. What does not come is a tile that paints its own
+   gradient in a page's style block -- those stay as they are until that
+   page is swept, and a saturated tile on a dark ground still reads. */
+html[data-theme="dark"] .stat-card { box-shadow: none; }
+html[data-theme="dark"] .stat-card-value { color: var(--text); }
+html[data-theme="dark"] .stat-card-label,
+html[data-theme="dark"] .ds .ds-kpi-title,
+html[data-theme="dark"] .ds .ds-kpi-trend { color: var(--text-secondary); }
+
+/* Bootstrap paints a few things from its own variables rather than ours. */
+html[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .modal-content,
+html[data-theme="dark"] .dropdown-menu,
+html[data-theme="dark"] .list-group-item,
+html[data-theme="dark"] .offcanvas {
+  background-color: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+html[data-theme="dark"] .card-header,
+html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] .modal-footer,
+html[data-theme="dark"] .table-light > :not(caption) > * > * {
+  background-color: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+html[data-theme="dark"] .table {
+  --bs-table-color: var(--text);
+  --bs-table-bg: transparent;
+  --bs-table-border-color: var(--border);
+  --bs-table-striped-color: var(--text);
+  --bs-table-striped-bg: rgba(255,255,255,.03);
+  --bs-table-hover-color: var(--text);
+  --bs-table-hover-bg: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Fields: the one place a light theme can be left showing, because a white
+   box with white text in it is a field nobody can fill in. */
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .form-select,
+html[data-theme="dark"] .input-group-text,
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-selection,
+html[data-theme="dark"] .select2-dropdown,
+html[data-theme="dark"] .dataTables_wrapper input,
+html[data-theme="dark"] .dataTables_wrapper select {
+  background-color: #101924;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+html[data-theme="dark"] .form-control::placeholder { color: var(--text-muted); }
+html[data-theme="dark"] .form-control:disabled,
+html[data-theme="dark"] .form-control[readonly] {
+  background-color: #141d29; color: var(--text-secondary);
+}
+html[data-theme="dark"] .select2-container--bootstrap-5 .select2-results__option--highlighted {
+  background-color: var(--primary-dark);
+}
+
+/* The two shells. Both are dark green in the light theme, which is the one
+   piece of the chrome that is already dark; here they take the canvas's own
+   family so the page reads as one surface rather than a band on it. */
+html[data-theme="dark"] .bims-navbar,
+html[data-theme="dark"] .bims-modulebar,
+html[data-theme="dark"] .ds-sidebar,
+html[data-theme="dark"] .ds-topbar {
+  background: #12202a;
+  border-color: var(--border);
+}
+
+/* Anything drawn white on purpose in a page's own style block is still white
+   until that page is swept; these are the few that would otherwise be a
+   white page on a dark canvas. */
+html[data-theme="dark"] .bl-head, html[data-theme="dark"] .bl-card,
+html[data-theme="dark"] .bl-filters, html[data-theme="dark"] .bl-filter,
+html[data-theme="dark"] .bf-head, html[data-theme="dark"] .bf-card,
+html[data-theme="dark"] .bf-filters, html[data-theme="dark"] .bf-filter,
+html[data-theme="dark"] .running-card, html[data-theme="dark"] .page-header {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+
+/* -------------------------------------------------------------------------
+   The Broiler Batch pages, swept.
+
+   These two were written with their own colours -- a navy title, white
+   sticky cells, pale chips -- because they were written for one theme. Each
+   literal gets its dark counterpart here rather than being turned into a
+   token in the page, so the page keeps reading as one piece in daylight and
+   the sweep can move page by page.
+   ------------------------------------------------------------------------- */
+
+/* Page titles: the worst of it, navy ink on a navy ground. */
+html[data-theme="dark"] .bl-title,
+html[data-theme="dark"] .bf-title,
+html[data-theme="dark"] .page-header-title { color: var(--text); }
+html[data-theme="dark"] .bl-sub,
+html[data-theme="dark"] .bf-sub,
+html[data-theme="dark"] .page-header-subtitle { color: var(--text-secondary); }
+
+/* Grid headings and the quiet cells beside them. */
+html[data-theme="dark"] #broiler-batch-table th,
+html[data-theme="dark"] #batch-rows th { color: var(--text-muted); }
+html[data-theme="dark"] #broiler-batch-table .b-branch { color: var(--text-secondary); }
+html[data-theme="dark"] #broiler-batch-table .b-farm { color: var(--text); }
+html[data-theme="dark"] .b-none { color: var(--text-muted); }
+
+/* The batch number, as a code on a dark ground. */
+html[data-theme="dark"] .batch-chip,
+html[data-theme="dark"] #batch-rows .batch-no {
+  background: #16233a !important; border-color: #2b3f63; color: #93c5fd;
+}
+html[data-theme="dark"] #batch-rows .batch-no::placeholder { color: #64748b; }
+
+/* Status pills keep their meaning, at this ground's weight. */
+html[data-theme="dark"] .bs-active { background: #10281f; color: #6ee7b7; }
+html[data-theme="dark"] .bs-closed { background: #1c2735; color: #a9b7c9; }
+
+/* The rows form: the sticky add/delete cell was white, which on this canvas
+   reads as a hole punched in the row. */
+html[data-theme="dark"] #batch-rows .col-act { background: var(--surface); }
+html[data-theme="dark"] #batch-rows thead .col-act { background: var(--bg-subtle); }
+html[data-theme="dark"] #batch-rows tbody tr:hover td,
+html[data-theme="dark"] #batch-rows tbody tr:hover .col-act { background: var(--surface-hover); }
+html[data-theme="dark"] #batch-rows tr.row-bad td,
+html[data-theme="dark"] #batch-rows tr.row-bad .col-act { background: #2c1719; }
+html[data-theme="dark"] .row-note { color: #fca5a5; }
+html[data-theme="dark"] #batch-rows .col-no { color: var(--text-muted); }
+
+/* What is already on the farm, under the buttons. */
+html[data-theme="dark"] #running-table tr.farm-head td { background: var(--bg-subtle); }
+html[data-theme="dark"] #running-table tr.this-unit td { background: #16233a; }
+html[data-theme="dark"] #running-table tbody tr:not(.farm-head):hover td { background: var(--surface-hover); }
+html[data-theme="dark"] .unit-tag { background: #16233a; color: #93c5fd; }
+html[data-theme="dark"] .farm-sum,
+html[data-theme="dark"] .running-empty { color: var(--text-secondary); }
+
+/* The filter strip's own cells. */
+html[data-theme="dark"] .bl-filter,
+html[data-theme="dark"] .bf-filter { border-color: var(--border); }
+html[data-theme="dark"] .bl-filter label,
+html[data-theme="dark"] .bf-filter label { color: var(--text-secondary); }
+
+/* The last bright spots: outline buttons and the pager keep Bootstrap's
+   light-theme greys, which on this ground read as lit panels. */
+html[data-theme="dark"] .btn-outline-secondary {
+  color: var(--text-secondary); border-color: var(--border-strong);
+  background: transparent;
+}
+html[data-theme="dark"] .btn-outline-secondary:hover {
+  background: var(--surface-hover); color: var(--text);
+}
+html[data-theme="dark"] .btn-secondary {
+  background: #24303f; border-color: var(--border-strong); color: var(--text);
+}
+html[data-theme="dark"] .dataTables_wrapper .paginate_button,
+html[data-theme="dark"] .page-link {
+  background: var(--surface); border-color: var(--border); color: var(--text-secondary);
+}
+html[data-theme="dark"] .page-item.active .page-link {
+  background: var(--primary); border-color: var(--primary); color: #fff;
+}
+html[data-theme="dark"] .page-item.disabled .page-link { color: var(--text-muted); }
+html[data-theme="dark"] .dataTables_info,
+html[data-theme="dark"] .dataTables_length,
+html[data-theme="dark"] .dataTables_filter { color: var(--text-secondary); }
+html[data-theme="dark"] .dt-buttons .btn {
+  background: var(--surface); color: var(--text-secondary);
+  border-color: var(--border-strong) !important;
+}
+html[data-theme="dark"] .dt-buttons .btn:hover {
+  background: var(--primary); color: #fff; border-color: var(--primary) !important;
+}

@@ -50,7 +50,7 @@ def web_access(request):
     # profile to read and no menu to show.
     from django.conf import settings
     from .services.navigation import (nav_layout_for, role_label_for,
-                                      sidebar_for)
+                                      sidebar_for, theme_for)
 
     ds_shell = False
     if user is not None and user.is_authenticated:
@@ -75,6 +75,9 @@ def web_access(request):
         "breadcrumb": breadcrumb,
         "sidebar": sidebar,
         "ds_shell": ds_shell,
+        # Light or dark. Stamped on <html> so the first paint is already in
+        # the right theme; a class added by script after load flashes white.
+        "user_theme": theme_for(user),
         "user_role_label": role_label_for(user),
         "app_version": getattr(settings, "APP_VERSION", ""),
         "pending_change_requests": pending_change_requests,

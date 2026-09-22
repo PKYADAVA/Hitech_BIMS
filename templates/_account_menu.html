@@ -77,6 +77,42 @@ mean "the other one", and pressing the one already marked would turn it off.
     </form>
   </li>
 
+  <li class="acct-pref">
+    <div class="acct-pref-head">
+      <span class="acct-ico acct-ico-theme"><i class="fa-solid fa-circle-half-stroke"></i></span>
+      <span>
+        <strong>Appearance</strong>
+        <small>Light or dark, on every device you sign in on</small>
+      </span>
+    </div>
+    <form method="post" action="{% url 'toggle_theme' %}" class="acct-tiles">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" name="theme" value="light"
+              class="acct-tile{% if user_theme != 'dark' %} is-on{% endif %}"
+              {% if user_theme != 'dark' %}aria-current="true"{% endif %}>
+        <span class="acct-art acct-art-light" aria-hidden="true">
+          <span class="acct-art-sky"></span>
+          <span class="acct-art-lines"><i></i><i></i><i></i></span>
+        </span>
+        <span class="acct-tile-name">Light</span>
+        <small>Daylight screens</small>
+        <span class="acct-pick" aria-hidden="true"></span>
+      </button>
+      <button type="submit" name="theme" value="dark"
+              class="acct-tile{% if user_theme == 'dark' %} is-on{% endif %}"
+              {% if user_theme == 'dark' %}aria-current="true"{% endif %}>
+        <span class="acct-art acct-art-dark" aria-hidden="true">
+          <span class="acct-art-sky"></span>
+          <span class="acct-art-lines"><i></i><i></i><i></i></span>
+        </span>
+        <span class="acct-tile-name">Dark</span>
+        <small>Low light, long shifts</small>
+        <span class="acct-pick" aria-hidden="true"></span>
+      </button>
+    </form>
+  </li>
+
   <li><a class="acct-row" href="{% url 'update_password' %}">
     <span class="acct-ico acct-ico-key"><i class="fas fa-key"></i></span>
     <span class="acct-row-text">Change Password</span>
