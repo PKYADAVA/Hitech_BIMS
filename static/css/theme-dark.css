@@ -270,3 +270,106 @@ html[data-theme="dark"] .dt-buttons .btn {
 html[data-theme="dark"] .dt-buttons .btn:hover {
   background: var(--primary); color: #fff; border-color: var(--primary) !important;
 }
+
+/* -------------------------------------------------------------------------
+   What a contrast pass over the main screens turned up: text under 3:1
+   against the surface actually behind it. Two kinds, and both are the same
+   cause -- a colour written into a page rather than taken from a token.
+
+   The shell's own pieces are fixed here for every page at once; a page that
+   names its own ink still needs its own line.
+   ------------------------------------------------------------------------- */
+
+/* The footer kept a white band under every page. */
+html[data-theme="dark"] footer {
+  background: var(--bg-subtle); border-top: 1px solid var(--border);
+}
+html[data-theme="dark"] footer p { color: var(--text-muted); }
+
+/* The global search: its box, its panel and the Ctrl+K hint on it. */
+html[data-theme="dark"] .nav-search input,
+html[data-theme="dark"] .gs-input,
+html[data-theme="dark"] .gs-panel {
+  background: #101924; color: var(--text); border-color: var(--border-strong);
+}
+html[data-theme="dark"] .gs-kbd {
+  background: #1c2735; color: var(--text-secondary); border-color: var(--border-strong);
+}
+html[data-theme="dark"] .gs-row:hover, html[data-theme="dark"] .gs-row.is-on {
+  background: var(--surface-hover);
+}
+
+/* Sortable grid headings: a mid grey that reads on white and vanishes here. */
+html[data-theme="dark"] table.dataTable thead th,
+html[data-theme="dark"] table.dataTable thead th.sorting,
+html[data-theme="dark"] table.dataTable thead th.sorting_asc,
+html[data-theme="dark"] table.dataTable thead th.sorting_desc,
+html[data-theme="dark"] table.dataTable thead th.sorting_disabled {
+  color: var(--text-secondary);
+}
+
+/* The Farmers & Farms screen, whose card titles and names are near-black
+   literals: the card went dark under them and they did not. */
+html[data-theme="dark"] .bf-card-title,
+html[data-theme="dark"] .bf-name { color: var(--text); }
+html[data-theme="dark"] .bf-code,
+html[data-theme="dark"] .bf-rownum,
+html[data-theme="dark"] .bf-meta { color: var(--text-secondary); }
+html[data-theme="dark"] .bf-count { background: #1c2735; color: var(--text-secondary); }
+html[data-theme="dark"] .bf-tabs .nav-link {
+  background: var(--surface); color: var(--text-secondary); border-color: var(--border);
+}
+html[data-theme="dark"] .bf-tabs .nav-link.active {
+  background: var(--primary); border-color: var(--primary); color: #fff;
+}
+html[data-theme="dark"] .bf-tabs .nav-link.active .bf-count {
+  background: rgba(255,255,255,.22); color: #fff;
+}
+
+/* Summary tiles: white cards that glared on this ground. The saturated KPI
+   tiles -- the ones that paint their own gradient -- are left alone: a
+   coloured tile reads on either canvas, and dulling them would cost the
+   page the one thing that makes a KPI row scannable. */
+html[data-theme="dark"] .bf-sum-tile,
+html[data-theme="dark"] .bf-sum, html[data-theme="dark"] .sum-tile {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--text);
+}
+html[data-theme="dark"] .bf-sum-tile small,
+html[data-theme="dark"] .bf-sum-tile .label { color: var(--text-secondary); }
+
+/* A tip or note strip: pale green or blue wash with dark ink on it. */
+html[data-theme="dark"] .bf-tip, html[data-theme="dark"] .ds-tip,
+html[data-theme="dark"] .tip-bar, html[data-theme="dark"] .alert-info,
+html[data-theme="dark"] .alert-success {
+  background: var(--bg-subtle); border-color: var(--border); color: var(--text-secondary);
+}
+
+/* The summary tiles' own numbers, which stayed near-black when the tile
+   behind them went dark. The good/bad variants keep their meaning, lifted
+   to weights that read on this ground. */
+html[data-theme="dark"] .bf-sum-val { color: var(--text); }
+html[data-theme="dark"] .bf-sum-tile.good .bf-sum-val { color: #6ee7b7; }
+html[data-theme="dark"] .bf-sum-tile.warn .bf-sum-val { color: #fcd34d; }
+html[data-theme="dark"] .bf-sum-tile.bad .bf-sum-val { color: #fca5a5; }
+html[data-theme="dark"] .bf-sum-lbl { color: var(--text-secondary); }
+
+/* The count on the tab that is on: white on mid blue is thin, so the pill
+   it sits in darkens rather than the number changing colour. */
+html[data-theme="dark"] .bf-tabs .nav-link.active .bf-count {
+  background: rgba(0,0,0,.28); color: #fff;
+}
+
+/* Farm Shed: the farm rows that group the list were a pale blue band, which
+   on this canvas reads as a light strip laid across a dark table. The tiles
+   above them are gradients of their own and stay as they are -- a saturated
+   KPI reads on either ground, and dulling them would cost the row the one
+   thing that makes it scannable. */
+html[data-theme="dark"] #shed-table .shed-group-row td,
+html[data-theme="dark"] .shed-group-row td { background: #1a2534 !important; color: var(--text); }
+html[data-theme="dark"] .shed-group-row:hover td { background: #1f2c3d !important; }
+html[data-theme="dark"] #shed-table td.dtr-control:before {
+  background: #2b62c9 !important; border-color: #2b62c9 !important; color: #fff !important;
+}
+html[data-theme="dark"] .shed-toolbar .form-control,
+html[data-theme="dark"] .shed-toolbar .form-select { color: var(--text); }
