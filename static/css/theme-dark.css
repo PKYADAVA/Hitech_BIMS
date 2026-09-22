@@ -1109,3 +1109,34 @@ html[data-theme="dark"] .da-note, html[data-theme="dark"] .ma-note {
   background: #15202f !important; color: var(--text-secondary) !important;
   border-color: var(--border) !important;
 }
+
+/* -------------------------------------------------------------------------
+   The dashboard's welcome banner.
+
+   A mint gradient with near-black text on it and the flock photo fading in
+   from the right. In dark the text went light and the mint stayed, which is
+   pale ink on a pale ground -- and the contrast pass could not see it,
+   because it steps over anything with a gradient behind it rather than
+   guess at what a gradient averages to.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .dash-welcome {
+  background: linear-gradient(100deg, #12211a 0%, #16251d 52%, #101a15 100%) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border);
+}
+html[data-theme="dark"] .dash-welcome h1 { color: var(--text) !important; }
+html[data-theme="dark"] .dash-welcome p { color: var(--text-secondary) !important; }
+html[data-theme="dark"] .dash-eyebrow { color: #6ee7b7 !important; }
+
+/* The photo is decoration, and on this ground it reads as a lit window in a
+   dark wall; it dims and keeps its fade into the banner. */
+html[data-theme="dark"] .dash-hero-art { opacity: .38; }
+
+/* The round tints behind the quick-action icons: pale washes with a saturated
+   glyph, which invert the same way. */
+html[data-theme="dark"] .dash-icon-blue   { background: #15202f !important; color: #7dafff !important; }
+html[data-theme="dark"] .dash-icon-green  { background: #10281f !important; color: #45d3b4 !important; }
+html[data-theme="dark"] .dash-icon-orange { background: #2a2113 !important; color: #f0a03a !important; }
+html[data-theme="dark"] .dash-icon-purple { background: #1e1830 !important; color: #a78bfa !important; }
+html[data-theme="dark"] .dash-icon-red    { background: #241417 !important; color: #f4778a !important; }
+html[data-theme="dark"] .dash-icon-cyan   { background: #10242e !important; color: #3bbfdd !important; }
