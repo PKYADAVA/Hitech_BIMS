@@ -1173,9 +1173,12 @@ html[data-theme="dark"] .gs-box .fa-magnifying-glass { color: var(--text-muted) 
    In daylight the two groups are told apart by hue -- a pale blue and a pale
    violet. Carried over as hue, the violet reads as a purple band across the
    row, which is a colour the page never meant to say anything with. On this
-   ground the two are told apart by lightness instead: one group sits a step
-   above the row, the other two steps, and neither is a colour. */
-html[data-theme="dark"] .dr-table td.fg1 { background: #15171b !important; }
-html[data-theme="dark"] .dr-table td.fg2 { background: #1b1e23 !important; }
-html[data-theme="dark"] .dr-table thead th.fg1 { background: #1a1d22 !important; }
-html[data-theme="dark"] .dr-table thead th.fg2 { background: #20242a !important; }
+   ground both sit at the same step above the row and neither is a colour.
+   Two steps were tried first, one group per step, and that read as one
+   group highlighted and the other not: a difference in weight says "this
+   one matters more", which is not what a grouping means. The column rules
+   already show where one trio ends and the next begins. */
+html[data-theme="dark"] .dr-table td.fg1,
+html[data-theme="dark"] .dr-table td.fg2 { background: #191c21 !important; }
+html[data-theme="dark"] .dr-table thead th.fg1,
+html[data-theme="dark"] .dr-table thead th.fg2 { background: #1e2228 !important; }
