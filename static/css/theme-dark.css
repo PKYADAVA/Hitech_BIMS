@@ -1182,3 +1182,50 @@ html[data-theme="dark"] .dr-table td.fg1,
 html[data-theme="dark"] .dr-table td.fg2 { background: #191c21 !important; }
 html[data-theme="dark"] .dr-table thead th.fg1,
 html[data-theme="dark"] .dr-table thead th.fg2 { background: #1e2228 !important; }
+
+/* -------------------------------------------------------------------------
+   The dropdown a searchable select opens.
+
+   Select2 draws it at the field's own width, which on a narrow column wraps
+   an item's name down six lines, and it paints the search box and the
+   highlighted row from its own stylesheet rather than from a token. The
+   panel is the thing being read, so it takes the room it needs and this
+   theme's ink.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .select2-dropdown {
+  background-color: #101216 !important; border-color: var(--border-strong) !important;
+}
+html[data-theme="dark"] .select2-search--dropdown .select2-search__field,
+html[data-theme="dark"] .select2-dropdown .select2-search__field {
+  background-color: #17191d !important; color: var(--text) !important;
+  border-color: var(--border-strong) !important;
+}
+html[data-theme="dark"] .select2-results__option {
+  background-color: transparent !important; color: var(--text) !important;
+}
+html[data-theme="dark"] .select2-results__option--highlighted,
+html[data-theme="dark"] .select2-results__option[aria-selected="true"] {
+  background-color: var(--primary) !important; color: #fff !important;
+}
+html[data-theme="dark"] .select2-results__message { color: var(--text-secondary) !important; }
+
+/* A name that has to wrap six times is a name nobody reads. The panel is
+   free of the field's width in both themes: it is the list that has to be
+   legible, not the column it drops out of. */
+.select2-container--open .select2-dropdown {
+  /* 300px is what "ITEM-001 - Balanced broiler feed" needs to sit on one
+     line at this type size; below that the longest names wrap and a list
+     of wrapped names is read twice as slowly. */
+  min-width: 300px;
+  width: max-content !important;
+  max-width: min(420px, 92vw);
+}
+.select2-results__option { white-space: normal; }
+
+/* The row under the cursor: white on a mid blue is thinner than the rows
+   around it, which is backwards -- the one being pointed at should be the
+   easiest to read. A deeper blue carries white properly. */
+html[data-theme="dark"] .select2-results__option--highlighted,
+html[data-theme="dark"] .select2-results__option[aria-selected="true"] {
+  background-color: #1d4ed8 !important; color: #fff !important;
+}
