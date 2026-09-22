@@ -1140,3 +1140,25 @@ html[data-theme="dark"] .dash-icon-orange { background: #2a2113 !important; colo
 html[data-theme="dark"] .dash-icon-purple { background: #1e1830 !important; color: #a78bfa !important; }
 html[data-theme="dark"] .dash-icon-red    { background: #241417 !important; color: #f4778a !important; }
 html[data-theme="dark"] .dash-icon-cyan   { background: #10242e !important; color: #3bbfdd !important; }
+
+/* -------------------------------------------------------------------------
+   The global search on the bars.
+
+   Its pill is .gs-box and the field inside it is .gs-input. The field was
+   given a dark ground early on and the pill was not, so the bar carried a
+   dark rectangle inside a white lozenge. The pill is the control; the field
+   inside it carries no ground of its own.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] .gs-box {
+  background: #101216 !important; border-color: var(--border-strong) !important;
+  color: var(--text) !important;
+}
+html[data-theme="dark"] .gs-box:focus-within {
+  border-color: var(--border-focus) !important; box-shadow: var(--focus-ring);
+}
+html[data-theme="dark"] .gs-input {
+  background: transparent !important; color: var(--text) !important;
+}
+html[data-theme="dark"] .gs-input::placeholder { color: var(--text-muted) !important; }
+html[data-theme="dark"] .gs-icon, html[data-theme="dark"] .gs-box > i,
+html[data-theme="dark"] .gs-box .fa-magnifying-glass { color: var(--text-muted) !important; }
