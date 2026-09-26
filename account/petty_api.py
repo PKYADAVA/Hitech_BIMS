@@ -15,6 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from account.models import (BankCashMaster, PaymentMode, PettyExpense,
@@ -93,6 +94,9 @@ def _masters(user=None):
     }
 
 
+# Never cached: these pages change with the data and with the code, and a
+# browser holding yesterday's copy is indistinguishable from a bug.
+@never_cache
 @login_required
 def petty_expense_list(request):
     """The register, its filters and the four figures above it."""
@@ -102,6 +106,9 @@ def petty_expense_list(request):
     })
 
 
+# Never cached: these pages change with the data and with the code, and a
+# browser holding yesterday's copy is indistinguishable from a bug.
+@never_cache
 @login_required
 def petty_expense_form(request, id=None):
     """The entry screen. With an id, it opens an existing expense."""
