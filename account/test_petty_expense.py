@@ -323,6 +323,72 @@ class ClassificationTests(PettyExpenseTestCase):
 # Uploads go to a directory of their own: a test must not leave a bill in the
 # project's media folder.
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="petty-test-media-"))
+class TypedTextTests(PettyExpenseTestCase):
+    """Three spellings of one payee are one payee once stored."""
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def save(self, **over):
+        body = {
+            "expense_date": TODAY.isoformat(), "branch": self.branch.pk,
+            "paid_to_name": "Tea Stall", "payment_mode": self.mode.pk,
+            "paid_from": self.cash.pk,
+            "items": [{"account": self.expense_ledger.pk, "description": "Tea",
+                       "quantity": "1", "rate": "60"}],
+        }
+        body.update(over)
+        response = self.client.post("/api/petty-expenses/save/",
+                                    data=json.dumps(body),
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.content)
+        return PettyExpense.objects.get(pk=response.json()["id"])
+
+    def test_a_payee_is_stored_in_proper_case_however_it_was_typed(self):
+        self.assertEqual(self.save(paid_to_name="  ram   tea stall ").paid_to_name,
+                         "Ram Tea Stall")
+        self.assertEqual(self.save(paid_to_name="gupta tea stall").paid_to_name,
+                         "Gupta Tea Stall")
+
+    def test_capitals_the_typist_meant_are_left_alone(self):
+        """Title-casing would turn HDFC into Hdfc, which is worse than leaving it."""
+        self.assertEqual(self.save(paid_to_name="HDFC Bank").paid_to_name, "HDFC Bank")
+        self.assertEqual(self.save(paid_to_name="UPPCL").paid_to_name, "UPPCL")
+
+    def test_joining_words_stay_small_unless_they_start_the_name(self):
+        self.assertEqual(self.save(paid_to_name="ram & sons of akbarpur").paid_to_name,
+                         "Ram & Sons of Akbarpur")
+        self.assertEqual(self.save(paid_to_name="the tea stall").paid_to_name,
+                         "The Tea Stall")
+
+    def test_a_description_is_a_sentence_not_a_headline(self):
+        expense = self.save(items=[{"account": self.expense_ledger.pk,
+                                    "description": "  tea for the vaccination team ",
+                                    "quantity": "1", "rate": "60"}])
+        self.assertEqual(expense.items.first().description,
+                         "Tea for the vaccination team")
+
+    def test_a_reference_is_stored_the_way_every_other_document_number_is(self):
+        self.assertEqual(self.save(reference=" chq-77 ").reference, "CHQ-77")
+
+    def test_tags_are_proper_cased_and_never_repeated(self):
+        expense = self.save(tags="farm, local purchase, FARM ,  vehicle")
+        self.assertEqual(expense.tags, "Farm, Local Purchase, Vehicle")
+
+    def test_narration_keeps_its_own_words_but_starts_with_a_capital(self):
+        expense = self.save(narration="  paid at the counter, no bill given ")
+        self.assertEqual(expense.narration, "Paid at the counter, no bill given")
+
+    def test_tidying_makes_the_duplicate_check_work_across_spellings(self):
+        """The reason this is worth doing: one payee, one warning."""
+        first = self.save(paid_to_name="ram tea stall")
+        second = self.save(paid_to_name="  RAM TEA STALL")
+        # Stored differently (capitals were meant in the second), but the
+        # comparison is case-insensitive, so the repeat is still caught.
+        self.assertIsNotNone(service.duplicate_of(second))
+        self.assertEqual(first.paid_to_name, "Ram Tea Stall")
+
+
 class CashBoxTests(PettyExpenseTestCase):
     """Money going into the box, and knowing when there is too little in it."""
 
@@ -346,6 +412,21 @@ class CashBoxTests(PettyExpenseTestCase):
                          before_cash + Decimal("10000"))
         self.assertEqual(journal.account_balance(self.bank_ledger),
                          before_bank - Decimal("10000"))
+
+    def test_a_remark_rides_on_the_voucher_where_the_statement_will_read_it(self):
+        voucher = service.replenish(self.cash, 5000, self.bank, user=self.user,
+                                    reference="chq-9",
+                                    remark="Month-end top-up for the vaccination round")
+        self.assertIn("Month-end top-up", voucher.narration)
+        self.assertIn("Cash drawn from", voucher.narration)
+        # The engine's half is kept apart from the person's.
+        self.assertNotIn("Month-end", voucher.auto_narration)
+        self.assertEqual(voucher.narration_source, "MANUAL")
+
+    def test_without_a_remark_the_narration_is_the_engine_s_own(self):
+        voucher = service.replenish(self.cash, 5000, self.bank, user=self.user)
+        self.assertEqual(voucher.narration, voucher.auto_narration)
+        self.assertEqual(voucher.narration_source, "AUTO")
 
     def test_a_cash_box_is_not_replenished_from_another_cash_box(self):
         with self.assertRaises(service.PettyExpenseError):

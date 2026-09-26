@@ -45,6 +45,50 @@ def _int(value):
         return None
 
 
+def _tidy(value, limit=None):
+    """One space between words, none at the ends."""
+    text = " ".join(str(value or "").split())
+    return text[:limit] if limit else text
+
+
+def _proper(value, limit=None):
+    """Proper case for a name, leaving anything the typist capitalised alone.
+
+    A word typed in lower case is capitalised; "HDFC", "UPPCL" and "McLeod"
+    are left as they are, because someone who typed capitals meant them and
+    title-casing would give "Hdfc" and "Mcleod".
+    """
+    # Joining words stay small unless they start the name: "Ram & Sons of
+    # Akbarpur", not "Ram & Sons Of Akbarpur".
+    small = {"and", "or", "of", "the", "for", "to", "in", "at", "on", "by"}
+    words = []
+    for index, word in enumerate(_tidy(value).split(" ")):
+        if not word.islower():
+            words.append(word)                       # capitals were meant
+        elif index and word in small:
+            words.append(word)
+        else:
+            words.append(word.capitalize())
+    return _tidy(" ".join(words), limit)
+
+
+def _sentence(value, limit=None):
+    """A sentence: first letter up, the rest as written.
+
+    Not title case -- "Tea For The Vaccination Team" reads like a headline,
+    and these are descriptions.
+    """
+    text = _tidy(value)
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+    return text[:limit] if limit else text
+
+
+def _reference(value, limit=None):
+    """A document number, in the case every other document number here uses."""
+    return _tidy(value, limit).upper()
+
+
 def _dec(value, default=ZERO):
     try:
         return Decimal(str(value).replace(",", "").strip() or default)
@@ -241,12 +285,19 @@ def _apply(expense, data, user):
     expense.cost_centre_id = _int(data.get("cost_centre"))
     expense.payment_mode_id = _int(data.get("payment_mode"))
     expense.paid_from_id = _int(data.get("paid_from"))
-    expense.paid_to_name = (data.get("paid_to_name") or "").strip()[:150]
-    expense.reference = (data.get("reference") or "").strip()[:100]
+    expense.paid_to_name = _proper(data.get("paid_to_name"), 150)
+    expense.reference = _reference(data.get("reference"), 100)
     expense.other_charges = _dec(data.get("other_charges"))
     expense.adjustment = _dec(data.get("adjustment"))
-    expense.narration = (data.get("narration") or "").strip()
-    expense.tags = (data.get("tags") or "").strip()[:200]
+    expense.narration = _sentence(data.get("narration"))
+    # One tag per name, properly cased, in the order they were given.
+    seen, tags = set(), []
+    for tag in str(data.get("tags") or "").split(","):
+        tag = _proper(tag, 40)
+        if tag and tag.lower() not in seen:
+            seen.add(tag.lower())
+            tags.append(tag)
+    expense.tags = _tidy(", ".join(tags), 200)
 
     # A payee chosen from a master keeps the link; one typed at the counter is
     # just a name, which is what most petty expenses are.
@@ -278,7 +329,7 @@ def _write_items(expense, rows):
         PettyExpenseItem(
             petty_expense=expense, line_no=index,
             account_id=_int(row["account"]),
-            description=(row.get("description") or "").strip()[:255],
+            description=_sentence(row.get("description"), 255),
             quantity=_dec(row.get("quantity"), Decimal("1")),
             uom_id=_int(row.get("uom")),
             rate=_dec(row.get("rate")),
@@ -366,7 +417,8 @@ def petty_cash_replenish(request):
         voucher = service.replenish(
             box, _dec(data.get("amount")), bank,
             date=parse_date(data.get("date") or "") or timezone.localdate(),
-            user=request.user, reference=(data.get("reference") or "").strip()[:100])
+            user=request.user, reference=_reference(data.get("reference"), 100),
+            remark=_sentence(data.get("remark"), 255))
     except service.PettyExpenseError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     return JsonResponse({"voucher_no": voucher.voucher_no,

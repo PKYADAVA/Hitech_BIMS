@@ -140,7 +140,8 @@ def cash_health(master=None):
 
 
 @transaction.atomic
-def replenish(box, amount, from_account, date=None, user=None, reference=""):
+def replenish(box, amount, from_account, date=None, user=None, reference="",
+              remark=""):
     """Put money into a cash box from a bank account.
 
     A contra, because nothing is earned or spent by moving your own money
@@ -163,7 +164,11 @@ def replenish(box, amount, from_account, date=None, user=None, reference=""):
                                 "chart of accounts, so nothing can be posted.")
 
     date = date or timezone.localdate()
-    narration = f"Cash drawn from {from_account} into {box}."
+    # What the engine would say, and what the person added to it. Both are
+    # kept, so the voucher screen can tell which half is whose.
+    written = f"Cash drawn from {from_account} into {box}."
+    remark = " ".join(str(remark or "").split())
+    narration = f"{written} {remark}".strip() if remark else written
     try:
         return journal.create_voucher(
             company(), date,
@@ -173,8 +178,8 @@ def replenish(box, amount, from_account, date=None, user=None, reference=""):
               "narration": narration}],
             user=user, voucher_type="Contra", manual=False,
             system_generated=True, reference=reference or "",
-            narration=narration, auto_narration=narration,
-            narration_source="AUTO", post=True)
+            narration=narration, auto_narration=written,
+            narration_source="MANUAL" if remark else "AUTO", post=True)
     except DjangoValidationError as exc:
         raise PettyExpenseError("  ".join(exc.messages)) from exc
 

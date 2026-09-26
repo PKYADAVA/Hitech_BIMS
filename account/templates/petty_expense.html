@@ -198,10 +198,18 @@
           <label class="form-label" for="px-cash-date">Date</label>
           <input type="date" id="px-cash-date" class="form-control form-control-sm">
         </div>
-        <div>
+        <div class="mb-2">
           <label class="form-label" for="px-cash-ref">Reference</label>
           <input type="text" id="px-cash-ref" class="form-control form-control-sm"
                  placeholder="Cheque / slip no.">
+        </div>
+        <div>
+          <label class="form-label" for="px-cash-remark">Remark</label>
+          <textarea id="px-cash-remark" class="form-control form-control-sm" rows="2"
+                    placeholder="Why the box is being topped up"></textarea>
+          <div class="px-none" style="font-size:.7rem">
+            Goes onto the voucher, so it shows in the statement.
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -810,6 +818,7 @@ $(function () {
       b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
     el("px-cash-date").value = new Date().toISOString().slice(0, 10);
     el("px-cash-ref").value = "";
+    el("px-cash-remark").value = "";
     showTopUp();
     cashModal.show();
   });
@@ -837,6 +846,7 @@ $(function () {
         amount: el("px-cash-amount").value,
         date: el("px-cash-date").value,
         reference: el("px-cash-ref").value,
+        remark: el("px-cash-remark").value,
       }),
       success: function (out) {
         cashModal.hide();
