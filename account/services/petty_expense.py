@@ -149,6 +149,15 @@ def petty_cash_movement(master, date_from=None, date_to=None):
 # Narration
 # --------------------------------------------------------------------------
 
+def narration_is_auto(expense):
+    """Whether the narration on this expense is still the one we wrote.
+
+    Compared rather than flagged: no column to keep in step, and an expense
+    edited back to the engine's own words is honestly automatic again.
+    """
+    return (expense.narration or "").strip() == compose_narration(expense).strip()
+
+
 def compose_narration(expense):
     """A sentence from the transaction, for the user to accept or rewrite.
 
@@ -300,6 +309,21 @@ def post(expense, user=None):
                  "debit": 0, "credit": expense.net_amount,
                  "narration": expense.reference or expense.expense_no})
 
+    # The narration the engine would write, and whether this one is still it.
+    # The journal keeps both so the voucher screen can say which narrations
+    # were written for the company and which a person replaced.
+    written = compose_narration(expense)
+    narration = expense.narration or written
+
+    # NarrationSettings can switch narration off, or drop the amount, party or
+    # reference from it, for the whole company. A module that writes its own
+    # sentence has to honour that or it becomes the exception nobody knows about.
+    from account.models import NarrationSettings
+    settings = NarrationSettings.get_solo()
+    if settings is not None and not settings.enabled:
+        narration = expense.narration or ""
+        written = ""
+
     # Whatever the engine refuses is the user's problem to fix, not a crash:
     # its own wording is passed straight through to the screen.
     try:
@@ -307,7 +331,10 @@ def post(expense, user=None):
             profile, expense.expense_date, rows,
             user=user, voucher_type="Payment", manual=False, system_generated=True,
             reference=expense.reference or expense.expense_no,
-            narration=expense.narration or compose_narration(expense),
+            narration=narration,
+            auto_narration=written,
+            narration_source=("AUTO" if narration.strip() == written.strip()
+                              else "MANUAL"),
             post=True,
         )
     except DjangoValidationError as exc:

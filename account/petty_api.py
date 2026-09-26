@@ -24,6 +24,7 @@ from account.services import petty_expense as service
 from broiler.models import Branch, BroilerFarm, BroilerFarmShed
 from inventory.models import UnitOfMeasurement
 from user.access import user_can
+from user.services.scoping import branches_for, farms_for, scope_queryset
 
 ZERO = Decimal("0")
 
@@ -60,11 +61,15 @@ def _masters(user=None):
     """
     from account.services.bank_cash import payment_mode_map
 
-    branches = list(Branch.objects.order_by("branch_name")
-                    .values("id", "branch_name"))
-    farms = list(BroilerFarm.objects.order_by("farm_name")
+    # Only what this user is allowed to work in. The same service the rest of
+    # the ERP uses, so one Web-Access setting governs every screen.
+    branch_qs = branches_for(user)
+    farm_qs = farms_for(user)
+    branches = list(branch_qs.order_by("branch_name").values("id", "branch_name"))
+    farms = list(farm_qs.order_by("farm_name")
                  .values("id", "farm_name", "branch_id"))
-    sheds = list(BroilerFarmShed.objects.order_by("farm__farm_code", "unit_no")
+    sheds = list(BroilerFarmShed.objects.filter(farm__in=farm_qs)
+                 .order_by("farm__farm_code", "unit_no")
                  .values("id", "farm_id", "shed_name", "shed_code", "unit_no"))
     # A branch already owns a cost centre in this ERP, so the mapping the spec
     # asks for exists: it is read, not entered.
@@ -72,7 +77,7 @@ def _masters(user=None):
                 "branch_id": b.id,
                 "name": (b.organization_centre.name
                          if hasattr(b, "organization_centre") and b.organization_centre else "")}
-               for b in Branch.objects.select_related("organization_centre").all()]
+               for b in branch_qs.select_related("organization_centre")]
     return {
         "branches": branches,
         "farms": farms,
@@ -96,6 +101,21 @@ def _masters(user=None):
 
 # Never cached: these pages change with the data and with the code, and a
 # browser holding yesterday's copy is indistinguishable from a bug.
+def _visible(request):
+    """The expenses this user may see, by the ERP's own branch and farm scopes.
+
+    A farm is optional on an expense, so scope_or_null would be wrong here:
+    the branch is always set, and it is the branch that decides.
+    """
+    return scope_queryset(request.user, PettyExpense.objects.all(),
+                          "branches", "branch_id")
+
+
+def _mine(request, id):
+    """One expense, or a 404 if it belongs to a branch this user cannot see."""
+    return get_object_or_404(_visible(request), pk=id)
+
+
 @never_cache
 @login_required
 def petty_expense_list(request):
@@ -114,10 +134,7 @@ def petty_expense_form(request, id=None):
     """The entry screen. With an id, it opens an existing expense."""
     expense = None
     if id:
-        expense = get_object_or_404(
-            PettyExpense.objects.select_related(
-                "branch", "farm", "shed", "cost_centre", "paid_from", "payment_mode"),
-            pk=id)
+        expense = _mine(request, id)
     return render(request, "petty_expense_form.html", {
         "masters": _masters(request.user),
         "expense": expense,
@@ -129,7 +146,7 @@ def petty_expense_form(request, id=None):
 @login_required
 def petty_expense_rows(request):
     """The register's rows, filtered — and the figures for the cards above it."""
-    qs = (PettyExpense.objects
+    qs = (_visible(request)
           .select_related("branch", "farm", "shed", "paid_from", "payment_mode",
                           "cost_centre", "journal")
           .prefetch_related("items__account", "attachments"))
@@ -198,14 +215,15 @@ def petty_expense_rows(request):
     # The cards. Today and this month count what is on the books, so a draft
     # nobody posted is not reported as money spent.
     today = timezone.localdate()
-    posted = PettyExpense.objects.filter(status=PettyExpense.STATUS_POSTED)
+    mine = _visible(request)
+    posted = mine.filter(status=PettyExpense.STATUS_POSTED)
     cards = {
         "today": float(posted.filter(expense_date=today)
                        .aggregate(t=Sum("net_amount"))["t"] or 0),
         "month": float(posted.filter(expense_date__year=today.year,
                                      expense_date__month=today.month)
                        .aggregate(t=Sum("net_amount"))["t"] or 0),
-        "drafts": PettyExpense.objects.filter(status=PettyExpense.STATUS_DRAFT).count(),
+        "drafts": mine.filter(status=PettyExpense.STATUS_DRAFT).count(),
         "cash": [{"label": a["label"], "balance": a["balance"]}
                  for a in service.paid_from_accounts() if a["is_cash"]],
     }
@@ -278,7 +296,7 @@ def petty_expense_save(request, id=None):
         return JsonResponse({"error": "Not permitted."}, status=403)
 
     data = json.loads(request.body.decode("utf-8") or "{}")
-    expense = get_object_or_404(PettyExpense, pk=id) if id else PettyExpense()
+    expense = _mine(request, id) if id else PettyExpense()
     if id and not expense.is_editable:
         return JsonResponse(
             {"error": f"{expense.expense_no} is {expense.status.lower()} and cannot be edited."},
@@ -290,6 +308,10 @@ def petty_expense_save(request, id=None):
     _apply(expense, data, request.user)
     if not expense.branch_id:
         return JsonResponse({"error": "Choose the branch."}, status=400)
+    # The picker only offers branches in scope; a payload can still name one
+    # that is not, and the server is where that has to be refused.
+    if not branches_for(request.user).filter(pk=expense.branch_id).exists():
+        return JsonResponse({"error": "That branch is not one of yours."}, status=403)
     expense.save()
     _write_items(expense, data.get("items") or [])
     expense.recalculate()
@@ -328,7 +350,7 @@ def petty_expense_post(request, id):
     """Put an existing draft on the books."""
     if not user_can(request.user, "petty_expense_list", "edit"):
         return JsonResponse({"error": "Not permitted."}, status=403)
-    expense = get_object_or_404(PettyExpense, pk=id)
+    expense = _mine(request, id)
     try:
         voucher = service.post(expense, user=request.user)
     except service.PettyExpenseError as exc:
@@ -342,7 +364,7 @@ def petty_expense_cancel(request, id):
     """Reverse what it posted, and keep the record."""
     if not user_can(request.user, "petty_expense_list", "delete"):
         return JsonResponse({"error": "Not permitted."}, status=403)
-    expense = get_object_or_404(PettyExpense, pk=id)
+    expense = _mine(request, id)
     reason = (json.loads(request.body.decode("utf-8") or "{}").get("reason") or "").strip()
     try:
         service.cancel(expense, user=request.user, reason=reason)
@@ -367,7 +389,7 @@ def petty_expense_delete(request, id):
     """
     if not user_can(request.user, "petty_expense_list", "delete"):
         return JsonResponse({"error": "Not permitted."}, status=403)
-    expense = get_object_or_404(PettyExpense, pk=id)
+    expense = _mine(request, id)
 
     voucher = expense.journal          # read before the row goes
     voucher_no = voucher.voucher_no if voucher else ""
@@ -387,11 +409,9 @@ def petty_expense_delete(request, id):
 @login_required
 def petty_expense_detail(request, id):
     """One expense, in full: its lines, its bills and what it posted."""
-    expense = get_object_or_404(
-        PettyExpense.objects.select_related(
-            "branch", "farm", "shed", "cost_centre", "paid_from", "payment_mode",
-            "journal", "created_by", "posted_by", "cancelled_by"),
-        pk=id)
+    expense = get_object_or_404(_visible(request).select_related(
+        "branch", "farm", "shed", "cost_centre", "paid_from", "payment_mode",
+        "journal", "created_by", "posted_by", "cancelled_by"), pk=id)
     return JsonResponse({
         "id": expense.pk,
         "expense_no": expense.expense_no,
@@ -436,7 +456,7 @@ def petty_expense_detail(request, id):
 @require_POST
 def petty_expense_attach(request, id):
     """Attach a bill. Several at once; each kept with the expense it proves."""
-    expense = get_object_or_404(PettyExpense, pk=id)
+    expense = _mine(request, id)
     allowed = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
     saved, refused = [], []
     for upload in request.FILES.getlist("files"):
@@ -464,7 +484,7 @@ def petty_expense_detach(request, id, attachment_id):
     corrected, but the bill that justified the payment is not something to be
     quietly removed from a payment that has been made.
     """
-    expense = get_object_or_404(PettyExpense, pk=id)
+    expense = _mine(request, id)
     if expense.status != PettyExpense.STATUS_DRAFT:
         return JsonResponse(
             {"error": "A posted expense keeps its attachments."}, status=400)

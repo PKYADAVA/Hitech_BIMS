@@ -323,6 +323,126 @@ class ClassificationTests(PettyExpenseTestCase):
 # Uploads go to a directory of their own: a test must not leave a bill in the
 # project's media folder.
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="petty-test-media-"))
+class ScopeTests(PettyExpenseTestCase):
+    """A user limited to one branch sees one branch.
+
+    The limit is the ERP's own Web-Access scope, so a single setting governs
+    this register and every other screen.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+
+        from user.models import GroupAccessProfile
+
+        self.local = get_user_model().objects.create_user(
+            username="akbarpur-only", password="x")
+        group = Group.objects.create(name="Akbarpur clerks")
+        self.local.groups.add(group)
+        profile = GroupAccessProfile.objects.create(group=group,
+                                                    access_type="custom",
+                                                    all_branches=False)
+        profile.branches.add(self.other_branch)
+
+        # They may work the screen; what they may not do is see another
+        # branch's rows through it. The two are separate settings, and this
+        # test is about the second.
+        from user.models import GroupTabPermission
+        GroupTabPermission.objects.create(
+            group=group, tab_code="petty_expense_list", can_view=True,
+            can_add=True, can_edit=True, can_delete=True)
+
+        # One expense on each branch.
+        self.here = self.make(lines=((300, 1),))
+        self.there = self.make(lines=((400, 1),), branch=self.other_branch,
+                               farm=self.other_farm)
+        self.client.force_login(self.local)
+
+    def test_the_register_shows_only_the_branch_they_are_given(self):
+        rows = self.client.get("/api/petty-expenses/").json()["rows"]
+        numbers = {r["expense_no"] for r in rows}
+        self.assertIn(self.there.expense_no, numbers)
+        self.assertNotIn(self.here.expense_no, numbers)
+
+    def test_the_figures_above_it_are_scoped_too(self):
+        """A total that counts branches you cannot open is a leak of its own."""
+        cards = self.client.get("/api/petty-expenses/").json()["cards"]
+        self.assertEqual(cards["drafts"], 1)
+
+    def test_another_branch_s_expense_cannot_even_be_read(self):
+        self.assertEqual(
+            self.client.get(f"/api/petty-expenses/{self.here.pk}/").status_code, 404)
+        self.assertEqual(
+            self.client.get(f"/petty-expenses/{self.here.pk}/edit/").status_code, 404)
+
+    def test_another_branch_s_expense_cannot_be_posted_or_deleted(self):
+        self.assertEqual(
+            self.client.post(f"/api/petty-expenses/{self.here.pk}/post/").status_code, 404)
+        self.assertEqual(
+            self.client.post(f"/api/petty-expenses/{self.here.pk}/delete/").status_code, 404)
+        self.assertTrue(PettyExpense.objects.filter(pk=self.here.pk).exists())
+
+    def test_the_pickers_offer_only_what_they_may_use(self):
+        from account.petty_api import _masters
+
+        masters = _masters(self.local)
+        self.assertEqual([b["id"] for b in masters["branches"]],
+                         [self.other_branch.pk])
+        self.assertNotIn(self.farm.pk, [f["id"] for f in masters["farms"]])
+
+    def test_a_branch_out_of_scope_is_refused_even_if_the_payload_names_it(self):
+        """The picker is a convenience; the server is the rule."""
+        body = json.dumps({
+            "expense_date": TODAY.isoformat(),
+            "branch": self.branch.pk,          # not theirs
+            "paid_to_name": "Tea Stall",
+            "payment_mode": self.mode.pk,
+            "paid_from": self.cash.pk,
+            "items": [{"account": self.expense_ledger.pk, "description": "Tea",
+                       "quantity": "1", "rate": "60"}],
+        })
+        response = self.client.post("/api/petty-expenses/save/", data=body,
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("not one of yours", response.json()["error"])
+
+
+class NarrationTests(PettyExpenseTestCase):
+    def test_the_voucher_records_what_the_engine_wrote(self):
+        self.fund_cash(5000)
+        expense = self.make(lines=((300, 1),))
+        expense.narration = service.compose_narration(expense)
+        expense.save()
+        voucher = service.post(expense, user=self.user)
+        self.assertEqual(voucher.auto_narration, expense.narration)
+        self.assertEqual(voucher.narration_source, "AUTO")
+
+    def test_a_narration_someone_rewrote_is_marked_as_theirs(self):
+        self.fund_cash(5000)
+        expense = self.make(lines=((300, 1),))
+        expense.narration = "Tea for the vaccination team, as agreed with the vet."
+        expense.save()
+        voucher = service.post(expense, user=self.user)
+        self.assertEqual(voucher.narration, expense.narration)
+        self.assertEqual(voucher.narration_source, "MANUAL")
+        self.assertEqual(voucher.narration_edited_by, self.user)
+
+    def test_narration_switched_off_for_the_company_is_honoured_here(self):
+        from account.models import NarrationSettings
+
+        settings = NarrationSettings.get_solo()
+        settings.enabled = False
+        settings.save()
+
+        self.fund_cash(5000)
+        expense = self.make(lines=((300, 1),))
+        expense.narration = ""
+        expense.save()
+        voucher = service.post(expense, user=self.user)
+        self.assertEqual(voucher.narration, "")
+        self.assertEqual(voucher.auto_narration, "")
+
+
 class EndpointTests(PettyExpenseTestCase):
     @classmethod
     def tearDownClass(cls):
