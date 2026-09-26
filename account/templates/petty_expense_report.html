@@ -83,11 +83,11 @@
   @media (max-width: 1300px) { .per-charts { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 860px) { .per-charts { grid-template-columns: 1fr; } }
   .per-card > header { display: flex; align-items: center; gap: .4rem;
-    padding: .4rem .7rem; border-bottom: 1px solid var(--border);
-    font-size: .78rem; font-weight: 700; color: var(--text); }
-  .per-plot { padding: .5rem .6rem; height: 190px; position: relative; }
-  .per-donut-wrap { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; }
-  .per-donut { position: relative; width: 150px; height: 150px; flex: 0 0 150px; }
+    padding: .3rem .6rem; border-bottom: 1px solid var(--border);
+    font-size: .76rem; font-weight: 700; color: var(--text); }
+  .per-plot { padding: .35rem .5rem; height: 142px; position: relative; }
+  .per-donut-wrap { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; }
+  .per-donut { position: relative; width: 122px; height: 122px; flex: 0 0 122px; }
   .per-donut-centre { position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; pointer-events: none; }
   .per-donut-total { font-size: .86rem; font-weight: 700; color: var(--text);
@@ -96,7 +96,7 @@
   /* The legend is the relief for the light slots that fall under 3:1: every
      slice is named and numbered here, never identified by its colour alone. */
   .per-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .18rem; }
-  .per-key { display: flex; align-items: center; gap: .4rem; font-size: .74rem;
+  .per-key { display: flex; align-items: center; gap: .4rem; font-size: .72rem;
     color: var(--text-secondary); }
   .per-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 2px; }
   .per-key-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -124,7 +124,10 @@
      one line: dates, numbers, the status pill, the voucher code. */
   #per-table td.per-num, #per-table td.per-amount,
   #per-table td:nth-child(1), #per-table td:nth-child(2),
-  #per-table td:nth-child(3), #per-table td:nth-child(10) { white-space: nowrap; }
+  #per-table td:nth-child(3), #per-table td:nth-child(10),
+  /* The status pill and the voucher code are single objects: "Cancelle/d"
+     and "PV/2026-/27/0019" are two lines of nothing gained. */
+  #per-table td:nth-child(14), #per-table td:nth-child(16) { white-space: nowrap; }
   .per-status { font-size: .68rem; font-weight: 600; border-radius: .35rem;
     padding: .1rem .4rem; }
   .per-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
@@ -200,7 +203,7 @@
   .pcs-card > header { display: flex; align-items: center; gap: .4rem;
     padding: .4rem .7rem; border-bottom: 1px solid var(--border);
     font-size: .78rem; font-weight: 700; color: var(--text); }
-  .pcs-plot { padding: .5rem .6rem; height: 170px; position: relative; }
+  .pcs-plot { padding: .35rem .5rem; height: 142px; position: relative; }
 
   #pcs-table th { font-size: .68rem; text-transform: uppercase; letter-spacing: .02em;
     color: var(--text-secondary); font-weight: 600; white-space: nowrap;
