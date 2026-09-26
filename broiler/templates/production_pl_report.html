@@ -23,7 +23,9 @@ A statement missing its rows reads as complete, and somebody decides on it.
 {% endcomment %}
 {% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{# A report opens in its own tab and is read or printed, so it carries
+   no module navigation -- the same as every other report here. #}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
 {% csrf_token %}
