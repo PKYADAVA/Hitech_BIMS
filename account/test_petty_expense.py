@@ -323,6 +323,93 @@ class ClassificationTests(PettyExpenseTestCase):
 # Uploads go to a directory of their own: a test must not leave a bill in the
 # project's media folder.
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="petty-test-media-"))
+class SummaryTests(PettyExpenseTestCase):
+    """Where the money went, grouped."""
+
+    def all_of_them(self):
+        return PettyExpense.objects.all()
+
+    def test_only_posted_spending_counts(self):
+        """A draft is not spending and a cancelled expense was undone."""
+        self.fund_cash(20000)
+        posted = self.make(lines=((300, 1),))
+        service.post(posted, user=self.user)
+        self.make(lines=((999, 1),))                       # a draft
+        cancelled = self.make(lines=((777, 1),))
+        service.post(cancelled, user=self.user)
+        service.cancel(cancelled, user=self.user)
+
+        report = service.summary(self.all_of_them())
+        self.assertEqual(Decimal(str(report["total"])), Decimal("300.00"))
+        self.assertEqual(report["expenses"], 1)
+
+    def test_an_expense_split_across_two_categories_counts_in_both(self):
+        """Counted from the lines, not from the header — or half the spend
+        would land under whichever category happened to be first."""
+        from account.models import ChartOfAccount, PettyExpenseItem
+
+        other = ChartOfAccount.objects.filter(
+            company=self.company, account_type__name="Expense",
+            is_postable=True, is_group=False).exclude(
+            pk=self.expense_ledger.pk).order_by("code").first()
+
+        self.fund_cash(20000)
+        expense = self.make(lines=((300, 1),))
+        PettyExpenseItem.objects.create(petty_expense=expense, line_no=2,
+                                        account=other, description="Second",
+                                        quantity=1, rate=200)
+        expense.recalculate()
+        expense.save()
+        service.post(expense, user=self.user)
+
+        report = service.summary(self.all_of_them(), group_by="sub_category")
+        by_label = {row["label"]: row["amount"] for row in report["rows"]}
+        self.assertEqual(len(report["rows"]), 2)
+        self.assertEqual(Decimal(str(by_label[self.expense_ledger.description])),
+                         Decimal("300.00"))
+        self.assertEqual(Decimal(str(by_label[other.description])), Decimal("200.00"))
+        # One expense, counted once.
+        self.assertEqual(report["expenses"], 1)
+
+    def test_other_charges_reach_the_total_instead_of_vanishing(self):
+        """They sit on the header, so a total built only from lines loses them."""
+        self.fund_cash(20000)
+        expense = self.make(lines=((300, 1),), other_charges=Decimal("50"))
+        expense.recalculate()
+        expense.save()
+        service.post(expense, user=self.user)
+
+        report = service.summary(self.all_of_them())
+        self.assertEqual(Decimal(str(report["total"])), Decimal("350.00"))
+
+    def test_the_shares_add_up(self):
+        self.fund_cash(20000)
+        for rate in (300, 700):
+            expense = self.make(lines=((rate, 1),))
+            service.post(expense, user=self.user)
+        report = service.summary(self.all_of_them())
+        self.assertAlmostEqual(sum(r["share"] for r in report["rows"]), 100.0, places=1)
+
+    def test_months_read_in_order_and_everything_else_biggest_first(self):
+        self.fund_cash(20000)
+        small = self.make(lines=((100, 1),))
+        big = self.make(lines=((900, 1),),
+                        expense_date=TODAY - datetime.timedelta(days=40))
+        service.post(small, user=self.user)
+        service.post(big, user=self.user)
+
+        months = [r["label"] for r in service.summary(self.all_of_them(),
+                                                      group_by="month")["rows"]]
+        self.assertEqual(months, sorted(months))
+
+        payees = service.summary(self.all_of_them(), group_by="payee")["rows"]
+        self.assertEqual(payees, sorted(payees, key=lambda r: -r["amount"]))
+
+    def test_an_unknown_grouping_falls_back_rather_than_failing(self):
+        report = service.summary(self.all_of_them(), group_by="colour")
+        self.assertEqual(report["group_by"], "category")
+
+
 class TypedTextTests(PettyExpenseTestCase):
     """Three spellings of one payee are one payee once stored."""
 

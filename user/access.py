@@ -323,6 +323,8 @@ MODULE_REGISTRY = [
             {
                 "label": "Reports",
                 "tabs": [
+                    ("petty_expense_report", "Petty Expense Report",
+                     ("api_petty_expense_report",)),
                     ("petty_cash_statement", "Petty Cash Statement",
                      ("api_petty_cash_statement",)),
                     ("ledger_report", "Account Ledger", (

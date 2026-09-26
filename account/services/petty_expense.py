@@ -315,6 +315,184 @@ def _by_day(rows, opening):
 
 
 # --------------------------------------------------------------------------
+# Where it went
+# --------------------------------------------------------------------------
+
+#: What a summary can be grouped by, and how each row is labelled.
+SUMMARY_GROUPS = {
+    "category": "Category",
+    "sub_category": "Sub Category",
+    "branch": "Branch",
+    "farm": "Farm",
+    "payee": "Paid To",
+    "mode": "Payment Mode",
+    "paid_from": "Paid From",
+    "month": "Month",
+}
+
+
+def summary(expenses, group_by="category"):
+    """Totals for ``expenses``, grouped one way, biggest first.
+
+    ``expenses`` is a queryset the caller has already filtered and scoped --
+    this decides nothing about who may see what.
+    """
+    from account.models import PettyExpenseItem
+
+    if group_by not in SUMMARY_GROUPS:
+        group_by = "category"
+
+    posted = expenses.filter(status=PettyExpense.STATUS_POSTED)
+    lines = (PettyExpenseItem.objects
+             .filter(petty_expense__in=posted)
+             .select_related("account", "account__parent",
+                             "petty_expense__branch", "petty_expense__farm",
+                             "petty_expense__payment_mode",
+                             "petty_expense__paid_from"))
+
+    groups = {}
+    for line in lines:
+        expense = line.petty_expense
+        if group_by == "category":
+            key = (line.account.parent.description if line.account.parent_id
+                   else line.account.description)
+        elif group_by == "sub_category":
+            key = line.account.description
+        elif group_by == "branch":
+            key = expense.branch.branch_name
+        elif group_by == "farm":
+            key = expense.farm.farm_name if expense.farm_id else "Branch office"
+        elif group_by == "payee":
+            key = expense.paid_to_name or "\u2014"
+        elif group_by == "mode":
+            key = expense.payment_mode.name if expense.payment_mode_id else "\u2014"
+        elif group_by == "paid_from":
+            key = str(expense.paid_from) if expense.paid_from_id else "\u2014"
+        else:
+            key = expense.expense_date.strftime("%Y-%m")
+
+        row = groups.setdefault(key, {"label": key, "amount": ZERO,
+                                      "lines": 0, "expenses": set()})
+        row["amount"] += line.amount or ZERO
+        row["lines"] += 1
+        row["expenses"].add(expense.pk)
+
+    # Other charges and discounts sit on the header, not on a line, so they
+    # would vanish from a total built only from lines. They are spread across
+    # the expense's own lines in proportion, which is where they were spent.
+    header_extra = sum(((e.other_charges or ZERO) - (e.adjustment or ZERO)
+                        for e in posted), ZERO)
+    line_total = sum((row["amount"] for row in groups.values()), ZERO)
+    if header_extra and line_total:
+        for row in groups.values():
+            row["amount"] += header_extra * (row["amount"] / line_total)
+
+    total = sum((row["amount"] for row in groups.values()), ZERO)
+    rows = []
+    for row in groups.values():
+        rows.append({
+            "label": row["label"],
+            "amount": float(row["amount"].quantize(Decimal("0.01"))),
+            "expenses": len(row["expenses"]),
+            "lines": row["lines"],
+            "share": float((row["amount"] / total * 100).quantize(Decimal("0.1")))
+                     if total else 0.0,
+        })
+
+    # Months read in order; everything else biggest first, which is the order
+    # the question "where did it go" is asked in.
+    rows.sort(key=(lambda r: r["label"]) if group_by == "month"
+              else (lambda r: -r["amount"]))
+    return {
+        "group_by": group_by,
+        "group_label": SUMMARY_GROUPS[group_by],
+        "rows": rows,
+        "total": float(total.quantize(Decimal("0.01"))),
+        "expenses": posted.count(),
+    }
+
+
+def trend(expenses, days=15, date_to=None):
+    """What was posted on each of the last ``days`` days, zeros included.
+
+    The gaps matter: a line that skips the days nothing was spent implies a
+    slow trickle where there were two busy days and a fortnight of nothing.
+    """
+    import datetime
+
+    end = date_to or timezone.localdate()
+    start = end - datetime.timedelta(days=days - 1)
+    posted = (expenses.filter(status=PettyExpense.STATUS_POSTED,
+                              expense_date__gte=start, expense_date__lte=end)
+              .values_list("expense_date", "net_amount"))
+
+    totals = {}
+    for day, amount in posted:
+        totals[day] = totals.get(day, ZERO) + (amount or ZERO)
+
+    return [{"date": (start + datetime.timedelta(days=offset)).isoformat(),
+             "amount": float(totals.get(start + datetime.timedelta(days=offset), ZERO))}
+            for offset in range(days)]
+
+
+def report(expenses, group_by="category", limit=500):
+    """The whole page: the figures, the trend, the register and the summaries."""
+    posted = expenses.filter(status=PettyExpense.STATUS_POSTED)
+    today = timezone.localdate()
+
+    spent = sum((e.net_amount or ZERO for e in posted), ZERO)
+    today_rows = [e for e in posted if e.expense_date == today]
+
+    rows = []
+    for expense in (expenses.select_related(
+            "branch", "farm", "shed", "paid_from", "payment_mode", "journal")
+            .prefetch_related("items__account")[:limit]):
+        items = list(expense.items.all())
+        rows.append({
+            "id": expense.pk,
+            "expense_no": expense.expense_no,
+            "date": expense.expense_date.isoformat(),
+            "branch": expense.branch.branch_name if expense.branch_id else "",
+            "farm": (expense.farm.farm_name if expense.farm_id else ""),
+            "shed": ((expense.shed.shed_name or expense.shed.shed_code)
+                     if expense.shed_id else ""),
+            "category": ", ".join(sorted({(i.account.parent.description
+                                           if i.account.parent_id
+                                           else i.account.description) for i in items})),
+            "sub_category": ", ".join(sorted({i.account.description for i in items})),
+            "description": "; ".join(i.description for i in items if i.description),
+            "paid_to": expense.paid_to_name,
+            "mode": expense.payment_mode.name if expense.payment_mode_id else "",
+            "paid_from": str(expense.paid_from) if expense.paid_from_id else "",
+            "amount": float(expense.net_amount or 0),
+            "status": expense.status,
+            "voucher_no": expense.journal.voucher_no if expense.journal_id else "",
+            "attachments": expense.attachments.count(),
+        })
+
+    return {
+        "kpi": {
+            "total": float(spent),
+            "count": posted.count(),
+            "today": float(sum((e.net_amount or ZERO for e in today_rows), ZERO)),
+            "today_count": len(today_rows),
+            "branches": len({e.branch_id for e in posted if e.branch_id}),
+            "farms": len({e.farm_id for e in posted if e.farm_id}),
+            "farm_total": float(sum((e.net_amount or ZERO for e in posted
+                                     if e.farm_id), ZERO)),
+            "boxes": cash_health(),
+        },
+        "trend": trend(expenses),
+        "main": summary(expenses, group_by=group_by),
+        "by_category": summary(expenses, group_by="category"),
+        "by_branch": summary(expenses, group_by="branch"),
+        "by_mode": summary(expenses, group_by="mode"),
+        "by_paid_from": summary(expenses, group_by="paid_from"),
+        "rows": rows,
+    }
+
+
+# --------------------------------------------------------------------------
 # Narration
 # --------------------------------------------------------------------------
 

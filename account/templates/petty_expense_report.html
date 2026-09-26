@@ -1,0 +1,699 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Petty Expenses Report{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_report_subnavbar.html' with active_tab='petty_expense_report' %}
+
+<style>
+  /* ---- the chart palette -------------------------------------------------
+     Slots in the fixed categorical order, declared once as roles so the two
+     themes swap in one place and the charts are written against the role.
+     Validated in both modes (worst adjacent CVD dE 9.1 light / 8.4 dark).
+     Three light slots sit under 3:1 on white, which is why every chart here
+     carries named labels and a table of the same figures underneath. */
+  .per-page {
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+    --grid: #e5e7eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .per-page {
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9;
+      --grid: #22252b;
+    }
+  }
+  :root[data-theme="dark"] .per-page {
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --grid: #22252b;
+  }
+
+  .per-page { display: flex; flex-direction: column; gap: .6rem; }
+  .per-head, .per-card, .per-tile { background: var(--surface);
+    border: 1px solid var(--border); border-radius: .6rem; }
+  .per-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .per-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--success); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .per-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .per-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  .per-head-actions { margin-left: auto; display: flex; gap: .5rem; }
+
+  /* ---- the five figures -------------------------------------------------- */
+  .per-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: .5rem; }
+  .per-tile { padding: .5rem .7rem; display: flex; gap: .55rem; align-items: flex-start; }
+  .per-tile-icon { width: 32px; height: 32px; flex: 0 0 32px; border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center; font-size: .85rem;
+    background: var(--px-bg); color: var(--px-fg); }
+  .per-tile-body { min-width: 0; }
+  .per-tile-label { font-size: .68rem; color: var(--text-secondary); line-height: 1.2; }
+  .per-tile-value { font-size: 1.05rem; font-weight: 700; color: var(--text);
+    line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .per-tile-note { font-size: .68rem; color: var(--text-muted); line-height: 1.25; }
+
+  /* ---- filters ----------------------------------------------------------- */
+  .per-tabs { display: flex; gap: .3rem; padding: .45rem .45rem 0; }
+  .per-tab { font-size: .76rem; font-weight: 600; border: 1px solid transparent;
+    background: transparent; color: var(--text-secondary); border-radius: .4rem;
+    padding: .2rem .6rem; cursor: pointer; }
+  .per-tab.is-on { background: var(--primary-subtle); color: var(--primary);
+    border-color: var(--primary); }
+  .per-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: .4rem; padding: .45rem; }
+  .per-filters.is-hidden { display: none; }
+  .per-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: var(--text-secondary); line-height: 1.2; }
+  .per-filter .form-select, .per-filter .form-control { height: 30px; font-size: .8rem; }
+  .per-actions { display: flex; gap: .4rem; align-items: end; }
+
+  /* ---- charts ------------------------------------------------------------ */
+  .per-charts { display: grid; grid-template-columns: 1.6fr 1.2fr 1fr; gap: .5rem; }
+  @media (max-width: 1300px) { .per-charts { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 860px) { .per-charts { grid-template-columns: 1fr; } }
+  .per-card > header { display: flex; align-items: center; gap: .4rem;
+    padding: .4rem .7rem; border-bottom: 1px solid var(--border);
+    font-size: .78rem; font-weight: 700; color: var(--text); }
+  .per-plot { padding: .5rem .6rem; height: 190px; position: relative; }
+  .per-donut-wrap { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; }
+  .per-donut { position: relative; width: 150px; height: 150px; flex: 0 0 150px; }
+  .per-donut-centre { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: none; }
+  .per-donut-total { font-size: .86rem; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums; }
+  .per-donut-word { font-size: .62rem; color: var(--text-muted); }
+  /* The legend is the relief for the light slots that fall under 3:1: every
+     slice is named and numbered here, never identified by its colour alone. */
+  .per-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .18rem; }
+  .per-key { display: flex; align-items: center; gap: .4rem; font-size: .74rem;
+    color: var(--text-secondary); }
+  .per-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 2px; }
+  .per-key-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; color: var(--text); }
+  .per-key-share { font-variant-numeric: tabular-nums; }
+
+  /* ---- register and summaries -------------------------------------------- */
+  .per-toolbar { margin-left: auto; display: flex; gap: .4rem; align-items: center; }
+  .per-toolbar select { height: 28px; font-size: .76rem; width: auto; }
+  #per-table th { font-size: .68rem; text-transform: uppercase; letter-spacing: .02em;
+    color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+    padding: .35rem .5rem; }
+  #per-table td { font-size: .78rem; padding: .3rem .5rem; white-space: nowrap;
+    vertical-align: middle; }
+  .per-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .per-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .per-cut { max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; display: block; }
+  .per-status { font-size: .68rem; font-weight: 600; border-radius: .35rem;
+    padding: .1rem .4rem; }
+  .per-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
+  .per-posted { background: var(--success-subtle); color: var(--success-text); }
+  .per-cancelled { background: var(--danger-subtle); color: var(--danger-text); }
+  .per-none { color: var(--text-muted); }
+
+  .per-summaries { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: .5rem; }
+  .per-sum-table { width: 100%; }
+  .per-sum-table th { font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .02em; color: var(--text-secondary); font-weight: 600;
+    padding: .25rem .6rem; border-bottom: 1px solid var(--border); }
+  .per-sum-table td { font-size: .76rem; padding: .22rem .6rem; }
+  .per-sum-table tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
+
+  @media print {
+    .no-print { display: none !important; }
+    .per-card, .per-tile { break-inside: avoid; }
+  }
+</style>
+
+<div class="per-page">
+
+<div class="per-head">
+  <div class="per-head-icon"><i class="fas fa-chart-pie"></i></div>
+  <div>
+    <div class="per-title">Petty Expenses Report</div>
+    <div class="per-sub">Posted petty cash spending, by category, branch, farm and month</div>
+  </div>
+  <div class="per-head-actions no-print">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="per-export">
+      <i class="fas fa-file-export"></i> Export
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="per-print">
+      <i class="fas fa-print"></i> Print
+    </button>
+    <a class="btn btn-primary btn-sm" href="{% url 'petty_expense_list' %}">
+      <i class="fas fa-list"></i> Register
+    </a>
+  </div>
+</div>
+
+<div class="per-tiles" id="per-tiles"></div>
+
+<div class="per-card no-print">
+  <div class="per-tabs">
+    <button type="button" class="per-tab is-on" data-pane="basic">Basic Filters</button>
+    <button type="button" class="per-tab" data-pane="advanced">Advanced Filters</button>
+  </div>
+
+  <div class="per-filters" id="per-basic">
+    <div class="per-filter">
+      <label for="per-from">Date From</label>
+      <input type="date" id="per-from" class="form-control">
+    </div>
+    <div class="per-filter">
+      <label for="per-to">Date To</label>
+      <input type="date" id="per-to" class="form-control">
+    </div>
+    <div class="per-filter">
+      <label for="per-branch">Branch</label>
+      <select id="per-branch" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-farm">Farm / Location</label>
+      <select id="per-farm" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-shed">Shed / Unit</label>
+      <select id="per-shed" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-account">Sub Category</label>
+      <select id="per-account" class="form-select"></select>
+    </div>
+    <div class="per-actions">
+      <button class="btn btn-primary btn-sm" id="per-load"><i class="fas fa-search"></i> Search</button>
+      <button class="btn btn-outline-secondary btn-sm" id="per-clear"><i class="fas fa-rotate-left"></i> Reset</button>
+    </div>
+  </div>
+
+  <div class="per-filters is-hidden" id="per-advanced">
+    <div class="per-filter">
+      <label for="per-centre">Cost Centre</label>
+      <select id="per-centre" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-paid-from">Paid From</label>
+      <select id="per-paid-from" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-mode">Payment Mode</label>
+      <select id="per-mode" class="form-select"></select>
+    </div>
+    <div class="per-filter">
+      <label for="per-paid-to">Paid To</label>
+      <input type="text" id="per-paid-to" class="form-control" placeholder="Any party">
+    </div>
+    <div class="per-filter">
+      <label for="per-status">Status</label>
+      <select id="per-status" class="form-select">
+        <option value="">All</option>
+        <option value="Posted">Posted</option>
+        <option value="Draft">Draft</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+    <div class="per-actions">
+      <button class="btn btn-primary btn-sm" id="per-load-2"><i class="fas fa-search"></i> Search</button>
+    </div>
+  </div>
+</div>
+
+<div class="per-charts">
+  <div class="per-card">
+    <header><i class="fas fa-chart-line"></i> Expense Trend <span class="per-none">(last 15 days)</span></header>
+    <div class="per-plot"><canvas id="per-trend"></canvas></div>
+  </div>
+  <div class="per-card">
+    <header><i class="fas fa-chart-pie"></i> Category Wise</header>
+    <div class="per-donut-wrap">
+      <div class="per-donut">
+        <canvas id="per-donut"></canvas>
+        <div class="per-donut-centre">
+          <div class="per-donut-total" id="per-donut-total">&#8377;0</div>
+          <div class="per-donut-word">Total</div>
+        </div>
+      </div>
+      <div class="per-legend" id="per-legend"></div>
+    </div>
+  </div>
+  <div class="per-card">
+    <header><i class="fas fa-chart-column"></i> Branch Wise</header>
+    <div class="per-plot"><canvas id="per-branch-chart"></canvas></div>
+  </div>
+</div>
+
+<div class="per-card">
+  <header>
+    <i class="fas fa-table"></i> Petty Expense Register
+    <span class="per-toolbar no-print">
+      <label for="per-group" class="per-none" style="font-size:.72rem">Group by</label>
+      <select id="per-group" class="form-select form-select-sm">
+        {% for value, label in groups.items %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="per-toggle-view">
+        <i class="fas fa-layer-group"></i> Summary
+      </button>
+    </span>
+  </header>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" id="per-table">
+      <thead id="per-head-row"></thead>
+      <tbody id="per-body"></tbody>
+      <tfoot id="per-foot"></tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="per-summaries" id="per-summaries"></div>
+
+</div>
+
+{{ masters|json_script:"per-masters" }}
+
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+$(function () {
+  const M = JSON.parse(document.getElementById("per-masters").textContent);
+  const el = id => document.getElementById(id);
+  const money = n => (Number(n) || 0).toLocaleString("en-IN",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const short = n => {
+    const v = Number(n) || 0;
+    return v >= 100000 ? (v / 100000).toFixed(1) + "L"
+         : v >= 1000 ? (v / 1000).toFixed(0) + "k" : String(Math.round(v));
+  };
+  const fmtDate = iso => {
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? iso
+      : d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  };
+
+  // Colours and ink come from the page's own tokens, so one theme switch
+  // repaints the charts with the steps chosen for that surface.
+  function token(name) {
+    return getComputedStyle(document.querySelector(".per-page"))
+      .getPropertyValue(name).trim();
+  }
+  const SERIES = () => ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7"].map(token);
+  const ink = () => ({
+    text: token("--text") || getComputedStyle(document.body).color,
+    muted: getComputedStyle(document.querySelector(".per-none")).color,
+    grid: token("--grid"),
+    surface: getComputedStyle(document.querySelector(".per-card")).backgroundColor,
+  });
+
+  // ---- the pickers -------------------------------------------------------
+  const fill = (id, rows, value, label) => {
+    el(id).innerHTML = '<option value="">All</option>' + rows.map(
+      r => '<option value="' + r[value] + '">'
+         + escapeHtml(String(r[label] || "")) + '</option>').join("");
+  };
+  fill("per-branch", M.branches, "id", "branch_name");
+  fill("per-centre", M.centres, "id", "name");
+  fill("per-mode", M.modes, "id", "name");
+  fill("per-paid-from", M.paid_from, "id", "label");
+  el("per-account").innerHTML = '<option value="">All</option>' + M.categories.map(
+    c => '<optgroup label="' + escapeHtml(c.name) + '">' + c.items.map(
+      i => '<option value="' + i.id + '">' + escapeHtml(i.name) + '</option>').join("")
+       + '</optgroup>').join("");
+
+  function narrowFarms() {
+    const branch = el("per-branch").value;
+    const rows = branch ? M.farms.filter(f => String(f.branch_id) === String(branch))
+                        : M.farms;
+    el("per-farm").innerHTML = '<option value="">All</option>' + rows.map(
+      f => '<option value="' + f.id + '">' + escapeHtml(f.farm_name) + '</option>').join("");
+    narrowSheds();
+    $("#per-farm").trigger("change.select2");
+  }
+  function narrowSheds() {
+    const farm = el("per-farm").value;
+    const rows = farm ? M.sheds.filter(s => String(s.farm_id) === String(farm)) : [];
+    el("per-shed").innerHTML = '<option value="">All</option>' + rows.map(
+      s => '<option value="' + s.id + '">' + escapeHtml(s.label) + '</option>').join("");
+    $("#per-shed").trigger("change.select2");
+  }
+  $("#per-branch").on("change", narrowFarms);
+  $("#per-farm").on("change", narrowSheds);
+
+  const today = new Date();
+  const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+    + "-" + String(d.getDate()).padStart(2, "0");
+  el("per-from").value = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+  el("per-to").value = iso(today);
+
+  // ---- loading -----------------------------------------------------------
+  let data = null, showingSummary = false;
+  const charts = {};
+
+  function query() {
+    const p = new URLSearchParams();
+    const add = (k, v) => { if (v) { p.set(k, v); } };
+    add("group_by", el("per-group").value);
+    add("from", el("per-from").value);
+    add("to", el("per-to").value);
+    add("branch", el("per-branch").value);
+    add("farm", el("per-farm").value);
+    add("shed", el("per-shed").value);
+    add("account", el("per-account").value);
+    add("centre", el("per-centre").value);
+    add("paid_from", el("per-paid-from").value);
+    add("mode", el("per-mode").value);
+    add("paid_to", el("per-paid-to").value);
+    add("status", el("per-status").value);
+    return p.toString();
+  }
+
+  function load() {
+    $.getJSON("{% url 'api_petty_expense_report' %}?" + query(), function (d) {
+      data = d;
+      paintTiles(d.kpi);
+      drawTrend(d.trend);
+      drawDonut(d.by_category);
+      drawBranches(d.by_branch);
+      paintTable();
+      paintSummaries(d);
+    });
+  }
+
+  // ---- the five figures --------------------------------------------------
+  function tile(icon, bg, fg, label, value, note) {
+    return '<div class="per-tile">'
+      + '<span class="per-tile-icon" style="--px-bg:' + bg + ';--px-fg:' + fg + '">'
+      + '<i class="fas ' + icon + '"></i></span>'
+      + '<span class="per-tile-body"><span class="per-tile-label">' + escapeHtml(label)
+      + '</span><div class="per-tile-value">' + value + '</div>'
+      + '<span class="per-tile-note">' + note + '</span></span></div>';
+  }
+
+  function paintTiles(k) {
+    const boxes = (k.boxes || []).map(
+      b => escapeHtml(b.label.split(" - ")[0]) + ": &#8377;" + money(b.balance)).join(" &middot; ");
+    el("per-tiles").innerHTML =
+      tile("fa-wallet", "#e8f1fd", "#1d6fe0", "Total Expenses",
+           "&#8377;" + money(k.total), k.count + " posted")
+      + tile("fa-calendar-day", "#e6f6fe", "#0369a1", "Today's Expenses",
+             "&#8377;" + money(k.today), k.today_count + " today")
+      + tile("fa-building", "#fff1db", "#b54708", "Branch Wise",
+             "&#8377;" + money(k.total), k.branches + (k.branches === 1 ? " branch" : " branches"))
+      + tile("fa-tractor", "#f1ebfd", "#6941c6", "Farm Wise",
+             "&#8377;" + money(k.farm_total), k.farms + (k.farms === 1 ? " farm" : " farms"))
+      + tile("fa-money-bill-wave", "#e7f7ee", "#067647", "Petty Cash Balance",
+             "&#8377;" + money((k.boxes || []).reduce((t, b) => t + (b.balance || 0), 0)),
+             boxes || "no cash box");
+  }
+
+  // ---- the charts --------------------------------------------------------
+  function base() {
+    const c = ink();
+    return {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: c.surface, titleColor: c.text, bodyColor: c.text,
+          borderColor: c.grid, borderWidth: 1, padding: 8, displayColors: true,
+          callbacks: { label: ctx => " ₹" + money(ctx.parsed.y ?? ctx.parsed) },
+        },
+      },
+    };
+  }
+
+  function drawTrend(points) {
+    const c = ink();
+    charts.trend && charts.trend.destroy();
+    charts.trend = new Chart(el("per-trend"), {
+      type: "line",
+      data: {
+        labels: points.map(p => fmtDate(p.date)),
+        datasets: [{
+          data: points.map(p => p.amount),
+          borderColor: token("--s1"),
+          // A wash, not a block: the line is the data, the fill is context.
+          backgroundColor: token("--s1") + "1a",
+          borderWidth: 2, fill: true, tension: .32,
+          pointRadius: 4, pointHoverRadius: 6,
+          pointBackgroundColor: token("--s1"),
+          // The 2px surface ring keeps a marker legible where it meets the line.
+          pointBorderColor: c.surface, pointBorderWidth: 2,
+        }],
+      },
+      options: Object.assign(base(), {
+        scales: {
+          x: { grid: { display: false }, ticks: { color: c.muted, font: { size: 10 },
+               maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+          y: { beginAtZero: true, border: { display: false },
+               grid: { color: c.grid, drawTicks: false },
+               ticks: { color: c.muted, font: { size: 10 },
+                        callback: v => short(v) } },
+        },
+      }),
+    });
+  }
+
+  function drawDonut(summary) {
+    const c = ink();
+    // Seven named slices at most: past that the tail is one "Others" rather
+    // than a ring of colours nobody can tell apart.
+    const rows = summary.rows.slice(0, 6);
+    const tail = summary.rows.slice(6);
+    if (tail.length) {
+      rows.push({ label: "Others",
+                  amount: tail.reduce((t, r) => t + r.amount, 0),
+                  share: tail.reduce((t, r) => t + r.share, 0) });
+    }
+    const colours = SERIES();
+    charts.donut && charts.donut.destroy();
+    charts.donut = new Chart(el("per-donut"), {
+      type: "doughnut",
+      data: {
+        labels: rows.map(r => r.label),
+        datasets: [{
+          data: rows.map(r => r.amount),
+          backgroundColor: rows.map((_, i) => colours[i % colours.length]),
+          // The gap between slices is surface colour, not a drawn border.
+          borderColor: c.surface, borderWidth: 2, hoverOffset: 4,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: "68%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: c.surface, titleColor: c.text, bodyColor: c.text,
+            borderColor: c.grid, borderWidth: 1, padding: 8,
+            callbacks: { label: ctx => " ₹" + money(ctx.parsed) },
+          },
+        },
+      },
+    });
+    el("per-donut-total").innerHTML = "&#8377;" + short(summary.total);
+    el("per-legend").innerHTML = rows.map((r, i) =>
+      '<span class="per-key">'
+      + '<span class="per-dot" style="background:' + colours[i % colours.length] + '"></span>'
+      + '<span class="per-key-name" title="' + escapeHtml(r.label) + '">'
+      + escapeHtml(r.label) + '</span>'
+      + '<span class="per-key-share">' + r.share.toFixed(0) + '%</span></span>').join("")
+      || '<span class="per-none">Nothing posted in this period.</span>';
+  }
+
+  function drawBranches(summary) {
+    const c = ink();
+    const rows = summary.rows.slice(0, 8);
+    charts.branch && charts.branch.destroy();
+    charts.branch = new Chart(el("per-branch-chart"), {
+      type: "bar",
+      data: {
+        labels: rows.map(r => r.label),
+        // One measure, one hue: a different colour per bar would encode
+        // nothing the label does not already say.
+        datasets: [{ data: rows.map(r => r.amount),
+                     backgroundColor: token("--s1"),
+                     borderRadius: { topLeft: 4, topRight: 4 },
+                     maxBarThickness: 24 }],
+      },
+      options: Object.assign(base(), {
+        interaction: { mode: "nearest", intersect: true },
+        scales: {
+          x: { grid: { display: false },
+               ticks: { color: c.muted, font: { size: 10 }, maxRotation: 0 } },
+          y: { beginAtZero: true, border: { display: false },
+               grid: { color: c.grid, drawTicks: false },
+               ticks: { color: c.muted, font: { size: 10 }, callback: v => short(v) } },
+        },
+      }),
+    });
+  }
+
+  // ---- the register, or its summary --------------------------------------
+  const DETAIL_HEAD = ["#", "Expense No.", "Date", "Branch", "Farm / Location",
+                       "Category", "Sub Category", "Description", "Paid To",
+                       "Payment Mode", "Paid From", "Amount (₹)", "Status",
+                       "Att", "Voucher"];
+
+  function paintTable() {
+    if (!data) { return; }
+    if (showingSummary) { paintGrouped(); return; }
+    $("#per-head-row").html("<tr>" + DETAIL_HEAD.map(
+      (h, i) => '<th' + (i === 11 ? ' class="per-num"' : '') + '>' + h + "</th>").join("") + "</tr>");
+    const body = $("#per-body").empty();
+    const none = '<span class="per-none">—</span>';
+    if (!data.rows.length) {
+      body.append('<tr><td colspan="15" class="per-none text-center py-3">'
+        + "Nothing matches these filters.</td></tr>");
+    }
+    data.rows.forEach(function (r, i) {
+      const place = [r.farm, r.shed].filter(Boolean).join(" · ");
+      body.append("<tr>"
+        + "<td>" + (i + 1) + "</td>"
+        + "<td>" + escapeHtml(r.expense_no) + "</td>"
+        + "<td>" + fmtDate(r.date) + "</td>"
+        + "<td>" + (escapeHtml(r.branch) || none) + "</td>"
+        + '<td><span class="per-cut">' + (escapeHtml(place) || none) + "</span></td>"
+        + '<td><span class="per-cut">' + (escapeHtml(r.category) || none) + "</span></td>"
+        + '<td><span class="per-cut">' + (escapeHtml(r.sub_category) || none) + "</span></td>"
+        + '<td><span class="per-cut">' + (escapeHtml(r.description) || none) + "</span></td>"
+        + '<td><span class="per-cut">' + (escapeHtml(r.paid_to) || none) + "</span></td>"
+        + "<td>" + (escapeHtml(r.mode) || none) + "</td>"
+        + '<td><span class="per-cut">' + (escapeHtml(r.paid_from) || none) + "</span></td>"
+        + '<td class="per-amount">' + money(r.amount) + "</td>"
+        + '<td><span class="per-status per-' + r.status.toLowerCase() + '">'
+        + escapeHtml(r.status) + "</span></td>"
+        + '<td class="per-num">' + (r.attachments || "") + "</td>"
+        + "<td>" + (escapeHtml(r.voucher_no) || none) + "</td>"
+        + "</tr>");
+    });
+    $("#per-foot").html('<tr><td colspan="11">Posted total</td>'
+      + '<td class="per-amount">' + money(data.kpi.total) + "</td>"
+      + '<td colspan="3"></td></tr>');
+  }
+
+  function paintGrouped() {
+    const s = data.main;
+    $("#per-head-row").html("<tr><th>" + escapeHtml(s.group_label) + "</th>"
+      + '<th class="per-num">Expenses</th><th class="per-num">Lines</th>'
+      + '<th class="per-num">Amount (₹)</th><th class="per-num">Share</th></tr>');
+    const body = $("#per-body").empty();
+    if (!s.rows.length) {
+      body.append('<tr><td colspan="5" class="per-none text-center py-3">'
+        + "Nothing posted in this period.</td></tr>");
+    }
+    s.rows.forEach(r => body.append("<tr><td>" + escapeHtml(readable(r.label, s.group_by))
+      + '</td><td class="per-num">' + r.expenses + "</td>"
+      + '<td class="per-num">' + r.lines + "</td>"
+      + '<td class="per-amount">' + money(r.amount) + "</td>"
+      + '<td class="per-num">' + r.share.toFixed(1) + "%</td></tr>"));
+    $("#per-foot").html('<tr><td>Total</td><td class="per-num">' + s.expenses + "</td>"
+      + '<td class="per-num"></td><td class="per-amount">' + money(s.total)
+      + '</td><td class="per-num">100.0%</td></tr>');
+  }
+
+  // A month is stored as 2026-08 so it sorts; it is read as August 2026.
+  function readable(label, group) {
+    if (group !== "month") { return label; }
+    const parts = String(label).split("-");
+    if (parts.length !== 2) { return label; }
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+    return isNaN(d) ? label
+      : d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+
+  // ---- the four summaries -------------------------------------------------
+  function summaryCard(title, summary, top) {
+    const rows = top ? summary.rows.slice(0, top) : summary.rows;
+    const shown = rows.reduce((t, r) => t + r.amount, 0);
+    const rest = summary.total - shown;
+    return '<div class="per-card"><header><i class="fas fa-table-list"></i> '
+      + escapeHtml(title) + "</header>"
+      + '<table class="per-sum-table"><thead><tr><th>' + escapeHtml(summary.group_label)
+      + '</th><th class="per-num">Amount (₹)</th><th class="per-num">%</th></tr></thead>'
+      + "<tbody>"
+      + rows.map(r => "<tr><td>" + escapeHtml(r.label) + "</td>"
+          + '<td class="per-amount">' + money(r.amount) + "</td>"
+          + '<td class="per-num">' + r.share.toFixed(0) + "%</td></tr>").join("")
+      + (rest > 0.5 ? '<tr><td class="per-none">Others</td><td class="per-amount">'
+          + money(rest) + '</td><td class="per-num">'
+          + (summary.total ? (rest / summary.total * 100).toFixed(0) : 0) + "%</td></tr>" : "")
+      + (summary.rows.length ? "" : '<tr><td colspan="3" class="per-none">Nothing posted.</td></tr>')
+      + "</tbody><tfoot><tr><td>Total</td>"
+      + '<td class="per-amount">' + money(summary.total) + "</td>"
+      + '<td class="per-num">' + (summary.total ? "100%" : "0%") + "</td></tr></tfoot></table></div>";
+  }
+
+  function paintSummaries(d) {
+    el("per-summaries").innerHTML =
+      summaryCard("Summary by Category", d.by_category)
+      + summaryCard("Summary by Branch", d.by_branch)
+      + summaryCard("Summary by Payment Mode", d.by_mode)
+      + summaryCard("Summary by Paid From (Top 5)", d.by_paid_from, 5);
+  }
+
+  // ---- the controls -------------------------------------------------------
+  $(".per-tab").on("click", function () {
+    $(".per-tab").removeClass("is-on");
+    $(this).addClass("is-on");
+    const pane = this.dataset.pane;
+    el("per-basic").classList.toggle("is-hidden", pane !== "basic");
+    el("per-advanced").classList.toggle("is-hidden", pane !== "advanced");
+  });
+  $("#per-load, #per-load-2").on("click", load);
+  $("#per-group").on("change", function () {
+    showingSummary = true;
+    el("per-toggle-view").innerHTML = '<i class="fas fa-list"></i> Detail';
+    load();
+  });
+  $("#per-toggle-view").on("click", function () {
+    showingSummary = !showingSummary;
+    this.innerHTML = showingSummary ? '<i class="fas fa-list"></i> Detail'
+                                    : '<i class="fas fa-layer-group"></i> Summary';
+    paintTable();
+  });
+  $("#per-clear").on("click", function () {
+    $(".per-filters input").val("");
+    $(".per-filters select").val("").trigger("change.select2");
+    narrowFarms();
+    load();
+  });
+  $("#per-print").on("click", () => window.print());
+
+  $("#per-export").on("click", function () {
+    if (!data) { return; }
+    const head = DETAIL_HEAD.slice(1);
+    const lines = [head.join(",")].concat(data.rows.map(r => [
+      r.expense_no, r.date, r.branch, r.farm, r.category, r.sub_category,
+      r.description, r.paid_to, r.mode, r.paid_from, r.amount, r.status,
+      r.attachments, r.voucher_no,
+    ].map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")));
+    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "petty-expenses-" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // The theme switch repaints the charts with that surface's own steps,
+  // rather than leaving light-mode hues on a dark ground.
+  new MutationObserver(function () {
+    if (!data) { return; }
+    drawTrend(data.trend);
+    drawDonut(data.by_category);
+    drawBranches(data.by_branch);
+  }).observe(document.documentElement, { attributes: true,
+                                         attributeFilter: ["data-theme"] });
+
+  narrowFarms();
+  load();
+});
+</script>
+{% endblock %}

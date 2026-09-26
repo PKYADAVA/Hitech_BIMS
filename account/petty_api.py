@@ -574,6 +574,49 @@ def petty_expense_detach(request, id, attachment_id):
     return JsonResponse({"removed": attachment_id})
 
 
+def _filtered(request, qs):
+    """Apply the filters the report and the register share."""
+    get = request.GET
+    date_from = parse_date(get.get("from") or "")
+    date_to = parse_date(get.get("to") or "")
+    if date_from:
+        qs = qs.filter(expense_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(expense_date__lte=date_to)
+    for field, param in (("branch_id", "branch"), ("farm_id", "farm"),
+                         ("cost_centre_id", "centre"), ("paid_from_id", "paid_from"),
+                         ("payment_mode_id", "mode")):
+        if get.get(param):
+            qs = qs.filter(**{field: get[param]})
+    if get.get("account"):
+        qs = qs.filter(items__account_id=get["account"]).distinct()
+    return qs
+
+
+@never_cache
+@login_required
+def petty_expense_report(request):
+    """Where the petty money went: one question, grouped six ways."""
+    return render(request, "petty_expense_report.html", {
+        "masters": _masters(request.user),
+        "groups": service.SUMMARY_GROUPS,
+    })
+
+
+@login_required
+def petty_expense_report_rows(request):
+    """The figures, the trend, the register and the summaries, of one set."""
+    expenses = _filtered(request, _visible(request))
+    if request.GET.get("status"):
+        expenses = expenses.filter(status=request.GET["status"])
+    if request.GET.get("paid_to"):
+        expenses = expenses.filter(paid_to_name__icontains=request.GET["paid_to"])
+    if request.GET.get("shed"):
+        expenses = expenses.filter(shed_id=request.GET["shed"])
+    return JsonResponse(service.report(
+        expenses, group_by=request.GET.get("group_by") or "category"))
+
+
 @never_cache
 @login_required
 def petty_cash_statement(request):
