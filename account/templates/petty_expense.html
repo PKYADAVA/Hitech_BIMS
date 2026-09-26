@@ -38,7 +38,9 @@
     gap: .5rem; }
   .px-kpi { padding: .45rem .6rem; display: flex; align-items: center; gap: .55rem;
     text-align: left; cursor: pointer; }
-  .px-kpi:hover { border-color: var(--border-strong); }
+  /* A step of surface is not a hover anyone sees; a tint of the brand
+     colour is, and it is the same answer the sub-nav tabs got. */
+  .px-kpi:hover { background: var(--primary-subtle); border-color: var(--primary); }
   .px-kpi.is-on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
   .px-kpi-icon { width: 28px; height: 28px; flex: 0 0 28px; border-radius: .45rem;
     display: flex; align-items: center; justify-content: center; font-size: .78rem;
