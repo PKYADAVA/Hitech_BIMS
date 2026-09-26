@@ -50,6 +50,8 @@
   .px-kpi-value { font-size: 1.02rem; font-weight: 700; color: var(--text);
     line-height: 1.25; font-variant-numeric: tabular-nums; }
   .px-kpi-value.is-low { color: var(--danger-text); }
+  .px-kpi.is-low { border-color: var(--danger); }
+  .px-kpi-note.is-low { color: var(--danger-text); font-weight: 600; }
   .px-kpi-note { display: block; font-size: .64rem; color: var(--text-muted); line-height: 1.2; }
 
   /* The filter strip, as the Broiler registers wear it. */
@@ -156,13 +158,61 @@
     <div class="px-sub">Day-to-day cash and local expenses, and what each one posted</div>
   </div>
   <div class="px-head-actions">
-    {% if page_perms.add %}<a class="btn btn-primary btn-sm" href="{% url 'petty_expense_add' %}">
+    {% if page_perms.add %}
+    <button type="button" class="btn btn-outline-success btn-sm" id="px-replenish">
+      <i class="fas fa-money-bill-transfer"></i> Add Cash
+    </button>
+    <a class="btn btn-primary btn-sm" href="{% url 'petty_expense_add' %}">
       <i class="fas fa-plus"></i> Add Expense
     </a>{% endif %}
   </div>
 </div>
 
 <div class="px-kpis" id="px-kpis"></div>
+
+<!-- Putting money into the box. A contra, so it is the journal that moves it
+     and this is only the form that asks. -->
+<div class="modal fade" id="px-cash-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-money-bill-transfer me-2"></i>Add cash to the box</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label" for="px-cash-box">Into</label>
+          <select id="px-cash-box" class="form-select form-select-sm"></select>
+          <div class="px-none" id="px-cash-note" style="font-size:.72rem"></div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label" for="px-cash-from">From</label>
+          <select id="px-cash-from" class="form-select form-select-sm"></select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label" for="px-cash-amount">Amount (&#8377;)</label>
+          <input type="number" step="0.01" min="0" id="px-cash-amount"
+                 class="form-control form-control-sm">
+        </div>
+        <div class="mb-2">
+          <label class="form-label" for="px-cash-date">Date</label>
+          <input type="date" id="px-cash-date" class="form-control form-control-sm">
+        </div>
+        <div>
+          <label class="form-label" for="px-cash-ref">Reference</label>
+          <input type="text" id="px-cash-ref" class="form-control form-control-sm"
+                 placeholder="Cheque / slip no.">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success btn-sm" id="px-cash-go">
+          <i class="fas fa-check"></i> Add cash
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="px-filters" id="px-filters">
   <div class="px-filter px-pair">
@@ -396,23 +446,26 @@ $(function () {
     return p.toString();
   }
 
+  let lastCards = {};
   function load() {
     $.getJSON("{% url 'api_petty_expense_rows' %}?" + query(), function (data) {
       rows = data.rows;
+      lastCards = data.cards;
       paintKpis(data.cards);
       paintRows();
     });
   }
 
-  function kpiCard(key, icon, bg, fg, label, value, note) {
+  function kpiCard(key, icon, bg, fg, label, value, note, low) {
     return '<button type="button" class="px-kpi' + (kpi === key ? " is-on" : "")
-      + '" data-kpi="' + key + '">'
+      + (low ? " is-low" : "") + '" data-kpi="' + key + '">'
       + '<span class="px-kpi-icon" style="--px-bg:' + bg + ';--px-fg:' + fg + '">'
       + '<i class="fas ' + icon + '"></i></span>'
       + '<span class="px-kpi-body">'
       + '<span class="px-kpi-label">' + escapeHtml(label) + '</span>'
-      + '<span class="px-kpi-value">' + value + '</span>'
-      + '<span class="px-kpi-note">' + escapeHtml(note) + '</span>'
+      + '<span class="px-kpi-value' + (low ? " is-low" : "") + '">' + value + '</span>'
+      + '<span class="px-kpi-note' + (low ? " is-low" : "") + '">'
+      + escapeHtml(note) + '</span>'
       + '</span></button>';
   }
 
@@ -420,8 +473,14 @@ $(function () {
     // Cash in hand is read from each petty-cash account's own ledger, so the
     // figure here and the ledger report are the same number by construction.
     const cash = (cards.cash || []).map(function (c) {
-      return kpiCard("paid_from:" + c.id, "fa-wallet", "#e7f7ee", "#067647",
-        c.label, "&#8377;" + money(c.balance), "Balance on its ledger");
+      // A box below the policy's line says so, and says what would fill it.
+      const note = c.low
+        ? (c.top_up > 0 ? "Low \u2014 " + money(c.top_up) + " short of the float"
+                        : "Low")
+        : "Balance on its ledger";
+      return kpiCard("paid_from:" + c.id, "fa-wallet",
+                     c.low ? "#fdeced" : "#e7f7ee", c.low ? "#b02a37" : "#067647",
+                     c.label, "&#8377;" + money(c.balance), note, c.low);
     }).join("");
     el("px-kpis").innerHTML =
       kpiCard("today", "fa-calendar-day", "#e8f1fd", "#1d6fe0",
@@ -739,6 +798,58 @@ $(function () {
     load();
   });
 
+  // ---- adding cash to the box -------------------------------------------
+  const cashModal = document.getElementById("px-cash-modal")
+    && new bootstrap.Modal(document.getElementById("px-cash-modal"));
+
+  $("#px-replenish").on("click", function () {
+    const boxes = M.paid_from || [];
+    el("px-cash-box").innerHTML = boxes.map(
+      b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+    el("px-cash-from").innerHTML = (M.banks || []).map(
+      b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+    el("px-cash-date").value = new Date().toISOString().slice(0, 10);
+    el("px-cash-ref").value = "";
+    showTopUp();
+    cashModal.show();
+  });
+
+  function showTopUp() {
+    // What the box is short of its float, offered rather than imposed.
+    const chosen = el("px-cash-box").value;
+    const row = (lastCards.cash || []).find(c => String(c.id) === String(chosen));
+    if (!row) { el("px-cash-note").textContent = ""; return; }
+    el("px-cash-amount").value = row.top_up > 0 ? row.top_up.toFixed(2) : "";
+    el("px-cash-note").textContent = row.float_amount
+      ? "Holds " + money(row.balance) + " of a " + money(row.float_amount) + " float."
+      : "Holds " + money(row.balance) + ".";
+  }
+  $("#px-cash-box").on("change", showTopUp);
+
+  $("#px-cash-go").on("click", function () {
+    $.ajax({
+      url: "{% url 'api_petty_cash_replenish' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/json" },
+      data: JSON.stringify({
+        box: el("px-cash-box").value,
+        from: el("px-cash-from").value,
+        amount: el("px-cash-amount").value,
+        date: el("px-cash-date").value,
+        reference: el("px-cash-ref").value,
+      }),
+      success: function (out) {
+        cashModal.hide();
+        showToast("success", "Cash added as " + out.voucher_no + ". The box now "
+          + "holds " + money(out.balance) + ".");
+        load();
+      },
+      error: function (xhr) {
+        showToast("danger", (xhr.responseJSON || {}).error || "Could not add the cash.");
+      }
+    });
+  });
+
   // The form redirects here after a save; this is where the expense now is,
   // so this is where the save is confirmed.
   try {
@@ -746,6 +857,11 @@ $(function () {
     if (saved) {
       sessionStorage.removeItem("bims-petty-saved");
       showToast("success", saved);
+    }
+    const twin = sessionStorage.getItem("bims-petty-duplicate");
+    if (twin) {
+      sessionStorage.removeItem("bims-petty-duplicate");
+      showToast("warning", "Looks like a repeat: " + twin);
     }
   } catch (e) { /* private browsing: a toast is not worth an error */ }
 

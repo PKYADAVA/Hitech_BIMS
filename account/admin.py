@@ -317,3 +317,20 @@ class AccountingControlSettingsAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.modified_by = request.user
         super().save_model(request, obj, form, change)
+
+
+# The petty cash house rules: one row, and the people whose policy it is can
+# change it without a deployment.
+from account.models import PettyCashPolicy  # noqa: E402
+
+
+@admin.register(PettyCashPolicy)
+class PettyCashPolicyAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "float_amount", "low_balance_at",
+                    "bill_required_above", "warn_on_duplicates")
+
+    def has_add_permission(self, request):
+        return not PettyCashPolicy.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

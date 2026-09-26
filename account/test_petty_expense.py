@@ -323,6 +323,131 @@ class ClassificationTests(PettyExpenseTestCase):
 # Uploads go to a directory of their own: a test must not leave a bill in the
 # project's media folder.
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="petty-test-media-"))
+class CashBoxTests(PettyExpenseTestCase):
+    """Money going into the box, and knowing when there is too little in it."""
+
+    def policy(self, **fields):
+        from account.models import PettyCashPolicy
+
+        rule = PettyCashPolicy.get_solo()
+        for name, value in fields.items():
+            setattr(rule, name, value)
+        rule.save()
+        return rule
+
+    def test_replenishing_moves_money_from_the_bank_into_the_box(self):
+        before_cash = journal.account_balance(self.cash_ledger)
+        before_bank = journal.account_balance(self.bank_ledger)
+
+        voucher = service.replenish(self.cash, 10000, self.bank, user=self.user,
+                                    reference="CHQ-77")
+        self.assertEqual(voucher.voucher_type, "Contra")
+        self.assertEqual(journal.account_balance(self.cash_ledger),
+                         before_cash + Decimal("10000"))
+        self.assertEqual(journal.account_balance(self.bank_ledger),
+                         before_bank - Decimal("10000"))
+
+    def test_a_cash_box_is_not_replenished_from_another_cash_box(self):
+        with self.assertRaises(service.PettyExpenseError):
+            service.replenish(self.cash, 500, self.cash, user=self.user)
+
+    def test_nothing_is_a_refusal_not_an_empty_voucher(self):
+        with self.assertRaises(service.PettyExpenseError):
+            service.replenish(self.cash, 0, self.bank, user=self.user)
+
+    def test_the_box_reports_itself_low_against_the_policy_s_float(self):
+        self.policy(float_amount=Decimal("10000"), low_balance_at=Decimal("2000"))
+        self.fund_cash(1500)
+        row = next(r for r in service.cash_health() if r["id"] == self.cash.pk)
+        self.assertTrue(row["low"])
+        self.assertEqual(Decimal(str(row["top_up"])), Decimal("8500"))
+
+        service.replenish(self.cash, 8500, self.bank, user=self.user)
+        row = next(r for r in service.cash_health() if r["id"] == self.cash.pk)
+        self.assertFalse(row["low"])
+        self.assertEqual(Decimal(str(row["top_up"])), Decimal("0"))
+
+    def test_the_replenish_endpoint_is_the_same_path(self):
+        self.client.force_login(self.user)
+        before = journal.account_balance(self.cash_ledger)
+        response = self.client.post(
+            "/api/petty-cash/replenish/",
+            data=json.dumps({"box": self.cash.pk, "from": self.bank.pk,
+                             "amount": "2500", "date": TODAY.isoformat(),
+                             "reference": "Slip 12"}),
+            content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["voucher_no"])
+        self.assertEqual(journal.account_balance(self.cash_ledger),
+                         before + Decimal("2500"))
+
+
+class PolicyTests(PettyExpenseTestCase):
+    def policy(self, **fields):
+        from account.models import PettyCashPolicy
+
+        rule = PettyCashPolicy.get_solo()
+        for name, value in fields.items():
+            setattr(rule, name, value)
+        rule.save()
+        return rule
+
+    def test_a_large_expense_needs_its_bill(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.policy(bill_required_above=Decimal("500"))
+        self.fund_cash(5000)
+        expense = self.make(lines=((900, 1),))
+        self.assertTrue(any("Attach the bill" in p for p in service.validate(expense)))
+
+        expense.attachments.create(
+            file=SimpleUploadedFile("bill.pdf", b"%PDF", content_type="application/pdf"),
+            file_name="bill.pdf", file_type="application/pdf")
+        self.assertFalse(any("Attach the bill" in p for p in service.validate(expense)))
+
+    def test_a_small_one_does_not(self):
+        self.policy(bill_required_above=Decimal("500"))
+        self.fund_cash(5000)
+        expense = self.make(lines=((300, 1),))
+        self.assertFalse(any("Attach the bill" in p for p in service.validate(expense)))
+
+    def test_the_same_payment_twice_in_a_day_is_noticed(self):
+        self.fund_cash(5000)
+        first = self.make(lines=((300, 1),))
+        second = self.make(lines=((300, 1),))
+        twin = service.duplicate_of(second)
+        self.assertIsNotNone(twin)
+        self.assertEqual(twin.pk, first.pk)
+
+    def test_a_different_amount_is_not_a_duplicate(self):
+        self.fund_cash(5000)
+        self.make(lines=((300, 1),))
+        self.assertIsNone(service.duplicate_of(self.make(lines=((400, 1),))))
+
+    def test_the_warning_can_be_switched_off(self):
+        self.policy(warn_on_duplicates=False)
+        self.fund_cash(5000)
+        self.make(lines=((300, 1),))
+        self.assertIsNone(service.duplicate_of(self.make(lines=((300, 1),))))
+
+    def test_a_duplicate_is_reported_on_save_but_does_not_stop_it(self):
+        self.client.force_login(self.user)
+        self.fund_cash(5000)
+        body = json.dumps({
+            "expense_date": TODAY.isoformat(), "branch": self.branch.pk,
+            "paid_to_name": "Tea Stall", "payment_mode": self.mode.pk,
+            "paid_from": self.cash.pk,
+            "items": [{"account": self.expense_ledger.pk, "description": "Tea",
+                       "quantity": "2", "rate": "60"}]})
+        first = self.client.post("/api/petty-expenses/save/", data=body,
+                                 content_type="application/json").json()
+        self.assertEqual(first["duplicate"], "")
+        second = self.client.post("/api/petty-expenses/save/", data=body,
+                                  content_type="application/json").json()
+        self.assertIn(first["expense_no"], second["duplicate"])
+        self.assertTrue(PettyExpense.objects.filter(pk=second["id"]).exists())
+
+
 class ScopeTests(PettyExpenseTestCase):
     """A user limited to one branch sees one branch.
 

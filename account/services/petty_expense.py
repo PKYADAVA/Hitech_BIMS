@@ -111,6 +111,107 @@ def cash_payment_modes():
                 .order_by("display_order", "name").values("id", "name"))
 
 
+def policy():
+    from account.models import PettyCashPolicy
+    return PettyCashPolicy.get_solo()
+
+
+def cash_health(master=None):
+    """Each cash box, its balance, and whether that balance is worryingly low.
+
+    "Low" is the policy's figure, not a guess: a box with a 10,000 float and a
+    2,000 warning line is a different thing from one with a 500 float.
+    """
+    rule = policy()
+    rows = []
+    masters = ([master] if master is not None
+               else BankCashMaster.objects.filter(is_cash=True).order_by("code"))
+    for box in masters:
+        balance = balance_of(box)
+        rows.append({
+            "id": box.pk,
+            "label": str(box),
+            "balance": float(balance) if balance is not None else None,
+            "low": balance is not None and balance <= (rule.low_balance_at or ZERO),
+            "float_amount": float(rule.float_amount or 0),
+            "top_up": float(max((rule.float_amount or ZERO) - (balance or ZERO), ZERO)),
+        })
+    return rows
+
+
+@transaction.atomic
+def replenish(box, amount, from_account, date=None, user=None, reference=""):
+    """Put money into a cash box from a bank account.
+
+    A contra, because nothing is earned or spent by moving your own money
+    between your own accounts -- and posted through the same engine as
+    everything else, so the box's balance stays the balance of its ledger.
+    """
+    amount = Decimal(str(amount or 0))
+    if amount <= ZERO:
+        raise PettyExpenseError("Say how much is going into the box.")
+    if not _is_cash(box):
+        raise PettyExpenseError(f"{box} is not a cash box.")
+    if _is_cash(from_account):
+        raise PettyExpenseError("Cash is drawn from a bank account, not from "
+                                "another cash box.")
+
+    to_ledger = ledger_for_bank_cash(box)
+    from_ledger = ledger_for_bank_cash(from_account)
+    if to_ledger is None or from_ledger is None:
+        raise PettyExpenseError("One of those accounts has no ledger in the "
+                                "chart of accounts, so nothing can be posted.")
+
+    date = date or timezone.localdate()
+    narration = f"Cash drawn from {from_account} into {box}."
+    try:
+        return journal.create_voucher(
+            company(), date,
+            [{"account": to_ledger.pk, "debit": amount, "credit": 0,
+              "narration": narration},
+             {"account": from_ledger.pk, "debit": 0, "credit": amount,
+              "narration": narration}],
+            user=user, voucher_type="Contra", manual=False,
+            system_generated=True, reference=reference or "",
+            narration=narration, auto_narration=narration,
+            narration_source="AUTO", post=True)
+    except DjangoValidationError as exc:
+        raise PettyExpenseError("  ".join(exc.messages)) from exc
+
+
+def bank_accounts():
+    """The accounts a cash box can be replenished from."""
+    rows = []
+    for master in BankCashMaster.objects.filter(is_cash=False).order_by("code"):
+        ledger = ledger_for_bank_cash(master)
+        rows.append({"id": master.pk, "label": str(master),
+                     "balance": (float(journal.account_balance(ledger))
+                                 if ledger else None)})
+    return rows
+
+
+def duplicate_of(expense):
+    """An expense already on file with the same payee, date and amount.
+
+    Not a rule -- a warning. Two identical payments on one day happen; two
+    identical *entries* of one payment happen more often.
+    """
+    from account.models import PettyExpense as PE
+
+    if not policy().warn_on_duplicates:
+        return None
+    if not (expense.paid_to_name or "").strip():
+        return None
+    twin = (PE.objects.filter(company=expense.company,
+                              expense_date=expense.expense_date,
+                              paid_to_name__iexact=expense.paid_to_name.strip(),
+                              net_amount=expense.net_amount)
+            .exclude(pk=expense.pk)
+            .exclude(status=PE.STATUS_CANCELLED)
+            .first())
+    return twin
+
+
 def _is_cash(master):
     """The master says so itself -- no guessing from a name."""
     return bool(getattr(master, "is_cash", False))
@@ -230,6 +331,14 @@ def validate(expense, items=None):
     net = expense.net_amount or ZERO
     if net <= ZERO:
         problems.append("The net amount must be more than zero.")
+
+    # No bill, no posting, above the figure the policy names.
+    rule = policy()
+    threshold = rule.bill_required_above or ZERO
+    if threshold > ZERO and net > threshold and expense.pk:
+        if not expense.attachments.exists():
+            problems.append(f"Attach the bill: anything above "
+                            f"{threshold:,.2f} needs one.")
 
     # A date outside every financial year is the commonest reason a post is
     # refused, and the engine's own message arrives too late to be useful on

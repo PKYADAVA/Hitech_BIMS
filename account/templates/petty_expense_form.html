@@ -790,6 +790,9 @@ $(function () {
     await sendFiles(out.id);
     // Said on the register rather than here: this page is about to go away,
     // and a toast that leaves with it was never read.
+    if (out.duplicate) {
+      sessionStorage.setItem("bims-petty-duplicate", out.duplicate);
+    }
     sessionStorage.setItem("bims-petty-saved", out.expense_no + (
       out.status === "Posted"
         ? " posted" + (out.voucher_no ? " as " + out.voucher_no : "") + "."

@@ -91,6 +91,7 @@ def _masters(user=None):
         # box, so the pickers offer nothing that could take it elsewhere.
         "modes": service.cash_payment_modes(),
         "mode_accounts": payment_mode_map("payment"),
+        "banks": service.bank_accounts(),
         "uoms": list(UnitOfMeasurement.objects.order_by("name").values("id", "name")),
         # The years the register can actually show, so the picker offers no
         # year that would come back empty. This year is always offered.
@@ -217,6 +218,8 @@ def petty_expense_rows(request):
     today = timezone.localdate()
     mine = _visible(request)
     posted = mine.filter(status=PettyExpense.STATUS_POSTED)
+    # Each cash box with its balance, and whether the policy calls it low.
+    health = service.cash_health()
     cards = {
         "today": float(posted.filter(expense_date=today)
                        .aggregate(t=Sum("net_amount"))["t"] or 0),
@@ -224,8 +227,7 @@ def petty_expense_rows(request):
                                      expense_date__month=today.month)
                        .aggregate(t=Sum("net_amount"))["t"] or 0),
         "drafts": mine.filter(status=PettyExpense.STATUS_DRAFT).count(),
-        "cash": [{"label": a["label"], "balance": a["balance"]}
-                 for a in service.paid_from_accounts() if a["is_cash"]],
+        "cash": health,
     }
     return JsonResponse({"rows": rows, "cards": cards})
 
@@ -319,6 +321,12 @@ def petty_expense_save(request, id=None):
         expense.narration = service.compose_narration(expense)
     expense.save(update_fields=["subtotal", "net_amount", "narration", "updated_at"])
 
+    # Said, not enforced: two identical payments on one day happen; two
+    # identical entries of one payment happen more often.
+    twin = service.duplicate_of(expense)
+    warning = (f"{twin.expense_no} on the same day is also "
+               f"{twin.net_amount:,.2f} to {twin.paid_to_name}." if twin else "")
+
     if was_posted:
         try:
             service.repost(expense, user=request.user)
@@ -340,8 +348,29 @@ def petty_expense_save(request, id=None):
     return JsonResponse({"id": expense.pk, "expense_no": expense.expense_no,
                          "status": expense.status,
                          "net_amount": float(expense.net_amount or 0),
+                         "duplicate": warning,
                          "voucher_no": expense.journal.voucher_no if expense.journal_id else ""},
                         status=201 if not id else 200)
+
+
+@login_required
+@require_POST
+def petty_cash_replenish(request):
+    """Put money into a cash box, as a contra from a bank account."""
+    if not user_can(request.user, "petty_expense_list", "add"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    data = json.loads(request.body.decode("utf-8") or "{}")
+    box = get_object_or_404(BankCashMaster, pk=_int(data.get("box")))
+    bank = get_object_or_404(BankCashMaster, pk=_int(data.get("from")))
+    try:
+        voucher = service.replenish(
+            box, _dec(data.get("amount")), bank,
+            date=parse_date(data.get("date") or "") or timezone.localdate(),
+            user=request.user, reference=(data.get("reference") or "").strip()[:100])
+    except service.PettyExpenseError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({"voucher_no": voucher.voucher_no,
+                         "balance": float(service.balance_of(box) or 0)})
 
 
 @login_required

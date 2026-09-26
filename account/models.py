@@ -1330,6 +1330,46 @@ class PettyExpense(models.Model):
         return self.status in (self.STATUS_DRAFT, self.STATUS_POSTED)
 
 
+class PettyCashPolicy(models.Model):
+    """The house rules for petty cash: one row, edited in admin.
+
+    Numbers like "a bill is required above five hundred rupees" are policy,
+    not code. Keeping them here means they can be changed by the people whose
+    policy it is, and that every screen reads the same figure.
+    """
+    float_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0,
+        help_text=_("The float each cash box is meant to hold. Replenishing "
+                    "offers the difference between this and the balance."))
+    low_balance_at = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0,
+        help_text=_("Warn when a cash box falls below this. Zero warns only "
+                    "when the box is empty or overdrawn."))
+    bill_required_above = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0,
+        help_text=_("Refuse to post an expense above this amount with no bill "
+                    "attached. Zero asks for a bill on nothing."))
+    warn_on_duplicates = models.BooleanField(
+        default=True,
+        help_text=_("Warn when the same payee, date and amount is already on "
+                    "file — the usual sign of one bill entered twice."))
+
+    class Meta:
+        verbose_name = _("Petty Cash Policy")
+        verbose_name_plural = _("Petty Cash Policy")
+
+    def __str__(self):
+        return "Petty cash policy"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1                      # one row, whatever anyone tries
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
 class PettyExpenseItem(models.Model):
     """One line of a petty expense: what was bought, and what it cost.
 
