@@ -251,6 +251,8 @@
           <tr>
             <th>Expense No.</th>
             <th>Date</th>
+            <th class="ds-mid">Month</th>
+            <th class="ds-mid">Year</th>
             <th>Branch</th>
             <th>Farm / Shed</th>
             <th>Category</th>
@@ -294,6 +296,11 @@ $(function () {
   const money = n => (Number(n) || 0).toLocaleString("en-IN",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const none = () => '<span class="px-none">—</span>';
+
+  function monthOf(iso) {
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "long" });
+  }
 
   function fmtDate(iso) {
     if (!iso) { return ""; }
@@ -430,6 +437,10 @@ $(function () {
       body.append('<tr>'
         + '<td><span class="px-no">' + escapeHtml(r.expense_no) + '</span></td>'
         + '<td data-order="' + r.date + '">' + fmtDate(r.date) + '</td>'
+        // Sorted on the number, read as the name: a column of "September"
+        // that sorts alphabetically is worse than no column.
+        + '<td data-order="' + r.date.slice(0, 7) + '">' + monthOf(r.date) + '</td>'
+        + '<td data-order="' + r.date.slice(0, 4) + '">' + r.date.slice(0, 4) + '</td>'
         + '<td class="px-branch">' + (escapeHtml(r.branch) || none()) + '</td>'
         + '<td class="px-place">' + (escapeHtml(place) || none()) + '</td>'
         + '<td>' + (escapeHtml(r.category) || none())
@@ -457,7 +468,7 @@ $(function () {
       searching: true,
       info: true,
       lengthChange: true,
-      order: [[1, "desc"]],
+      order: [[1, "desc"]],          // by date, newest first
       columnDefs: [{ orderable: false, targets: -1 }],
     });
   }
@@ -473,6 +484,9 @@ $(function () {
     const today = new Date();
     el("px-from").value = ""; el("px-to").value = "";
     el("px-status").value = ""; el("px-paid-from").value = "";
+    // Letting a figure go puts the register back to the window it opened on,
+    // which is what the press replaced.
+    if (same) { lastSevenDays(); }
     if (!same) {
       if (key === "today") {
         el("px-from").value = iso(today); el("px-to").value = iso(today);
@@ -604,7 +618,23 @@ $(function () {
     }
   } catch (e) { /* private browsing: a toast is not worth an error */ }
 
+  // A register of day-to-day spending is nearly always asked about the last
+  // few days, and a page that opens on a year of rows makes you filter before
+  // you can read anything. The strip shows the dates, so what is on screen is
+  // never a mystery, and Clear widens it to everything.
+  function lastSevenDays() {
+    const iso = d => d.getFullYear() + "-"
+      + String(d.getMonth() + 1).padStart(2, "0") + "-"
+      + String(d.getDate()).padStart(2, "0");
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - 6);        // today included, seven in all
+    el("px-from").value = iso(from);
+    el("px-to").value = iso(today);
+  }
+
   narrowFarms();
+  lastSevenDays();
   load();
 });
 </script>

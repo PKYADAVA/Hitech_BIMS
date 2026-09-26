@@ -165,7 +165,9 @@ def petty_expense_rows(request):
             "category": ", ".join(sorted({(i.account.parent.description
                                            if i.account.parent_id else i.account.description)
                                           for i in items})),
-            "sub_category": ", ".join(i.account.description for i in items),
+            # One per account, not one per line: two lines charged to the
+            # same ledger printed "Vaccination, Vaccination".
+            "sub_category": ", ".join(sorted({i.account.description for i in items})),
             "paid_to": expense.paid_to_name,
             "mode": expense.payment_mode.name,
             "paid_from": str(expense.paid_from),
