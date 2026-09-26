@@ -1320,8 +1320,14 @@ class PettyExpense(models.Model):
 
     @property
     def is_editable(self):
-        """A draft can be changed; a posted or cancelled expense cannot."""
-        return self.status == self.STATUS_DRAFT
+        """A draft or a posted expense can be changed; a cancelled one cannot.
+
+        Editing something already posted does not patch its voucher: saving
+        replaces it, so the books always say what the expense says. A
+        cancelled expense is the record of something that was undone, and
+        rewriting that would be rewriting history rather than correcting it.
+        """
+        return self.status in (self.STATUS_DRAFT, self.STATUS_POSTED)
 
 
 class PettyExpenseItem(models.Model):

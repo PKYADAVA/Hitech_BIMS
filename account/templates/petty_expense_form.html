@@ -24,6 +24,10 @@
   .pe-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
   .pe-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
 
+  .pe-posted-note { background: var(--warning-subtle); color: var(--warning-text);
+    border: 1px solid var(--border); border-radius: .6rem; padding: .4rem .7rem;
+    font-size: .78rem; margin-bottom: .6rem; }
+
   .pe-grid { display: grid; grid-template-columns: 1fr 320px; gap: .6rem;
     align-items: start; }
   @media (max-width: 1199.98px) { .pe-grid { grid-template-columns: 1fr; } }
@@ -113,6 +117,8 @@
     </button>
   </div>
 </div>
+
+<div class="pe-posted-note d-none" id="pe-posted-note"></div>
 
 <div class="pe-grid">
   <!-- 1 ─ where and what it is ------------------------------------------ -->
@@ -689,6 +695,16 @@ $(function () {
         document.querySelectorAll(".pe-grid input, .pe-grid select, .pe-grid textarea,"
           + " #pe-add-row, #pe-draft, #pe-post").forEach(n => { n.disabled = true; });
         window.showToast("info", `${d.expense_no} is ${d.status.toLowerCase()} and cannot be edited.`);
+      } else if (d.status === "Posted") {
+        // Editable, but not silently: this one is already in the books, and
+        // saving rewrites what it put there.
+        el("pe-draft").classList.add("d-none");        // it is past being a draft
+        el("pe-post").innerHTML = '<i class="fas fa-check"></i> Save &amp; Repost';
+        el("pe-posted-note").classList.remove("d-none");
+        el("pe-posted-note").innerHTML = "Posted as <strong>"
+          + window.escapeHtml(d.voucher ? d.voucher.no : "")
+          + "</strong>. Saving replaces that voucher with a new one, so the "
+          + "books follow the correction."
       }
     });
   } else if (COPY_ID) {

@@ -353,15 +353,6 @@ class EndpointTests(PettyExpenseTestCase):
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["status"], "Posted")
 
-    def test_a_posted_expense_can_no_longer_be_edited(self):
-        self.fund_cash(5000)
-        created = self.post_json("/api/petty-expenses/save/",
-                                 self.payload(post=True)).json()
-        again = self.post_json(f"/api/petty-expenses/{created['id']}/save/",
-                               self.payload())
-        self.assertEqual(again.status_code, 400)
-        self.assertIn("cannot be edited", again.json()["error"])
-
     def test_the_register_reports_what_is_posted_and_what_is_still_a_draft(self):
         self.fund_cash(5000)
         self.post_json("/api/petty-expenses/save/", self.payload(post=True))
@@ -410,30 +401,108 @@ class EndpointTests(PettyExpenseTestCase):
         self.assertEqual(
             self.client.get(f"/petty-expenses/{created['id']}/edit/").status_code, 200)
 
-    def test_a_draft_can_be_deleted_and_a_posted_expense_cannot(self):
+    def test_a_draft_can_be_deleted(self):
         self.fund_cash(5000)
         draft = self.post_json("/api/petty-expenses/save/", self.payload()).json()
         gone = self.client.post(f"/api/petty-expenses/{draft['id']}/delete/")
         self.assertEqual(gone.status_code, 200, gone.content)
         self.assertFalse(PettyExpense.objects.filter(pk=draft["id"]).exists())
 
+    def test_deleting_a_posted_expense_takes_its_voucher_off_the_books(self):
+        """Asked for deliberately: the voucher goes, and so does its effect.
+
+        What it costs is that voucher's number, which cancelling would keep.
+        """
+        from account.models import Voucher
+
+        self.fund_cash(5000)
+        before = journal.account_balance(self.cash_ledger)
         posted = self.post_json("/api/petty-expenses/save/",
                                 self.payload(post=True)).json()
-        refused = self.client.post(f"/api/petty-expenses/{posted['id']}/delete/")
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn("cancelled, never deleted", refused.json()["error"])
-        self.assertTrue(PettyExpense.objects.filter(pk=posted["id"]).exists())
+        voucher_id = PettyExpense.objects.get(pk=posted["id"]).journal_id
 
-    def test_a_cancelled_expense_stays_on_the_record(self):
-        """It is the record of something that happened, and of it being undone."""
+        gone = self.client.post(f"/api/petty-expenses/{posted['id']}/delete/")
+        self.assertEqual(gone.status_code, 200, gone.content)
+        self.assertEqual(gone.json()["voucher_no"], posted["voucher_no"])
+        self.assertFalse(PettyExpense.objects.filter(pk=posted["id"]).exists())
+        self.assertFalse(Voucher.objects.filter(pk=voucher_id).exists())
+        # The money is back where it was, because the voucher's lines went too.
+        self.assertEqual(journal.account_balance(self.cash_ledger), before)
+
+    def test_deleting_a_cancelled_expense_removes_its_cancelled_voucher(self):
+        from account.models import Voucher
+
+        self.fund_cash(5000)
+        created = self.post_json("/api/petty-expenses/save/",
+                                 self.payload(post=True)).json()
+        voucher_id = PettyExpense.objects.get(pk=created["id"]).journal_id
+        self.post_json(f"/api/petty-expenses/{created['id']}/cancel/",
+                       json.dumps({"reason": "Wrong account"}))
+        gone = self.client.post(f"/api/petty-expenses/{created['id']}/delete/")
+        self.assertEqual(gone.status_code, 200)
+        self.assertFalse(Voucher.objects.filter(pk=voucher_id).exists())
+
+    def test_editing_a_posted_expense_rewrites_what_it_put_on_the_books(self):
+        """The voucher is replaced, not patched, so the two cannot disagree."""
+        from account.models import Voucher
+
+        self.fund_cash(5000)
+        created = self.post_json("/api/petty-expenses/save/",
+                                 self.payload(post=True)).json()
+        old_voucher_id = PettyExpense.objects.get(pk=created["id"]).journal_id
+        self.assertEqual(journal.account_balance(self.expense_ledger),
+                         Decimal("120.00"))
+
+        # 2 x 60 was really 2 x 90.
+        edited = self.post_json(
+            f"/api/petty-expenses/{created['id']}/save/",
+            self.payload(items=[{"account": self.expense_ledger.pk,
+                                 "description": "Tea", "quantity": "2",
+                                 "rate": "90"}]))
+        self.assertEqual(edited.status_code, 200, edited.content)
+
+        expense = PettyExpense.objects.get(pk=created["id"])
+        self.assertEqual(expense.status, PettyExpense.STATUS_POSTED)
+        self.assertEqual(expense.net_amount, Decimal("180.00"))
+        self.assertNotEqual(expense.journal_id, old_voucher_id)
+        self.assertFalse(Voucher.objects.filter(pk=old_voucher_id).exists())
+        # One entry for one expense, at the corrected figure.
+        self.assertEqual(journal.account_balance(self.expense_ledger),
+                         Decimal("180.00"))
+        self.assertEqual(expense.journal.total_debit, Decimal("180.00"))
+
+    def test_an_edit_that_cannot_post_leaves_the_posted_expense_alone(self):
+        """A refused correction must not quietly unpost what was there."""
+        self.fund_cash(500)
+        created = self.post_json("/api/petty-expenses/save/",
+                                 self.payload(post=True)).json()
+        voucher_id = PettyExpense.objects.get(pk=created["id"]).journal_id
+
+        refused = self.post_json(
+            f"/api/petty-expenses/{created['id']}/save/",
+            self.payload(items=[{"account": self.expense_ledger.pk,
+                                 "description": "Tea", "quantity": "1",
+                                 "rate": "99999"}]))
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("Not enough petty cash", refused.json()["error"])
+
+        expense = PettyExpense.objects.get(pk=created["id"])
+        self.assertEqual(expense.status, PettyExpense.STATUS_POSTED)
+        self.assertEqual(expense.journal_id, voucher_id)
+        self.assertEqual(expense.net_amount, Decimal("120.00"))
+
+    def test_a_cancelled_expense_cannot_be_edited(self):
+        """It is the record of something undone; correcting it would be
+        rewriting history rather than fixing it."""
         self.fund_cash(5000)
         created = self.post_json("/api/petty-expenses/save/",
                                  self.payload(post=True)).json()
         self.post_json(f"/api/petty-expenses/{created['id']}/cancel/",
                        json.dumps({"reason": "Wrong account"}))
-        refused = self.client.post(f"/api/petty-expenses/{created['id']}/delete/")
+        refused = self.post_json(f"/api/petty-expenses/{created['id']}/save/",
+                                 self.payload())
         self.assertEqual(refused.status_code, 400)
-        self.assertTrue(PettyExpense.objects.filter(pk=created["id"]).exists())
+        self.assertIn("cannot be edited", refused.json()["error"])
 
     def test_deleting_a_draft_takes_its_bills_with_it(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

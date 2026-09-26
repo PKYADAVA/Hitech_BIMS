@@ -298,6 +298,24 @@ def post(expense, user=None):
 
 
 @transaction.atomic
+def repost(expense, user=None):
+    """Put a corrected expense back on the books in place of its old voucher.
+
+    The old voucher is deleted rather than cancelled, so the journal shows one
+    entry for one expense instead of a pair that cancel each other out. What
+    it costs is that voucher's number; what it buys is a ledger that always
+    agrees with the register.
+    """
+    old = expense.journal
+    expense.journal = None
+    expense.status = PettyExpense.STATUS_DRAFT
+    expense.save(update_fields=["journal", "status", "updated_at"])
+    if old is not None:
+        old.delete()
+    return post(expense, user=user)
+
+
+@transaction.atomic
 def cancel(expense, user=None, reason=""):
     """Take it off the books without taking it off the record.
 

@@ -275,6 +275,9 @@ def petty_expense_save(request, id=None):
         return JsonResponse(
             {"error": f"{expense.expense_no} is {expense.status.lower()} and cannot be edited."},
             status=400)
+    # Something already posted stays posted: the correction goes back onto the
+    # books rather than quietly dropping the expense to a draft.
+    was_posted = bool(id) and expense.status == PettyExpense.STATUS_POSTED
 
     _apply(expense, data, request.user)
     if not expense.branch_id:
@@ -286,7 +289,16 @@ def petty_expense_save(request, id=None):
         expense.narration = service.compose_narration(expense)
     expense.save(update_fields=["subtotal", "net_amount", "narration", "updated_at"])
 
-    if data.get("post"):
+    if was_posted:
+        try:
+            service.repost(expense, user=request.user)
+        except service.PettyExpenseError as exc:
+            # Nothing is half-done: the atomic block rolls the edit back, so
+            # the expense and its voucher stay as they were.
+            transaction.set_rollback(True)
+            return JsonResponse({"error": str(exc), "id": expense.pk,
+                                 "expense_no": expense.expense_no}, status=400)
+    elif data.get("post"):
         try:
             service.post(expense, user=request.user)
         except service.PettyExpenseError as exc:
@@ -334,27 +346,34 @@ def petty_expense_cancel(request, id):
 @login_required
 @require_POST
 def petty_expense_delete(request, id):
-    """Throw away a draft.
+    """Throw the expense away, whatever state it is in.
 
-    Only a draft: it has posted nothing, so nothing has to be unwound and no
-    number that appears in the books goes missing. A posted expense is
-    cancelled instead, which reverses its voucher and keeps the record, and a
-    cancelled one is already the record of something that happened.
+    A draft has posted nothing, so it simply goes. A posted or cancelled one
+    takes its voucher with it: the voucher's lines go, so the money returns to
+    the account it left and the ledger, the trial balance and the cost-centre
+    report all stop counting it.
+
+    What that costs is a gap in the voucher numbering, which cancelling would
+    not leave -- so the screen says so before it happens, and the deletion
+    itself is recorded in the audit log.
     """
     if not user_can(request.user, "petty_expense_list", "delete"):
         return JsonResponse({"error": "Not permitted."}, status=403)
     expense = get_object_or_404(PettyExpense, pk=id)
-    if expense.status != PettyExpense.STATUS_DRAFT:
-        return JsonResponse(
-            {"error": f"{expense.expense_no} is {expense.status.lower()}. "
-                      f"A posted expense is cancelled, never deleted."}, status=400)
+
+    voucher = expense.journal          # read before the row goes
+    voucher_no = voucher.voucher_no if voucher else ""
 
     # The bills go with it; nothing else refers to them.
     for attachment in expense.attachments.all():
         attachment.file.delete(save=False)
     number = expense.expense_no
-    expense.delete()
-    return JsonResponse({"deleted": id, "expense_no": number})
+    with transaction.atomic():
+        expense.delete()
+        if voucher is not None:
+            voucher.delete()           # its lines go with it, and so does its effect
+    return JsonResponse({"deleted": id, "expense_no": number,
+                         "voucher_no": voucher_no})
 
 
 @login_required
@@ -431,9 +450,14 @@ def petty_expense_attach(request, id):
 @login_required
 @require_POST
 def petty_expense_detach(request, id, attachment_id):
-    """Remove a bill from a draft. A posted expense keeps its evidence."""
+    """Remove a bill from a draft. A posted expense keeps its evidence.
+
+    Deliberately stricter than editing the expense itself: the figures can be
+    corrected, but the bill that justified the payment is not something to be
+    quietly removed from a payment that has been made.
+    """
     expense = get_object_or_404(PettyExpense, pk=id)
-    if not expense.is_editable:
+    if expense.status != PettyExpense.STATUS_DRAFT:
         return JsonResponse(
             {"error": "A posted expense keeps its attachments."}, status=400)
     get_object_or_404(PettyExpenseAttachment, pk=attachment_id,

@@ -414,11 +414,16 @@ $(function () {
 
   function actions(r) {
     const parts = [];
+    // A posted expense can be corrected -- saving it replaces its voucher --
+    // so Edit is offered there too. Post is not: it already is.
     if (r.editable && PERMS.edit) {
-      parts.push('<a class="btn btn-outline-warning btn-sm" title="Edit"'
-        + ' href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-pen"></i></a>');
-      parts.push('<button class="btn btn-outline-success btn-sm px-post" title="Post"'
-        + ' data-id="' + r.id + '"><i class="fas fa-check"></i></button>');
+      parts.push('<a class="btn btn-outline-warning btn-sm" title="'
+        + (r.status === "Posted" ? "Edit and repost" : "Edit")
+        + '" href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-pen"></i></a>');
+      if (r.status === "Draft") {
+        parts.push('<button class="btn btn-outline-success btn-sm px-post" title="Post"'
+          + ' data-id="' + r.id + '"><i class="fas fa-check"></i></button>');
+      }
     } else {
       parts.push('<a class="btn btn-outline-secondary btn-sm" title="View"'
         + ' href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-eye"></i></a>');
@@ -440,14 +445,17 @@ $(function () {
     // kept, because its voucher is in the books and a number that has been
     // in the books does not vanish.
     if (PERMS.del) {
-      if (r.status === "Draft") {
-        parts.push('<button class="btn btn-outline-danger btn-sm px-delete" title="Delete"'
-          + ' data-id="' + r.id + '" data-no="' + escapeHtml(r.expense_no)
-          + '"><i class="fas fa-trash"></i></button>');
-      } else if (r.status !== "Cancelled") {
+      // Cancel is still the gentler ending for something already posted, so
+      // it is offered first; Delete is beside it for when the entry should
+      // not have existed at all.
+      if (r.status === "Posted") {
         parts.push('<button class="btn btn-outline-danger btn-sm px-cancel" title="Cancel"'
           + ' data-id="' + r.id + '"><i class="fas fa-ban"></i></button>');
       }
+      parts.push('<button class="btn btn-outline-danger btn-sm px-delete" title="Delete"'
+        + ' data-id="' + r.id + '" data-no="' + escapeHtml(r.expense_no)
+        + '" data-status="' + r.status + '" data-voucher="'
+        + escapeHtml(r.voucher_no || '') + '"><i class="fas fa-trash"></i></button>');
     }
     return '<div class="d-flex gap-1 justify-content-center">' + parts.join("") + '</div>';
   }
@@ -607,19 +615,32 @@ $(function () {
   $("#petty-expense-table").on("click", ".px-delete", function () {
     const id = this.dataset.id;
     const no = this.dataset.no;
+    const status = this.dataset.status;
+    const voucher = this.dataset.voucher;
+    // What it costs depends on whether it reached the books.
+    const why = status === "Draft"
+      ? "It is still a draft, so nothing has been posted and nothing has to be"
+        + " reversed \u2014 but it cannot be got back."
+      : "Voucher " + (voucher || "\u2014") + " will be removed from the books with"
+        + " it, so the money goes back to the account it left and the entry"
+        + " leaves the journal. Cancelling instead would reverse the money and"
+        + " keep the entry, marked cancelled.";
     bimsConfirm(
-      no + " will be deleted.\n\n"
-      + "It is still a draft, so nothing has been posted and nothing has"
-      + " to be reversed \u2014 but it cannot be got back.",
-      { title: "Delete this draft?", confirmText: "Delete",
-        cancelText: "Keep it", variant: "danger" }
+      no + " will be deleted.\n\n" + why,
+      { title: status === "Draft" ? "Delete this draft?"
+                                  : "Delete this " + status.toLowerCase() + " expense?",
+        confirmText: "Delete", cancelText: "Keep it", variant: "danger" }
     ).then(function (ok) {
       if (!ok) { return; }
       $.ajax({
         url: "/api/petty-expenses/" + id + "/delete/",
         type: "POST",
         headers: { "X-CSRFToken": CSRF },
-        success: function () { showToast("success", no + " deleted."); load(); },
+        success: function (out) {
+          showToast("success", no + " deleted."
+            + (out.voucher_no ? " " + out.voucher_no + " is off the books." : ""));
+          load();
+        },
         error: function (xhr) {
           showToast("danger", (xhr.responseJSON || {}).error || "Could not delete it.");
         }
