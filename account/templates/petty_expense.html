@@ -156,6 +156,20 @@
     </div>
   </div>
   <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#f1ebfd;--px-fg:#6941c6"><i class="fas fa-calendar-alt"></i></span>
+    <div class="px-filter-body">
+      <label for="px-month">Month</label>
+      <select id="px-month" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#e6f6fe;--px-fg:#0369a1"><i class="fas fa-calendar"></i></span>
+    <div class="px-filter-body">
+      <label for="px-year">Year</label>
+      <select id="px-year" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter">
     <span class="px-filter-icon" style="--px-bg:#e8f1fd;--px-fg:#1d6fe0"><i class="fas fa-code-branch"></i></span>
     <div class="px-filter-body">
       <label for="px-branch">Branch</label>
@@ -251,8 +265,6 @@
           <tr>
             <th>Expense No.</th>
             <th>Date</th>
-            <th class="ds-mid">Month</th>
-            <th class="ds-mid">Year</th>
             <th>Branch</th>
             <th>Farm / Shed</th>
             <th>Category</th>
@@ -297,11 +309,6 @@ $(function () {
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const none = () => '<span class="px-none">—</span>';
 
-  function monthOf(iso) {
-    const d = new Date(iso + "T00:00:00");
-    return isNaN(d) ? "" : d.toLocaleDateString(undefined, { month: "long" });
-  }
-
   function fmtDate(iso) {
     if (!iso) { return ""; }
     const d = new Date(iso + "T00:00:00");
@@ -316,6 +323,13 @@ $(function () {
          + escapeHtml(String(r[label] || "")) + '</option>').join("");
   }
   fill("px-branch", M.branches, "id", "branch_name");
+  // Named, not numbered: nobody asks for the expenses of month 9.
+  el("px-month").innerHTML = '<option value="">All</option>' +
+    Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '">'
+      + new Date(2000, i, 1).toLocaleDateString(undefined, { month: "long" })
+      + '</option>').join("");
+  el("px-year").innerHTML = '<option value="">All</option>' +
+    (M.years || []).map(y => '<option value="' + y + '">' + y + '</option>').join("");
   fill("px-centre", M.centres, "id", "name");
   fill("px-mode", M.modes, "id", "name");
   fill("px-paid-from", M.paid_from, "id", "label");
@@ -346,6 +360,8 @@ $(function () {
     const add = (k, v) => { if (v) { p.set(k, v); } };
     add("from", el("px-from").value);
     add("to", el("px-to").value);
+    add("month", el("px-month").value);
+    add("year", el("px-year").value);
     add("branch", el("px-branch").value);
     add("farm", el("px-farm").value);
     add("centre", el("px-centre").value);
@@ -419,10 +435,19 @@ $(function () {
       parts.push('<button class="btn btn-outline-primary btn-sm px-copy" title="Duplicate"'
         + ' data-id="' + r.id + '"><i class="fas fa-copy"></i></button>');
     }
-    // A posted expense is reversed, never removed; a cancelled one is done with.
-    if (r.status !== "Cancelled" && PERMS.del) {
-      parts.push('<button class="btn btn-outline-danger btn-sm px-cancel" title="Cancel"'
-        + ' data-id="' + r.id + '"><i class="fas fa-ban"></i></button>');
+    // Two different endings, and they are not interchangeable. A draft has
+    // posted nothing, so it can simply go. A posted expense is reversed and
+    // kept, because its voucher is in the books and a number that has been
+    // in the books does not vanish.
+    if (PERMS.del) {
+      if (r.status === "Draft") {
+        parts.push('<button class="btn btn-outline-danger btn-sm px-delete" title="Delete"'
+          + ' data-id="' + r.id + '" data-no="' + escapeHtml(r.expense_no)
+          + '"><i class="fas fa-trash"></i></button>');
+      } else if (r.status !== "Cancelled") {
+        parts.push('<button class="btn btn-outline-danger btn-sm px-cancel" title="Cancel"'
+          + ' data-id="' + r.id + '"><i class="fas fa-ban"></i></button>');
+      }
     }
     return '<div class="d-flex gap-1 justify-content-center">' + parts.join("") + '</div>';
   }
@@ -439,8 +464,6 @@ $(function () {
         + '<td data-order="' + r.date + '">' + fmtDate(r.date) + '</td>'
         // Sorted on the number, read as the name: a column of "September"
         // that sorts alphabetically is worse than no column.
-        + '<td data-order="' + r.date.slice(0, 7) + '">' + monthOf(r.date) + '</td>'
-        + '<td data-order="' + r.date.slice(0, 4) + '">' + r.date.slice(0, 4) + '</td>'
         + '<td class="px-branch">' + (escapeHtml(r.branch) || none()) + '</td>'
         + '<td class="px-place">' + (escapeHtml(place) || none()) + '</td>'
         + '<td>' + (escapeHtml(r.category) || none())
@@ -483,6 +506,7 @@ $(function () {
       + String(d.getDate()).padStart(2, "0");
     const today = new Date();
     el("px-from").value = ""; el("px-to").value = "";
+    el("px-month").value = ""; el("px-year").value = "";
     el("px-status").value = ""; el("px-paid-from").value = "";
     // Letting a figure go puts the register back to the window it opened on,
     // which is what the press replaced.
@@ -580,14 +604,55 @@ $(function () {
     });
   });
 
+  $("#petty-expense-table").on("click", ".px-delete", function () {
+    const id = this.dataset.id;
+    const no = this.dataset.no;
+    bimsConfirm(
+      no + " will be deleted.\n\n"
+      + "It is still a draft, so nothing has been posted and nothing has"
+      + " to be reversed \u2014 but it cannot be got back.",
+      { title: "Delete this draft?", confirmText: "Delete",
+        cancelText: "Keep it", variant: "danger" }
+    ).then(function (ok) {
+      if (!ok) { return; }
+      $.ajax({
+        url: "/api/petty-expenses/" + id + "/delete/",
+        type: "POST",
+        headers: { "X-CSRFToken": CSRF },
+        success: function () { showToast("success", no + " deleted."); load(); },
+        error: function (xhr) {
+          showToast("danger", (xhr.responseJSON || {}).error || "Could not delete it.");
+        }
+      });
+    });
+  });
+
   $("#petty-expense-table").on("click", ".px-copy", function () {
     window.location.href = "/petty-expenses/new/?copy=" + this.dataset.id;
   });
 
   // ---- the strip ----------------------------------------------------------
   $("#px-branch").on("change", narrowFarms);
-  ["px-from", "px-to", "px-branch", "px-farm", "px-centre", "px-account",
-   "px-paid-from", "px-mode", "px-status", "px-min", "px-max"].forEach(function (id) {
+
+  // A period is asked for one way at a time. Naming a month or a year drops
+  // the date range, and typing a date range drops the month and the year --
+  // otherwise the strip shows two answers and the register obeys one.
+  $("#px-month, #px-year").on("change", function () {
+    if (el("px-month").value || el("px-year").value) {
+      el("px-from").value = "";
+      el("px-to").value = "";
+    }
+  });
+  $("#px-from, #px-to").on("change", function () {
+    if (this.value) {
+      el("px-month").value = "";
+      el("px-year").value = "";
+      $("#px-month, #px-year").trigger("change.select2");
+    }
+  });
+  ["px-from", "px-to", "px-month", "px-year", "px-branch", "px-farm",
+   "px-centre", "px-account", "px-paid-from", "px-mode", "px-status",
+   "px-min", "px-max"].forEach(function (id) {
     el(id).addEventListener("change", function () { kpi = ""; load(); });
   });
   let typing;

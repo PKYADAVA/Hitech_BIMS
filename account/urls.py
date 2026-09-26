@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/petty-expenses/<int:id>/save/', petty_api.petty_expense_save, name='api_petty_expense_save'),
     path('api/petty-expenses/<int:id>/post/', petty_api.petty_expense_post, name='api_petty_expense_post'),
     path('api/petty-expenses/<int:id>/cancel/', petty_api.petty_expense_cancel, name='api_petty_expense_cancel'),
+    path('api/petty-expenses/<int:id>/delete/', petty_api.petty_expense_delete, name='api_petty_expense_delete'),
     path('api/petty-expenses/<int:id>/attach/', petty_api.petty_expense_attach, name='api_petty_expense_attach'),
     path('api/petty-expenses/<int:id>/attach/<int:attachment_id>/delete/',
          petty_api.petty_expense_detach, name='api_petty_expense_detach'),

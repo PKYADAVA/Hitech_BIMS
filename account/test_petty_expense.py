@@ -410,6 +410,42 @@ class EndpointTests(PettyExpenseTestCase):
         self.assertEqual(
             self.client.get(f"/petty-expenses/{created['id']}/edit/").status_code, 200)
 
+    def test_a_draft_can_be_deleted_and_a_posted_expense_cannot(self):
+        self.fund_cash(5000)
+        draft = self.post_json("/api/petty-expenses/save/", self.payload()).json()
+        gone = self.client.post(f"/api/petty-expenses/{draft['id']}/delete/")
+        self.assertEqual(gone.status_code, 200, gone.content)
+        self.assertFalse(PettyExpense.objects.filter(pk=draft["id"]).exists())
+
+        posted = self.post_json("/api/petty-expenses/save/",
+                                self.payload(post=True)).json()
+        refused = self.client.post(f"/api/petty-expenses/{posted['id']}/delete/")
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("cancelled, never deleted", refused.json()["error"])
+        self.assertTrue(PettyExpense.objects.filter(pk=posted["id"]).exists())
+
+    def test_a_cancelled_expense_stays_on_the_record(self):
+        """It is the record of something that happened, and of it being undone."""
+        self.fund_cash(5000)
+        created = self.post_json("/api/petty-expenses/save/",
+                                 self.payload(post=True)).json()
+        self.post_json(f"/api/petty-expenses/{created['id']}/cancel/",
+                       json.dumps({"reason": "Wrong account"}))
+        refused = self.client.post(f"/api/petty-expenses/{created['id']}/delete/")
+        self.assertEqual(refused.status_code, 400)
+        self.assertTrue(PettyExpense.objects.filter(pk=created["id"]).exists())
+
+    def test_deleting_a_draft_takes_its_bills_with_it(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from account.models import PettyExpenseAttachment
+
+        created = self.post_json("/api/petty-expenses/save/", self.payload()).json()
+        bill = SimpleUploadedFile("bill.pdf", b"%PDF-1.4 x", content_type="application/pdf")
+        self.client.post(f"/api/petty-expenses/{created['id']}/attach/", {"files": [bill]})
+        self.client.post(f"/api/petty-expenses/{created['id']}/delete/")
+        self.assertEqual(PettyExpenseAttachment.objects.count(), 0)
+
     def test_a_bill_can_be_attached_and_only_a_draft_can_lose_it(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 

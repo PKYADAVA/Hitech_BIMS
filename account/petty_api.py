@@ -85,6 +85,10 @@ def _masters(user=None):
                       .order_by("display_order", "name").values("id", "name")),
         "mode_accounts": payment_mode_map("payment"),
         "uoms": list(UnitOfMeasurement.objects.order_by("name").values("id", "name")),
+        # The years the register can actually show, so the picker offers no
+        # year that would come back empty. This year is always offered.
+        "years": sorted({d.year for d in PettyExpense.objects.values_list(
+            "expense_date", flat=True)} | {timezone.localdate().year}, reverse=True),
     }
 
 
@@ -135,6 +139,11 @@ def petty_expense_rows(request):
         value = get.get(param)
         if value:
             qs = qs.filter(**{field: value})
+    # Month and year stand on their own: "September", or "2026", or both.
+    if get.get("month"):
+        qs = qs.filter(expense_date__month=get["month"])
+    if get.get("year"):
+        qs = qs.filter(expense_date__year=get["year"])
     if get.get("status"):
         qs = qs.filter(status=get["status"])
     if get.get("account"):
@@ -320,6 +329,32 @@ def petty_expense_cancel(request, id):
     except service.PettyExpenseError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     return JsonResponse({"status": expense.status})
+
+
+@login_required
+@require_POST
+def petty_expense_delete(request, id):
+    """Throw away a draft.
+
+    Only a draft: it has posted nothing, so nothing has to be unwound and no
+    number that appears in the books goes missing. A posted expense is
+    cancelled instead, which reverses its voucher and keeps the record, and a
+    cancelled one is already the record of something that happened.
+    """
+    if not user_can(request.user, "petty_expense_list", "delete"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    expense = get_object_or_404(PettyExpense, pk=id)
+    if expense.status != PettyExpense.STATUS_DRAFT:
+        return JsonResponse(
+            {"error": f"{expense.expense_no} is {expense.status.lower()}. "
+                      f"A posted expense is cancelled, never deleted."}, status=400)
+
+    # The bills go with it; nothing else refers to them.
+    for attachment in expense.attachments.all():
+        attachment.file.delete(save=False)
+    number = expense.expense_no
+    expense.delete()
+    return JsonResponse({"deleted": id, "expense_no": number})
 
 
 @login_required

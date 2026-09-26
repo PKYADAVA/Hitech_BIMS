@@ -314,6 +314,7 @@ MODULE_REGISTRY = [
                         "api_petty_expense_rows", "api_petty_expense_create",
                         "api_petty_expense_detail", "api_petty_expense_save",
                         "api_petty_expense_post", "api_petty_expense_cancel",
+                        "api_petty_expense_delete",
                         "api_petty_expense_attach", "api_petty_expense_detach",
                         "api_bank_cash_balance",
                     )),
