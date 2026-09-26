@@ -234,16 +234,79 @@ def petty_cash_movement(master, date_from=None, date_to=None):
     ledger = ledger_for_bank_cash(master)
     if ledger is None:
         return None
-    opening = journal.account_balance(ledger, date_to=date_from) if date_from else ZERO
-    lines = journal.account_ledger(ledger, date_from=date_from, date_to=date_to)
-    received = sum((Decimal(str(l.get("debit") or 0)) for l in lines), ZERO)
-    spent = sum((Decimal(str(l.get("credit") or 0)) for l in lines), ZERO)
+    ledger_report = journal.account_ledger(ledger, date_from=date_from,
+                                           date_to=date_to)
+    rows = ledger_report["rows"]
+    received = sum((Decimal(str(r["debit"] or 0)) for r in rows), ZERO)
+    spent = sum((Decimal(str(r["credit"] or 0)) for r in rows), ZERO)
     return {
-        "opening": opening,
+        "opening": Decimal(str(ledger_report["opening"] or 0)),
         "received": received,
         "spent": spent,
-        "current": journal.account_balance(ledger, date_to=date_to),
+        "current": Decimal(str(ledger_report["closing"] or 0)),
     }
+
+
+def statement(box, date_from=None, date_to=None, by_day=False):
+    """A cash box's statement: opening, each movement, and the running balance.
+
+    Built from the ledger's posted lines rather than from this module's own
+    rows, so money that reached the box another way -- an opening balance, a
+    correction in the journal -- is in the statement rather than missing from
+    it.
+    """
+    ledger = ledger_for_bank_cash(box)
+    if ledger is None:
+        return {"opening": 0, "received": 0, "spent": 0, "closing": 0, "rows": []}
+
+    # The ledger helper has already worked out the opening balance and the
+    # running one; recomputing them here would be a second answer to the same
+    # question, and the two would drift.
+    report = journal.account_ledger(ledger, date_from=date_from, date_to=date_to)
+    opening = Decimal(str(report["opening"] or 0))
+    balance = Decimal(str(report["closing"] or 0))
+
+    rows, received, spent = [], ZERO, ZERO
+    for line in report["rows"]:
+        debit = Decimal(str(line["debit"] or 0))
+        credit = Decimal(str(line["credit"] or 0))
+        received += debit
+        spent += credit
+        rows.append({
+            "kind": "entry",
+            "date": str(line["date"] or ""),
+            "voucher_no": line.get("voucher_no") or "",
+            "particulars": line.get("narration") or line.get("voucher_type") or "",
+            "debit": float(debit), "credit": float(credit),
+            "balance": float(line["balance"] or 0),
+        })
+
+    if by_day:
+        rows = _by_day(rows, opening)
+
+    return {"opening": float(opening), "received": float(received),
+            "spent": float(spent), "closing": float(balance), "rows": rows}
+
+
+def _by_day(rows, opening):
+    """One line per day, for someone who wants the shape rather than the detail."""
+    days, order = {}, []
+    for row in rows:
+        day = row["date"]
+        if day not in days:
+            days[day] = {"kind": "day", "date": day, "voucher_no": "",
+                         "particulars": "", "debit": 0.0, "credit": 0.0,
+                         "balance": 0.0, "count": 0}
+            order.append(day)
+        days[day]["debit"] += row["debit"]
+        days[day]["credit"] += row["credit"]
+        days[day]["balance"] = row["balance"]
+        days[day]["count"] += 1
+    for day in order:
+        entry = days[day]
+        entry["particulars"] = (f"{entry['count']} entries" if entry["count"] > 1
+                                else "1 entry")
+    return [days[day] for day in order]
 
 
 # --------------------------------------------------------------------------
@@ -414,9 +477,12 @@ def post(expense, user=None):
     if extra and rows:
         rows[0]["debit"] = Decimal(str(rows[0]["debit"])) + extra
 
+    # The cash line says who the money went to. It used to carry the bill
+    # number, which is already on the voucher and tells a cash-book reader
+    # nothing about what left the box.
     rows.append({"account": credit_ledger.pk, "cost_center": centre,
                  "debit": 0, "credit": expense.net_amount,
-                 "narration": expense.reference or expense.expense_no})
+                 "narration": (expense.paid_to_name or expense.expense_no)[:255]})
 
     # The narration the engine would write, and whether this one is still it.
     # The journal keeps both so the voucher screen can say which narrations

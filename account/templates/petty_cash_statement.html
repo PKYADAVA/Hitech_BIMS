@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Petty Cash Statement — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_report_subnavbar.html' with active_tab='petty_cash_statement' %}
+
+<style>
+  .pcs-page { display: flex; flex-direction: column; gap: .6rem; }
+  .pcs-head, .pcs-card, .pcs-filters, .pcs-tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; }
+  .pcs-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .pcs-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--success); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .pcs-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .pcs-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  .pcs-head-actions { margin-left: auto; display: flex; gap: .5rem; }
+
+  .pcs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: .5rem; }
+  .pcs-tile { padding: .45rem .7rem; }
+  .pcs-tile-label { font-size: .64rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .03em; color: var(--text-secondary); }
+  .pcs-tile-value { font-size: 1.05rem; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums; }
+  .pcs-in .pcs-tile-value { color: var(--success-text); }
+  .pcs-out .pcs-tile-value { color: var(--danger-text); }
+
+  .pcs-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .4rem; padding: .45rem; align-items: center; }
+  .pcs-filter { display: flex; align-items: center; gap: .4rem; min-width: 0;
+    border: 1px solid var(--border); border-radius: .45rem; padding: .25rem .4rem; }
+  .pcs-filter-icon { width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--px-bg); color: var(--px-fg); font-size: .7rem; }
+  .pcs-filter-body { flex: 1; min-width: 0; }
+  .pcs-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 0; line-height: 1.2; }
+  .pcs-filter .form-select, .pcs-filter .form-control {
+    border: 0; box-shadow: none; padding: 0; height: auto; min-height: 0;
+    font-size: .8rem; background-color: transparent; color: var(--text); }
+  .pcs-pair { display: flex; align-items: center; gap: .3rem; }
+  .pcs-pair .form-control { font-size: .76rem; }
+  .pcs-sep { font-size: .68rem; color: var(--text-muted); }
+
+  .pcs-card > .card-header { padding: .4rem .7rem; font-size: .8rem; }
+  #pcs-table th { font-size: .7rem; text-transform: uppercase; letter-spacing: .02em;
+    color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+    padding: .35rem .6rem; }
+  #pcs-table td { font-size: .8rem; padding: .3rem .6rem; vertical-align: middle;
+    white-space: nowrap; }
+  .pcs-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pcs-in-cell { color: var(--success-text); }
+  .pcs-out-cell { color: var(--danger-text); }
+  .pcs-running { font-weight: 600; }
+  .pcs-day td { background: var(--bg-subtle); font-weight: 600; }
+  .pcs-none { color: var(--text-muted); }
+  #pcs-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+</style>
+
+<div class="pcs-page">
+
+<div class="pcs-head">
+  <div class="pcs-head-icon"><i class="fas fa-cash-register"></i></div>
+  <div>
+    <div class="pcs-title">Petty Cash Statement</div>
+    <div class="pcs-sub">What went into the box, what came out, and what is left</div>
+  </div>
+  <div class="pcs-head-actions">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="pcs-print">
+      <i class="fas fa-print"></i> Print
+    </button>
+  </div>
+</div>
+
+<div class="pcs-tiles" id="pcs-tiles"></div>
+
+<div class="pcs-filters">
+  <div class="pcs-filter">
+    <span class="pcs-filter-icon" style="--px-bg:#e7f7ee;--px-fg:#067647"><i class="fas fa-wallet"></i></span>
+    <div class="pcs-filter-body">
+      <label for="pcs-box">Cash box</label>
+      <select id="pcs-box" class="form-select"></select>
+    </div>
+  </div>
+  <div class="pcs-filter" style="grid-column: span 2">
+    <span class="pcs-filter-icon" style="--px-bg:#e8f1fd;--px-fg:#1d6fe0"><i class="fas fa-calendar-day"></i></span>
+    <div class="pcs-filter-body">
+      <label for="pcs-from">Between</label>
+      <div class="pcs-pair">
+        <input type="date" id="pcs-from" class="form-control">
+        <span class="pcs-sep">to</span>
+        <input type="date" id="pcs-to" class="form-control">
+      </div>
+    </div>
+  </div>
+  <div class="pcs-filter">
+    <span class="pcs-filter-icon" style="--px-bg:#f1ebfd;--px-fg:#6941c6"><i class="fas fa-layer-group"></i></span>
+    <div class="pcs-filter-body">
+      <label for="pcs-group">Show</label>
+      <select id="pcs-group" class="form-select">
+        <option value="entry">Every entry</option>
+        <option value="day">One line per day</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card pcs-card">
+  <div class="card-header"><i class="fas fa-book"></i> Statement</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="pcs-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Voucher</th>
+            <th>Particulars</th>
+            <th class="pcs-num">In (&#8377;)</th>
+            <th class="pcs-num">Out (&#8377;)</th>
+            <th class="pcs-num">Balance (&#8377;)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+{{ boxes|json_script:"pcs-boxes" }}
+
+<script>
+$(function () {
+  const BOXES = JSON.parse(document.getElementById("pcs-boxes").textContent);
+  const el = id => document.getElementById(id);
+  const money = n => (Number(n) || 0).toLocaleString("en-IN",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = iso => {
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? iso
+      : d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  };
+
+  el("pcs-box").innerHTML = BOXES.map(
+    b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+  // A month to yesterday's close is the question people usually have.
+  const today = new Date();
+  const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+    + "-" + String(d.getDate()).padStart(2, "0");
+  el("pcs-from").value = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+  el("pcs-to").value = iso(today);
+
+  function load() {
+    const p = new URLSearchParams({ box: el("pcs-box").value,
+                                    from: el("pcs-from").value,
+                                    to: el("pcs-to").value,
+                                    group: el("pcs-group").value });
+    $.getJSON("{% url 'api_petty_cash_statement' %}?" + p.toString(), function (d) {
+      paintTiles(d);
+      paintRows(d);
+    });
+  }
+
+  function tile(label, value, cls) {
+    return '<div class="pcs-tile ' + (cls || "") + '">'
+      + '<div class="pcs-tile-label">' + escapeHtml(label) + '</div>'
+      + '<div class="pcs-tile-value">&#8377;' + money(value) + '</div></div>';
+  }
+
+  function paintTiles(d) {
+    el("pcs-tiles").innerHTML =
+      tile("Opening", d.opening)
+      + tile("Received", d.received, "pcs-in")
+      + tile("Spent", d.spent, "pcs-out")
+      + tile("Closing", d.closing);
+  }
+
+  function paintRows(d) {
+    const body = $("#pcs-table tbody").empty();
+    if (!d.rows.length) {
+      body.append('<tr><td colspan="6" class="pcs-none text-center py-3">'
+        + 'Nothing moved in or out of this box in that period.</td></tr>');
+    }
+    d.rows.forEach(function (r) {
+      body.append('<tr' + (r.kind === "day" ? ' class="pcs-day"' : '') + '>'
+        + '<td>' + fmt(r.date) + '</td>'
+        + '<td>' + (escapeHtml(r.voucher_no) || '<span class="pcs-none">—</span>') + '</td>'
+        + '<td>' + escapeHtml(r.particulars) + '</td>'
+        + '<td class="pcs-num pcs-in-cell">' + (r.debit ? money(r.debit) : "") + '</td>'
+        + '<td class="pcs-num pcs-out-cell">' + (r.credit ? money(r.credit) : "") + '</td>'
+        + '<td class="pcs-num pcs-running">' + money(r.balance) + '</td>'
+        + '</tr>');
+    });
+    $("#pcs-table tfoot").html('<tr>'
+      + '<td colspan="3">Closing balance</td>'
+      + '<td class="pcs-num pcs-in-cell">' + money(d.received) + '</td>'
+      + '<td class="pcs-num pcs-out-cell">' + money(d.spent) + '</td>'
+      + '<td class="pcs-num">' + money(d.closing) + '</td></tr>');
+  }
+
+  ["pcs-box", "pcs-from", "pcs-to", "pcs-group"].forEach(
+    id => el(id).addEventListener("change", load));
+  el("pcs-print").addEventListener("click", () => window.print());
+
+  load();
+});
+</script>
+{% endblock %}

@@ -522,6 +522,32 @@ def petty_expense_detach(request, id, attachment_id):
     return JsonResponse({"removed": attachment_id})
 
 
+@never_cache
+@login_required
+def petty_cash_statement(request):
+    """The page: a cash box, a period, and what moved."""
+    return render(request, "petty_cash_statement.html", {
+        "boxes": [{"id": row["id"], "label": row["label"]}
+                  for row in service.paid_from_accounts()],
+    })
+
+
+@login_required
+def petty_cash_statement_rows(request):
+    """Opening, every movement, and the running balance.
+
+    Read from the posted journal lines of the box's own ledger, so this agrees
+    with the ledger report and with the figure on the register by construction
+    rather than by reconciliation.
+    """
+    box = get_object_or_404(BankCashMaster, pk=_int(request.GET.get("box")))
+    date_from = parse_date(request.GET.get("from") or "")
+    date_to = parse_date(request.GET.get("to") or "")
+    movement = service.statement(box, date_from=date_from, date_to=date_to,
+                                 by_day=request.GET.get("group") == "day")
+    return JsonResponse(movement)
+
+
 @login_required
 def petty_cash_balance(request, id):
     """What is left in an account, and how a petty-cash one got there."""
