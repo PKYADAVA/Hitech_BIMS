@@ -81,8 +81,9 @@ def _masters(user=None):
         "centres": [c for c in centres if c["id"]],
         "categories": service.expense_categories(),
         "paid_from": service.paid_from_accounts(),
-        "modes": list(PaymentMode.objects.filter(is_active=True)
-                      .order_by("display_order", "name").values("id", "name")),
+        # Cash only, at both ends: a petty expense is money leaving the cash
+        # box, so the pickers offer nothing that could take it elsewhere.
+        "modes": service.cash_payment_modes(),
         "mode_accounts": payment_mode_map("payment"),
         "uoms": list(UnitOfMeasurement.objects.order_by("name").values("id", "name")),
         # The years the register can actually show, so the picker offers no

@@ -75,7 +75,11 @@ class PettyExpenseTestCase(TestCase):
         cls.bank_ledger = ledger_for_bank_cash(cls.bank)
 
         # A migration already seeds the usual modes.
-        cls.mode, _ = PaymentMode.objects.get_or_create(name="Cash")
+        cls.mode, _ = PaymentMode.objects.get_or_create(
+            name="Cash", defaults={"category": "Cash"})
+        if cls.mode.category != "Cash":
+            cls.mode.category = "Cash"
+            cls.mode.save(update_fields=["category"])
         cls.user = get_user_model().objects.create_superuser(
             username="pettytester", password="x", email="p@example.com")
 
@@ -186,12 +190,39 @@ class RefusalTests(PettyExpenseTestCase):
         expense.refresh_from_db()
         self.assertEqual(expense.status, PettyExpense.STATUS_DRAFT)
 
-    def test_a_bank_account_may_go_overdrawn_where_a_cash_box_may_not(self):
-        """There is no overdraft in a cash box; a bank account is the bank's
-        business, not this screen's."""
+    def test_a_bank_account_cannot_pay_a_petty_expense(self):
+        """Petty means the cash box. A bank payment carries the bank's own
+        reference and belongs in a payment voucher."""
         expense = self.make(lines=((300, 1),), paid_from=self.bank)
-        service.post(expense, user=self.user)
-        self.assertEqual(expense.status, PettyExpense.STATUS_POSTED)
+        with self.assertRaises(service.PettyExpenseError) as caught:
+            service.post(expense, user=self.user)
+        self.assertIn("bank account", str(caught.exception))
+        self.assertEqual(expense.status, PettyExpense.STATUS_DRAFT)
+
+    def test_the_bank_is_not_even_offered(self):
+        offered = {row["id"] for row in service.paid_from_accounts()}
+        self.assertIn(self.cash.pk, offered)
+        self.assertNotIn(self.bank.pk, offered)
+
+    def test_only_a_cash_payment_mode_is_offered(self):
+        """Read from the Payment Mode master's own category, not from names."""
+        from account.models import PaymentMode
+
+        card = PaymentMode.objects.create(name="Card (test)", category="Bank")
+        offered = {row["id"] for row in service.cash_payment_modes()}
+        self.assertIn(self.mode.pk, offered)
+        self.assertNotIn(card.pk, offered)
+
+    def test_a_bank_payment_mode_is_refused_even_on_a_cash_account(self):
+        from account.models import PaymentMode
+
+        self.fund_cash(5000)
+        expense = self.make(lines=((300, 1),))
+        expense.payment_mode = PaymentMode.objects.create(name="NEFT (test)",
+                                                          category="Bank")
+        expense.save()
+        problems = service.validate(expense)
+        self.assertTrue(any("not a cash payment mode" in p for p in problems), problems)
 
     def test_a_line_may_not_be_charged_to_a_group(self):
         self.fund_cash(5000)

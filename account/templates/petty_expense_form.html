@@ -108,16 +108,49 @@
   .pe-net strong { font-size: 1.25rem; font-weight: 700; color: var(--success-text);
     font-variant-numeric: tabular-nums; }
 
-  .pe-drop { border: 1px dashed var(--border-strong); border-radius: .5rem; padding: .7rem;
-    text-align: center; font-size: .78rem; color: var(--text-secondary); cursor: pointer;
-    background: var(--bg-subtle); }
+  /* Bills: the upload tile, then one thumbnail per file, then a tile to
+     add more -- all the same size, so the strip reads as one shelf. */
+  .pe-bills { display: flex; gap: .4rem; flex-wrap: wrap; align-items: stretch; }
+  .pe-drop { flex: 1 1 150px; min-width: 140px; border: 1px dashed var(--border-strong);
+    border-radius: .5rem; padding: .6rem; text-align: center; font-size: .76rem;
+    color: var(--text-secondary); cursor: pointer; background: var(--bg-subtle);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .15rem; }
   .pe-drop:hover { border-color: var(--primary); color: var(--primary); }
-  .pe-file { display: flex; align-items: center; gap: .4rem; font-size: .78rem;
-    padding: .2rem 0; }
-  .pe-tags { display: flex; gap: .3rem; flex-wrap: wrap; }
-  .pe-tag { font-size: .72rem; border: 1px solid var(--border); background: var(--surface);
-    border-radius: 999px; padding: .1rem .5rem; cursor: pointer; color: var(--text-secondary); }
-  .pe-tag.is-on { background: var(--primary-subtle); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .pe-drop .fa-cloud-arrow-up { font-size: 1.1rem; color: var(--primary); }
+  .pe-drop-note { font-size: .68rem; color: var(--text-muted); }
+  .pe-bill { position: relative; width: 72px; flex: 0 0 72px; text-align: center; }
+  .pe-bill-face { width: 72px; height: 62px; border: 1px solid var(--border);
+    border-radius: .45rem; background: var(--bg-subtle); display: flex;
+    align-items: center; justify-content: center; overflow: hidden; }
+  .pe-bill-face img { width: 100%; height: 100%; object-fit: cover; }
+  .pe-bill-face i { font-size: 1.3rem; color: var(--danger); }
+  .pe-bill-name { font-size: .64rem; color: var(--text-secondary); margin-top: .15rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pe-bill-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+    border-radius: 50%; border: 0; background: var(--danger); color: #fff;
+    font-size: .6rem; line-height: 1; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; padding: 0; }
+  .pe-bill-more { width: 72px; flex: 0 0 72px; height: 62px; border: 1px dashed var(--primary);
+    border-radius: .45rem; background: transparent; color: var(--primary);
+    font-size: 1rem; cursor: pointer; }
+
+  /* Tags: what this expense is tagged with, each removable, plus a way to
+     write one that is not on any list. */
+  .pe-tags { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+  .pe-tag { display: inline-flex; align-items: center; gap: .25rem; font-size: .72rem;
+    border: 1px solid var(--primary); background: var(--primary-subtle);
+    border-radius: 999px; padding: .1rem .5rem; color: var(--primary); font-weight: 600; }
+  .pe-tag button { border: 0; background: none; padding: 0; line-height: 1;
+    color: inherit; cursor: pointer; font-size: .7rem; opacity: .7; }
+  .pe-tag button:hover { opacity: 1; }
+  .pe-tag-add { font-size: .72rem; border: 1px dashed var(--border-strong);
+    background: transparent; border-radius: 999px; padding: .1rem .5rem;
+    cursor: pointer; color: var(--text-secondary); }
+  .pe-tag-add:hover { border-color: var(--primary); color: var(--primary); }
+  .pe-tag-input { font-size: .72rem; height: 24px; width: 120px; padding: 0 .4rem;
+    border: 1px solid var(--primary); border-radius: 999px;
+    background: var(--surface); color: var(--text); }
   .pe-problems { font-size: .78rem; color: var(--danger-text); }
   .pe-problems li { margin-bottom: .1rem; }
 </style>
@@ -239,14 +272,15 @@
       <div class="pe-body">
         <div class="row g-2">
           <div class="col-md-4">
-            <div class="pe-drop" id="pe-drop">
-              <i class="fas fa-paperclip"></i>
-              <div>Click to upload bills / photos</div>
-              <div style="font-size:.7rem">PDF, JPG, PNG — up to 5 MB each</div>
+            <div class="pe-bills" id="pe-bills">
+              <div class="pe-drop" id="pe-drop">
+                <i class="fas fa-cloud-arrow-up"></i>
+                <div>Click to upload bills / photos</div>
+                <div class="pe-drop-note">PDF, JPG, PNG (Max 5 MB)</div>
+              </div>
             </div>
             <input type="file" id="pe-files" class="d-none" multiple
                    accept="application/pdf,image/jpeg,image/png">
-            <div id="pe-file-list"></div>
           </div>
           <div class="col-md-5">
             <label class="pe-field" for="pe-narration"
@@ -257,13 +291,16 @@
             >{% if expense %}{{ expense.narration }}{% endif %}</textarea>
           </div>
           <div class="col-md-3">
-            <label style="font-size:.68rem;font-weight:600;color:var(--text-secondary)">Tags</label>
-            <div class="pe-tags" id="pe-tags">
-              <button type="button" class="pe-tag" data-tag="Farm">+ Farm</button>
-              <button type="button" class="pe-tag" data-tag="Vehicle">+ Vehicle</button>
-              <button type="button" class="pe-tag" data-tag="Maintenance">+ Maintenance</button>
-              <button type="button" class="pe-tag" data-tag="Emergency">+ Emergency</button>
-            </div>
+            <label style="font-size:.68rem;font-weight:600;color:var(--text-secondary)">Tags (Optional)</label>
+            <div class="pe-tags" id="pe-tags"></div>
+            <datalist id="pe-tag-suggestions">
+              <option value="Farm"></option>
+              <option value="Vehicle"></option>
+              <option value="Maintenance"></option>
+              <option value="Emergency"></option>
+              <option value="Stationery"></option>
+              <option value="Local Purchase"></option>
+            </datalist>
             <div class="pe-note">For searching and reporting — never an account.</div>
           </div>
         </div>
@@ -548,30 +585,122 @@ $(function () {
   el("pe-paid-to").addEventListener("input", narrate);
 
   // ---- tags -------------------------------------------------------------
+  // The chips are the tags this expense has, not a fixed vocabulary: the
+  // suggestions live in the input's own list, and anything else can be typed.
+  let tagList = [];
+  const tags = () => tagList.join(", ");
+
+  function drawTags() {
+    el("pe-tags").innerHTML = tagList.map((t, i) =>
+      '<span class="pe-tag">' + escapeHtml(t)
+      + '<button type="button" data-drop="' + i + '" title="Remove">'
+      + '<i class="fas fa-xmark"></i></button></span>').join("")
+      + '<button type="button" class="pe-tag-add" id="pe-tag-add">'
+      + '<i class="fas fa-plus"></i> Add Tag</button>';
+  }
+
+  function addTag(value) {
+    const tag = (value || "").trim().replace(/,/g, " ").slice(0, 40);
+    if (tag && !tagList.some(t => t.toLowerCase() === tag.toLowerCase())) {
+      tagList.push(tag);
+    }
+    drawTags();
+  }
+
   el("pe-tags").addEventListener("click", e => {
-    const tag = e.target.closest(".pe-tag");
-    if (tag) { tag.classList.toggle("is-on"); }
+    const drop = e.target.closest("[data-drop]");
+    if (drop) {
+      tagList.splice(Number(drop.dataset.drop), 1);
+      drawTags();
+      return;
+    }
+    if (!e.target.closest("#pe-tag-add")) { return; }
+    // The button becomes the box, so nothing moves on the line.
+    const box = document.createElement("input");
+    box.className = "pe-tag-input";
+    box.setAttribute("list", "pe-tag-suggestions");
+    box.placeholder = "Tag name";
+    el("pe-tag-add").replaceWith(box);
+    box.focus();
+    const done = () => { addTag(box.value); };
+    box.addEventListener("blur", done);
+    box.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); box.blur(); }
+      if (ev.key === "Escape") { box.value = ""; box.blur(); }
+    });
   });
-  // Tags the chips cannot show -- ones typed elsewhere, or carried in from
-  // the expense being copied -- are kept rather than quietly dropped.
-  let carriedTags = [];
-  const tags = () => carriedTags
-    .concat([...el("pe-tags").querySelectorAll(".pe-tag.is-on")].map(t => t.dataset.tag))
-    .join(", ");
+
+  drawTags();
 
   // ---- attachments ------------------------------------------------------
-  let pending = [];
+  // Two kinds sit on the same shelf: files chosen here and not yet sent, and
+  // bills already on the expense. Both show as a thumbnail; removing the
+  // first is local, removing the second asks the server.
+  let pending = [];      // {file, url} chosen in this session
+  let attached = [];     // {id, name, url, type} already saved
+
   el("pe-drop").addEventListener("click", () => el("pe-files").click());
+
   el("pe-files").addEventListener("change", function () {
-    pending = pending.concat([...this.files]);
-    el("pe-file-list").innerHTML = pending.map(
-      f => `<div class="pe-file"><i class="fas fa-paperclip"></i>${escapeHtml(f.name)}</div>`).join("");
+    [...this.files].forEach(file => {
+      pending.push({ file: file,
+                     url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" });
+    });
+    this.value = "";                 // the same file twice still fires change
+    drawBills();
+  });
+
+  function billTile(name, url, isImage, handler, index) {
+    return '<div class="pe-bill"><div class="pe-bill-face">'
+      + (isImage && url ? '<img src="' + url + '" alt="">'
+                        : '<i class="fas fa-file-pdf"></i>')
+      + '</div><div class="pe-bill-name" title="' + escapeHtml(name) + '">'
+      + escapeHtml(name) + '</div>'
+      + '<button type="button" class="pe-bill-x" data-' + handler + '="' + index
+      + '" title="Remove"><i class="fas fa-xmark"></i></button></div>';
+  }
+
+  function drawBills() {
+    const shelf = el("pe-bills");
+    [...shelf.querySelectorAll(".pe-bill, .pe-bill-more")].forEach(n => n.remove());
+    attached.forEach((a, i) => shelf.insertAdjacentHTML("beforeend",
+      billTile(a.name, a.url, /image/.test(a.type || ""), "saved", i)));
+    pending.forEach((p, i) => shelf.insertAdjacentHTML("beforeend",
+      billTile(p.file.name, p.url, /^image\//.test(p.file.type), "pending", i)));
+    if (attached.length || pending.length) {
+      shelf.insertAdjacentHTML("beforeend",
+        '<button type="button" class="pe-bill-more" id="pe-bill-more" '
+        + 'title="Add another"><i class="fas fa-plus"></i></button>');
+    }
+  }
+
+  el("pe-bills").addEventListener("click", async e => {
+    if (e.target.closest("#pe-bill-more")) { el("pe-files").click(); return; }
+    const gone = e.target.closest("[data-pending]");
+    if (gone) {
+      pending.splice(Number(gone.dataset.pending), 1);
+      drawBills();
+      return;
+    }
+    const saved = e.target.closest("[data-saved]");
+    if (!saved) { return; }
+    const bill = attached[Number(saved.dataset.saved)];
+    const r = await fetch(
+      `/api/petty-expenses/${EXPENSE_ID}/attach/${bill.id}/delete/`,
+      { method: "POST", headers: { "X-CSRFToken": CSRF } });
+    if (!r.ok) {
+      const out = await r.json();
+      window.showToast("danger", out.error || "Could not remove it.");
+      return;
+    }
+    attached.splice(Number(saved.dataset.saved), 1);
+    drawBills();
   });
 
   async function sendFiles(id) {
     if (!pending.length) { return; }
     const body = new FormData();
-    pending.forEach(f => body.append("files", f));
+    pending.forEach(p => body.append("files", p.file));
     const r = await fetch(`/api/petty-expenses/${id}/attach/`, {
       method: "POST", headers: { "X-CSRFToken": CSRF }, body });
     const out = await r.json();
@@ -579,7 +708,7 @@ $(function () {
       window.showToast("warning", out.refused.join(" "));
     }
     pending = [];
-    el("pe-file-list").innerHTML = "";
+    drawBills();
   }
 
   // Rendered by the template, which is also what sets the cookie: read from
@@ -698,12 +827,12 @@ $(function () {
       narrationTouched = true;
     }
 
-    carriedTags = [];
-    (d.tags || "").split(",").map(t => t.trim()).filter(Boolean).forEach(wanted => {
-      const chip = [...el("pe-tags").querySelectorAll(".pe-tag")]
-        .find(c => (c.dataset.tag || "").toLowerCase() === wanted.toLowerCase());
-      if (chip) { chip.classList.add("is-on"); } else { carriedTags.push(wanted); }
-    });
+    tagList = (d.tags || "").split(",").map(t => t.trim()).filter(Boolean);
+    drawTags();
+
+    // A copy takes the spend, not the bills: they belong to the original.
+    attached = asCopy ? [] : (d.attachments || []);
+    drawBills();
 
     body.innerHTML = "";
     d.items.forEach(item => {

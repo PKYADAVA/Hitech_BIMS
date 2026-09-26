@@ -28,6 +28,8 @@ TAG = "sample"
 FUNDING_REFERENCE = "SMP-FUND"
 
 # days ago, sub-category code, [(what, qty, rate)], paid to, mode, cash?, farm, shed, extras
+# Every row pays cash: a petty expense leaves the cash box, and the service
+# refuses anything else.
 ROWS = [
     (42, "640005", [("Charcoal for brooding", 12, 420)],
      "Ram Fuel Depot", "Cash", True, 0, 0, {}),
@@ -47,13 +49,13 @@ ROWS = [
     (12, "610004", [("Daily entry registers", 10, 65)],
      "Bahraich Stationers", "Cash", True, None, None, {"adjustment": 50}),
     (9, "670001", [("Farm electricity bill, August", 1, 3480)],
-     "UPPCL", "Bank Transfer", False, 1, None, {}),
+     "UPPCL", "Cash", True, 1, None, {}),
     (6, "610005", [("Broadband, September", 1, 1180)],
-     "Airtel", "UPI", False, None, None, {}),
+     "Airtel", "Cash", True, None, None, {}),
     (3, "670002", [("Water tanker", 2, 700)],
      "Singh Water Supply", "Cash", True, 0, None, {}),
     (2, "630001", [("Cheque book and quarterly charges", 1, 236)],
-     "HDFC Bank", "Bank Transfer", False, None, None, {}),
+     "HDFC Bank", "Cash", True, None, None, {}),
 ]
 
 # Entered, not yet posted -- what a register looks like on a working morning.

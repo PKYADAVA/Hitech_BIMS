@@ -75,14 +75,20 @@ def expense_categories(profile=None):
     return sorted(groups.values(), key=lambda g: g["name"])
 
 
-def paid_from_accounts():
-    """The Bank/Cash Master accounts, with the balance of each one's ledger.
+def paid_from_accounts(cash_only=True):
+    """The accounts a petty expense can be paid from, with each one's balance.
 
-    The balance comes from the ledger, not from a column kept here: one place
-    holds what an account is worth, and it is the place the reports read.
+    Cash only by default, because that is what "petty" means here: money out
+    of a cash box. Anything paid by bank belongs in a payment voucher, where
+    it will carry the bank's own reference. The balance comes from the ledger,
+    not from a column kept here: one place holds what an account is worth, and
+    it is the place the reports read.
     """
+    masters = BankCashMaster.objects.all().order_by("-is_cash", "code")
+    if cash_only:
+        masters = masters.filter(is_cash=True)
     rows = []
-    for master in BankCashMaster.objects.all().order_by("-is_cash", "code"):
+    for master in masters:
         ledger = ledger_for_bank_cash(master)
         rows.append({
             "id": master.pk,
@@ -92,6 +98,17 @@ def paid_from_accounts():
             "balance": float(journal.account_balance(ledger)) if ledger else None,
         })
     return rows
+
+
+def cash_payment_modes():
+    """The payment modes that mean cash, as the Payment Mode master defines it.
+
+    Categorised there as Cash -- not matched on the name, so renaming a mode
+    or adding a second cash mode needs no change here.
+    """
+    from account.models import PaymentMode
+    return list(PaymentMode.objects.filter(is_active=True, category="Cash")
+                .order_by("display_order", "name").values("id", "name"))
 
 
 def _is_cash(master):
@@ -219,6 +236,15 @@ def validate(expense, items=None):
         elif covered.state != "Open":
             problems.append(f"The financial year covering {expense.expense_date} "
                             f"is {covered.state.lower()}, so nothing can be posted into it.")
+
+    if expense.paid_from_id and not _is_cash(expense.paid_from):
+        problems.append(f"{expense.paid_from} is a bank account. A petty expense "
+                        f"is paid out of a cash box; anything paid by bank belongs "
+                        f"in a payment voucher.")
+    if (expense.payment_mode_id
+            and getattr(expense.payment_mode, "category", "Cash") != "Cash"):
+        problems.append(f"{expense.payment_mode.name} is not a cash payment mode. "
+                        f"A petty expense leaves the cash box.")
 
     if expense.paid_from_id:
         ledger = ledger_for_bank_cash(expense.paid_from)
