@@ -24,12 +24,24 @@
   .pe-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
   .pe-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
 
+  /* The decision bar. Sticky, because on a laptop the last section sits
+     below the fold and a Save button you have to scroll back to is a Save
+     button people miss. */
+  .pe-foot { position: sticky; bottom: 0; z-index: 3;
+    display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: .6rem; padding: .5rem .7rem; margin-top: .6rem;
+    box-shadow: 0 -2px 8px rgba(16, 32, 56, .06); }
+
   .pe-posted-note { background: var(--warning-subtle); color: var(--warning-text);
     border: 1px solid var(--border); border-radius: .6rem; padding: .4rem .7rem;
     font-size: .78rem; margin-bottom: .6rem; }
 
   .pe-grid { display: grid; grid-template-columns: 1fr 320px; gap: .6rem;
     align-items: start; }
+  /* Without this a grid item refuses to go below its content's minimum, and
+     one wide card drags the whole form past the edge of the window. */
+  .pe-grid > * { min-width: 0; }
   @media (max-width: 1199.98px) { .pe-grid { grid-template-columns: 1fr; } }
   /* Where and what it is runs across the top: it is the header of the whole
      entry, not of one column. The summary then starts at the next row, which
@@ -49,6 +61,17 @@
 
   .pe-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: .5rem .6rem; }
+  /* Narrower screens: the fields get shorter rather than the form getting
+     wider than the window. */
+  @media (max-width: 1440px) {
+    .pe-grid { grid-template-columns: 1fr 290px; }
+    .pe-fields { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 1300px) {
+    .pe-grid { grid-template-columns: 1fr 260px; }
+    .pe-fields { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+      gap: .4rem .45rem; }
+  }
   .pe-field label { display: block; font-size: .68rem; font-weight: 600;
     color: var(--text-secondary); margin-bottom: .1rem; }
   .pe-field .form-control, .pe-field .form-select { height: 32px; font-size: .84rem; }
@@ -104,17 +127,6 @@
   <div>
     <div class="pe-title">{% if expense %}{{ expense.expense_no }}{% else %}Petty Expense{% endif %}</div>
     <div class="pe-sub">Record and manage small cash and local operating expenses.</div>
-  </div>
-  <div class="pe-head-actions">
-    <a href="{% url 'petty_expense_list' %}" class="btn btn-outline-secondary btn-sm">
-      <i class="fas fa-list"></i> View List
-    </a>
-    <button type="button" class="btn btn-secondary btn-sm" id="pe-draft">
-      <i class="fas fa-floppy-disk"></i> Save Draft
-    </button>
-    <button type="button" class="btn btn-success btn-sm" id="pe-post">
-      <i class="fas fa-check"></i> Save &amp; Post
-    </button>
   </div>
 </div>
 
@@ -294,6 +306,18 @@
       </div>
     </section>
   </aside>
+</div>
+
+<div class="pe-foot">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="pe-cancel">
+      <i class="fas fa-xmark"></i> Cancel
+    </button>
+    <button type="button" class="btn btn-primary btn-sm" id="pe-draft">
+      <i class="fas fa-floppy-disk"></i> Save Draft
+    </button>
+    <button type="button" class="btn btn-success btn-sm" id="pe-post">
+      <i class="fas fa-check"></i> Save &amp; Post
+    </button>
 </div>
 
 {{ masters|json_script:"pe-masters" }}
@@ -623,6 +647,24 @@ $(function () {
         : " saved as a draft."));
     window.location.href = "{% url 'petty_expense_list' %}";
   }
+
+  // ---- leaving without saving -------------------------------------------
+  // Asked about only when there is something to lose: a form nobody has
+  // touched should close on one click, not two.
+  let touched = false;
+  document.querySelector(".pe-grid").addEventListener("input", () => { touched = true; });
+  document.querySelector(".pe-grid").addEventListener("change", () => { touched = true; });
+
+  el("pe-cancel").addEventListener("click", async () => {
+    const list = "{% url 'petty_expense_list' %}";
+    if (!touched) { window.location.href = list; return; }
+    const ok = await window.bimsConfirm(
+      "Anything typed here will be lost.\n\nNothing has been saved yet.",
+      { title: EXPENSE_ID ? "Leave without saving your changes?"
+                          : "Leave without saving this expense?",
+        confirmText: "Leave", cancelText: "Stay", variant: "danger" });
+    if (ok) { window.location.href = list; }
+  });
 
   el("pe-draft").addEventListener("click", () => save(false));
   el("pe-post").addEventListener("click", () => save(true));
