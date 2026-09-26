@@ -274,6 +274,11 @@
 
 </div>
 
+<!-- One picker for the whole register: the row that opened it is remembered
+     rather than an input being rendered per row. -->
+<input type="file" id="px-files" class="d-none" multiple
+       accept="application/pdf,image/jpeg,image/png">
+
 {{ masters|json_script:"px-masters" }}
 
 <script>
@@ -395,6 +400,14 @@ $(function () {
       parts.push('<a class="btn btn-outline-secondary btn-sm" title="View"'
         + ' href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-eye"></i></a>');
     }
+    // A bill often arrives after the expense is entered, and sometimes after
+    // it is posted, so attaching one is not limited to a draft. A cancelled
+    // expense is done with, and takes no more evidence.
+    if (r.status !== "Cancelled" && PERMS.edit) {
+      parts.push('<button class="btn btn-outline-info btn-sm px-upload"'
+        + ' title="Attach a bill" data-id="' + r.id + '" data-no="'
+        + escapeHtml(r.expense_no) + '"><i class="fas fa-paperclip"></i></button>');
+    }
     if (PERMS.add) {
       parts.push('<button class="btn btn-outline-primary btn-sm px-copy" title="Duplicate"'
         + ' data-id="' + r.id + '"><i class="fas fa-copy"></i></button>');
@@ -515,6 +528,41 @@ $(function () {
           showToast("danger", (xhr.responseJSON || {}).error || "Could not cancel it.");
         }
       });
+    });
+  });
+
+  // ---- attaching a bill from the register --------------------------------
+  let attachTo = null;
+  $("#petty-expense-table").on("click", ".px-upload", function () {
+    attachTo = { id: this.dataset.id, no: this.dataset.no };
+    const picker = el("px-files");
+    picker.value = "";              // the same file twice still fires change
+    picker.click();
+  });
+
+  el("px-files").addEventListener("change", function () {
+    if (!attachTo || !this.files.length) { return; }
+    const form = new FormData();
+    [...this.files].forEach(f => form.append("files", f));
+    const target = attachTo;
+    attachTo = null;
+    $.ajax({
+      url: "/api/petty-expenses/" + target.id + "/attach/",
+      type: "POST", data: form, processData: false, contentType: false,
+      headers: { "X-CSRFToken": CSRF },
+      success: function (out) {
+        const kept = (out.saved || []).length;
+        showToast("success", kept + (kept === 1 ? " bill" : " bills")
+          + " attached to " + target.no + ".");
+        // Some accepted, some not: the ones that were not are named.
+        (out.refused || []).forEach(why => showToast("warning", why));
+        load();
+      },
+      error: function (xhr) {
+        const out = xhr.responseJSON || {};
+        ((out.refused || []).length ? out.refused : [out.error || "Could not attach it."])
+          .forEach(why => showToast("danger", why));
+      }
     });
   });
 
