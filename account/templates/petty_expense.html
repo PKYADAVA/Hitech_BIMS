@@ -51,6 +51,17 @@
     line-height: 1.25; font-variant-numeric: tabular-nums; }
   .px-kpi-value.is-low { color: var(--danger-text); }
   .px-kpi.is-low { border-color: var(--danger); }
+
+  /* Add Cash: two columns, so six fields are four rows rather than six, and
+     the box is read across instead of scrolled down. */
+  .px-cash-dialog { max-width: 620px; }
+  .px-cash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .7rem; }
+  @media (max-width: 575.98px) { .px-cash-grid { grid-template-columns: 1fr; } }
+  .px-cash-grid .form-label { font-size: .68rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: .1rem; }
+  .px-cash-grid .px-none { font-size: .68rem; line-height: 1.25; margin-top: .1rem; }
+  #px-cash-modal .modal-body { padding: .7rem .9rem; }
+  #px-cash-modal .modal-header, #px-cash-modal .modal-footer { padding: .5rem .9rem; }
   .px-kpi-note.is-low { color: var(--danger-text); font-weight: 600; }
   .px-kpi-note { display: block; font-size: .64rem; color: var(--text-muted); line-height: 1.2; }
 
@@ -173,42 +184,42 @@
 <!-- Putting money into the box. A contra, so it is the journal that moves it
      and this is only the form that asks. -->
 <div class="modal fade" id="px-cash-modal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-sm">
+  <div class="modal-dialog modal-dialog-centered px-cash-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="fas fa-money-bill-transfer me-2"></i>Add cash to the box</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="mb-2">
-          <label class="form-label" for="px-cash-box">Into</label>
-          <select id="px-cash-box" class="form-select form-select-sm"></select>
-          <div class="px-none" id="px-cash-note" style="font-size:.72rem"></div>
-        </div>
-        <div class="mb-2">
-          <label class="form-label" for="px-cash-from">From</label>
-          <select id="px-cash-from" class="form-select form-select-sm"></select>
-        </div>
-        <div class="mb-2">
-          <label class="form-label" for="px-cash-amount">Amount (&#8377;)</label>
-          <input type="number" step="0.01" min="0" id="px-cash-amount"
-                 class="form-control form-control-sm">
-        </div>
-        <div class="mb-2">
-          <label class="form-label" for="px-cash-date">Date</label>
-          <input type="date" id="px-cash-date" class="form-control form-control-sm">
-        </div>
-        <div class="mb-2">
-          <label class="form-label" for="px-cash-ref">Reference</label>
-          <input type="text" id="px-cash-ref" class="form-control form-control-sm"
-                 placeholder="Cheque / slip no.">
-        </div>
-        <div>
-          <label class="form-label" for="px-cash-remark">Remark</label>
-          <textarea id="px-cash-remark" class="form-control form-control-sm" rows="2"
-                    placeholder="Why the box is being topped up"></textarea>
-          <div class="px-none" style="font-size:.7rem">
-            Goes onto the voucher, so it shows in the statement.
+        <div class="px-cash-grid">
+          <div>
+            <label class="form-label" for="px-cash-box">Into</label>
+            <select id="px-cash-box" class="form-select form-select-sm"></select>
+            <div class="px-none" id="px-cash-note"></div>
+          </div>
+          <div>
+            <label class="form-label" for="px-cash-from">From</label>
+            <select id="px-cash-from" class="form-select form-select-sm"></select>
+          </div>
+          <div>
+            <label class="form-label" for="px-cash-amount">Amount (&#8377;)</label>
+            <input type="number" step="0.01" min="0" id="px-cash-amount"
+                   class="form-control form-control-sm">
+          </div>
+          <div>
+            <label class="form-label" for="px-cash-date">Date</label>
+            <input type="date" id="px-cash-date" class="form-control form-control-sm">
+          </div>
+          <div>
+            <label class="form-label" for="px-cash-ref">Reference</label>
+            <input type="text" id="px-cash-ref" class="form-control form-control-sm"
+                   placeholder="Cheque / slip no.">
+          </div>
+          <div>
+            <label class="form-label" for="px-cash-remark">Remark</label>
+            <input type="text" id="px-cash-remark" class="form-control form-control-sm"
+                   placeholder="Why the box is being topped up">
+            <div class="px-none">Goes onto the voucher, so it reads in the statement.</div>
           </div>
         </div>
       </div>
