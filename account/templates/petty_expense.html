@@ -98,12 +98,19 @@
     white-space: normal; padding: 0 6px; vertical-align: middle;
     letter-spacing: .02em; text-transform: uppercase; color: var(--text-secondary); }
   .ds .px-card table.ds-grid tbody td { font-size: .8rem; padding: 4px 6px;
-    vertical-align: middle; line-height: 1.3; white-space: nowrap; }
+    vertical-align: middle; line-height: 1.3; white-space: normal; }
+  /* Except the ones with nothing to wrap. */
+  .ds .px-card table.ds-grid tbody td:nth-child(1),
+  .ds .px-card table.ds-grid tbody td:nth-child(2),
+  .ds .px-card table.ds-grid tbody td.px-amount,
+  .ds .px-card table.ds-grid tbody td:last-child { white-space: nowrap; }
   /* The long ones: one line each, ellipsed, with the whole value on hover.
      A register is read down the columns, and a cell that wraps to three
      lines makes the eye climb over it to reach the next row. */
-  .px-cut { max-width: 170px; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; display: block; }
+  /* Wrapped, not ellipsed: the column keeps its width so the grid still
+     fits the window, and the value takes a second line when it needs one. */
+  .px-cut { max-width: 170px; display: block; white-space: normal;
+    overflow-wrap: anywhere; line-height: 1.3; }
   .px-cut-wide { max-width: 200px; }
   .px-cut-narrow { max-width: 120px; }
   /* Below a wide desktop the text columns give up room so the columns that
@@ -135,7 +142,9 @@
     border: 1px solid var(--border); border-radius: .35rem; padding: .1rem .45rem;
     white-space: nowrap; }
   html[data-theme="dark"] .px-no { color: var(--primary-light); }
-  .px-branch { color: var(--text-secondary); white-space: nowrap; }
+  /* The branch name wraps like everything else: "BAHRAICH BRANCH" on one
+     line was the last cell still ending in an ellipsis. */
+  .px-branch { color: var(--text-secondary); }
   .px-place { font-weight: 600; }
   .px-amount { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
     white-space: nowrap; }

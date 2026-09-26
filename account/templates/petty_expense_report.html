@@ -111,14 +111,18 @@
     vertical-align: middle; }
   .per-num { text-align: right; font-variant-numeric: tabular-nums; }
   .per-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .per-cut { max-width: 150px; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; display: block; }
-  /* The description is the sentence someone wrote; one clipped line of it
-     with no tooltip is worse than no column. Two lines, wider, and the whole
-     of it on hover. */
-  #per-table td.per-text { white-space: normal; }
-  .per-text .per-cut { max-width: 260px; white-space: normal; display: -webkit-box;
-    -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+  /* Every cell shows all of itself. The widths stay -- they are what keeps
+     the grid inside the window -- so a long value wraps onto a second line
+     rather than ending in an ellipsis nobody can expand. */
+  #per-table td { white-space: normal; }
+  .per-cut { max-width: 170px; display: block; overflow-wrap: anywhere;
+    line-height: 1.3; }
+  .per-text .per-cut { max-width: 240px; }
+  /* The short, fixed-shape columns have nothing to wrap and read better on
+     one line: dates, numbers, the status pill, the voucher code. */
+  #per-table td.per-num, #per-table td.per-amount,
+  #per-table td:nth-child(1), #per-table td:nth-child(2),
+  #per-table td:nth-child(3), #per-table td:nth-child(10) { white-space: nowrap; }
   .per-status { font-size: .68rem; font-weight: 600; border-radius: .35rem;
     padding: .1rem .4rem; }
   .per-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
