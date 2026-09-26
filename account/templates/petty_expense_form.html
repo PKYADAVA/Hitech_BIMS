@@ -27,6 +27,11 @@
   .pe-grid { display: grid; grid-template-columns: 1fr 320px; gap: .6rem;
     align-items: start; }
   @media (max-width: 1199.98px) { .pe-grid { grid-template-columns: 1fr; } }
+  /* Where and what it is runs across the top: it is the header of the whole
+     entry, not of one column. The summary then starts at the next row, which
+     puts it beside Payment Information -- the first figures appear level with
+     the account they will come out of. The grid's own gap does the spacing. */
+  .pe-wide { grid-column: 1 / -1; margin-bottom: 0; }
 
   .pe-card { background: var(--surface); border: 1px solid var(--border); border-radius: .6rem;
     margin-bottom: .6rem; }
@@ -110,43 +115,43 @@
 </div>
 
 <div class="pe-grid">
-  <div>
-    <!-- 1 ─ where and what it is ------------------------------------------ -->
-    <section class="pe-card">
-      <header><span class="pe-step">1</span> Expense Information</header>
-      <div class="pe-body">
-        <div class="pe-fields">
-          <div class="pe-field">
-            <label for="pe-no">Expense No.</label>
-            <input type="text" id="pe-no" class="form-control bg-light" readonly
-                   value="{% if expense %}{{ expense.expense_no }}{% else %}{{ next_no }}{% endif %}">
-          </div>
-          <div class="pe-field">
-            <label for="pe-date">Date <span class="text-danger">*</span></label>
-            <input type="date" id="pe-date" class="form-control" max="{{ today }}"
-                   value="{% if expense %}{{ expense.expense_date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
-          </div>
-          <div class="pe-field">
-            <label for="pe-branch">Branch <span class="text-danger">*</span></label>
-            <select id="pe-branch" class="form-select"></select>
-          </div>
-          <div class="pe-field">
-            <label for="pe-farm">Location / Farm</label>
-            <select id="pe-farm" class="form-select"></select>
-          </div>
-          <div class="pe-field">
-            <label for="pe-shed">Shed / Unit</label>
-            <select id="pe-shed" class="form-select" disabled></select>
-          </div>
-          <div class="pe-field">
-            <label for="pe-centre">Cost Centre</label>
-            <select id="pe-centre" class="form-select"></select>
-            <div class="pe-note" id="pe-centre-note">Follows the branch.</div>
-          </div>
+  <!-- 1 ─ where and what it is ------------------------------------------ -->
+  <section class="pe-card pe-wide">
+    <header><span class="pe-step">1</span> Expense Information</header>
+    <div class="pe-body">
+      <div class="pe-fields">
+        <div class="pe-field">
+          <label for="pe-no">Expense No.</label>
+          <input type="text" id="pe-no" class="form-control bg-light" readonly
+                 value="{% if expense %}{{ expense.expense_no }}{% else %}{{ next_no }}{% endif %}">
+        </div>
+        <div class="pe-field">
+          <label for="pe-date">Date <span class="text-danger">*</span></label>
+          <input type="date" id="pe-date" class="form-control" max="{{ today }}"
+                 value="{% if expense %}{{ expense.expense_date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
+        </div>
+        <div class="pe-field">
+          <label for="pe-branch">Branch <span class="text-danger">*</span></label>
+          <select id="pe-branch" class="form-select"></select>
+        </div>
+        <div class="pe-field">
+          <label for="pe-farm">Location / Farm</label>
+          <select id="pe-farm" class="form-select"></select>
+        </div>
+        <div class="pe-field">
+          <label for="pe-shed">Shed / Unit</label>
+          <select id="pe-shed" class="form-select" disabled></select>
+        </div>
+        <div class="pe-field">
+          <label for="pe-centre">Cost Centre</label>
+          <select id="pe-centre" class="form-select"></select>
+          <div class="pe-note" id="pe-centre-note">Follows the branch.</div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
+  <div class="pe-main">
     <!-- 2 ─ who was paid, and out of what -------------------------------- -->
     <section class="pe-card">
       <header><span class="pe-step">2</span> Payment Information</header>
