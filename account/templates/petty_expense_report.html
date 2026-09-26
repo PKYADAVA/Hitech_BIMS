@@ -427,7 +427,8 @@
           <th>Date</th>
           <th>Voucher</th>
           <th>Particulars</th>
-          <th class="pcs-num">In / Out (&#8377;)</th>
+          <th class="pcs-num">In (&#8377;)</th>
+          <th class="pcs-num">Out (&#8377;)</th>
           <th class="pcs-num">Balance (&#8377;)</th>
         </tr>
       </thead>
@@ -1009,24 +1010,12 @@ $(function () {
     });
   }
 
-  // One column for both directions: money in reads as a plus and money out
-  // as a minus, which is how anyone reading a passbook expects it, and it
-  // saves a column of mostly-empty cells.
-  function movement(debit, credit) {
-    const inn = Number(debit) || 0, out = Number(credit) || 0;
-    if (!inn && !out) { return '<td class="pcs-num pcs-none">—</td>'; }
-    const net = inn - out;
-    const cls = net >= 0 ? "pcs-in-cell" : "pcs-out-cell";
-    return '<td class="pcs-num ' + cls + '">'
-      + (net >= 0 ? "+" : "−") + money(Math.abs(net)) + "</td>";
-  }
-
   function paintRows(d) {
     const body = $("#pcs-table tbody").empty();
     el("pcs-count").textContent = d.rows.length
       ? d.rows.length + (d.rows.length > 1 ? " entries" : " entry") : "";
     if (!d.rows.length) {
-      body.append('<tr><td colspan="5" class="pcs-none text-center py-3">'
+      body.append('<tr><td colspan="6" class="pcs-none text-center py-3">'
         + "Nothing moved in or out of this box in that period.</td></tr>");
     }
     d.rows.forEach(function (r) {
@@ -1035,12 +1024,14 @@ $(function () {
         + "<td>" + (escapeHtml(r.voucher_no) || '<span class="pcs-none">—</span>') + "</td>"
         + '<td class="pcs-particulars" title="' + escapeHtml(r.particulars) + '">'
         + escapeHtml(r.particulars) + "</td>"
-        + movement(r.debit, r.credit)
+        + '<td class="pcs-num pcs-in-cell">' + (r.debit ? money(r.debit) : "") + "</td>"
+        + '<td class="pcs-num pcs-out-cell">' + (r.credit ? money(r.credit) : "") + "</td>"
         + '<td class="pcs-num pcs-running">' + money(r.balance) + "</td></tr>");
     });
     // The footer nets the period: the two halves are on the tiles above.
     $("#pcs-table tfoot").html("<tr><td colspan=\"3\">Closing balance</td>"
-      + movement(d.received, d.spent)
+      + '<td class="pcs-num pcs-in-cell">' + money(d.received) + "</td>"
+      + '<td class="pcs-num pcs-out-cell">' + money(d.spent) + "</td>"
       + '<td class="pcs-num">' + money(d.closing) + "</td></tr>");
   }
 
