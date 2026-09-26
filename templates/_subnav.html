@@ -119,6 +119,7 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'terms' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'terms' %}active{% endif %} activate" href="{% url 'terms' %}"><i class="fas fa-file-contract me-1"></i>Terms &amp; Conditions</a></li>{% endif %}
       {% elif module == 'account_transaction' %}
         {% if 'vouchers' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'vouchers' %}active{% endif %} activate" href="{% url 'vouchers' %}"><i class="fas fa-book me-1"></i>Journal Vouchers</a></li>{% endif %}
+        {% if 'petty_expense_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'petty_expense_list' %}active{% endif %} activate" href="{% url 'petty_expense_list' %}"><i class="fas fa-receipt me-1"></i>Petty Expense</a></li>{% endif %}
       {% elif module == 'account_report' %}
         {% if 'ledger_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'ledger_report' %}active{% endif %} activate" href="{% url 'ledger_report' %}"><i class="fas fa-book-open me-1"></i>Account Ledger</a></li>{% endif %}
         {% if 'journal_voucher_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'journal_voucher_report' %}active{% endif %}" href="{% url 'journal_voucher_report' %}"><i class="fas fa-book me-1"></i>Journal Voucher Report</a></li>{% endif %}

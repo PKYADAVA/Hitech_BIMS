@@ -1,0 +1,563 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Petty Expense — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_transaction_subnavbar.html' with active_tab='petty_expense_list' %}
+
+<style>
+  /* The Broiler registers' measurements, written in the shell's own tokens
+     rather than literals, so this page comes with the dark theme instead of
+     needing a sweep after it. */
+  .px-page { display: flex; flex-direction: column; gap: .6rem; }
+  .px-head, .px-card, .px-filters, .px-kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; }
+  .px-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .px-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--primary); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .px-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .px-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  @media (min-width: 1200px) {
+    .px-head > div:not(.px-head-icon):not(.px-head-actions) {
+      display: flex; align-items: baseline; gap: .6rem; }
+    .px-head > div:not(.px-head-icon):not(.px-head-actions) .px-sub::before {
+      content: "\2014"; margin-right: .4rem; color: var(--text-muted); }
+  }
+  .px-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  /* The figures. Each one narrows the register under it, which is the only
+     reason to put a number at the top of a list. */
+  .px-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: .5rem; }
+  .px-kpi { padding: .45rem .6rem; display: flex; align-items: center; gap: .55rem;
+    text-align: left; cursor: pointer; }
+  .px-kpi:hover { border-color: var(--border-strong); }
+  .px-kpi.is-on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .px-kpi-icon { width: 28px; height: 28px; flex: 0 0 28px; border-radius: .45rem;
+    display: flex; align-items: center; justify-content: center; font-size: .78rem;
+    background: var(--px-bg); color: var(--px-fg); }
+  .px-kpi-body { min-width: 0; }
+  .px-kpi-label { display: block; font-size: .64rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary);
+    line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .px-kpi-value { font-size: 1.02rem; font-weight: 700; color: var(--text);
+    line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .px-kpi-value.is-low { color: var(--danger-text); }
+  .px-kpi-note { display: block; font-size: .64rem; color: var(--text-muted); line-height: 1.2; }
+
+  /* The filter strip, as the Broiler registers wear it. */
+  .px-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: .4rem; padding: .45rem; align-items: center; }
+  .px-filter { display: flex; align-items: center; gap: .4rem; min-width: 0;
+    border: 1px solid var(--border); border-radius: .45rem; padding: .25rem .4rem; }
+  .px-filter-icon { width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--px-bg); color: var(--px-fg); font-size: .7rem; }
+  .px-filter-body { flex: 1; min-width: 0; }
+  .px-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 0; line-height: 1.2; }
+  .px-filter .form-select, .px-filter .form-control {
+    border: 0; box-shadow: none; padding: 0; height: auto; min-height: 0;
+    font-size: .8rem; background-color: transparent; color: var(--text);
+    background-position: right .1rem center; }
+  .px-filter .form-select:focus, .px-filter .form-control:focus { box-shadow: none; }
+  .px-pair { grid-column: span 2; }
+  @media (max-width: 575.98px) { .px-pair { grid-column: span 1; } }
+  .px-two { display: flex; align-items: center; gap: .3rem; }
+  .px-two .form-control { font-size: .76rem; padding: 0; }
+  .px-two-sep { font-size: .68rem; color: var(--text-muted); }
+  /* The second rank is there when asked for, so the common five are not
+     buried under the rare six. */
+  .px-more { display: none; }
+  .px-filters.is-open .px-more { display: flex; }
+  .px-strip-actions { display: flex; gap: .35rem; justify-self: end; }
+
+  /* The grid, at the sizes the other registers use. */
+  .px-card > .card-header { padding: .4rem .7rem; font-size: .8rem; }
+  .ds .px-card table.ds-grid thead th { font-size: .7rem; line-height: 1.2;
+    white-space: normal; padding: 0 6px; vertical-align: middle;
+    letter-spacing: .02em; text-transform: uppercase; color: var(--text-secondary); }
+  .ds .px-card table.ds-grid tbody td { font-size: .8rem; padding: 6px;
+    vertical-align: middle; line-height: 1.3; }
+  .ds .px-card .dataTables_length select, .ds .px-card .dataTables_filter input {
+    height: 30px; font-size: .78rem; }
+  .ds .px-card .dataTables_filter { margin-left: auto; }
+  .ds .px-card .dataTables_filter label { display: flex; align-items: center;
+    gap: .4rem; margin-bottom: 0; }
+  .ds .px-card .dataTables_filter input { min-width: 220px; }
+  .ds .px-card .dt-buttons { display: inline-flex; gap: 0; margin-left: .5rem; }
+  .ds .px-card .dt-buttons .btn { height: 30px; min-height: 30px;
+    padding: 0 10px !important; font-size: .78rem; display: inline-flex;
+    align-items: center; justify-content: center; line-height: 1; }
+  .ds .px-card .dataTables_length, .ds .px-card .dataTables_filter {
+    display: flex; align-items: center; }
+  .ds .px-card .dataTables_length label { display: flex; align-items: center;
+    gap: .4rem; margin-bottom: 0; }
+  .ds .px-card .dataTables_length, .ds .px-card .dataTables_filter,
+  .ds .px-card .dataTables_info, .ds .px-card .dataTables_paginate { font-size: .78rem; }
+
+  /* The expense number is a minted code, and reads as one. */
+  .px-no { display: inline-block; font-weight: 600; font-size: .76rem;
+    color: var(--primary-dark); background: var(--primary-subtle);
+    border: 1px solid var(--border); border-radius: .35rem; padding: .1rem .45rem;
+    white-space: nowrap; }
+  html[data-theme="dark"] .px-no { color: var(--primary-light); }
+  .px-branch { color: var(--text-secondary); white-space: nowrap; }
+  .px-place { font-weight: 600; }
+  .px-amount { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+    white-space: nowrap; }
+  .px-status { display: inline-block; font-weight: 600; font-size: .72rem;
+    border-radius: .35rem; padding: .18rem .5rem; white-space: nowrap; }
+  .px-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
+  .px-posted { background: var(--success-subtle); color: var(--success-text); }
+  .px-cancelled { background: var(--danger-subtle); color: var(--danger-text); }
+  .px-vno, .px-clip { font-size: .76rem; color: var(--text-secondary); white-space: nowrap; }
+  .px-sub-cat { font-size: .72rem; color: var(--text-muted); }
+  .px-none { color: var(--text-muted); }
+  #petty-expense-table .btn-sm { width: 26px; height: 26px; padding: 0;
+    min-height: 0; display: inline-flex; align-items: center;
+    justify-content: center; line-height: 1; font-size: .72rem; }
+</style>
+
+<div class="px-page">
+
+<div class="px-head">
+  <div class="px-head-icon"><i class="fas fa-receipt"></i></div>
+  <div>
+    <div class="px-title">Petty Expense</div>
+    <div class="px-sub">Day-to-day cash and local expenses, and what each one posted</div>
+  </div>
+  <div class="px-head-actions">
+    {% if page_perms.add %}<a class="btn btn-primary btn-sm" href="{% url 'petty_expense_add' %}">
+      <i class="fas fa-plus"></i> Add Expense
+    </a>{% endif %}
+  </div>
+</div>
+
+<div class="px-kpis" id="px-kpis"></div>
+
+<div class="px-filters" id="px-filters">
+  <div class="px-filter px-pair">
+    <span class="px-filter-icon" style="--px-bg:#e7f7ee;--px-fg:#067647"><i class="fas fa-calendar-day"></i></span>
+    <div class="px-filter-body">
+      <label for="px-from">Expense date between</label>
+      <div class="px-two">
+        <input type="date" id="px-from" class="form-control" aria-label="On or after">
+        <span class="px-two-sep">to</span>
+        <input type="date" id="px-to" class="form-control" aria-label="On or before">
+      </div>
+    </div>
+  </div>
+  <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#e8f1fd;--px-fg:#1d6fe0"><i class="fas fa-code-branch"></i></span>
+    <div class="px-filter-body">
+      <label for="px-branch">Branch</label>
+      <select id="px-branch" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#f1ebfd;--px-fg:#6941c6"><i class="fas fa-tractor"></i></span>
+    <div class="px-filter-body">
+      <label for="px-farm">Farm</label>
+      <select id="px-farm" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#fff1db;--px-fg:#b54708"><i class="fas fa-tags"></i></span>
+    <div class="px-filter-body">
+      <label for="px-account">Sub Category</label>
+      <select id="px-account" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter">
+    <span class="px-filter-icon" style="--px-bg:#e7f7ee;--px-fg:#067647"><i class="fas fa-circle-check"></i></span>
+    <div class="px-filter-body">
+      <label for="px-status">Status</label>
+      <select id="px-status" class="form-select">
+        <option value="">All</option>
+        <option value="Draft">Draft</option>
+        <option value="Posted">Posted</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="px-filter px-more">
+    <span class="px-filter-icon" style="--px-bg:#e6f6fe;--px-fg:#0369a1"><i class="fas fa-sitemap"></i></span>
+    <div class="px-filter-body">
+      <label for="px-centre">Cost Centre</label>
+      <select id="px-centre" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter px-more">
+    <span class="px-filter-icon" style="--px-bg:#e7f7ee;--px-fg:#067647"><i class="fas fa-wallet"></i></span>
+    <div class="px-filter-body">
+      <label for="px-paid-from">Paid From</label>
+      <select id="px-paid-from" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter px-more">
+    <span class="px-filter-icon" style="--px-bg:#e8f1fd;--px-fg:#1d6fe0"><i class="fas fa-money-bill-wave"></i></span>
+    <div class="px-filter-body">
+      <label for="px-mode">Payment Mode</label>
+      <select id="px-mode" class="form-select"></select>
+    </div>
+  </div>
+  <div class="px-filter px-more">
+    <span class="px-filter-icon" style="--px-bg:#f1ebfd;--px-fg:#6941c6"><i class="fas fa-user"></i></span>
+    <div class="px-filter-body">
+      <label for="px-paid-to">Paid To</label>
+      <input type="text" id="px-paid-to" class="form-control" placeholder="Any payee">
+    </div>
+  </div>
+  <div class="px-filter px-more px-pair">
+    <span class="px-filter-icon" style="--px-bg:#fff1db;--px-fg:#b54708"><i class="fas fa-coins"></i></span>
+    <div class="px-filter-body">
+      <label for="px-min">Amount between</label>
+      <div class="px-two">
+        <input type="number" id="px-min" class="form-control" placeholder="0" aria-label="At least">
+        <span class="px-two-sep">to</span>
+        <input type="number" id="px-max" class="form-control" placeholder="Any" aria-label="At most">
+      </div>
+    </div>
+  </div>
+
+  <div class="px-strip-actions">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="px-toggle">
+      <i class="fas fa-sliders-h"></i> More
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="px-clear">
+      <i class="fas fa-rotate-left"></i> Clear
+    </button>
+  </div>
+</div>
+
+<div class="card px-card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    Expense Register
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="petty-expense-table">
+        <thead>
+          <tr>
+            <th>Expense No.</th>
+            <th>Date</th>
+            <th>Branch</th>
+            <th>Farm / Shed</th>
+            <th>Category</th>
+            <th>Paid To</th>
+            <th>Mode</th>
+            <th>Paid From</th>
+            <th class="ds-num">Amount (&#8377;)</th>
+            <th class="ds-mid">Status</th>
+            <th>Voucher</th>
+            <th class="ds-mid">Bills</th>
+            <th class="ds-mid">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Loaded via AJAX -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+{{ masters|json_script:"px-masters" }}
+
+<script>
+$(function () {
+  const M = JSON.parse(document.getElementById("px-masters").textContent);
+  const PERMS = {
+    add: {{ page_perms.add|yesno:"true,false" }},
+    edit: {{ page_perms.edit|yesno:"true,false" }},
+    del: {{ page_perms.delete|yesno:"true,false" }}
+  };
+  const CSRF = "{{ csrf_token }}";
+  const el = id => document.getElementById(id);
+  const money = n => (Number(n) || 0).toLocaleString("en-IN",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const none = () => '<span class="px-none">—</span>';
+
+  function fmtDate(iso) {
+    if (!iso) { return ""; }
+    const d = new Date(iso + "T00:00:00");
+    if (isNaN(d)) { return iso; }
+    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  // ---- the pickers, filled from masters the ERP already keeps -------------
+  function fill(id, rows, value, label) {
+    el(id).innerHTML = '<option value="">All</option>' + rows.map(
+      r => '<option value="' + r[value] + '">'
+         + escapeHtml(String(r[label] || "")) + '</option>').join("");
+  }
+  fill("px-branch", M.branches, "id", "branch_name");
+  fill("px-centre", M.centres, "id", "name");
+  fill("px-mode", M.modes, "id", "name");
+  fill("px-paid-from", M.paid_from, "id", "label");
+  el("px-account").innerHTML = '<option value="">All</option>' + M.categories.map(
+    c => '<optgroup label="' + escapeHtml(c.name) + '">' + c.items.map(
+      i => '<option value="' + i.id + '">' + escapeHtml(i.name) + '</option>').join("")
+       + '</optgroup>').join("");
+
+  // Farms follow the branch: a farm belonging to another branch is not an
+  // option once a branch is named.
+  function narrowFarms() {
+    const branch = el("px-branch").value;
+    const keep = el("px-farm").value;
+    const rows = branch
+      ? M.farms.filter(f => String(f.branch_id) === String(branch)) : M.farms;
+    el("px-farm").innerHTML = '<option value="">All</option>' + rows.map(
+      f => '<option value="' + f.id + '">' + escapeHtml(f.farm_name) + '</option>').join("");
+    if (rows.some(f => String(f.id) === String(keep))) { el("px-farm").value = keep; }
+    $("#px-farm").trigger("change.select2");
+  }
+
+  // ---- what the register is showing --------------------------------------
+  let rows = [];
+  let kpi = "";                 // which figure above is narrowing the list
+
+  function query() {
+    const p = new URLSearchParams();
+    const add = (k, v) => { if (v) { p.set(k, v); } };
+    add("from", el("px-from").value);
+    add("to", el("px-to").value);
+    add("branch", el("px-branch").value);
+    add("farm", el("px-farm").value);
+    add("centre", el("px-centre").value);
+    add("account", el("px-account").value);
+    add("paid_from", el("px-paid-from").value);
+    add("mode", el("px-mode").value);
+    add("status", el("px-status").value);
+    add("paid_to", el("px-paid-to").value);
+    add("min", el("px-min").value);
+    add("max", el("px-max").value);
+    return p.toString();
+  }
+
+  function load() {
+    $.getJSON("{% url 'api_petty_expense_rows' %}?" + query(), function (data) {
+      rows = data.rows;
+      paintKpis(data.cards);
+      paintRows();
+    });
+  }
+
+  function kpiCard(key, icon, bg, fg, label, value, note) {
+    return '<button type="button" class="px-kpi' + (kpi === key ? " is-on" : "")
+      + '" data-kpi="' + key + '">'
+      + '<span class="px-kpi-icon" style="--px-bg:' + bg + ';--px-fg:' + fg + '">'
+      + '<i class="fas ' + icon + '"></i></span>'
+      + '<span class="px-kpi-body">'
+      + '<span class="px-kpi-label">' + escapeHtml(label) + '</span>'
+      + '<span class="px-kpi-value">' + value + '</span>'
+      + '<span class="px-kpi-note">' + escapeHtml(note) + '</span>'
+      + '</span></button>';
+  }
+
+  function paintKpis(cards) {
+    // Cash in hand is read from each petty-cash account's own ledger, so the
+    // figure here and the ledger report are the same number by construction.
+    const cash = (cards.cash || []).map(function (c) {
+      return kpiCard("paid_from:" + c.id, "fa-wallet", "#e7f7ee", "#067647",
+        c.label, "&#8377;" + money(c.balance), "Balance on its ledger");
+    }).join("");
+    el("px-kpis").innerHTML =
+      kpiCard("today", "fa-calendar-day", "#e8f1fd", "#1d6fe0",
+              "Today's expenses", "&#8377;" + money(cards.today), "Posted today")
+      + kpiCard("month", "fa-calendar-alt", "#f1ebfd", "#6941c6",
+              "This month", "&#8377;" + money(cards.month), "Posted this month")
+      + kpiCard("drafts", "fa-file-alt", "#fff1db", "#b54708",
+              "Drafts", cards.drafts, "Waiting to be posted")
+      + cash;
+  }
+
+  function actions(r) {
+    const parts = [];
+    if (r.editable && PERMS.edit) {
+      parts.push('<a class="btn btn-outline-warning btn-sm" title="Edit"'
+        + ' href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-pen"></i></a>');
+      parts.push('<button class="btn btn-outline-success btn-sm px-post" title="Post"'
+        + ' data-id="' + r.id + '"><i class="fas fa-check"></i></button>');
+    } else {
+      parts.push('<a class="btn btn-outline-secondary btn-sm" title="View"'
+        + ' href="/petty-expenses/' + r.id + '/edit/"><i class="fas fa-eye"></i></a>');
+    }
+    if (PERMS.add) {
+      parts.push('<button class="btn btn-outline-primary btn-sm px-copy" title="Duplicate"'
+        + ' data-id="' + r.id + '"><i class="fas fa-copy"></i></button>');
+    }
+    // A posted expense is reversed, never removed; a cancelled one is done with.
+    if (r.status !== "Cancelled" && PERMS.del) {
+      parts.push('<button class="btn btn-outline-danger btn-sm px-cancel" title="Cancel"'
+        + ' data-id="' + r.id + '"><i class="fas fa-ban"></i></button>');
+    }
+    return '<div class="d-flex gap-1 justify-content-center">' + parts.join("") + '</div>';
+  }
+
+  function paintRows() {
+    const table = $("#petty-expense-table");
+    if ($.fn.DataTable.isDataTable(table)) { table.DataTable().clear().destroy(); }
+    const body = table.find("tbody").empty();
+
+    rows.forEach(function (r) {
+      const place = [r.farm, r.shed].filter(Boolean).join(" · ");
+      body.append('<tr>'
+        + '<td><span class="px-no">' + escapeHtml(r.expense_no) + '</span></td>'
+        + '<td data-order="' + r.date + '">' + fmtDate(r.date) + '</td>'
+        + '<td class="px-branch">' + (escapeHtml(r.branch) || none()) + '</td>'
+        + '<td class="px-place">' + (escapeHtml(place) || none()) + '</td>'
+        + '<td>' + (escapeHtml(r.category) || none())
+        + (r.sub_category
+            ? '<div class="px-sub-cat">' + escapeHtml(r.sub_category) + '</div>' : '')
+        + '</td>'
+        + '<td>' + (escapeHtml(r.paid_to) || none()) + '</td>'
+        + '<td>' + (escapeHtml(r.mode) || none()) + '</td>'
+        + '<td>' + (escapeHtml(r.paid_from) || none()) + '</td>'
+        + '<td class="px-amount">' + money(r.amount) + '</td>'
+        + '<td><span class="px-status px-' + r.status.toLowerCase() + '">'
+        + escapeHtml(r.status) + '</span></td>'
+        + '<td>' + (r.voucher_no
+            ? '<span class="px-vno">' + escapeHtml(r.voucher_no) + '</span>' : none()) + '</td>'
+        + '<td>' + (r.attachments
+            ? '<span class="px-clip"><i class="fas fa-paperclip"></i> ' + r.attachments + '</span>'
+            : none()) + '</td>'
+        + '<td>' + actions(r) + '</td>'
+        + '</tr>');
+    });
+
+    table.DataTable({
+      responsive: true,
+      paging: true,
+      searching: true,
+      info: true,
+      lengthChange: true,
+      order: [[1, "desc"]],
+      columnDefs: [{ orderable: false, targets: -1 }],
+    });
+  }
+
+  // ---- the figures narrow the list ---------------------------------------
+  $("#px-kpis").on("click", ".px-kpi", function () {
+    const key = this.dataset.kpi;
+    const same = kpi === key;            // pressing it again clears it
+    kpi = same ? "" : key;
+    const iso = d => d.getFullYear() + "-"
+      + String(d.getMonth() + 1).padStart(2, "0") + "-"
+      + String(d.getDate()).padStart(2, "0");
+    const today = new Date();
+    el("px-from").value = ""; el("px-to").value = "";
+    el("px-status").value = ""; el("px-paid-from").value = "";
+    if (!same) {
+      if (key === "today") {
+        el("px-from").value = iso(today); el("px-to").value = iso(today);
+        el("px-status").value = "Posted";
+      } else if (key === "month") {
+        el("px-from").value = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+        el("px-to").value = iso(today);
+        el("px-status").value = "Posted";
+      } else if (key === "drafts") {
+        el("px-status").value = "Draft";
+      } else if (key.indexOf("paid_from:") === 0) {
+        el("px-paid-from").value = key.split(":")[1];
+      }
+    }
+    $("#px-status, #px-paid-from").trigger("change.select2");
+    load();
+  });
+
+  // ---- row actions --------------------------------------------------------
+  $("#petty-expense-table").on("click", ".px-post", function () {
+    const id = this.dataset.id;
+    $.ajax({
+      url: "/api/petty-expenses/" + id + "/post/",
+      type: "POST",
+      headers: { "X-CSRFToken": CSRF },
+      success: function (out) {
+        showToast("success", "Posted as " + out.voucher_no + ".");
+        load();
+      },
+      error: function (xhr) {
+        showToast("danger", (xhr.responseJSON || {}).error || "Could not post it.");
+      }
+    });
+  });
+
+  $("#petty-expense-table").on("click", ".px-cancel", function () {
+    const id = this.dataset.id;
+    const no = $(this).closest("tr").find(".px-no").text().trim();
+    bimsConfirm(
+      no + " will be cancelled.\n\nWhatever it posted is reversed in the books and"
+      + " the record is kept — a posted expense is never deleted.",
+      { title: "Cancel this expense?", confirmText: "Cancel expense",
+        cancelText: "Keep it", variant: "danger" }
+    ).then(function (ok) {
+      if (!ok) { return; }
+      $.ajax({
+        url: "/api/petty-expenses/" + id + "/cancel/",
+        type: "POST",
+        headers: { "X-CSRFToken": CSRF, "Content-Type": "application/json" },
+        data: JSON.stringify({ reason: "Cancelled from the register" }),
+        success: function () { showToast("success", no + " cancelled."); load(); },
+        error: function (xhr) {
+          showToast("danger", (xhr.responseJSON || {}).error || "Could not cancel it.");
+        }
+      });
+    });
+  });
+
+  $("#petty-expense-table").on("click", ".px-copy", function () {
+    window.location.href = "/petty-expenses/new/?copy=" + this.dataset.id;
+  });
+
+  // ---- the strip ----------------------------------------------------------
+  $("#px-branch").on("change", narrowFarms);
+  ["px-from", "px-to", "px-branch", "px-farm", "px-centre", "px-account",
+   "px-paid-from", "px-mode", "px-status", "px-min", "px-max"].forEach(function (id) {
+    el(id).addEventListener("change", function () { kpi = ""; load(); });
+  });
+  let typing;
+  el("px-paid-to").addEventListener("input", function () {
+    clearTimeout(typing);
+    typing = setTimeout(function () { kpi = ""; load(); }, 300);
+  });
+
+  $("#px-toggle").on("click", function () {
+    const open = $("#px-filters").toggleClass("is-open").hasClass("is-open");
+    $(this).html('<i class="fas fa-sliders-h"></i> ' + (open ? "Fewer" : "More"));
+  });
+  $("#px-clear").on("click", function () {
+    $("#px-filters").find("input").val("");
+    $("#px-filters").find("select").val("").trigger("change.select2");
+    kpi = "";
+    narrowFarms();
+    load();
+  });
+
+  // The form redirects here after a save; this is where the expense now is,
+  // so this is where the save is confirmed.
+  try {
+    const saved = sessionStorage.getItem("bims-petty-saved");
+    if (saved) {
+      sessionStorage.removeItem("bims-petty-saved");
+      showToast("success", saved);
+    }
+  } catch (e) { /* private browsing: a toast is not worth an error */ }
+
+  narrowFarms();
+  load();
+});
+</script>
+{% endblock %}

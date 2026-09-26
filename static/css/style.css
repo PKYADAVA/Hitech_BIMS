@@ -677,9 +677,14 @@ footer { margin-top: auto; }
   border: 1px solid transparent;
 }
 
+/* Hover says which tab the pointer is on, so it has to be seen at a glance.
+   A step of surface does not do that here: the strip is already a card, and
+   #f8fafc on white (or the dark theme's equivalent) is a 3% shift nobody
+   notices. A tint of the brand colour, which the active tab also speaks. */
 .module-subnav .subnav-tab a:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--primary-subtle);
+  color: var(--primary-dark);
+  border-color: var(--primary-light);
 }
 
 .module-subnav .subnav-tab a.active {

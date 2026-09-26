@@ -1,0 +1,666 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Petty Expense — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_transaction_subnavbar.html' with active_tab='petty_expense_list' %}
+
+<style>
+  /* A one-screen entry form. The point of a petty expense is that it takes
+     half a minute, so the fields are the register's size and the three
+     sections stack without scrolling on a laptop. */
+  .pe-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: .6rem;
+    padding: .45rem .7rem; margin-bottom: .6rem; }
+  .pe-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--primary); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .pe-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .pe-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  .pe-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  .pe-grid { display: grid; grid-template-columns: 1fr 320px; gap: .6rem;
+    align-items: start; }
+  @media (max-width: 1199.98px) { .pe-grid { grid-template-columns: 1fr; } }
+
+  .pe-card { background: var(--surface); border: 1px solid var(--border); border-radius: .6rem;
+    margin-bottom: .6rem; }
+  .pe-card > header { display: flex; align-items: center; gap: .5rem;
+    padding: .45rem .7rem; border-bottom: 1px solid var(--border); font-size: .8rem;
+    font-weight: 700; color: var(--text); }
+  .pe-step { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%;
+    background: var(--primary); color: #fff; font-size: .7rem; display: inline-flex;
+    align-items: center; justify-content: center; }
+  .pe-card > .pe-body { padding: .6rem .7rem; }
+
+  .pe-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: .5rem .6rem; }
+  .pe-field label { display: block; font-size: .68rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: .1rem; }
+  .pe-field .form-control, .pe-field .form-select { height: 32px; font-size: .84rem; }
+  .pe-note { font-size: .7rem; color: var(--text-secondary); margin-top: .15rem; }
+  .pe-note strong { color: var(--text); }
+  .pe-note.is-short { color: var(--danger-text); }
+
+  /* The lines. Amount is computed, never typed. */
+  #pe-rows td, #pe-rows th { vertical-align: middle; white-space: nowrap;
+    padding: .3rem .4rem; }
+  #pe-rows th { font-size: .7rem; text-transform: uppercase; letter-spacing: .02em;
+    color: var(--text-secondary); font-weight: 600; }
+  #pe-rows .form-control, #pe-rows .form-select { height: 30px; font-size: .82rem; }
+  #pe-rows .col-cat .form-select { min-width: 150px; }
+  #pe-rows .col-sub .form-select { min-width: 160px; }
+  #pe-rows .col-desc .form-control { min-width: 180px; }
+  #pe-rows .col-qty .form-control, #pe-rows .col-rate .form-control { width: 82px; text-align: right; }
+  #pe-rows .col-amt input { width: 104px; text-align: right; font-weight: 600;
+    color: var(--success-text); background: var(--success-subtle) !important; border-color: var(--border); }
+  #pe-rows .col-act { position: sticky; right: 0; background: var(--surface);
+    box-shadow: -6px 0 6px -6px rgba(16,32,56,.18); }
+  #pe-rows .btn-sm { width: 26px; height: 26px; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center; font-size: .72rem; }
+
+  /* The summary. Green for what it comes to, because that is the figure the
+     page exists to produce. */
+  .pe-sum-row { display: flex; justify-content: space-between; align-items: baseline;
+    font-size: .82rem; padding: .2rem 0; color: var(--text-secondary); }
+  .pe-sum-row input { width: 110px; height: 28px; font-size: .82rem; text-align: right; }
+  .pe-net { display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 1px solid var(--border); margin-top: .35rem; padding-top: .4rem; }
+  .pe-net span { font-size: .78rem; font-weight: 700; color: var(--text);
+    text-transform: uppercase; letter-spacing: .02em; }
+  .pe-net strong { font-size: 1.25rem; font-weight: 700; color: var(--success-text);
+    font-variant-numeric: tabular-nums; }
+
+  .pe-drop { border: 1px dashed var(--border-strong); border-radius: .5rem; padding: .7rem;
+    text-align: center; font-size: .78rem; color: var(--text-secondary); cursor: pointer;
+    background: var(--bg-subtle); }
+  .pe-drop:hover { border-color: var(--primary); color: var(--primary); }
+  .pe-file { display: flex; align-items: center; gap: .4rem; font-size: .78rem;
+    padding: .2rem 0; }
+  .pe-tags { display: flex; gap: .3rem; flex-wrap: wrap; }
+  .pe-tag { font-size: .72rem; border: 1px solid var(--border); background: var(--surface);
+    border-radius: 999px; padding: .1rem .5rem; cursor: pointer; color: var(--text-secondary); }
+  .pe-tag.is-on { background: var(--primary-subtle); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .pe-problems { font-size: .78rem; color: var(--danger-text); }
+  .pe-problems li { margin-bottom: .1rem; }
+</style>
+
+<div class="pe-head">
+  <div class="pe-head-icon"><i class="fas fa-receipt"></i></div>
+  <div>
+    <div class="pe-title">{% if expense %}{{ expense.expense_no }}{% else %}Petty Expense{% endif %}</div>
+    <div class="pe-sub">Record and manage small cash and local operating expenses.</div>
+  </div>
+  <div class="pe-head-actions">
+    <a href="{% url 'petty_expense_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-list"></i> View List
+    </a>
+    <button type="button" class="btn btn-secondary btn-sm" id="pe-draft">
+      <i class="fas fa-floppy-disk"></i> Save Draft
+    </button>
+    <button type="button" class="btn btn-success btn-sm" id="pe-post">
+      <i class="fas fa-check"></i> Save &amp; Post
+    </button>
+  </div>
+</div>
+
+<div class="pe-grid">
+  <div>
+    <!-- 1 ─ where and what it is ------------------------------------------ -->
+    <section class="pe-card">
+      <header><span class="pe-step">1</span> Expense Information</header>
+      <div class="pe-body">
+        <div class="pe-fields">
+          <div class="pe-field">
+            <label for="pe-no">Expense No.</label>
+            <input type="text" id="pe-no" class="form-control bg-light" readonly
+                   value="{% if expense %}{{ expense.expense_no }}{% else %}{{ next_no }}{% endif %}">
+          </div>
+          <div class="pe-field">
+            <label for="pe-date">Date <span class="text-danger">*</span></label>
+            <input type="date" id="pe-date" class="form-control" max="{{ today }}"
+                   value="{% if expense %}{{ expense.expense_date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
+          </div>
+          <div class="pe-field">
+            <label for="pe-branch">Branch <span class="text-danger">*</span></label>
+            <select id="pe-branch" class="form-select"></select>
+          </div>
+          <div class="pe-field">
+            <label for="pe-farm">Location / Farm</label>
+            <select id="pe-farm" class="form-select"></select>
+          </div>
+          <div class="pe-field">
+            <label for="pe-shed">Shed / Unit</label>
+            <select id="pe-shed" class="form-select" disabled></select>
+          </div>
+          <div class="pe-field">
+            <label for="pe-centre">Cost Centre</label>
+            <select id="pe-centre" class="form-select"></select>
+            <div class="pe-note" id="pe-centre-note">Follows the branch.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 ─ who was paid, and out of what -------------------------------- -->
+    <section class="pe-card">
+      <header><span class="pe-step">2</span> Payment Information</header>
+      <div class="pe-body">
+        <div class="pe-fields">
+          <div class="pe-field">
+            <label for="pe-paid-to">Paid To <span class="text-danger">*</span></label>
+            <input type="text" id="pe-paid-to" class="form-control" list="pe-payees"
+                   placeholder="Name on the voucher"
+                   value="{% if expense %}{{ expense.paid_to_name }}{% endif %}">
+            <datalist id="pe-payees"></datalist>
+          </div>
+          <div class="pe-field">
+            <label for="pe-mode">Payment Mode <span class="text-danger">*</span></label>
+            <select id="pe-mode" class="form-select"></select>
+          </div>
+          <div class="pe-field">
+            <label for="pe-paid-from">Paid From <span class="text-danger">*</span></label>
+            <select id="pe-paid-from" class="form-select"></select>
+            <div class="pe-note" id="pe-balance"></div>
+          </div>
+          <div class="pe-field">
+            <label for="pe-reference">Reference No.</label>
+            <input type="text" id="pe-reference" class="form-control"
+                   placeholder="Bill / voucher no."
+                   value="{% if expense %}{{ expense.reference }}{% endif %}">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 ─ the lines ----------------------------------------------------- -->
+    <section class="pe-card">
+      <header>
+        <span class="pe-step">3</span> Expense Items
+        <span class="ms-auto">
+          <button type="button" class="btn btn-sm btn-outline-primary" id="pe-add-row">
+            <i class="fas fa-plus"></i> Add Item
+          </button>
+        </span>
+      </header>
+      <div class="pe-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bordered mb-0" id="pe-rows">
+            <thead class="table-light">
+              <tr>
+                <th style="width:1%">#</th>
+                <th class="col-cat">Category <span class="text-danger">*</span></th>
+                <th class="col-sub">Sub Category <span class="text-danger">*</span></th>
+                <th class="col-desc">Description <span class="text-danger">*</span></th>
+                <th class="col-qty text-end">Qty</th>
+                <th class="col-uom">Unit</th>
+                <th class="col-rate text-end">Rate (₹)</th>
+                <th class="col-amt text-end">Amount (₹)</th>
+                <th class="col-act"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 ─ the bill, and what to call it -------------------------------- -->
+    <section class="pe-card">
+      <header><span class="pe-step">4</span> Attachments &amp; Notes</header>
+      <div class="pe-body">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <div class="pe-drop" id="pe-drop">
+              <i class="fas fa-paperclip"></i>
+              <div>Click to upload bills / photos</div>
+              <div style="font-size:.7rem">PDF, JPG, PNG — up to 5 MB each</div>
+            </div>
+            <input type="file" id="pe-files" class="d-none" multiple
+                   accept="application/pdf,image/jpeg,image/png">
+            <div id="pe-file-list"></div>
+          </div>
+          <div class="col-md-5">
+            <label class="pe-field" for="pe-narration"
+                   style="font-size:.68rem;font-weight:600;color:var(--text-secondary)">Narration</label>
+            <textarea id="pe-narration" class="form-control" rows="4"
+                      style="font-size:.84rem"
+                      placeholder="Written from the expense; edit if you want other words"
+            >{% if expense %}{{ expense.narration }}{% endif %}</textarea>
+          </div>
+          <div class="col-md-3">
+            <label style="font-size:.68rem;font-weight:600;color:var(--text-secondary)">Tags</label>
+            <div class="pe-tags" id="pe-tags">
+              <button type="button" class="pe-tag" data-tag="Farm">+ Farm</button>
+              <button type="button" class="pe-tag" data-tag="Vehicle">+ Vehicle</button>
+              <button type="button" class="pe-tag" data-tag="Maintenance">+ Maintenance</button>
+              <button type="button" class="pe-tag" data-tag="Emergency">+ Emergency</button>
+            </div>
+            <div class="pe-note">For searching and reporting — never an account.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- the summary, beside the form -------------------------------------- -->
+  <aside>
+    <section class="pe-card">
+      <header><i class="fas fa-calculator"></i> Expense Summary</header>
+      <div class="pe-body">
+        <div class="pe-sum-row"><span>Subtotal</span><strong id="pe-subtotal">₹0.00</strong></div>
+        <div class="pe-sum-row">
+          <span>Other charges</span>
+          <input type="number" step="0.01" min="0" id="pe-other" class="form-control" value="0">
+        </div>
+        <div class="pe-sum-row">
+          <span>Discount / adjustment</span>
+          <input type="number" step="0.01" min="0" id="pe-adjust" class="form-control" value="0">
+        </div>
+        <div class="pe-net"><span>Net expense</span><strong id="pe-net">₹0.00</strong></div>
+        <div class="pe-note mt-2" id="pe-after"></div>
+      </div>
+    </section>
+
+    <section class="pe-card" id="pe-problem-card" style="display:none">
+      <header><i class="fas fa-triangle-exclamation text-danger"></i> Before this can post</header>
+      <div class="pe-body">
+        <ul class="pe-problems mb-0" id="pe-problems"></ul>
+      </div>
+    </section>
+
+    <section class="pe-card">
+      <header><i class="fas fa-book"></i> What it will post</header>
+      <div class="pe-body">
+        <div class="pe-note" id="pe-entry">
+          Choose a sub category and an account to see the entry.
+        </div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+{{ masters|json_script:"pe-masters" }}
+{% if expense %}{{ expense.pk|json_script:"pe-id" }}{% endif %}
+
+<script>
+// Inside a ready handler because the page's own script tag is parsed before
+// main.js: escapeHtml and showToast do not exist yet at parse time.
+$(function () {
+  const M = JSON.parse(document.getElementById("pe-masters").textContent);
+  const idNode = document.getElementById("pe-id");
+  const EXPENSE_ID = idNode ? JSON.parse(idNode.textContent) : null;
+  const money = n => "₹" + (Number(n) || 0).toLocaleString("en-IN",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const el = id => document.getElementById(id);
+  const opts = (rows, value, label, placeholder) =>
+    `<option value="">${placeholder}</option>` +
+    rows.map(r => `<option value="${r[value]}">${escapeHtml(String(r[label]))}</option>`).join("");
+
+  // ---- the header's own dropdowns, and what follows what ----------------
+  el("pe-branch").innerHTML = opts(M.branches, "id", "branch_name", "select branch");
+  el("pe-mode").innerHTML = opts(M.modes, "id", "name", "select mode");
+  el("pe-paid-from").innerHTML = `<option value="">select account</option>` +
+    M.paid_from.map(a => `<option value="${a.id}" data-cash="${a.is_cash ? 1 : 0}"
+      data-balance="${a.balance === null ? "" : a.balance}">${escapeHtml(a.label)}</option>`).join("");
+  el("pe-centre").innerHTML = opts(M.centres, "id", "name", "none");
+
+  function farmsFor(branch) {
+    return M.farms.filter(f => String(f.branch_id) === String(branch));
+  }
+
+  el("pe-branch").addEventListener("change", function () {
+    const branch = this.value;
+    const farms = farmsFor(branch);
+    el("pe-farm").innerHTML = opts(farms, "id", "farm_name",
+      farms.length ? "whole branch" : "no farms on this branch");
+    el("pe-shed").innerHTML = `<option value="">select a farm first</option>`;
+    el("pe-shed").disabled = true;
+    // The branch owns a cost centre in this ERP, so it is filled in rather
+    // than asked for. It stays changeable: a spend can belong elsewhere.
+    const centre = M.centres.find(c => String(c.branch_id) === String(branch));
+    el("pe-centre").value = centre ? centre.id : "";
+    el("pe-centre-note").textContent = centre
+      ? `From ${escapeHtml(centre.name)} — change it if this spend belongs elsewhere.`
+      : "This branch has no centre of its own.";
+    // And its petty cash, where there is exactly one cash account.
+    const cash = M.paid_from.filter(a => a.is_cash);
+    if (cash.length === 1 && !el("pe-paid-from").value) {
+      el("pe-paid-from").value = cash[0].id;
+      el("pe-paid-from").dispatchEvent(new Event("change"));
+    }
+    narrate();
+  });
+
+  el("pe-farm").addEventListener("change", function () {
+    const sheds = M.sheds.filter(s => String(s.farm_id) === String(this.value));
+    el("pe-shed").innerHTML = opts(sheds, "id", "label",
+      sheds.length ? "whole farm" : "no sheds on this farm");
+    el("pe-shed").disabled = !sheds.length;
+    narrate();
+  });
+
+  // The mode a payment was made by often names the account it came from.
+  el("pe-mode").addEventListener("change", function () {
+    // payment_mode_map gives the ledgers a mode is mapped to, as a list. One
+    // mapping names the account; none or several leave the choice to the user.
+    const mapped = (M.mode_accounts || {})[this.selectedOptions[0].text] || [];
+    if (mapped.length !== 1) { return; }
+    const match = M.paid_from.find(a => String(a.account_id) === String(mapped[0]));
+    if (match) { el("pe-paid-from").value = match.id; showBalance(); }
+  });
+
+  function showBalance() {
+    const picked = el("pe-paid-from").selectedOptions[0];
+    const note = el("pe-balance");
+    if (!picked || !picked.value) { note.textContent = ""; return; }
+    const balance = picked.dataset.balance;
+    if (balance === "") {
+      note.className = "pe-note is-short";
+      note.textContent = "This account has no ledger, so nothing can be posted against it.";
+      return;
+    }
+    note.className = "pe-note";
+    note.innerHTML = (picked.dataset.cash === "1" ? "Petty cash balance: " : "Available balance: ")
+      + `<strong>${money(balance)}</strong>`;
+    afterThis();
+    narrate();
+  }
+  el("pe-paid-from").addEventListener("change", showBalance);
+
+  function afterThis() {
+    const picked = el("pe-paid-from").selectedOptions[0];
+    const note = el("pe-after");
+    if (!picked || picked.dataset.balance === "") { note.textContent = ""; return; }
+    const left = Number(picked.dataset.balance) - net();
+    note.className = left < 0 ? "pe-note is-short" : "pe-note";
+    note.innerHTML = left < 0
+      ? `That is ${money(-left)} more than the account holds.`
+      : `Leaves <strong>${money(left)}</strong> in the account.`;
+  }
+
+  // ---- the lines --------------------------------------------------------
+  const categoryOptions = `<option value="">select</option>` +
+    M.categories.map((c, i) => `<option value="${i}">${escapeHtml(c.name)}</option>`).join("");
+  const uomOptions = opts(M.uoms, "id", "name", "—");
+
+  function rowHtml(n) {
+    return `<tr class="pe-row">
+      <td class="text-center pe-n">${n}</td>
+      <td class="col-cat"><select class="form-select pe-cat">${categoryOptions}</select></td>
+      <td class="col-sub"><select class="form-select pe-sub" disabled><option value="">choose a category</option></select></td>
+      <td class="col-desc"><input type="text" class="form-control pe-desc" placeholder="what it was for"></td>
+      <td class="col-qty"><input type="number" step="0.001" min="0" class="form-control pe-qty" value="1"></td>
+      <td class="col-uom"><select class="form-select pe-uom">${uomOptions}</select></td>
+      <td class="col-rate"><input type="number" step="0.01" min="0" class="form-control pe-rate" value="0"></td>
+      <td class="col-amt"><input type="text" class="form-control pe-amt" readonly value="0.00"></td>
+      <td class="col-act text-center">
+        <button type="button" class="btn btn-sm btn-outline-primary pe-row-add" title="Add item"><i class="fas fa-plus"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger pe-row-del" title="Remove"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }
+
+  const body = document.querySelector("#pe-rows tbody");
+
+  function addRow() {
+    body.insertAdjacentHTML("beforeend", rowHtml(body.children.length + 1));
+    renumber();
+  }
+
+  function renumber() {
+    [...body.children].forEach((tr, i) => {
+      tr.querySelector(".pe-n").textContent = i + 1;
+      tr.querySelector(".pe-row-add").classList.toggle("d-none", i !== body.children.length - 1);
+      tr.querySelector(".pe-row-del").disabled = body.children.length === 1;
+    });
+  }
+
+  document.addEventListener("click", e => {
+    if (e.target.closest("#pe-add-row") || e.target.closest(".pe-row-add")) { addRow(); }
+    const del = e.target.closest(".pe-row-del");
+    if (del && !del.disabled) { del.closest("tr").remove(); renumber(); total(); }
+  });
+
+  body.addEventListener("change", e => {
+    const tr = e.target.closest("tr");
+    if (e.target.classList.contains("pe-cat")) {
+      const group = M.categories[e.target.value];
+      const sub = tr.querySelector(".pe-sub");
+      sub.innerHTML = group
+        ? `<option value="">select</option>` + group.items.map(
+            i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("")
+        : `<option value="">choose a category</option>`;
+      sub.disabled = !group;
+    }
+    if (e.target.classList.contains("pe-sub")) { narrate(); entry(); }
+  });
+
+  body.addEventListener("input", e => {
+    if (e.target.classList.contains("pe-qty") || e.target.classList.contains("pe-rate")) {
+      const tr = e.target.closest("tr");
+      const amount = (Number(tr.querySelector(".pe-qty").value) || 0)
+                   * (Number(tr.querySelector(".pe-rate").value) || 0);
+      tr.querySelector(".pe-amt").value = amount.toFixed(2);
+      total();
+    }
+    if (e.target.classList.contains("pe-desc")) { narrate(); }
+  });
+
+  // ---- the totals -------------------------------------------------------
+  function subtotal() {
+    return [...body.querySelectorAll(".pe-amt")]
+      .reduce((sum, i) => sum + (Number(i.value) || 0), 0);
+  }
+  function net() {
+    return subtotal() + (Number(el("pe-other").value) || 0) - (Number(el("pe-adjust").value) || 0);
+  }
+  function total() {
+    el("pe-subtotal").textContent = money(subtotal());
+    el("pe-net").textContent = money(net());
+    afterThis();
+    entry();
+  }
+  el("pe-other").addEventListener("input", total);
+  el("pe-adjust").addEventListener("input", total);
+
+  // ---- what it will post, shown but never edited ------------------------
+  function entry() {
+    const rows = [...body.children].map(tr => ({
+      sub: tr.querySelector(".pe-sub").selectedOptions[0],
+      amount: Number(tr.querySelector(".pe-amt").value) || 0,
+    })).filter(r => r.sub && r.sub.value && r.amount > 0);
+    const from = el("pe-paid-from").selectedOptions[0];
+    if (!rows.length || !from || !from.value) {
+      el("pe-entry").textContent = "Choose a sub category and an account to see the entry.";
+      return;
+    }
+    const lines = rows.map(r =>
+      `<div>Dr. ${escapeHtml(r.sub.text)} <strong>${money(r.amount)}</strong></div>`).join("");
+    el("pe-entry").innerHTML = lines +
+      `<div style="padding-left:1.2rem">Cr. ${escapeHtml(from.text)} <strong>${money(net())}</strong></div>`;
+  }
+
+  // ---- narration, written from the transaction --------------------------
+  let narrationTouched = false;
+  el("pe-narration").addEventListener("input", () => { narrationTouched = true; });
+
+  function narrate() {
+    if (narrationTouched) { return; }
+    const first = body.querySelector(".pe-desc");
+    const what = (first && first.value.trim()) || "sundry items";
+    const farm = el("pe-farm").selectedOptions[0];
+    const branch = el("pe-branch").selectedOptions[0];
+    const shed = el("pe-shed").selectedOptions[0];
+    const from = el("pe-paid-from").selectedOptions[0];
+    const where = (farm && farm.value) ? farm.text : (branch && branch.value ? branch.text : "");
+    const unit = (shed && shed.value) ? `, ${shed.text}` : "";
+    const payee = el("pe-paid-to").value.trim();
+    el("pe-narration").value =
+      `Petty expense for ${what}${where ? " at " + where + unit : ""}` +
+      `${payee ? " to " + payee : ""}` +
+      `${from && from.value ? ", paid through " + from.text : ""}.`;
+  }
+  el("pe-paid-to").addEventListener("input", narrate);
+
+  // ---- tags -------------------------------------------------------------
+  el("pe-tags").addEventListener("click", e => {
+    const tag = e.target.closest(".pe-tag");
+    if (tag) { tag.classList.toggle("is-on"); }
+  });
+  const tags = () => [...el("pe-tags").querySelectorAll(".pe-tag.is-on")]
+    .map(t => t.dataset.tag).join(", ");
+
+  // ---- attachments ------------------------------------------------------
+  let pending = [];
+  el("pe-drop").addEventListener("click", () => el("pe-files").click());
+  el("pe-files").addEventListener("change", function () {
+    pending = pending.concat([...this.files]);
+    el("pe-file-list").innerHTML = pending.map(
+      f => `<div class="pe-file"><i class="fas fa-paperclip"></i>${escapeHtml(f.name)}</div>`).join("");
+  });
+
+  async function sendFiles(id) {
+    if (!pending.length) { return; }
+    const body = new FormData();
+    pending.forEach(f => body.append("files", f));
+    const r = await fetch(`/api/petty-expenses/${id}/attach/`, {
+      method: "POST", headers: { "X-CSRFToken": CSRF }, body });
+    const out = await r.json();
+    if (out.refused && out.refused.length) {
+      window.showToast("warning", out.refused.join(" "));
+    }
+    pending = [];
+    el("pe-file-list").innerHTML = "";
+  }
+
+  // Rendered by the template, which is also what sets the cookie: read from
+  // document.cookie alone, a page with no form on it can find nothing there.
+  const CSRF = "{{ csrf_token }}";
+
+  // ---- saving -----------------------------------------------------------
+  function payload(post) {
+    return {
+      post: !!post,
+      expense_date: el("pe-date").value,
+      branch: el("pe-branch").value,
+      farm: el("pe-farm").value,
+      shed: el("pe-shed").value,
+      cost_centre: el("pe-centre").value,
+      paid_to_name: el("pe-paid-to").value,
+      payment_mode: el("pe-mode").value,
+      paid_from: el("pe-paid-from").value,
+      reference: el("pe-reference").value,
+      other_charges: el("pe-other").value,
+      adjustment: el("pe-adjust").value,
+      narration: el("pe-narration").value,
+      tags: tags(),
+      items: [...body.children].map(tr => ({
+        account: tr.querySelector(".pe-sub").value,
+        description: tr.querySelector(".pe-desc").value,
+        quantity: tr.querySelector(".pe-qty").value,
+        uom: tr.querySelector(".pe-uom").value,
+        rate: tr.querySelector(".pe-rate").value,
+      })).filter(r => r.account),
+    };
+  }
+
+  function showProblems(list) {
+    const card = el("pe-problem-card");
+    if (!list.length) { card.style.display = "none"; return; }
+    el("pe-problems").innerHTML = list.map(p => `<li>${escapeHtml(p)}</li>`).join("");
+    card.style.display = "";
+  }
+
+  async function save(post) {
+    showProblems([]);
+    const url = EXPENSE_ID ? `/api/petty-expenses/${EXPENSE_ID}/save/`
+                           : "/api/petty-expenses/save/";
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(payload(post)),
+    });
+    const out = await r.json();
+    if (!r.ok) {
+      // The draft is kept where the server kept it, so a refused post is a
+      // correction rather than a re-entry.
+      showProblems(String(out.error || "Could not save.").split("  ").filter(Boolean));
+      if (out.id) { await sendFiles(out.id); }
+      window.showToast("danger", out.error || "Could not save.");
+      return;
+    }
+    await sendFiles(out.id);
+    // Said on the register rather than here: this page is about to go away,
+    // and a toast that leaves with it was never read.
+    sessionStorage.setItem("bims-petty-saved", out.expense_no + (
+      out.status === "Posted"
+        ? " posted" + (out.voucher_no ? " as " + out.voucher_no : "") + "."
+        : " saved as a draft."));
+    window.location.href = "{% url 'petty_expense_list' %}";
+  }
+
+  el("pe-draft").addEventListener("click", () => save(false));
+  el("pe-post").addEventListener("click", () => save(true));
+
+  // ---- opening state ----------------------------------------------------
+  addRow();
+  if (EXPENSE_ID) {
+    fetch(`/api/petty-expenses/${EXPENSE_ID}/`).then(r => r.json()).then(d => {
+      el("pe-branch").value = d.branch || "";
+      el("pe-branch").dispatchEvent(new Event("change"));
+      el("pe-farm").value = d.farm || "";
+      el("pe-farm").dispatchEvent(new Event("change"));
+      el("pe-shed").value = d.shed || "";
+      el("pe-centre").value = d.cost_centre || "";
+      el("pe-mode").value = d.payment_mode || "";
+      el("pe-paid-from").value = d.paid_from || "";
+      el("pe-other").value = d.other_charges;
+      el("pe-adjust").value = d.adjustment;
+      narrationTouched = true;
+      body.innerHTML = "";
+      d.items.forEach(item => {
+        addRow();
+        const tr = body.lastElementChild;
+        const group = M.categories.findIndex(c => c.items.some(i => i.id === item.account));
+        tr.querySelector(".pe-cat").value = group >= 0 ? group : "";
+        tr.querySelector(".pe-cat").dispatchEvent(new Event("change", { bubbles: true }));
+        tr.querySelector(".pe-sub").value = item.account;
+        tr.querySelector(".pe-desc").value = item.description;
+        tr.querySelector(".pe-qty").value = item.quantity;
+        tr.querySelector(".pe-uom").value = item.uom || "";
+        tr.querySelector(".pe-rate").value = item.rate;
+        tr.querySelector(".pe-amt").value = Number(item.amount).toFixed(2);
+      });
+      if (!body.children.length) { addRow(); }
+      showBalance();
+      total();
+      if (!d.editable) {
+        document.querySelectorAll(".pe-grid input, .pe-grid select, .pe-grid textarea,"
+          + " #pe-add-row, #pe-draft, #pe-post").forEach(n => { n.disabled = true; });
+        window.showToast("info", `${d.expense_no} is ${d.status.toLowerCase()} and cannot be edited.`);
+      }
+    });
+  } else {
+    // A branch with only one choice is not a choice: it is filled in.
+    if (M.branches.length === 1) {
+      el("pe-branch").value = M.branches[0].id;
+      el("pe-branch").dispatchEvent(new Event("change"));
+    }
+    const cash = M.paid_from.filter(a => a.is_cash);
+    if (cash.length === 1) {
+      el("pe-paid-from").value = cash[0].id;
+      showBalance();
+    }
+    const cashMode = M.modes.find(m => /cash/i.test(m.name));
+    if (cashMode) { el("pe-mode").value = cashMode.id; }
+  }
+  total();
+});
+</script>
+{% endblock %}

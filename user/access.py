@@ -309,6 +309,14 @@ MODULE_REGISTRY = [
                         "api_voucher_list", "api_voucher_detail", "api_voucher_post",
                         "api_voucher_cancel", "api_trial_balance",
                     )),
+                    ("petty_expense_list", "Petty Expense", (
+                        "petty_expense_add", "petty_expense_edit",
+                        "api_petty_expense_rows", "api_petty_expense_create",
+                        "api_petty_expense_detail", "api_petty_expense_save",
+                        "api_petty_expense_post", "api_petty_expense_cancel",
+                        "api_petty_expense_attach", "api_petty_expense_detach",
+                        "api_bank_cash_balance",
+                    )),
                 ],
             },
             {

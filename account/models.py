@@ -1159,3 +1159,225 @@ class TermsConditions(models.Model):
 
     def __str__(self):
         return self.type or "Unnamed Terms and Condition"
+
+
+class PettyExpense(models.Model):
+    """A small day-to-day expense paid out of a petty-cash or bank account.
+
+    An operational screen, not a second set of books: the classification is a
+    Chart-of-Account expense ledger, the money comes out of a Bank/Cash Master
+    account, and posting hands the whole thing to account.services.journal like
+    any other voucher. What is kept here is the operational detail a journal
+    line has no room for -- which farm, which shed, who was paid, what was
+    bought, and the bill photographed at the counter.
+
+    `journal` is the voucher this expense became. Cancelling reverses that
+    voucher rather than deleting anything: a posted expense stays on the record.
+    """
+
+    STATUS_DRAFT = "Draft"
+    STATUS_POSTED = "Posted"
+    STATUS_CANCELLED = "Cancelled"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, _("Draft")),
+        (STATUS_POSTED, _("Posted")),
+        (STATUS_CANCELLED, _("Cancelled")),
+    ]
+
+    company = models.ForeignKey("CompanyProfile", on_delete=models.CASCADE,
+                                related_name="petty_expenses")
+    expense_no = models.CharField(
+        max_length=30, blank=True, editable=False, db_index=True,
+        help_text=_("Auto-generated, e.g. PE-2026-00001"),
+    )
+    expense_date = models.DateField()
+
+    # Where it was spent. The branch is required; a farm and a shed narrow it
+    # where the spend belongs to one, which is what makes farm-wise and
+    # shed-wise reporting possible without a second tagging scheme.
+    branch = models.ForeignKey("broiler.Branch", on_delete=models.PROTECT,
+                               related_name="petty_expenses")
+    farm = models.ForeignKey("broiler.BroilerFarm", on_delete=models.PROTECT,
+                             null=True, blank=True, related_name="petty_expenses")
+    shed = models.ForeignKey("broiler.BroilerFarmShed", on_delete=models.PROTECT,
+                             null=True, blank=True, related_name="petty_expenses")
+    cost_centre = models.ForeignKey(
+        "OrganizationCentre", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="petty_expenses",
+        help_text=_("Defaults to the branch's own centre; carried onto every journal line"),
+    )
+
+    # Who was paid. A supplier, an employee, or a name written at the counter --
+    # the last is what a petty expense usually is, and inventing a vendor for a
+    # tea stall is how a party master fills up with noise.
+    paid_to_content_type = models.ForeignKey(
+        ContentType, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="petty_expense_payees",
+        help_text=_("The master the payee came from, when it came from one"),
+    )
+    paid_to_object_id = models.PositiveIntegerField(null=True, blank=True)
+    paid_to = GenericForeignKey("paid_to_content_type", "paid_to_object_id")
+    paid_to_name = models.CharField(
+        max_length=150,
+        help_text=_("Who the money went to, as it should read on the voucher"),
+    )
+
+    payment_mode = models.ForeignKey("PaymentMode", on_delete=models.PROTECT,
+                                     related_name="petty_expenses")
+    paid_from = models.ForeignKey(
+        "BankCashMaster", on_delete=models.PROTECT, related_name="petty_expenses",
+        help_text=_("The petty cash or bank account the money left"),
+    )
+    reference = models.CharField(max_length=100, blank=True,
+                                 help_text=_("Bill or voucher number, where there is one"))
+
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    other_charges = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    adjustment = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0,
+        help_text=_("Discount or rounding, taken off the total"),
+    )
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    narration = models.TextField(blank=True)
+    tags = models.CharField(
+        max_length=200, blank=True,
+        help_text=_("Operational labels for searching, comma separated -- never an account"),
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+
+    journal = models.ForeignKey(
+        "Voucher", on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+        related_name="petty_expenses", help_text=_("The voucher this expense posted"),
+    )
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                  null=True, blank=True, related_name="+", editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name="+", editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                  null=True, blank=True, related_name="+", editable=False)
+    posted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                     null=True, blank=True, related_name="+", editable=False)
+    cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    cancel_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _("Petty Expense")
+        verbose_name_plural = _("Petty Expenses")
+        ordering = ["-expense_date", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "expense_no"],
+                                    name="uniq_petty_expense_no"),
+        ]
+        indexes = [
+            models.Index(fields=["company", "expense_date"]),
+            models.Index(fields=["company", "status", "expense_date"]),
+            models.Index(fields=["branch", "expense_date"]),
+            models.Index(fields=["paid_from", "expense_date"]),
+        ]
+
+    def __str__(self):
+        return self.expense_no or f"DRAFT-{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.expense_no:
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. Reissued and tried again
+            # rather than refused -- the idiom every number here uses.
+            self.expense_no = self.next_expense_no(self.company, self.expense_date)
+            return mint_with_retry(
+                lambda: super(PettyExpense, self).save(*args, **kwargs),
+                lambda: setattr(self, "expense_no",
+                                self.next_expense_no(self.company, self.expense_date)),
+                label="expense number")
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def next_expense_no(cls, company, on_date=None):
+        """PE-<year>-<serial>, serial per company per calendar year."""
+        import datetime
+
+        year = (on_date or datetime.date.today()).year
+        prefix = f"PE-{year}-"
+        last = (cls.objects.filter(company=company, expense_no__startswith=prefix)
+                .order_by("-expense_no").values_list("expense_no", flat=True).first())
+        serial = int(last.rsplit("-", 1)[1]) + 1 if last else 1
+        return f"{prefix}{serial:05d}"
+
+    def recalculate(self):
+        """Totals from the lines. The net is never typed in."""
+        import decimal
+
+        zero = decimal.Decimal("0")
+        self.subtotal = sum((line.amount or zero) for line in self.items.all()) or zero
+        self.net_amount = (self.subtotal + (self.other_charges or zero)
+                           - (self.adjustment or zero))
+        return self.net_amount
+
+    @property
+    def is_editable(self):
+        """A draft can be changed; a posted or cancelled expense cannot."""
+        return self.status == self.STATUS_DRAFT
+
+
+class PettyExpenseItem(models.Model):
+    """One line of a petty expense: what was bought, and what it cost.
+
+    `account` is the expense ledger the line posts to -- the classification and
+    the accounting account are the same choice, so a line cannot be classified
+    and unmapped at the same time.
+    """
+    petty_expense = models.ForeignKey(PettyExpense, on_delete=models.CASCADE,
+                                      related_name="items")
+    line_no = models.PositiveSmallIntegerField(default=1)
+    account = models.ForeignKey(
+        "ChartOfAccount", on_delete=models.PROTECT, related_name="petty_expense_items",
+        help_text=_("The expense ledger this line is classified as"),
+    )
+    description = models.CharField(max_length=255)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=1)
+    uom = models.ForeignKey("inventory.UnitOfMeasurement", on_delete=models.PROTECT,
+                            null=True, blank=True, related_name="petty_expense_items",
+                            help_text="Litres, numbers, kilograms -- the ERP's own unit master")
+    rate = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = _("Petty Expense Item")
+        verbose_name_plural = _("Petty Expense Items")
+        ordering = ["petty_expense", "line_no"]
+
+    def __str__(self):
+        return f"{self.petty_expense_id}/{self.line_no} {self.description}"
+
+    def save(self, *args, **kwargs):
+        import decimal
+
+        qty = self.quantity if self.quantity is not None else decimal.Decimal("1")
+        self.amount = (decimal.Decimal(str(qty)) * decimal.Decimal(str(self.rate or 0))
+                       ).quantize(decimal.Decimal("0.01"))
+        super().save(*args, **kwargs)
+
+
+class PettyExpenseAttachment(models.Model):
+    """A bill, or a photograph of one, kept with the expense it proves."""
+    petty_expense = models.ForeignKey(PettyExpense, on_delete=models.CASCADE,
+                                      related_name="attachments")
+    file = models.FileField(upload_to="petty_expenses/%Y/%m/")
+    file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=50, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name="+", editable=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Petty Expense Attachment")
+        verbose_name_plural = _("Petty Expense Attachments")
+        ordering = ["petty_expense", "id"]
+
+    def __str__(self):
+        return self.file_name

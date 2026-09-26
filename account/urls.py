@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import api_views
 from . import journal_api
+from . import petty_api
 
 urlpatterns = [
     # Chart of Accounts engine APIs
@@ -18,6 +19,22 @@ urlpatterns = [
     path('api/chart-of-accounts/<int:id>/', api_views.CoADetailAPI.as_view(), name='api_coa_detail'),
     # Journal engine APIs
     path('vouchers/', views.vouchers, name='vouchers'),
+
+    # Petty Expenses. Operational screens; everything they post goes through
+    # account.services.journal, so there is no second ledger here.
+    path('petty-expenses/', petty_api.petty_expense_list, name='petty_expense_list'),
+    path('petty-expenses/new/', petty_api.petty_expense_form, name='petty_expense_add'),
+    path('petty-expenses/<int:id>/edit/', petty_api.petty_expense_form, name='petty_expense_edit'),
+    path('api/petty-expenses/', petty_api.petty_expense_rows, name='api_petty_expense_rows'),
+    path('api/petty-expenses/save/', petty_api.petty_expense_save, name='api_petty_expense_create'),
+    path('api/petty-expenses/<int:id>/', petty_api.petty_expense_detail, name='api_petty_expense_detail'),
+    path('api/petty-expenses/<int:id>/save/', petty_api.petty_expense_save, name='api_petty_expense_save'),
+    path('api/petty-expenses/<int:id>/post/', petty_api.petty_expense_post, name='api_petty_expense_post'),
+    path('api/petty-expenses/<int:id>/cancel/', petty_api.petty_expense_cancel, name='api_petty_expense_cancel'),
+    path('api/petty-expenses/<int:id>/attach/', petty_api.petty_expense_attach, name='api_petty_expense_attach'),
+    path('api/petty-expenses/<int:id>/attach/<int:attachment_id>/delete/',
+         petty_api.petty_expense_detach, name='api_petty_expense_detach'),
+    path('api/bank-cash/<int:id>/balance/', petty_api.petty_cash_balance, name='api_bank_cash_balance'),
     path('api/vouchers/', journal_api.VoucherListCreateAPI.as_view(), name='api_voucher_list'),
     path('api/vouchers/<int:id>/', journal_api.VoucherDetailAPI.as_view(), name='api_voucher_detail'),
     path('api/vouchers/<int:id>/post/', journal_api.VoucherPostAPI.as_view(), name='api_voucher_post'),

@@ -240,6 +240,15 @@ html[data-theme="dark"] .unit-tag { background: #16202c; color: #8ab4f8; }
 html[data-theme="dark"] .farm-sum,
 html[data-theme="dark"] .running-empty { color: var(--text-secondary); }
 
+/* A sub-nav tab under the pointer. The brand tint reads on this ground where
+   a lift of surface does not -- #1b1e23 on #141619 is no change at all to
+   look at, which is how a hovered tab came to look like every other one. */
+html[data-theme="dark"] .module-subnav .subnav-tab a:hover {
+  background: var(--primary-subtle);
+  color: var(--primary-light);
+  border-color: var(--primary-dark);
+}
+
 /* The filter strip's own cells. */
 html[data-theme="dark"] .bl-filter,
 html[data-theme="dark"] .bf-filter { border-color: var(--border); }

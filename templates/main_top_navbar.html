@@ -687,6 +687,9 @@ layouts open it from the account menu.
               {% if 'vouchers' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'vouchers' %}">
                 <i class="fas fa-book"></i>Journal Vouchers
               </a></li>{% endif %}
+              {% if 'petty_expense_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'petty_expense_list' %}">
+                <i class="fas fa-receipt"></i>Petty Expense
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
