@@ -1330,6 +1330,31 @@ class PettyExpense(models.Model):
         return self.status in (self.STATUS_DRAFT, self.STATUS_POSTED)
 
 
+class VoucherAttachment(models.Model):
+    """A document kept with the voucher it justifies.
+
+    Deliberately the same shape as PettyExpenseAttachment rather than a
+    shared base: the two are stored in different folders and answer to
+    different screens, and a common parent would buy nothing but a join.
+    """
+    voucher = models.ForeignKey("Voucher", on_delete=models.CASCADE,
+                                related_name="attachments")
+    file = models.FileField(upload_to="vouchers/%Y/%m/")
+    file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=50, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True, related_name="+", editable=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Voucher Attachment")
+        verbose_name_plural = _("Voucher Attachments")
+        ordering = ["voucher", "id"]
+
+    def __str__(self):
+        return self.file_name
+
+
 class PettyCashPolicy(models.Model):
     """The house rules for petty cash: one row, edited in admin.
 

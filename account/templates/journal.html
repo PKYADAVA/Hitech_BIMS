@@ -9,6 +9,38 @@
 {% block content %}
  {% include '_account_transaction_subnavbar.html' with active_tab='vouchers' %}
 
+<style>
+  /* The documents that justify an entry: a tile to add them, a thumbnail
+     each, and a tile to add more. In tokens, so the dark theme comes free. */
+  .jv-docs .form-label { font-size: .72rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: .15rem; }
+  .jv-bills { display: flex; gap: .4rem; flex-wrap: wrap; align-items: stretch; }
+  .jv-drop { flex: 1 1 220px; min-width: 180px; border: 1px dashed var(--border-strong);
+    border-radius: .5rem; padding: .5rem; text-align: center; font-size: .76rem;
+    color: var(--text-secondary); cursor: pointer; background: var(--bg-subtle);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .1rem; }
+  .jv-drop:hover { border-color: var(--primary); color: var(--primary); }
+  .jv-drop .fa-cloud-arrow-up { font-size: 1.05rem; color: var(--primary); }
+  .jv-drop-note { font-size: .68rem; color: var(--text-muted); }
+  .jv-bills.has-bills .jv-drop { display: none; }
+  .jv-bill { position: relative; width: 72px; flex: 0 0 72px; text-align: center; }
+  .jv-bill-face { width: 72px; height: 62px; border: 1px solid var(--border);
+    border-radius: .45rem; background: var(--bg-subtle); display: flex;
+    align-items: center; justify-content: center; overflow: hidden; }
+  .jv-bill-face img { width: 100%; height: 100%; object-fit: cover; }
+  .jv-bill-face i { font-size: 1.3rem; color: var(--danger); }
+  .jv-bill-name { font-size: .64rem; color: var(--text-secondary); margin-top: .15rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jv-bill-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+    border-radius: 50%; border: 0; background: var(--danger); color: #fff;
+    font-size: .6rem; line-height: 1; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; padding: 0; }
+  .jv-bill-more { width: 72px; flex: 0 0 72px; height: 62px;
+    border: 1px dashed var(--primary); border-radius: .45rem; background: transparent;
+    color: var(--primary); font-size: 1rem; cursor: pointer; }
+</style>
+
 <div class="page-header">
     <div class="page-header-main">
       <div class="page-header-title"><i class="fas fa-book"></i>Journal Vouchers</div>
@@ -161,12 +193,32 @@
                 <tr class="fw-bold">
                   <td colspan="3" class="text-end">Totals</td>
                   <td class="text-end text-nowrap">In (Dr) <span id="lines-total-debit">0.00</span> · Out (Cr) <span id="lines-total-credit">0.00</span></td>
-                  <td colspan="2" id="lines-balance-hint" class="text-danger"></td>
+                  <td colspan="2">
+                    <span id="lines-balance-hint" class="text-danger"></span>
+                    <button type="button" class="btn btn-outline-primary btn-sm ms-2 d-none"
+                            id="balance-btn" title="Put the difference on this line (Alt+B)">
+                      <i class="fas fa-scale-balanced"></i> Balance
+                    </button>
+                  </td>
                 </tr>
               </tfoot>
             </table>
           </div>
         </div>
+        <!-- What justifies the entry: the advice, the bill, the letter. -->
+        <div class="jv-docs mt-3">
+          <label class="form-label">Documents</label>
+          <div class="jv-bills" id="jv-bills">
+            <div class="jv-drop" id="jv-drop">
+              <i class="fas fa-cloud-arrow-up"></i>
+              <div>Click to attach a bill, advice or letter</div>
+              <div class="jv-drop-note">PDF, JPG, PNG (Max 5 MB)</div>
+            </div>
+          </div>
+          <input type="file" id="jv-files" class="d-none" multiple
+                 accept="application/pdf,image/jpeg,image/png">
+        </div>
+
         <div class="d-flex justify-content-end gap-2 mt-3">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i> Cancel</button>
           <button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button>
@@ -540,6 +592,41 @@ $(document).ready(function () {
         if ($('#voucher-lines-body tr').length > 1) $(this).closest('tr').remove();
         refreshTotals();
     });
+    // The difference, onto a line, rather than typed out again. It goes to
+    // the line the cursor is in; with the cursor elsewhere, the last line.
+    function balanceHere() {
+        let debit = 0, credit = 0;
+        $('#voucher-lines-body tr').each(function () {
+            const amount = parseFloat($(this).find('.line-amount').val()) || 0;
+            if ($(this).find('.line-direction').val() === 'out') { credit += amount; }
+            else { debit += amount; }
+        });
+        const diff = debit - credit;
+        if (Math.abs(diff) < 0.005) { return; }
+
+        const focused = $(document.activeElement).closest('#voucher-lines-body tr');
+        let row = focused.length ? focused : $('#voucher-lines-body tr').last();
+        // A line that already carries a figure is not overwritten: the empty
+        // one is where the difference was going to be typed.
+        const empty = $('#voucher-lines-body tr').filter(function () {
+            return !(parseFloat($(this).find('.line-amount').val()) || 0);
+        }).first();
+        if (!focused.length && empty.length) { row = empty; }
+
+        const amount = parseFloat(row.find('.line-amount').val()) || 0;
+        const side = row.find('.line-direction').val();
+        // Money in short of money out wants the shortfall on the in side.
+        const wanted = diff > 0 ? 'out' : 'in';
+        row.find('.line-direction').val(wanted);
+        row.find('.line-amount').val((amount && side === wanted
+            ? amount + Math.abs(diff) : Math.abs(diff)).toFixed(2));
+        refreshTotals();
+    }
+    $(document).on('click', '#balance-btn', balanceHere);
+    $(document).on('keydown', '#voucherFormModal', function (e) {
+        if (e.altKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); balanceHere(); }
+    });
+
     $(document).on('input', '.line-amount', refreshTotals);
     $(document).on('change', '.line-direction', refreshTotals);
     $(document).on('change', '.line-account', function () {
@@ -561,6 +648,8 @@ $(document).ready(function () {
         $('#lines-total-credit').text(credit.toFixed(2));
         const diff = debit - credit;
         $('#lines-balance-hint').text(diff ? `Out of balance by ${Math.abs(diff).toFixed(2)}` : '');
+        // Offered only when there is a difference to put somewhere.
+        $('#balance-btn').toggleClass('d-none', Math.abs(diff) < 0.005);
         scheduleNarrationRefresh();
     }
 
@@ -717,6 +806,12 @@ $(document).ready(function () {
     }
     function reallyOpenVoucherForm(voucher, revise) {
         $('#voucher-id').val(voucher && !revise ? voucher.id : '');
+        // A revision is a new voucher, so it opens without the original's
+        // documents: they belong to the entry being cancelled.
+        jvPending = [];
+        jvAttached = (voucher && !revise && voucher.attachments)
+            ? voucher.attachments.slice() : [];
+        jvDrawBills();
         $('#voucherFormTitle').text(
             revise ? `Revise ${voucher.voucher_no} — corrected copy`
                    : (voucher ? `Edit ${voucher.voucher_no}` : 'New Voucher'));
@@ -774,6 +869,80 @@ $(document).ready(function () {
         });
     });
 
+    // ---- documents on the voucher ---------------------------------------
+    // Two kinds on one shelf: files picked here and not yet sent, and
+    // documents already on the voucher. Removing the first is local;
+    // removing the second asks the server, which refuses once posted.
+    let jvPending = [], jvAttached = [];
+
+    function jvDrawBills() {
+        const shelf = $('#jv-bills');
+        shelf.toggleClass('has-bills', !!(jvAttached.length + jvPending.length));
+        shelf.find('.jv-bill, .jv-bill-more').remove();
+        const tile = (name, url, isImage, kind, index) =>
+            '<div class="jv-bill"><div class="jv-bill-face">'
+            + (isImage && url ? '<img src="' + url + '" alt="">'
+                              : '<i class="fas fa-file-pdf"></i>')
+            + '</div><div class="jv-bill-name" title="' + escapeHtml(name) + '">'
+            + escapeHtml(name) + '</div>'
+            + '<button type="button" class="jv-bill-x" data-' + kind + '="' + index
+            + '" title="Remove"><i class="fas fa-xmark"></i></button></div>';
+        jvAttached.forEach((a, i) => shelf.append(
+            tile(a.name, a.url, /image/.test(a.type || ''), 'saved', i)));
+        jvPending.forEach((f, i) => shelf.append(
+            tile(f.file.name, f.url, f.url !== '', 'pending', i)));
+        if (jvAttached.length + jvPending.length) {
+            shelf.append('<button type="button" class="jv-bill-more" id="jv-bill-more"'
+                + ' title="Attach another"><i class="fas fa-plus"></i></button>');
+        }
+    }
+
+    $(document).on('click', '#jv-drop, #jv-bill-more', () => $('#jv-files').click());
+    $(document).on('change', '#jv-files', function () {
+        const files = [...this.files];
+        files.forEach(file => jvPending.push({
+            file: file,
+            url: file.type.indexOf('image/') === 0 ? URL.createObjectURL(file) : '',
+        }));
+        this.value = '';
+        jvDrawBills();
+    });
+    $(document).on('click', '.jv-bill-x[data-pending]', function () {
+        jvPending.splice(Number(this.dataset.pending), 1);
+        jvDrawBills();
+    });
+    $(document).on('click', '.jv-bill-x[data-saved]', function () {
+        const index = Number(this.dataset.saved);
+        const doc = jvAttached[index];
+        $.ajax({
+            url: '/api/vouchers/' + $('#voucher-id').val() + '/attach/' + doc.id + '/delete/',
+            method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+            success: function () { jvAttached.splice(index, 1); jvDrawBills(); },
+            error: (xhr) => showToast('danger',
+                xhr.responseJSON?.error || 'Could not remove it.'),
+        });
+    });
+
+    function jvSendFiles(voucherId, done) {
+        if (!jvPending.length || !voucherId) { done(); return; }
+        const body = new FormData();
+        jvPending.forEach(p => body.append('files', p.file));
+        $.ajax({
+            url: '/api/vouchers/' + voucherId + '/attach/', method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            data: body, processData: false, contentType: false,
+            success: function (out) {
+                (out.refused || []).forEach(why => showToast('warning', why));
+                jvPending = [];
+                done();
+            },
+            error: function () {
+                showToast('warning', 'The voucher saved; its documents did not.');
+                done();
+            },
+        });
+    }
+
     function saveVoucher(post) {
         const id = $('#voucher-id').val();
         const payload = collectPayload();
@@ -802,9 +971,13 @@ $(document).ready(function () {
                     finishSave(post);
                 }
                 function finishSave(posted) {
-                    $('#voucherFormModal').modal('hide');
-                    loadVouchers();
-                    showToast('success', posted ? 'Voucher posted.' : 'Draft saved.');
+                    // After the save: a new voucher has nothing to attach
+                    // documents to until it exists.
+                    jvSendFiles(id || voucher.id, function () {
+                        $('#voucherFormModal').modal('hide');
+                        loadVouchers();
+                        showToast('success', posted ? 'Voucher posted.' : 'Draft saved.');
+                    });
                 }
             },
             error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Save failed.'),

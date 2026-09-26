@@ -308,6 +308,7 @@ MODULE_REGISTRY = [
                     ("vouchers", "Journal Vouchers", (
                         "api_voucher_list", "api_voucher_detail", "api_voucher_post",
                         "api_voucher_cancel", "api_trial_balance",
+                        "api_voucher_attach", "api_voucher_detach",
                     )),
                     ("petty_expense_list", "Petty Expense", (
                         "petty_expense_add", "petty_expense_edit",

@@ -14,6 +14,7 @@ Routes (account/urls.py):
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -49,6 +50,11 @@ def _serialize_voucher(voucher, with_lines=False):
                          and timezone.localtime(voucher.cancelled_at).strftime("%d-%b-%Y %H:%M")),
         "cancel_reason": voucher.cancel_reason,
     }
+    # The documents that justify it, so one fetch fills the whole screen.
+    data["attachments"] = [
+        {"id": a.pk, "name": a.file_name, "url": a.file.url, "type": a.file_type}
+        for a in voucher.attachments.all()
+    ]
     if with_lines:
         data["lines"] = [
             {
@@ -170,6 +176,44 @@ class VoucherDetailAPI(View):
 
 
 @method_decorator(login_required, name="dispatch")
+@method_decorator(login_required, name="dispatch")
+class VoucherAttachmentAPI(View):
+    """Bills and advices on a voucher: add one, or take one off a draft."""
+
+    ALLOWED = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
+    LIMIT = 5 * 1024 * 1024
+
+    def post(self, request, id, attachment_id=None):
+        from account.models import VoucherAttachment
+
+        company = _company(request)
+        voucher = _get_voucher(company, id)
+
+        if attachment_id is not None:              # removing one
+            if voucher.status != "Draft":
+                return JsonResponse(
+                    {"error": "A posted voucher keeps its documents."}, status=400)
+            get_object_or_404(VoucherAttachment, pk=attachment_id,
+                              voucher=voucher).delete()
+            return JsonResponse({"removed": attachment_id})
+
+        saved, refused = [], []
+        for upload in request.FILES.getlist("files"):
+            if upload.content_type not in self.ALLOWED:
+                refused.append(f"{upload.name}: only PDF, JPG and PNG are accepted.")
+                continue
+            if upload.size > self.LIMIT:
+                refused.append(f"{upload.name}: larger than 5 MB.")
+                continue
+            row = VoucherAttachment.objects.create(
+                voucher=voucher, file=upload, file_name=upload.name[:255],
+                file_type=upload.content_type, uploaded_by=request.user)
+            saved.append({"id": row.pk, "name": row.file_name,
+                          "url": row.file.url, "type": row.file_type})
+        return JsonResponse({"saved": saved, "refused": refused},
+                            status=400 if refused and not saved else 200)
+
+
 class VoucherPostAPI(View):
     def post(self, request, id):
         company = _company(request)
