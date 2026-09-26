@@ -68,8 +68,11 @@
     padding: .2rem .6rem; cursor: pointer; }
   .per-tab.is-on { background: var(--primary-subtle); color: var(--primary);
     border-color: var(--primary); }
-  .per-tab:hover:not(.is-on) { background: var(--surface-hover);
-    border-color: var(--border-strong); color: var(--text); }
+  /* The same brand tint as the view switch and the sub-nav tabs. A step of
+     surface here was 5.0 on white -- which is the mistake this page was
+     already supposed to have stopped making. */
+  .per-tab:hover:not(.is-on) { background: var(--primary-subtle);
+    border-color: var(--primary); color: var(--primary); }
   .per-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
     gap: .4rem; padding: .45rem; }
   .per-filters.is-hidden { display: none; }
