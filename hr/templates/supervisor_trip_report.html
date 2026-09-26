@@ -18,8 +18,8 @@
                  overflow: hidden; margin: 2px auto 0; }
   @media print { .rpt-thumb { width: 56px; height: 42px; } }
 </style>{% endblock %}
-{# A report opens in its own tab and is read or printed, so it carries
-   no module navigation -- the same as every other report here. #}
+{% comment %} A report opens in its own tab and is read or printed, so it carries
+   no module navigation -- the same as every other report here. {% endcomment %}
 {% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_hr_tracking_subnavbar.html' with active_tab='supervisor_trip_report' %}

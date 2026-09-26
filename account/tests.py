@@ -775,7 +775,31 @@ class JournalVoucherReportTests(TestCase):
             ], **kw)
 
     def get(self, qs=""):
+        """Fetch the report for the fixtures' own year.
+
+        The page opens on the last seven days, and these vouchers are dated
+        across the financial year, so every request states the period it
+        means rather than relying on the default.
+        """
+        if "from_date" not in qs:
+            period = "from_date=2026-04-01&to_date=2027-03-31"
+            qs = (qs + "&" + period) if qs.startswith("?") else "?" + period
         return self.client.get("/reports/journal-voucher/" + qs).content.decode()
+
+    def test_a_bare_visit_opens_on_the_last_seven_days(self):
+        """Not the whole history: a register of vouchers is asked about the
+        last few days, and the dates are in the filter bar either way."""
+        today = datetime.date.today()
+        self.make(amount="4321", date=today.strftime("%Y-%m-%d"))
+        self.make(amount="8765", date="2026-05-01")
+
+        page = self.client.get("/reports/journal-voucher/").content.decode()
+        self.assertIn("4,321", page)
+        self.assertNotIn("8,765", page)
+        # ... and clearing the dates deliberately still gives everything.
+        whole = self.client.get(
+            "/reports/journal-voucher/?from_date=&to_date=").content.decode()
+        self.assertIn("8,765", whole)
 
     def test_lists_vouchers_with_journal_type_column(self):
         self.make(amount="1000")

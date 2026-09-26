@@ -4,8 +4,8 @@
 {% block title %}Petty Expenses Report{% endblock %}
 {% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{# A report opens in its own tab and is meant to be read and printed, so it
-   carries no module navigation -- the same as every other report here. #}
+{% comment %} A report opens in its own tab and is meant to be read and printed, so it
+   carries no module navigation -- the same as every other report here. {% endcomment %}
 {% block nav %}{% endblock nav %}
 
 {% block content %}

@@ -23,8 +23,8 @@
     text-align: center; min-width: 3rem; }
   .rpt-scroll .rpt-table td.ffr-sr { color: #6c757d; }
 </style>{% endblock %}
-{# A report opens in its own tab and is read or printed, so it carries
-   no module navigation -- the same as every other report here. #}
+{% comment %} A report opens in its own tab and is read or printed, so it carries
+   no module navigation -- the same as every other report here. {% endcomment %}
 {% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_broiler_report_subnavbar.html' with active_tab='farmer_farm_report' %}

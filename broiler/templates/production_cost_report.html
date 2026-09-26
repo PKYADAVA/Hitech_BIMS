@@ -15,8 +15,8 @@ use, so a flock's feed cost is one number across the ERP.
 
 {% block title %}Production Cost Report &mdash; BIMS{% endblock %}
 {% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
-{# A report opens in its own tab and is read or printed, so it carries
-   no module navigation -- the same as every other report here. #}
+{% comment %} A report opens in its own tab and is read or printed, so it carries
+   no module navigation -- the same as every other report here. {% endcomment %}
 {% block nav %}{% endblock nav %}
 
 {% block content %}
