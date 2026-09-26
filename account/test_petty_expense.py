@@ -7,10 +7,12 @@ because that is the whole claim the module makes.
 """
 import datetime
 import json
+import shutil
+import tempfile
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from account.coa_seed import seed_coa_templates
 from account.models import (BankCashMaster, ChartOfAccount, CoATemplate,
@@ -287,7 +289,16 @@ class ClassificationTests(PettyExpenseTestCase):
                          journal.account_balance(self.cash_ledger))
 
 
+# Uploads go to a directory of their own: a test must not leave a bill in the
+# project's media folder.
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="petty-test-media-"))
 class EndpointTests(PettyExpenseTestCase):
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
     def setUp(self):
         self.client.force_login(self.user)
 
@@ -398,6 +409,42 @@ class EndpointTests(PettyExpenseTestCase):
         self.assertEqual(self.client.get("/petty-expenses/new/").status_code, 200)
         self.assertEqual(
             self.client.get(f"/petty-expenses/{created['id']}/edit/").status_code, 200)
+
+    def test_a_bill_can_be_attached_and_only_a_draft_can_lose_it(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.fund_cash(5000)
+        created = self.post_json("/api/petty-expenses/save/", self.payload()).json()
+        bill = SimpleUploadedFile("bill.pdf", b"%PDF-1.4 tea", content_type="application/pdf")
+        attached = self.client.post(f"/api/petty-expenses/{created['id']}/attach/",
+                                    {"files": [bill]})
+        self.assertEqual(attached.status_code, 200, attached.content)
+        attachment_id = attached.json()["saved"][0]["id"]
+
+        # While it is a draft, a bill attached by mistake can be taken off.
+        removed = self.client.post(
+            f"/api/petty-expenses/{created['id']}/attach/{attachment_id}/delete/")
+        self.assertEqual(removed.status_code, 200)
+
+        # Once posted, the evidence stays with the entry.
+        bill = SimpleUploadedFile("bill.pdf", b"%PDF-1.4 tea", content_type="application/pdf")
+        again = self.client.post(f"/api/petty-expenses/{created['id']}/attach/",
+                                 {"files": [bill]}).json()["saved"][0]["id"]
+        self.client.post(f"/api/petty-expenses/{created['id']}/post/")
+        refused = self.client.post(
+            f"/api/petty-expenses/{created['id']}/attach/{again}/delete/")
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("keeps its attachments", refused.json()["error"])
+
+    def test_a_file_that_is_not_a_bill_is_refused_by_name(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        created = self.post_json("/api/petty-expenses/save/", self.payload()).json()
+        bad = SimpleUploadedFile("notes.exe", b"MZ", content_type="application/x-msdownload")
+        response = self.client.post(f"/api/petty-expenses/{created['id']}/attach/",
+                                    {"files": [bad]})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("notes.exe", response.json()["refused"][0])
 
     def test_one_expense_reads_back_whole(self):
         self.fund_cash(5000)
