@@ -102,10 +102,18 @@
           // Only a row that opens the page: at each level up it has to be the
           // first element (styles and scripts aside), or it belongs to
           // something further down and stays where it is.
-          var skip = { STYLE: 1, SCRIPT: 1, LINK: 1, NOSCRIPT: 1 };
+          var skip = { STYLE: 1, SCRIPT: 1, LINK: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+          function invisible(n) {
+            // Anything that draws nothing is not "the first thing on the page".
+            // A {% csrf_token %} at the top of a template put a hidden input
+            // in front of the tabs and quietly stopped them being hoisted.
+            return skip[n.tagName]
+              || (n.tagName === "INPUT" && n.type === "hidden")
+              || n.classList.contains("ds-breadcrumb");
+          }
           function firstEl(parent) {
             for (var n = parent.firstElementChild; n; n = n.nextElementSibling) {
-              if (!skip[n.tagName] && !n.classList.contains("ds-breadcrumb")) return n;
+              if (!invisible(n)) return n;
             }
             return null;
           }
