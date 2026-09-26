@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
@@ -598,10 +599,17 @@ def _filtered(request, qs):
 @never_cache
 @login_required
 def petty_expense_report(request):
-    """Where the petty money went: one question, grouped six ways."""
+    """Both halves of the question: where the money went, and the cash book.
+
+    One page with two views rather than two menu entries -- they are the
+    analysis and the ledger of the same money, and nobody knows which half
+    they want until they have seen the figures.
+    """
     return render(request, "petty_expense_report.html", {
         "masters": _masters(request.user),
         "groups": service.SUMMARY_GROUPS,
+        "boxes": [{"id": row["id"], "label": row["label"]}
+                  for row in service.paid_from_accounts()],
     })
 
 
@@ -619,14 +627,12 @@ def petty_expense_report_rows(request):
         expenses, group_by=request.GET.get("group_by") or "category"))
 
 
-@never_cache
 @login_required
 def petty_cash_statement(request):
-    """The page: a cash box, a period, and what moved."""
-    return render(request, "petty_cash_statement.html", {
-        "boxes": [{"id": row["id"], "label": row["label"]}
-                  for row in service.paid_from_accounts()],
-    })
+    """Kept so old links and bookmarks still land somewhere sensible."""
+    from django.shortcuts import redirect
+
+    return redirect(f"{reverse('petty_expense_report')}?view=cash")
 
 
 @login_required

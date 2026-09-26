@@ -154,6 +154,78 @@
     .no-print { display: none !important; }
     .per-card, .per-tile { break-inside: avoid; }
   }
+
+  /* The Petty Expense Report's measurements, so the two reports read as one
+     pair rather than two pages that happen to be about the same money. */
+  .pcs-page { --s1: #2a78d6; --grid: #e5e7eb;
+    display: flex; flex-direction: column; gap: .6rem; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .pcs-page { --s1: #3987e5; --grid: #22252b; }
+  }
+  :root[data-theme="dark"] .pcs-page { --s1: #3987e5; --grid: #22252b; }
+
+  .pcs-head, .pcs-card, .pcs-tile { background: var(--surface);
+    border: 1px solid var(--border); border-radius: .6rem; }
+  .pcs-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .pcs-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--success); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .pcs-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .pcs-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  .pcs-head-actions { margin-left: auto; display: flex; gap: .5rem; }
+
+  .pcs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .5rem; }
+  .pcs-tile { padding: .5rem .7rem; display: flex; gap: .55rem; align-items: flex-start; }
+  .pcs-tile-icon { width: 32px; height: 32px; flex: 0 0 32px; border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center; font-size: .85rem;
+    background: var(--px-bg); color: var(--px-fg); }
+  .pcs-tile-label { font-size: .68rem; color: var(--text-secondary); line-height: 1.2; }
+  .pcs-tile-value { font-size: 1.05rem; font-weight: 700; color: var(--text);
+    line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .pcs-tile-note { font-size: .68rem; color: var(--text-muted); line-height: 1.25; }
+  .pcs-in .pcs-tile-value { color: var(--success-text); }
+  .pcs-out .pcs-tile-value { color: var(--danger-text); }
+
+  .pcs-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .4rem; padding: .45rem; align-items: end; }
+  .pcs-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: var(--text-secondary); line-height: 1.2; }
+  .pcs-filter .form-select, .pcs-filter .form-control { height: 30px; font-size: .8rem; }
+  .pcs-actions { display: flex; gap: .4rem; }
+
+  .pcs-card > header { display: flex; align-items: center; gap: .4rem;
+    padding: .4rem .7rem; border-bottom: 1px solid var(--border);
+    font-size: .78rem; font-weight: 700; color: var(--text); }
+  .pcs-plot { padding: .5rem .6rem; height: 170px; position: relative; }
+
+  #pcs-table th { font-size: .68rem; text-transform: uppercase; letter-spacing: .02em;
+    color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+    padding: .35rem .6rem; }
+  #pcs-table td { font-size: .79rem; padding: .3rem .6rem; vertical-align: middle;
+    white-space: nowrap; }
+  .pcs-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pcs-in-cell { color: var(--success-text); }
+  .pcs-out-cell { color: var(--danger-text); }
+  .pcs-running { font-weight: 600; }
+  .pcs-day td { background: var(--bg-subtle); font-weight: 600; }
+  .pcs-particulars { white-space: normal; }
+  .pcs-none { color: var(--text-muted); }
+  #pcs-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+
+  @media print { .no-print { display: none !important; } }
+
+  /* One page, two views. The switch is a segmented control rather than two
+     menu entries, because nobody knows which half they want until they see
+     the figures. */
+  .pv-switch { display: inline-flex; border: 1px solid var(--border);
+    border-radius: .5rem; overflow: hidden; }
+  .pv-switch button { border: 0; background: transparent; color: var(--text-secondary);
+    font-size: .78rem; font-weight: 600; padding: .25rem .7rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: .35rem; }
+  .pv-switch button.is-on { background: var(--primary); color: #fff; }
+  .pv-hidden { display: none !important; }
 </style>
 
 <div class="per-page">
@@ -162,7 +234,15 @@
   <div class="per-head-icon"><i class="fas fa-chart-pie"></i></div>
   <div>
     <div class="per-title">Petty Expenses Report</div>
-    <div class="per-sub">Posted petty cash spending, by category, branch, farm and month</div>
+    <div class="per-sub" id="pv-sub">Posted petty cash spending, by category, branch, farm and month</div>
+  </div>
+  <div class="pv-switch no-print" id="pv-switch">
+    <button type="button" data-view="expense" class="is-on">
+      <i class="fas fa-chart-pie"></i> Where it went
+    </button>
+    <button type="button" data-view="cash">
+      <i class="fas fa-cash-register"></i> Cash book
+    </button>
   </div>
   <div class="per-head-actions no-print">
     <button type="button" class="btn btn-outline-secondary btn-sm" id="per-export">
@@ -177,6 +257,7 @@
   </div>
 </div>
 
+<div id="pane-expense">
 <div class="per-tiles" id="per-tiles"></div>
 
 <div class="per-card no-print">
@@ -297,8 +378,70 @@
 <div class="per-summaries" id="per-summaries"></div>
 
 </div>
+</div>
+
+<div id="pane-cash" class="pv-hidden">
+<div class="pcs-page pv-page">
+
+<div class="pcs-tiles" id="pcs-tiles"></div>
+
+<div class="pcs-card no-print">
+  <div class="pcs-filters">
+    <div class="pcs-filter">
+      <label for="pcs-box">Cash box</label>
+      <select id="pcs-box" class="form-select"></select>
+    </div>
+    <div class="pcs-filter">
+      <label for="pcs-from">From</label>
+      <input type="date" id="pcs-from" class="form-control">
+    </div>
+    <div class="pcs-filter">
+      <label for="pcs-to">To</label>
+      <input type="date" id="pcs-to" class="form-control">
+    </div>
+    <div class="pcs-filter">
+      <label for="pcs-group">Show</label>
+      <select id="pcs-group" class="form-select">
+        <option value="entry">Every entry</option>
+        <option value="day">One line per day</option>
+      </select>
+    </div>
+    <div class="pcs-actions">
+      <button class="btn btn-primary btn-sm" id="pcs-load"><i class="fas fa-search"></i> View</button>
+      <button class="btn btn-outline-secondary btn-sm" id="pcs-month"><i class="fas fa-calendar-day"></i> This month</button>
+    </div>
+  </div>
+</div>
+
+<div class="pcs-card">
+  <header><i class="fas fa-chart-line"></i> Balance through the period</header>
+  <div class="pcs-plot"><canvas id="pcs-chart"></canvas></div>
+</div>
+
+<div class="pcs-card">
+  <header><i class="fas fa-book"></i> Statement <span class="pcs-none" id="pcs-count"></span></header>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" id="pcs-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Particulars</th>
+          <th class="pcs-num">In / Out (&#8377;)</th>
+          <th class="pcs-num">Balance (&#8377;)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot></tfoot>
+    </table>
+  </div>
+</div>
+
+</div>
+</div>
 
 {{ masters|json_script:"per-masters" }}
+{{ boxes|json_script:"pcs-boxes" }}
 
 <script src="{% static 'js/chart.umd.min.js' %}"></script>
 <script>
@@ -710,6 +853,12 @@ $(function () {
   $("#per-print").on("click", () => window.print());
 
   $("#per-export").on("click", function () {
+    // The button belongs to the page; the rows belong to the view showing.
+    if (document.getElementById("pane-cash")
+        && !document.getElementById("pane-cash").classList.contains("pv-hidden")) {
+      if (window.pvCashExport) { window.pvCashExport(); }
+      return;
+    }
     if (!data) { return; }
     const head = DETAIL_HEAD.slice(1);
     const lines = [head.join(",")].concat(data.rows.map(r => [
@@ -739,4 +888,221 @@ $(function () {
   load();
 });
 </script>
+<script>
+$(function () {
+  const BOXES = JSON.parse(document.getElementById("pcs-boxes").textContent);
+  const el = id => document.getElementById(id);
+  const money = n => (Number(n) || 0).toLocaleString("en-IN",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const short = n => {
+    const v = Number(n) || 0;
+    return v >= 100000 ? (v / 100000).toFixed(1) + "L"
+         : v >= 1000 ? (v / 1000).toFixed(0) + "k" : String(Math.round(v));
+  };
+  const fmt = iso => {
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? iso
+      : d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  };
+  const short_date = iso => {
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  };
+
+  function token(name) {
+    return getComputedStyle(document.querySelector(".pcs-page"))
+      .getPropertyValue(name).trim();
+  }
+
+  el("pcs-box").innerHTML = BOXES.map(
+    b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+
+  const today = new Date();
+  const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+    + "-" + String(d.getDate()).padStart(2, "0");
+  function thisMonth() {
+    el("pcs-from").value = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+    el("pcs-to").value = iso(today);
+  }
+  thisMonth();
+
+  let current = null, chart = null;
+
+  function load() {
+    const p = new URLSearchParams({ box: el("pcs-box").value,
+                                    from: el("pcs-from").value,
+                                    to: el("pcs-to").value,
+                                    group: el("pcs-group").value });
+    $.getJSON("{% url 'api_petty_cash_statement' %}?" + p.toString(), function (d) {
+      current = d;
+      paintTiles(d);
+      drawChart(d);
+      paintRows(d);
+    });
+  }
+
+  function tile(icon, bg, fg, label, value, note, cls) {
+    return '<div class="pcs-tile ' + (cls || "") + '">'
+      + '<span class="pcs-tile-icon" style="--px-bg:' + bg + ';--px-fg:' + fg + '">'
+      + '<i class="fas ' + icon + '"></i></span>'
+      + '<span><span class="pcs-tile-label">' + escapeHtml(label) + '</span>'
+      + '<div class="pcs-tile-value">&#8377;' + money(value) + '</div>'
+      + '<span class="pcs-tile-note">' + escapeHtml(note) + '</span></span></div>';
+  }
+
+  function paintTiles(d) {
+    const period = (el("pcs-from").value ? fmt(el("pcs-from").value) : "inception")
+      + " to " + (el("pcs-to").value ? fmt(el("pcs-to").value) : "today");
+    el("pcs-tiles").innerHTML =
+      tile("fa-hourglass-start", "#eef1f5", "#5a6b7f", "Opening", d.opening, period)
+      + tile("fa-arrow-down", "#e7f7ee", "#067647", "Received", d.received,
+             "cash drawn in", "pcs-in")
+      + tile("fa-arrow-up", "#fdeced", "#b02a37", "Spent", d.spent,
+             "paid out", "pcs-out")
+      + tile("fa-wallet", "#e8f1fd", "#1d6fe0", "Closing", d.closing,
+             "what is in the box");
+  }
+
+  function drawChart(d) {
+    // One series: the balance as it moved. No legend — the header names it.
+    const rows = d.rows;
+    const labels = rows.map(r => short_date(r.date));
+    const values = rows.map(r => r.balance);
+    if (labels.length) {
+      labels.unshift("Opening");
+      values.unshift(d.opening);
+    }
+    const surface = getComputedStyle(document.querySelector(".pcs-card")).backgroundColor;
+    const muted = getComputedStyle(document.querySelector(".pcs-none")).color;
+    chart && chart.destroy();
+    chart = new Chart(el("pcs-chart"), {
+      type: "line",
+      data: { labels: labels,
+              datasets: [{ data: values,
+                           borderColor: token("--s1"),
+                           backgroundColor: token("--s1") + "1a",
+                           borderWidth: 2, fill: true, tension: .25,
+                           pointRadius: 4, pointHoverRadius: 6,
+                           pointBackgroundColor: token("--s1"),
+                           pointBorderColor: surface, pointBorderWidth: 2,
+                           stepped: false }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: surface,
+                     titleColor: getComputedStyle(document.body).color,
+                     bodyColor: getComputedStyle(document.body).color,
+                     borderColor: token("--grid"), borderWidth: 1, padding: 8,
+                     callbacks: { label: ctx => " ₹" + money(ctx.parsed.y) } },
+        },
+        scales: {
+          x: { grid: { display: false },
+               ticks: { color: muted, font: { size: 10 }, maxRotation: 0,
+                        autoSkip: true, maxTicksLimit: 10 } },
+          y: { border: { display: false },
+               grid: { color: token("--grid"), drawTicks: false },
+               ticks: { color: muted, font: { size: 10 }, callback: v => short(v) } },
+        },
+      },
+    });
+  }
+
+  // One column for both directions: money in reads as a plus and money out
+  // as a minus, which is how anyone reading a passbook expects it, and it
+  // saves a column of mostly-empty cells.
+  function movement(debit, credit) {
+    const inn = Number(debit) || 0, out = Number(credit) || 0;
+    if (!inn && !out) { return '<td class="pcs-num pcs-none">—</td>'; }
+    const net = inn - out;
+    const cls = net >= 0 ? "pcs-in-cell" : "pcs-out-cell";
+    return '<td class="pcs-num ' + cls + '">'
+      + (net >= 0 ? "+" : "−") + money(Math.abs(net)) + "</td>";
+  }
+
+  function paintRows(d) {
+    const body = $("#pcs-table tbody").empty();
+    el("pcs-count").textContent = d.rows.length
+      ? d.rows.length + (d.rows.length > 1 ? " entries" : " entry") : "";
+    if (!d.rows.length) {
+      body.append('<tr><td colspan="5" class="pcs-none text-center py-3">'
+        + "Nothing moved in or out of this box in that period.</td></tr>");
+    }
+    d.rows.forEach(function (r) {
+      body.append("<tr" + (r.kind === "day" ? ' class="pcs-day"' : "") + ">"
+        + "<td>" + fmt(r.date) + "</td>"
+        + "<td>" + (escapeHtml(r.voucher_no) || '<span class="pcs-none">—</span>') + "</td>"
+        + '<td class="pcs-particulars" title="' + escapeHtml(r.particulars) + '">'
+        + escapeHtml(r.particulars) + "</td>"
+        + movement(r.debit, r.credit)
+        + '<td class="pcs-num pcs-running">' + money(r.balance) + "</td></tr>");
+    });
+    // The footer nets the period: the two halves are on the tiles above.
+    $("#pcs-table tfoot").html("<tr><td colspan=\"3\">Closing balance</td>"
+      + movement(d.received, d.spent)
+      + '<td class="pcs-num">' + money(d.closing) + "</td></tr>");
+  }
+
+  ["pcs-box", "pcs-from", "pcs-to", "pcs-group"].forEach(
+    id => el(id).addEventListener("change", load));
+  $("#pcs-load").on("click", load);
+  $("#pcs-month").on("click", function () { thisMonth(); load(); });
+
+  // Called by the page's Export button when the cash view is the one showing.
+  window.pvCashExport = function () {
+    if (!current) { return; }
+    const head = ["Date", "Voucher", "Particulars", "In", "Out", "Balance"];
+    const lines = [head.join(",")].concat(current.rows.map(r => [
+      r.date, r.voucher_no, r.particulars, r.debit, r.credit, r.balance,
+    ].map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")));
+    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "petty-cash-statement-" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  new MutationObserver(function () { current && drawChart(current); })
+    .observe(document.documentElement, { attributes: true,
+                                         attributeFilter: ["data-theme"] });
+
+  load();
+});
+</script>
+<script>
+// The switch only shows and hides; each view loads and draws its own data,
+// and is told when it becomes visible because a chart sized in a hidden
+// container comes out 0 by 0.
+$(function () {
+  const panes = { expense: document.getElementById("pane-expense"),
+                  cash: document.getElementById("pane-cash") };
+
+  function show(view) {
+    view = panes[view] ? view : "expense";
+    Object.keys(panes).forEach(name =>
+      panes[name].classList.toggle("pv-hidden", name !== view));
+    document.querySelectorAll("#pv-switch button").forEach(b =>
+      b.classList.toggle("is-on", b.dataset.view === view));
+    document.getElementById("pv-sub").textContent = view === "cash"
+      ? "What went into the box, what came out, and what is left"
+      : "Posted petty cash spending, by category, branch, farm and month";
+    window.dispatchEvent(new CustomEvent("pv:shown", { detail: view }));
+    // The address bar follows, so the view can be linked to and the back
+    // button does what it looks like it should.
+    const url = new URL(window.location);
+    url.searchParams.set("view", view);
+    window.history.replaceState({}, "", url);
+  }
+
+  document.getElementById("pv-switch").addEventListener("click", function (e) {
+    const button = e.target.closest("button");
+    if (button) { show(button.dataset.view); }
+  });
+
+  show(new URLSearchParams(window.location.search).get("view") || "expense");
+});
+</script>
+
 {% endblock %}
