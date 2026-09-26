@@ -253,6 +253,8 @@ def petty_expense_rows(request):
             "amount": float(expense.net_amount or 0),
             "status": expense.status,
             "attachments": len(expense.attachments.all()),
+            "bills": [{"id": a.pk, "name": a.file_name, "url": a.file.url,
+                       "type": a.file_type} for a in expense.attachments.all()],
             "voucher_no": expense.journal.voucher_no if expense.journal_id else "",
             "editable": expense.is_editable,
         })

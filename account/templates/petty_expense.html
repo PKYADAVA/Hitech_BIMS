@@ -147,6 +147,17 @@
   .px-vno, .px-clip { font-size: .76rem; color: var(--text-secondary); white-space: nowrap; }
   .px-sub-cat { font-size: .72rem; color: var(--text-muted); }
   .px-none { color: var(--text-muted); }
+
+  /* Bills as bills: the photograph itself where there is one, a document
+     mark otherwise, and the rest counted. Opens the file in a new tab. */
+  .bill-strip { display: flex; gap: 3px; align-items: center; }
+  .bill-thumb { width: 24px; height: 24px; border-radius: .25rem; overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg-subtle); display: flex;
+    align-items: center; justify-content: center; flex: 0 0 24px; }
+  .bill-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .bill-thumb i { font-size: .7rem; color: var(--danger); }
+  .bill-more { font-size: .68rem; color: var(--text-secondary); }
+
   /* Square icon buttons, packed: five of them at 26px with gaps took 188px
      of grid width, which is a column and a half of data. */
   #petty-expense-table .btn-sm { width: 22px; height: 22px; padding: 0;
@@ -519,6 +530,22 @@ $(function () {
       + escapeHtml(value) + '</span></td>';
   }
 
+  // Up to three bills shown, the rest counted; a photograph shows itself and
+  // anything else shows a document mark.
+  function bills(list) {
+    if (!list || !list.length) { return '<span class="px-none">\u2014</span>'; }
+    const shown = list.slice(0, 3).map(function (b) {
+      const isImage = /image/.test(b.type || "") || /\.(jpe?g|png)$/i.test(b.name || "");
+      return '<a class="bill-thumb" href="' + b.url + '" target="_blank" rel="noopener"'
+        + ' title="' + escapeHtml(b.name) + '">'
+        + (isImage ? '<img src="' + b.url + '" alt="">'
+                   : '<i class="fas fa-file-pdf"></i>') + '</a>';
+    }).join("");
+    const rest = list.length - 3;
+    return '<span class="bill-strip">' + shown
+      + (rest > 0 ? '<span class="bill-more">+' + rest + '</span>' : '') + '</span>';
+  }
+
   function actions(r) {
     const parts = [];
     // A posted expense can be corrected -- saving it replaces its voucher --
@@ -597,9 +624,7 @@ $(function () {
         + escapeHtml(r.status) + '</span></td>'
         + '<td>' + (r.voucher_no
             ? '<span class="px-vno">' + escapeHtml(r.voucher_no) + '</span>' : none()) + '</td>'
-        + '<td>' + (r.attachments
-            ? '<span class="px-clip"><i class="fas fa-paperclip"></i> ' + r.attachments + '</span>'
-            : none()) + '</td>'
+        + '<td>' + bills(r.bills) + '</td>'
         + '<td>' + actions(r) + '</td>'
         + '</tr>');
     });

@@ -113,12 +113,29 @@
   .per-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
   .per-cut { max-width: 150px; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; display: block; }
+  /* The description is the sentence someone wrote; one clipped line of it
+     with no tooltip is worse than no column. Two lines, wider, and the whole
+     of it on hover. */
+  #per-table td.per-text { white-space: normal; }
+  .per-text .per-cut { max-width: 260px; white-space: normal; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
   .per-status { font-size: .68rem; font-weight: 600; border-radius: .35rem;
     padding: .1rem .4rem; }
   .per-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
   .per-posted { background: var(--success-subtle); color: var(--success-text); }
   .per-cancelled { background: var(--danger-subtle); color: var(--danger-text); }
   .per-none { color: var(--text-muted); }
+
+  /* Bills as bills: the photograph itself where there is one, a document
+     mark otherwise, and the rest counted. Opens the file in a new tab. */
+  .bill-strip { display: flex; gap: 3px; align-items: center; }
+  .bill-thumb { width: 24px; height: 24px; border-radius: .25rem; overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg-subtle); display: flex;
+    align-items: center; justify-content: center; flex: 0 0 24px; }
+  .bill-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .bill-thumb i { font-size: .7rem; color: var(--danger); }
+  .bill-more { font-size: .68rem; color: var(--text-secondary); }
+
 
   .per-summaries { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: .5rem; }
@@ -538,14 +555,33 @@ $(function () {
   // ---- the register, or its summary --------------------------------------
   const DETAIL_HEAD = ["#", "Expense No.", "Date", "Branch", "Farm / Location",
                        "Category", "Sub Category", "Description", "Paid To",
-                       "Payment Mode", "Paid From", "Amount (₹)", "Status",
-                       "Att", "Voucher"];
+                       "Payment Mode", "Paid From", "Amount (₹)",
+                       "Balance (₹)", "Status", "Bills", "Voucher"];
+
+  // Up to three bills shown, the rest counted; a photograph shows itself and
+  // anything else shows a document mark.
+  function bills(list) {
+    if (!list || !list.length) { return '<span class="per-none">\u2014</span>'; }
+    const shown = list.slice(0, 3).map(function (b) {
+      const isImage = /image/.test(b.type || "") || /\.(jpe?g|png)$/i.test(b.name || "");
+      return '<a class="bill-thumb" href="' + b.url + '" target="_blank" rel="noopener"'
+        + ' title="' + escapeHtml(b.name) + '">'
+        + (isImage ? '<img src="' + b.url + '" alt="">'
+                   : '<i class="fas fa-file-pdf"></i>') + '</a>';
+    }).join("");
+    const rest = list.length - 3;
+    return '<span class="bill-strip">' + shown
+      + (rest > 0 ? '<span class="bill-more">+' + rest + '</span>' : '') + '</span>';
+  }
 
   function paintTable() {
     if (!data) { return; }
     if (showingSummary) { paintGrouped(); return; }
     $("#per-head-row").html("<tr>" + DETAIL_HEAD.map(
-      (h, i) => '<th' + (i === 11 ? ' class="per-num"' : '') + '>' + h + "</th>").join("") + "</tr>");
+      (h, i) => '<th' + (i === 11 || i === 12 ? ' class="per-num"' : '')
+        + (i === 12 ? ' title="What the paid-from box held at the close of that'
+          + ' day, read from its ledger"' : '')
+        + '>' + h + "</th>").join("") + "</tr>");
     const body = $("#per-body").empty();
     const none = '<span class="per-none">—</span>';
     if (!data.rows.length) {
@@ -559,23 +595,26 @@ $(function () {
         + "<td>" + escapeHtml(r.expense_no) + "</td>"
         + "<td>" + fmtDate(r.date) + "</td>"
         + "<td>" + (escapeHtml(r.branch) || none) + "</td>"
-        + '<td><span class="per-cut">' + (escapeHtml(place) || none) + "</span></td>"
-        + '<td><span class="per-cut">' + (escapeHtml(r.category) || none) + "</span></td>"
-        + '<td><span class="per-cut">' + (escapeHtml(r.sub_category) || none) + "</span></td>"
-        + '<td><span class="per-cut">' + (escapeHtml(r.description) || none) + "</span></td>"
-        + '<td><span class="per-cut">' + (escapeHtml(r.paid_to) || none) + "</span></td>"
+        + '<td title="' + escapeHtml(place) + '"><span class="per-cut">' + (escapeHtml(place) || none) + "</span></td>"
+        + '<td title="' + escapeHtml(r.category) + '"><span class="per-cut">' + (escapeHtml(r.category) || none) + "</span></td>"
+        + '<td title="' + escapeHtml(r.sub_category) + '"><span class="per-cut">' + (escapeHtml(r.sub_category) || none) + "</span></td>"
+        + '<td class="per-text" title="' + escapeHtml(r.description) + '">'
+        + '<span class="per-cut">' + (escapeHtml(r.description) || none) + "</span></td>"
+        + '<td title="' + escapeHtml(r.paid_to) + '"><span class="per-cut">' + (escapeHtml(r.paid_to) || none) + "</span></td>"
         + "<td>" + (escapeHtml(r.mode) || none) + "</td>"
-        + '<td><span class="per-cut">' + (escapeHtml(r.paid_from) || none) + "</span></td>"
+        + '<td title="' + escapeHtml(r.paid_from) + '"><span class="per-cut">' + (escapeHtml(r.paid_from) || none) + "</span></td>"
         + '<td class="per-amount">' + money(r.amount) + "</td>"
+        + '<td class="per-num">' + (r.balance === null || r.balance === undefined
+            ? '<span class="per-none">\u2014</span>' : money(r.balance)) + "</td>"
         + '<td><span class="per-status per-' + r.status.toLowerCase() + '">'
         + escapeHtml(r.status) + "</span></td>"
-        + '<td class="per-num">' + (r.attachments || "") + "</td>"
+        + "<td>" + bills(r.bills) + "</td>"
         + "<td>" + (escapeHtml(r.voucher_no) || none) + "</td>"
         + "</tr>");
     });
     $("#per-foot").html('<tr><td colspan="11">Posted total</td>'
       + '<td class="per-amount">' + money(data.kpi.total) + "</td>"
-      + '<td colspan="3"></td></tr>');
+      + '<td colspan="4"></td></tr>');
   }
 
   function paintGrouped() {
@@ -671,8 +710,8 @@ $(function () {
     const head = DETAIL_HEAD.slice(1);
     const lines = [head.join(",")].concat(data.rows.map(r => [
       r.expense_no, r.date, r.branch, r.farm, r.category, r.sub_category,
-      r.description, r.paid_to, r.mode, r.paid_from, r.amount, r.status,
-      r.attachments, r.voucher_no,
+      r.description, r.paid_to, r.mode, r.paid_from, r.amount, r.balance,
+      r.status, r.attachments, r.voucher_no,
     ].map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")));
     const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
     const a = document.createElement("a");

@@ -443,10 +443,24 @@ def report(expenses, group_by="category", limit=500):
     spent = sum((e.net_amount or ZERO for e in posted), ZERO)
     today_rows = [e for e in posted if e.expense_date == today]
 
+    # The balance of each box at the close of each day it was spent from,
+    # asked of the ledger once per box-and-day rather than per row.
+    closing = {}
+
+    def box_balance(box, day):
+        if box is None:
+            return None
+        key = (box.pk, day)
+        if key not in closing:
+            ledger = ledger_for_bank_cash(box)
+            closing[key] = (journal.account_balance(ledger, date_to=day)
+                            if ledger else None)
+        return closing[key]
+
     rows = []
     for expense in (expenses.select_related(
             "branch", "farm", "shed", "paid_from", "payment_mode", "journal")
-            .prefetch_related("items__account")[:limit]):
+            .prefetch_related("items__account", "attachments")[:limit]):
         items = list(expense.items.all())
         rows.append({
             "id": expense.pk,
@@ -465,9 +479,15 @@ def report(expenses, group_by="category", limit=500):
             "mode": expense.payment_mode.name if expense.payment_mode_id else "",
             "paid_from": str(expense.paid_from) if expense.paid_from_id else "",
             "amount": float(expense.net_amount or 0),
+            # What the box held at the end of that day. Read from the ledger,
+            # so a replenishment or a journal correction is in it.
+            "balance": (float(box_balance(expense.paid_from, expense.expense_date))
+                        if expense.paid_from_id else None),
             "status": expense.status,
             "voucher_no": expense.journal.voucher_no if expense.journal_id else "",
             "attachments": expense.attachments.count(),
+            "bills": [{"id": a.pk, "name": a.file_name, "url": a.file.url,
+                       "type": a.file_type} for a in expense.attachments.all()],
         })
 
     return {
