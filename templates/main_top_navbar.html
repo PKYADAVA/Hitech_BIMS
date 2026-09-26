@@ -701,7 +701,7 @@ layouts open it from the account menu.
               <i class="fas fa-chart-bar"></i>Reports
             </a>
             <ul class="dropdown-menu">
-              {% if 'petty_expense_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'petty_expense_report' %}">
+              {% if 'petty_expense_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'petty_expense_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-pie"></i>Petty Expense Report
               </a></li>{% endif %}
               {% if 'ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'ledger_report' %}" target="_blank" rel="noopener">
