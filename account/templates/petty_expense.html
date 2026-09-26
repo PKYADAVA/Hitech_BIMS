@@ -95,30 +95,26 @@
   .px-cut-narrow { max-width: 120px; }
   /* Below a wide desktop the text columns give up room so the columns that
      carry the answers can keep theirs. */
-  @media (max-width: 1500px) {
-    .px-cut { max-width: 130px; }
-    .px-cut-wide { max-width: 150px; }
-    .px-cut-narrow { max-width: 100px; }
+  /* Below a wide desktop the text columns give up width so that every
+     column of data keeps its place and the grid never scrolls sideways.
+     Each rung was measured against the real register, not guessed. */
+  @media (max-width: 1520px) {
+    .px-cut { max-width: 105px; }
+    .px-cut-wide { max-width: 120px; }
+    .px-cut-narrow { max-width: 85px; }
+    .ds .px-card table.ds-grid tbody td,
+    .ds .px-card table.ds-grid thead th { padding-left: 4px; padding-right: 4px; }
   }
-  /* "Amount (₹)" over two lines made the header band taller than any row. */
-  .ds .px-card table.ds-grid thead th.ds-num,
-  .ds .px-card table.ds-grid thead th.ds-mid { white-space: nowrap; }
-  .ds .px-card .dataTables_length select, .ds .px-card .dataTables_filter input {
-    height: 30px; font-size: .78rem; }
-  .ds .px-card .dataTables_filter { margin-left: auto; }
-  .ds .px-card .dataTables_filter label { display: flex; align-items: center;
-    gap: .4rem; margin-bottom: 0; }
-  .ds .px-card .dataTables_filter input { min-width: 220px; }
-  .ds .px-card .dt-buttons { display: inline-flex; gap: 0; margin-left: .5rem; }
-  .ds .px-card .dt-buttons .btn { height: 30px; min-height: 30px;
-    padding: 0 10px !important; font-size: .78rem; display: inline-flex;
-    align-items: center; justify-content: center; line-height: 1; }
-  .ds .px-card .dataTables_length, .ds .px-card .dataTables_filter {
-    display: flex; align-items: center; }
-  .ds .px-card .dataTables_length label { display: flex; align-items: center;
-    gap: .4rem; margin-bottom: 0; }
-  .ds .px-card .dataTables_length, .ds .px-card .dataTables_filter,
-  .ds .px-card .dataTables_info, .ds .px-card .dataTables_paginate { font-size: .78rem; }
+  @media (max-width: 1240px) {
+    .px-cut { max-width: 86px; }
+    .px-cut-wide { max-width: 96px; }
+    .px-cut-narrow { max-width: 70px; }
+  }
+  @media (max-width: 1140px) {
+    .px-cut { max-width: 74px; }
+    .px-cut-wide { max-width: 82px; }
+    .px-cut-narrow { max-width: 62px; }
+  }
 
   /* The expense number is a minted code, and reads as one. */
   .px-no { display: inline-block; font-weight: 600; font-size: .76rem;
@@ -138,9 +134,17 @@
   .px-vno, .px-clip { font-size: .76rem; color: var(--text-secondary); white-space: nowrap; }
   .px-sub-cat { font-size: .72rem; color: var(--text-muted); }
   .px-none { color: var(--text-muted); }
-  #petty-expense-table .btn-sm { width: 26px; height: 26px; padding: 0;
-    min-height: 0; display: inline-flex; align-items: center;
-    justify-content: center; line-height: 1; font-size: .72rem; }
+  /* Square icon buttons, packed: five of them at 26px with gaps took 188px
+     of grid width, which is a column and a half of data. */
+  #petty-expense-table .btn-sm { width: 22px; height: 22px; padding: 0;
+    min-height: 0; min-width: 0; display: inline-flex; align-items: center;
+    justify-content: center; line-height: 1; font-size: .66rem; }
+  /* 1% is the usual way of saying "only as wide as your content" to a grid
+     that would otherwise give this column all the width left over. */
+  #petty-expense-table th:last-child,
+  #petty-expense-table td:last-child { width: 1%; white-space: nowrap;
+    padding-left: 2px; padding-right: 2px; }
+  .px-acts { display: flex; gap: 2px; justify-content: center; }
 </style>
 
 <div class="px-page">
@@ -482,7 +486,7 @@ $(function () {
         + '" data-status="' + r.status + '" data-voucher="'
         + escapeHtml(r.voucher_no || '') + '"><i class="fas fa-trash"></i></button>');
     }
-    return '<div class="d-flex gap-1 justify-content-center">' + parts.join("") + '</div>';
+    return '<div class="px-acts">' + parts.join("") + '</div>';
   }
 
   function paintRows() {
@@ -534,17 +538,13 @@ $(function () {
         // "all" is Responsive's never-hide class. What an expense posted and
         // whether its bill is on file are the two things this register exists
         // to answer, so they do not go behind an expander on a laptop.
-        { className: "all", targets: [0, 1, 8, 9, 10, 11, 12] },
-        // What folds first, if anything must, worst first: the branch is the
-        // same on every row here, the farm and the category are one hover
-        // away in the row's own detail, and the mode matters less than the
-        // account the money actually left.
-        { responsivePriority: 12, targets: [2] },
-        { responsivePriority: 11, targets: [3] },
-        { responsivePriority: 10, targets: [4] },
-        { responsivePriority: 9, targets: [6] },
-        { responsivePriority: 8, targets: [7] },
-        { responsivePriority: 7, targets: [5] },
+        // Every column of data stays on screen at any width -- the register
+        // is read across the row, and a figure behind an expander is a figure
+        // nobody sees. If they will not all fit, the grid scrolls sideways.
+        { className: "all", targets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+        // Actions is the only column that is not data, so it is the one that
+        // folds. Its buttons still work from inside the row's detail.
+        { responsivePriority: 20000, targets: [12] },
       ],
     });
   }

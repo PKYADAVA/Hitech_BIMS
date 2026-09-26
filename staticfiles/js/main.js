@@ -304,6 +304,37 @@ $.extend(true, $.fn.dataTable.defaults, {
 });
 
 // ---------------------------------------------------------------------------
+// A Select2 panel that would hang past the right edge of the window.
+//
+// The panel is deliberately wider than its field -- 300px, so a long item
+// name sits on one line -- but Select2 pins it to the field's left edge. A
+// field near the right of the screen therefore pushes the panel off it, and
+// the document grows a sideways scrollbar that has nothing to do with the
+// page's own content. Nudged back inside, once, as it opens.
+// ---------------------------------------------------------------------------
+(function ($) {
+  var MARGIN = 8;
+
+  function keepInside() {
+    // The panel has the width; its container -- a zero-width wrapper that
+    // Select2 appends to the body -- has the `left` that moves it. Measuring
+    // the container instead of the panel finds no overflow and does nothing.
+    var panel = document.querySelector(".select2-container--open .select2-dropdown");
+    if (!panel) return;
+    var container = panel.parentElement;
+    var over = panel.getBoundingClientRect().right
+             - (document.documentElement.clientWidth - MARGIN);
+    if (over <= 0) return;
+    container.style.left = (parseFloat(container.style.left || "0") - over) + "px";
+  }
+
+  $(document).on("select2:open", function () {
+    // After Select2 has placed it: it sets left/top itself on open.
+    window.requestAnimationFrame(keepInside);
+  });
+})(jQuery);
+
+// ---------------------------------------------------------------------------
 // Column alignment, mirrored from the header onto the body.
 //
 // The design system aligns by data type: quantities, rates and amounts right,
