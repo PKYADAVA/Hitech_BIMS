@@ -300,6 +300,10 @@ $(function () {
   const M = JSON.parse(document.getElementById("pe-masters").textContent);
   const idNode = document.getElementById("pe-id");
   const EXPENSE_ID = idNode ? JSON.parse(idNode.textContent) : null;
+  // Duplicate sends you here with ?copy=<id>: the same expense again, as a
+  // new one. Nothing is saved until you save it.
+  const COPY_ID = EXPENSE_ID ? null
+    : new URLSearchParams(window.location.search).get("copy");
   const money = n => "₹" + (Number(n) || 0).toLocaleString("en-IN",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const el = id => document.getElementById(id);
@@ -518,8 +522,12 @@ $(function () {
     const tag = e.target.closest(".pe-tag");
     if (tag) { tag.classList.toggle("is-on"); }
   });
-  const tags = () => [...el("pe-tags").querySelectorAll(".pe-tag.is-on")]
-    .map(t => t.dataset.tag).join(", ");
+  // Tags the chips cannot show -- ones typed elsewhere, or carried in from
+  // the expense being copied -- are kept rather than quietly dropped.
+  let carriedTags = [];
+  const tags = () => carriedTags
+    .concat([...el("pe-tags").querySelectorAll(".pe-tag.is-on")].map(t => t.dataset.tag))
+    .join(", ");
 
   // ---- attachments ------------------------------------------------------
   let pending = [];
@@ -614,42 +622,80 @@ $(function () {
   el("pe-post").addEventListener("click", () => save(true));
 
   // ---- opening state ----------------------------------------------------
+
+  // One filler for both ways of arriving with an expense in hand: opening an
+  // existing one, and copying one. A copy takes everything that describes the
+  // spend and nothing that identifies the document -- its number, its date,
+  // its bill number and its bills stay with the original.
+  function fillFrom(d, asCopy) {
+    el("pe-branch").value = d.branch || "";
+    el("pe-branch").dispatchEvent(new Event("change"));
+    el("pe-farm").value = d.farm || "";
+    el("pe-farm").dispatchEvent(new Event("change"));
+    el("pe-shed").value = d.shed || "";
+    el("pe-centre").value = d.cost_centre || "";
+    el("pe-paid-to").value = d.paid_to_name || "";
+    el("pe-mode").value = d.payment_mode || "";
+    el("pe-paid-from").value = d.paid_from || "";
+    el("pe-other").value = d.other_charges;
+    el("pe-adjust").value = d.adjustment;
+
+    if (asCopy) {
+      // Today's date, a fresh number, and no bill number: the same spend
+      // happening again is not the same document.
+      el("pe-reference").value = "";
+    } else {
+      el("pe-reference").value = d.reference || "";
+      el("pe-narration").value = d.narration || "";
+      narrationTouched = true;
+    }
+
+    carriedTags = [];
+    (d.tags || "").split(",").map(t => t.trim()).filter(Boolean).forEach(wanted => {
+      const chip = [...el("pe-tags").querySelectorAll(".pe-tag")]
+        .find(c => (c.dataset.tag || "").toLowerCase() === wanted.toLowerCase());
+      if (chip) { chip.classList.add("is-on"); } else { carriedTags.push(wanted); }
+    });
+
+    body.innerHTML = "";
+    d.items.forEach(item => {
+      addRow();
+      const tr = body.lastElementChild;
+      const group = M.categories.findIndex(c => c.items.some(i => i.id === item.account));
+      tr.querySelector(".pe-cat").value = group >= 0 ? group : "";
+      tr.querySelector(".pe-cat").dispatchEvent(new Event("change", { bubbles: true }));
+      tr.querySelector(".pe-sub").value = item.account;
+      tr.querySelector(".pe-desc").value = item.description;
+      tr.querySelector(".pe-qty").value = item.quantity;
+      tr.querySelector(".pe-uom").value = item.uom || "";
+      tr.querySelector(".pe-rate").value = item.rate;
+      tr.querySelector(".pe-amt").value = Number(item.amount).toFixed(2);
+    });
+    if (!body.children.length) { addRow(); }
+
+    // Select2 mirrors the native select, and does not notice a value set
+    // from script; without this the page reads right and the pickers do not.
+    if (window.jQuery) { jQuery(".pe-grid select").trigger("change.select2"); }
+    showBalance();
+    total();
+    if (asCopy) { narrate(); }
+  }
+
   addRow();
   if (EXPENSE_ID) {
     fetch(`/api/petty-expenses/${EXPENSE_ID}/`).then(r => r.json()).then(d => {
-      el("pe-branch").value = d.branch || "";
-      el("pe-branch").dispatchEvent(new Event("change"));
-      el("pe-farm").value = d.farm || "";
-      el("pe-farm").dispatchEvent(new Event("change"));
-      el("pe-shed").value = d.shed || "";
-      el("pe-centre").value = d.cost_centre || "";
-      el("pe-mode").value = d.payment_mode || "";
-      el("pe-paid-from").value = d.paid_from || "";
-      el("pe-other").value = d.other_charges;
-      el("pe-adjust").value = d.adjustment;
-      narrationTouched = true;
-      body.innerHTML = "";
-      d.items.forEach(item => {
-        addRow();
-        const tr = body.lastElementChild;
-        const group = M.categories.findIndex(c => c.items.some(i => i.id === item.account));
-        tr.querySelector(".pe-cat").value = group >= 0 ? group : "";
-        tr.querySelector(".pe-cat").dispatchEvent(new Event("change", { bubbles: true }));
-        tr.querySelector(".pe-sub").value = item.account;
-        tr.querySelector(".pe-desc").value = item.description;
-        tr.querySelector(".pe-qty").value = item.quantity;
-        tr.querySelector(".pe-uom").value = item.uom || "";
-        tr.querySelector(".pe-rate").value = item.rate;
-        tr.querySelector(".pe-amt").value = Number(item.amount).toFixed(2);
-      });
-      if (!body.children.length) { addRow(); }
-      showBalance();
-      total();
+      fillFrom(d, false);
       if (!d.editable) {
         document.querySelectorAll(".pe-grid input, .pe-grid select, .pe-grid textarea,"
           + " #pe-add-row, #pe-draft, #pe-post").forEach(n => { n.disabled = true; });
         window.showToast("info", `${d.expense_no} is ${d.status.toLowerCase()} and cannot be edited.`);
       }
+    });
+  } else if (COPY_ID) {
+    fetch(`/api/petty-expenses/${COPY_ID}/`).then(r => r.json()).then(d => {
+      fillFrom(d, true);
+      window.showToast("info", `Copied from ${d.expense_no}. `
+        + `Nothing is saved until you save it.`);
     });
   } else {
     // A branch with only one choice is not a choice: it is filled in.
