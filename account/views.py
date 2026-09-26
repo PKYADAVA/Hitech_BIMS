@@ -1062,6 +1062,18 @@ def journal_voucher_report(request):
         return (request.GET.get(key) or "").strip()
 
     from_date, to_date = g("from_date"), g("to_date")
+
+    # A register of vouchers is nearly always asked about the last few days,
+    # and a page that opens on everything since inception makes you filter
+    # before you can read. Only on a bare visit: once any filter is in the
+    # query string the user has said what they want, and clearing the dates
+    # deliberately still gives the whole history.
+    if not request.GET:
+        import datetime
+
+        today = datetime.date.today()
+        from_date = (today - datetime.timedelta(days=6)).strftime("%Y-%m-%d")
+        to_date = today.strftime("%Y-%m-%d")
     branch, cost_centre = g("branch"), g("cost_centre")
     voucher_no, ledger = g("voucher_no"), g("ledger")
     journal_type, status = g("journal_type"), g("status")
