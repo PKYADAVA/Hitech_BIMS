@@ -208,6 +208,25 @@ permission.
           .catch(function () {});
       });
     });
+    /* The crosses the rows carry work here too: this is where a backlog is
+       actually cleared, one at a time. Clearing all of them stays on the
+       bell, where the list is the whole list -- here it is filtered, and a
+       button that ignores the filter above it is a trap. */
+    list.querySelectorAll(".ah-item-x").forEach(function (button) {
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var wrap = button.closest(".ah-item-wrap");
+        wrap.classList.add("going");
+        AlertHub.post(AlertHub.API + button.dataset.clear + "/dismiss/", CSRF)
+          .then(function () {
+            wrap.remove();
+            refreshCounts();
+            if (!list.querySelector(".ah-item")) load();
+          })
+          .catch(function () { wrap.classList.remove("going"); });
+      });
+    });
   }
 
   function refreshCounts() {

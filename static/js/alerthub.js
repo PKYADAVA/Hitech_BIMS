@@ -83,7 +83,16 @@
       ? ""
       : '<p class="ah-item-msg">' + esc(n.message) + "</p>";
 
+    /* The row is a link, so the cross cannot be inside it: a button in an
+       anchor still navigates on some browsers. It sits beside the link, and
+       the pair share one positioned wrapper. */
+    var clear = opts.clearable === false ? "" :
+      '<button type="button" class="ah-item-x" data-clear="' + n.id +
+        '" title="Clear this notification" aria-label="Clear this notification">' +
+        '<i class="fa-solid fa-xmark"></i></button>';
+
     return (
+      '<div class="ah-item-wrap">' + clear +
       '<a class="ah-item ah-rail ' + esc(n.priority) + (n.is_read ? "" : " unread") +
         '" href="' + esc(n.detail_url) + '" data-id="' + n.id + '">' +
         '<span class="ah-dot"></span>' +
@@ -99,7 +108,8 @@
             "<span>" + esc(timeAgo(n.created_at)) + "</span>" +
           "</div>" +
         "</span>" +
-      "</a>"
+      "</a>" +
+      "</div>"
     );
   }
 
@@ -130,6 +140,7 @@
     var button = root.querySelector("#ahBellBtn");
     var menu = root.querySelector(".ah-bell-menu");
     var markAll = root.querySelector("#ahMarkAll");
+    var clearAll = root.querySelector("#ahClearAll");
     var prefs = { sound: root.dataset.sound === "1", desktop: root.dataset.desktop === "1" };
     var lastCount = null;
 
@@ -216,6 +227,26 @@
           el.classList.remove("unread");
         });
       });
+      /* Clearing one: the row goes at once and the badge follows the
+         server's own count, so the two cannot disagree. */
+      list.querySelectorAll(".ah-item-x").forEach(function (button) {
+        button.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          var wrap = button.closest(".ah-item-wrap");
+          wrap.classList.add("going");
+          post(API + button.dataset.clear + "/dismiss/", csrf)
+            .then(function (data) {
+              wrap.remove();
+              if (data && typeof data.unread === "number") setBadge(data.unread);
+              if (!list.querySelector(".ah-item")) {
+                list.innerHTML = emptyHTML("Nothing to show",
+                                           "fa-regular fa-bell");
+              }
+            })
+            .catch(function () { wrap.classList.remove("going"); });
+        });
+      });
     }
 
     function positionMenu() {
@@ -229,6 +260,17 @@
     window.addEventListener("resize", function () {
       if (menu.classList.contains("show")) positionMenu();
     });
+    if (clearAll) {
+      clearAll.addEventListener("click", function (event) {
+        event.stopPropagation();
+        event.preventDefault();
+        post(API + "dismiss_all/", csrf).then(function (data) {
+          list.innerHTML = emptyHTML("Nothing to show", "fa-regular fa-bell");
+          setBadge((data && data.unread) || 0);
+        }).catch(function () {});
+      });
+    }
+
     markAll.addEventListener("click", function (event) {
       event.stopPropagation();
       event.preventDefault();

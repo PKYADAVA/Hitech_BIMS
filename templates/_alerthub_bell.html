@@ -26,8 +26,15 @@ very first alert of the session.
     <div class="dropdown-menu dropdown-menu-end ah-bell-menu" aria-labelledby="ahBellBtn">
       <div class="ah-bell-head">
         <span class="fw-semibold"><i class="fa-solid fa-bell me-2"></i>Alerts &amp; Notifications</span>
-        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
-                style="font-size:.78rem" id="ahMarkAll">Mark all read</button>
+        <span class="ah-head-actions">
+          {% comment %}Two different answers, both kept: one quiets the badge
+          and leaves the list to read later, the other says you are done with
+          them.{% endcomment %}
+          <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                  style="font-size:.78rem" id="ahMarkAll">Mark all read</button>
+          <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                  style="font-size:.78rem" id="ahClearAll">Clear all</button>
+        </span>
       </div>
 
       <div id="ahBellList" class="ah-bell-list">

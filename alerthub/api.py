@@ -153,6 +153,27 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         })
 
     @action(detail=False, methods=["post"])
+    def dismiss_all(self, request):
+        """Clear every notification off this user's list.
+
+        The same act as dismissing one, repeated: read and dismissal are
+        different questions, so clearing marks read as well -- nothing taken
+        off the list may keep the badge lit.
+
+        Never a delete. The notifications, and the record that this user was
+        sent them, both survive; only their view of them changes. Somebody
+        added to a farm's alerts tomorrow still gets tomorrow's.
+        """
+        now = timezone.now()
+        mine = NotificationRecipient.objects.filter(
+            user=request.user, is_dismissed=False)
+        # read_at only where it was genuinely unread, so clearing a list of
+        # old alerts does not rewrite when each was first seen.
+        mine.filter(read_at__isnull=True).update(read_at=now)
+        cleared = mine.update(is_dismissed=True, dismissed_at=now, is_read=True)
+        return Response({"cleared": cleared, "unread": unread_count(request.user)})
+
+    @action(detail=False, methods=["post"])
     def mark_all_read(self, request):
         marked = mark_read(request.user)
         return Response({"marked_read": marked, "unread": unread_count(request.user)})
