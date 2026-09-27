@@ -56,8 +56,11 @@ export type ModuleStackParams = {
    * first, then the filters that narrow them, then the rows.
    */
   PettyExpenseList: undefined;
-  /** The entry screen. `id` opens a saved expense instead of a blank one. */
-  PettyExpenseForm: { id?: number } | undefined;
+  /**
+   * The entry screen. `id` opens a saved expense instead of a blank one;
+   * `copy` opens the same spend again as a new one.
+   */
+  PettyExpenseForm: { id?: number; copy?: number } | undefined;
   /** Batch Creation. `row` corrects a saved batch; the farm is fixed then. */
   BatchForm: { row?: Row } | undefined;
   FarmCaptureForm: { row?: Row; propose?: boolean } | undefined;

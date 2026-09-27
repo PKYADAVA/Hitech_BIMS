@@ -57,7 +57,7 @@ import { makeStyles, radius, shadow, spacing, type, withAlpha } from "@/theme";
 import { useTheme } from "@/theme/ThemeProvider";
 
 interface Props {
-  route?: { params?: { id?: number } };
+  route?: { params?: { id?: number; copy?: number } };
   navigation: { goBack: () => void };
 }
 
@@ -87,6 +87,11 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const id = route?.params?.id;
+  // A copy takes the spend and nothing that identifies the document:
+  // its number, its date, its bill number and its bills stay with the
+  // original, because the same spend happening again is not the same
+  // document.
+  const copyOf = route?.params?.copy;
 
   const masters = useQuery({ queryKey: ["petty-masters"], queryFn: pettyMasters });
   const M = masters.data;
@@ -157,24 +162,30 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   /* -- opening a saved expense --------------------------------------- */
 
   useEffect(() => {
-    if (!id || !M) return;
+    const from = id ?? copyOf;
+    if (!from || !M) return;
+    const asCopy = !id;
     let alive = true;
-    getPettyExpense(id).then((d) => {
+    getPettyExpense(from).then((d) => {
       if (!alive) return;
       const data = d as Record<string, any>;
-      setDate(String(data.expense_date ?? isoDate(new Date())));
+      // Today's date on a copy, and its own number when it is saved.
+      if (!asCopy) setDate(String(data.expense_date ?? isoDate(new Date())));
       setBranch(data.branch ? String(data.branch) : "");
       setFarm(data.farm ? String(data.farm) : "");
       setUnitKind(data.batch ? "batch" : "shed");
       setUnit(data.batch ? String(data.batch) : data.shed ? String(data.shed) : "");
       setCentre(data.cost_centre ? String(data.cost_centre) : "");
-      setReference(String(data.reference ?? ""));
+      setReference(asCopy ? "" : String(data.reference ?? ""));
       setMode(data.payment_mode ? String(data.payment_mode) : "");
       setPaidFrom(data.paid_from ? String(data.paid_from) : "");
       setPaidTo(String(data.paid_to_name ?? ""));
-      setNarration(String(data.narration ?? ""));
-      setTouched(true);
-      setReadOnly(!data.editable);
+      // A copy writes its own sentence from what it now says.
+      if (!asCopy) {
+        setNarration(String(data.narration ?? ""));
+        setTouched(true);
+      }
+      setReadOnly(!asCopy && !data.editable);
       const groups = M.categories;
       setLines(
         (data.items ?? []).map((item: Record<string, any>) => {
@@ -195,12 +206,12 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
     return () => {
       alive = false;
     };
-  }, [id, M]);
+  }, [id, copyOf, M]);
 
   /* -- a branch that is the only one is not a question ---------------- */
 
   useEffect(() => {
-    if (!M || id) return;
+    if (!M || id || copyOf) return;
     if (!branch && M.branches.length === 1) setBranch(String(M.branches[0].id));
     if (!mode && M.modes.length === 1) setMode(String(M.modes[0].id));
     const cash = M.paid_from.filter((a) => a.is_cash);

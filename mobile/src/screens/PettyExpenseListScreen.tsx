@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   RefreshControl,
@@ -26,13 +27,21 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import {
+  attachPettyBills,
+  cancelPettyExpense,
   CashBox,
+  deletePettyExpense,
   listPettyExpenses,
   PettyCards,
   pettyMasters,
+  postPettyExpense,
   PettyRow,
 } from "@/api/pettyExpenses";
+import { capturePhoto, CapturePermissionError, pickPhoto } from "@/capture";
+import { confirm, notify } from "@/ui/confirm";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { DateField } from "@/components/DateField";
 import {
@@ -55,6 +64,7 @@ import {
   pettyTileStrip,
 } from "@/domain/pettyExpense";
 import { ModuleStackParams } from "@/navigation/types";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, shadow, spacing, type, withAlpha } from "@/theme";
 import { useTheme } from "@/theme/ThemeProvider";
 
@@ -150,6 +160,117 @@ export function PettyExpenseListScreen({ navigation }: { navigation: Nav }) {
     value: String(y),
     label: String(y),
   }));
+
+  // What this user may do here, asked of the same matrix the web register
+  // asks, so a button the browser would not draw is not drawn here either.
+  const can = usePermissionsStore((st) => st.canTabAction);
+  const may = {
+    add: can("petty_expense_list", "add"),
+    edit: can("petty_expense_list", "edit"),
+    delete: can("petty_expense_list", "delete"),
+  };
+
+  const client = useQueryClient();
+  const [acting, setActing] = useState<PettyRow | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /** Every figure and every row moves when one of these lands. */
+  const reread = () => client.invalidateQueries({ queryKey: ["petty-expenses"] });
+
+  async function post(row: PettyRow) {
+    setBusy(true);
+    try {
+      const done = await postPettyExpense(row.id);
+      await reread();
+      notify(`${row.expense_no} posted as ${done.voucher_no}.`);
+    } catch (e) {
+      notify(refusal(e, "It could not be posted."));
+    } finally {
+      setBusy(false);
+      setActing(null);
+    }
+  }
+
+  async function cancel(row: PettyRow) {
+    // A posted expense is reversed and kept, because its voucher is in the
+    // books and a number that has been in the books does not vanish.
+    const ok = await confirm({
+      title: `Cancel ${row.expense_no}?`,
+      message: `Voucher ${row.voucher_no || ""} is reversed. The expense stays on `
+        + "the record as cancelled.",
+      confirmLabel: "Cancel it",
+      cancelLabel: "Keep it",
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await cancelPettyExpense(row.id, "Cancelled from the phone");
+      await reread();
+      notify(`${row.expense_no} cancelled.`);
+    } catch (e) {
+      notify(refusal(e, "It could not be cancelled."));
+    } finally {
+      setBusy(false);
+      setActing(null);
+    }
+  }
+
+  async function remove(row: PettyRow) {
+    const ok = await confirm({
+      title: `Delete ${row.expense_no}?`,
+      message:
+        row.status === "Posted"
+          ? `Voucher ${row.voucher_no || ""} is reversed first, then both are gone `
+            + "for good. Cancelling keeps the record instead."
+          : "It is gone for good. Nothing has been posted from it.",
+      confirmLabel: "Delete",
+      cancelLabel: "Keep",
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await deletePettyExpense(row.id);
+      await reread();
+      notify(`${row.expense_no} deleted.`);
+    } catch (e) {
+      notify(refusal(e, "It could not be deleted."));
+    } finally {
+      setBusy(false);
+      setActing(null);
+    }
+  }
+
+  async function attach(row: PettyRow, from: "camera" | "library") {
+    try {
+      const picked = from === "camera" ? await capturePhoto() : await pickPhoto();
+      if (!picked) return;
+      setBusy(true);
+      const form = new FormData();
+      form.append("files", {
+        uri: picked.uri,
+        name: picked.name,
+        type: picked.mimeType,
+      } as unknown as Blob);
+      const out = await attachPettyBills(row.id, form);
+      await reread();
+      notify((out.refused || [])[0] || `Bill added to ${row.expense_no}.`);
+    } catch (e) {
+      if (e instanceof CapturePermissionError) {
+        notify(
+          from === "camera"
+            ? "Allow the camera to photograph a bill."
+            : "Allow photo access to attach a bill."
+        );
+        return;
+      }
+      notify(refusal(e, "The bill could not be added."));
+    } finally {
+      setBusy(false);
+      setActing(null);
+    }
+  }
 
   const cards: PettyCards | undefined = query.data?.cards;
   const rows = query.data?.rows ?? [];
@@ -403,11 +524,191 @@ export function PettyExpenseListScreen({ navigation }: { navigation: Nav }) {
               key={row.id}
               row={row}
               onPress={() => navigation.navigate("PettyExpenseForm", { id: row.id })}
+              onActions={() => setActing(row)}
             />
           ))
         )}
       </ScrollView>
+
+      {acting ? (
+        <RowActions
+          row={acting}
+          may={may}
+          busy={busy}
+          onClose={() => setActing(null)}
+          onOpen={() => {
+            const id = acting.id;
+            setActing(null);
+            navigation.navigate("PettyExpenseForm", { id });
+          }}
+          onCopy={() => {
+            const from = acting.id;
+            setActing(null);
+            navigation.navigate("PettyExpenseForm", { copy: from });
+          }}
+          onPost={() => post(acting)}
+          onCancel={() => cancel(acting)}
+          onDelete={() => remove(acting)}
+          onAttach={(from) => attach(acting, from)}
+        />
+      ) : null}
     </Screen>
+  );
+}
+
+/** A server's refusal, in its own words where it gave any. */
+function refusal(error: unknown, fallback: string): string {
+  const said = (error as { response?: { data?: { error?: { message?: string } } } })
+    ?.response?.data?.error?.message;
+  return said || fallback;
+}
+
+/**
+ * What a row offers, on the sheet its menu opens.
+ *
+ * The same six the web register's Actions column holds, gated by the same
+ * rules: a posted expense can still be corrected, only a draft can be posted,
+ * a bill can arrive after posting but not after cancelling, and the two
+ * endings are not interchangeable -- a draft has posted nothing, so it can
+ * simply go, while a posted one is reversed and kept.
+ */
+function RowActions({
+  row,
+  may,
+  busy,
+  onClose,
+  onOpen,
+  onCopy,
+  onPost,
+  onCancel,
+  onDelete,
+  onAttach,
+}: {
+  row: PettyRow;
+  may: { add: boolean; edit: boolean; delete: boolean };
+  busy: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+  onCopy: () => void;
+  onPost: () => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  onAttach: (from: "camera" | "library") => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const editable = row.status !== "Cancelled";
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.sheetBack} onPress={onClose}>
+        <SafeAreaView style={styles.sheet} edges={["bottom"]}>
+          <View style={styles.sheetHead}>
+            <View>
+              <Text style={styles.modalTitle}>{row.expense_no}</Text>
+              <Text style={styles.rowMeta}>
+                {row.date} • {money(row.amount)} • {row.status}
+              </Text>
+            </View>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Text style={styles.modalClose}>Close</Text>
+            </Pressable>
+          </View>
+
+          {busy ? (
+            <View style={styles.sheetBusy}>
+              <ActivityIndicator />
+            </View>
+          ) : null}
+
+          <Action
+            icon={editable && may.edit ? "pencil" : "eye-outline"}
+            label={
+              !editable || !may.edit
+                ? "View"
+                : row.status === "Posted"
+                ? "Edit and repost"
+                : "Edit"
+            }
+            note={
+              row.status === "Posted" && may.edit
+                ? "Saving replaces the voucher it posted"
+                : undefined
+            }
+            onPress={onOpen}
+          />
+          {row.status === "Draft" && may.edit ? (
+            <Action icon="check" label="Post" tone={colors.success} onPress={onPost} />
+          ) : null}
+          {editable && may.edit ? (
+            <>
+              <Action icon="camera" label="Photograph a bill" onPress={() => onAttach("camera")} />
+              <Action
+                icon="image-multiple-outline"
+                label="Attach a bill from the gallery"
+                onPress={() => onAttach("library")}
+              />
+            </>
+          ) : null}
+          {may.add ? (
+            <Action
+              icon="content-copy"
+              label="Duplicate"
+              note="The same spend again, with its own number and today's date"
+              onPress={onCopy}
+            />
+          ) : null}
+          {row.status === "Posted" && may.delete ? (
+            <Action
+              icon="cancel"
+              label="Cancel"
+              note="Reverses its voucher and keeps the record"
+              tone={colors.danger}
+              onPress={onCancel}
+            />
+          ) : null}
+          {may.delete ? (
+            <Action
+              icon="trash-can-outline"
+              label="Delete"
+              note={
+                row.status === "Posted"
+                  ? "For an entry that should not have existed"
+                  : undefined
+              }
+              tone={colors.danger}
+              onPress={onDelete}
+            />
+          ) : null}
+        </SafeAreaView>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function Action({
+  icon,
+  label,
+  note,
+  tone,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  note?: string;
+  tone?: string;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <Pressable style={styles.action} onPress={onPress}>
+      <AppIcon name={icon} size={18} color={tone ?? colors.text} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.actionLabel, tone ? { color: tone } : null]}>{label}</Text>
+        {note ? <Text style={styles.rowMeta}>{note}</Text> : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -569,7 +870,15 @@ function Field({
   );
 }
 
-function Row({ row, onPress }: { row: PettyRow; onPress: () => void }) {
+function Row({
+  row,
+  onPress,
+  onActions,
+}: {
+  row: PettyRow;
+  onPress: () => void;
+  onActions: () => void;
+}) {
   const styles = useStyles();
   const { colors } = useTheme();
   const place = [row.branch, row.batch || row.shed || row.farm].filter(Boolean).join(" • ");
@@ -608,6 +917,15 @@ function Row({ row, onPress }: { row: PettyRow; onPress: () => void }) {
           </View>
         ) : null}
       </View>
+      {/* The register's Actions column, folded into the row it belongs to. */}
+      <Pressable
+        style={styles.rowMenu}
+        onPress={onActions}
+        hitSlop={8}
+        accessibilityLabel={`Actions for ${row.expense_no}`}
+      >
+        <AppIcon name="dots-vertical" size={18} color={colors.textMuted} />
+      </Pressable>
     </Card>
   );
 }
@@ -719,6 +1037,18 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   modalTitle: { ...type.h3, color: colors.text },
+  rowMenu: { paddingHorizontal: 2, paddingVertical: spacing.sm },
+  sheetBack: { flex: 1, backgroundColor: "rgba(15,23,42,0.4)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg, paddingBottom: spacing.sm },
+  sheetHead: { flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", padding: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border },
+  sheetBusy: { paddingVertical: spacing.sm },
+  action: { flexDirection: "row", alignItems: "center", gap: spacing.md,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border },
+  actionLabel: { ...type.body, color: colors.text, fontWeight: "600" },
   modalClose: { ...type.body, color: colors.tint, fontWeight: "700" },
   option: {
     flexDirection: "row",
