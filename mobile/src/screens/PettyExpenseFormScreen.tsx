@@ -47,7 +47,7 @@ import {
   pettyMoney as money,
 } from "@/domain/pettyExpense";
 import { AppIcon, IconName } from "@/components/AppIcon";
-import { DatePicker } from "@/components/DatePicker";
+import { DateField } from "@/components/DateField";
 import { Card, Screen, SearchBar } from "@/components/ui";
 import { makeStyles, radius, shadow, spacing, type, withAlpha } from "@/theme";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -351,11 +351,7 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
           <Field label="Date" required>
             {/* No future date: a petty expense is written when the money
                 leaves, and tomorrow has not happened. */}
-            <DatePicker
-              value={date}
-              maximumDate={new Date()}
-              onPick={(picked) => picked && setDate(picked)}
-            />
+            <DateField value={date} maximumDate={new Date()} onChange={setDate} />
           </Field>
           <Field label="Branch" required>
             <Picker

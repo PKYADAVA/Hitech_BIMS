@@ -1,17 +1,59 @@
 import { IconName } from "@/components/AppIcon";
-import { PettyFilters } from "@/api/pettyExpenses";
 
 /**
- * The register's two small decisions, kept out of the screens that draw it:
- * which window a pressed figure means, and which icon a spend wears.
+ * The register's filter strip, and the two small decisions the screens that
+ * draw it would otherwise each make for themselves.
  *
- * Both are read by people rather than by the server, so they are the parts
- * most worth pinning down in tests: a tile that narrows to the wrong window
- * is a figure that disagrees with its own list.
+ * The questions, their order and what a pressed figure does to them are the
+ * web register's, not this screen's: the same people fill both in, and a
+ * phone that filtered by its own rules would give a different answer to the
+ * same question. Keeping it here means the rules are tested once rather than
+ * re-derived in a component.
  */
 
 /** Which figure is pressed, if any. */
 export type PettyTile = "" | "today" | "month" | "drafts" | `box:${number}`;
+
+/**
+ * Everything the strip can ask, in the order the ERP asks it.
+ *
+ * Empty strings rather than undefined, because this is what a set of form
+ * controls holds, and a control is never "absent" -- it is blank.
+ */
+export interface PettyStrip {
+  from: string;
+  to: string;
+  month: string;
+  year: string;
+  branch: string;
+  farm: string;
+  /** Sub category: a postable expense ledger, which is what a line carries. */
+  account: string;
+  status: string;
+  centre: string;
+  paid_from: string;
+  mode: string;
+  paid_to: string;
+  min: string;
+  max: string;
+}
+
+export const EMPTY_STRIP: PettyStrip = {
+  from: "",
+  to: "",
+  month: "",
+  year: "",
+  branch: "",
+  farm: "",
+  account: "",
+  status: "",
+  centre: "",
+  paid_from: "",
+  mode: "",
+  paid_to: "",
+  min: "",
+  max: "",
+};
 
 /** Local YYYY-MM-DD. toISOString() would shift the day either side of UTC. */
 export function isoDate(d: Date): string {
@@ -20,44 +62,72 @@ export function isoDate(d: Date): string {
   ).padStart(2, "0")}`;
 }
 
-/**
- * What a pressed figure asks the register for.
- *
- * Drafts deliberately carries no dates: a draft can be any age, and a figure
- * counting every unposted expense that narrowed the list to this month would
- * show fewer rows than the number above it.
- */
-export function pettyTileFilters(tile: PettyTile, today = new Date()): PettyFilters {
-  if (tile === "today") return { from: isoDate(today), to: isoDate(today) };
-  if (tile === "month") {
-    return {
-      from: isoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-      to: isoDate(today),
-    };
-  }
-  if (tile === "drafts") return { status: "Draft" };
-  if (tile.startsWith("box:")) return { paid_from: tile.slice(4) };
-  return {};
+/** The window the register opens on, today included: seven days in all. */
+export function lastSevenDays(today = new Date()): Pick<PettyStrip, "from" | "to"> {
+  const from = new Date(today);
+  from.setDate(from.getDate() - 6);
+  return { from: isoDate(from), to: isoDate(today) };
 }
 
-/** The window the filter strip asks for, before any figure narrows it. */
-export function pettyRangeFilters(
-  range: "all" | "today" | "week" | "month",
+/** The strip as the register opens it. */
+export function openingStrip(today = new Date()): PettyStrip {
+  return { ...EMPTY_STRIP, ...lastSevenDays(today) };
+}
+
+/**
+ * What pressing a figure does to the strip.
+ *
+ * The ERP's own rules: a figure clears the window, the month, the year, the
+ * status and the box before setting its own, so what the strip shows is
+ * always what is being asked. Pressing the same figure again puts the
+ * register back to the window it opened on, which is what the press replaced.
+ *
+ * Drafts deliberately sets no dates: a draft can be any age, and narrowing to
+ * a window would show fewer rows than the figure above the list.
+ */
+export function pettyTileStrip(
+  strip: PettyStrip,
+  tile: PettyTile,
+  pressed: PettyTile,
   today = new Date()
-): PettyFilters {
-  if (range === "today") return { from: isoDate(today), to: isoDate(today) };
-  if (range === "week") {
-    const from = new Date(today);
-    from.setDate(from.getDate() - 6);
-    return { from: isoDate(from), to: isoDate(today) };
+): PettyStrip {
+  const same = tile === pressed;
+  const next: PettyStrip = {
+    ...strip,
+    from: "",
+    to: "",
+    month: "",
+    year: "",
+    status: "",
+    paid_from: "",
+  };
+  if (same) return { ...next, ...lastSevenDays(today) };
+
+  if (pressed === "today") {
+    return { ...next, from: isoDate(today), to: isoDate(today), status: "Posted" };
   }
-  if (range === "month") {
+  if (pressed === "month") {
     return {
+      ...next,
       from: isoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
       to: isoDate(today),
+      status: "Posted",
     };
   }
-  return {};
+  if (pressed === "drafts") return { ...next, status: "Draft" };
+  if (pressed.startsWith("box:")) return { ...next, paid_from: pressed.slice(4) };
+  return next;
+}
+
+/** The strip as a query, with the blanks left out. */
+export function pettyQuery(strip: PettyStrip, search = ""): Record<string, string> {
+  const query: Record<string, string> = {};
+  (Object.keys(strip) as (keyof PettyStrip)[]).forEach((key) => {
+    const value = strip[key].trim();
+    if (value) query[key] = value;
+  });
+  if (search.trim()) query.q = search.trim();
+  return query;
 }
 
 /**
@@ -87,3 +157,19 @@ export function pettyMoney(value: unknown): string {
 export function lineAmount(line: { quantity?: string; rate?: string }): number {
   return (Number(line.quantity) || 0) * (Number(line.rate) || 0);
 }
+
+/** The twelve months, as the strip's picker offers them. */
+export const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];

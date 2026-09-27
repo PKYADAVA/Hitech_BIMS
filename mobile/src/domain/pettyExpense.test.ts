@@ -1,67 +1,104 @@
 import {
+  EMPTY_STRIP,
   isoDate,
+  lastSevenDays,
   lineAmount,
+  openingStrip,
   pettyIcon,
   pettyMoney,
-  pettyRangeFilters,
-  pettyTileFilters,
+  pettyQuery,
+  pettyTileStrip,
 } from "./pettyExpense";
 
 const TODAY = new Date(2026, 8, 27); // 27 Sep 2026, local
 
-describe("what a pressed figure asks for", () => {
-  it("takes Today to one day", () => {
-    expect(pettyTileFilters("today", TODAY)).toEqual({
-      from: "2026-09-27",
-      to: "2026-09-27",
-    });
+describe("the window the register opens on", () => {
+  it("is the last seven days, today included", () => {
+    expect(lastSevenDays(TODAY)).toEqual({ from: "2026-09-21", to: "2026-09-27" });
   });
 
-  it("takes This Month to the first of the month, not thirty days back", () => {
-    expect(pettyTileFilters("month", TODAY)).toEqual({
-      from: "2026-09-01",
-      to: "2026-09-27",
-    });
-  });
-
-  it("leaves Drafts without dates, because a draft can be any age", () => {
-    // A figure counting every unposted expense must not narrow the list to
-    // this month, or it shows fewer rows than the number above it.
-    expect(pettyTileFilters("drafts", TODAY)).toEqual({ status: "Draft" });
-  });
-
-  it("takes a cash box to its own rows", () => {
-    expect(pettyTileFilters("box:2", TODAY)).toEqual({ paid_from: "2" });
-  });
-
-  it("asks for nothing when no figure is pressed", () => {
-    expect(pettyTileFilters("", TODAY)).toEqual({});
-  });
-});
-
-describe("the filter strip's window", () => {
-  it("counts the last seven days inclusive", () => {
-    expect(pettyRangeFilters("week", TODAY)).toEqual({
+  it("is what the strip starts as, and nothing else is set", () => {
+    expect(openingStrip(TODAY)).toEqual({
+      ...EMPTY_STRIP,
       from: "2026-09-21",
       to: "2026-09-27",
     });
-  });
-
-  it("opens the month at its first day", () => {
-    expect(pettyRangeFilters("month", TODAY)).toEqual({
-      from: "2026-09-01",
-      to: "2026-09-27",
-    });
-  });
-
-  it("bounds nothing when the range is All", () => {
-    expect(pettyRangeFilters("all", TODAY)).toEqual({});
   });
 
   it("stays on the local day either side of UTC", () => {
     // Late evening in +05:30 is already tomorrow in UTC; toISOString() would
     // have dated the register's window a day forward.
     expect(isoDate(new Date(2026, 8, 27, 23, 45))).toBe("2026-09-27");
+  });
+});
+
+describe("what pressing a figure does to the strip", () => {
+  const open = openingStrip(TODAY);
+
+  it("takes Today to one day of posted rows, as the ERP does", () => {
+    expect(pettyTileStrip(open, "", "today", TODAY)).toEqual({
+      ...EMPTY_STRIP,
+      from: "2026-09-27",
+      to: "2026-09-27",
+      status: "Posted",
+    });
+  });
+
+  it("takes This Month to the first of the month, not thirty days back", () => {
+    expect(pettyTileStrip(open, "", "month", TODAY)).toEqual({
+      ...EMPTY_STRIP,
+      from: "2026-09-01",
+      to: "2026-09-27",
+      status: "Posted",
+    });
+  });
+
+  it("leaves Drafts without dates, because a draft can be any age", () => {
+    expect(pettyTileStrip(open, "", "drafts", TODAY)).toEqual({
+      ...EMPTY_STRIP,
+      status: "Draft",
+    });
+  });
+
+  it("takes a cash box to its own rows, whatever their status", () => {
+    expect(pettyTileStrip(open, "", "box:2", TODAY)).toEqual({
+      ...EMPTY_STRIP,
+      paid_from: "2",
+    });
+  });
+
+  it("puts the register back to its opening window when let go", () => {
+    const pressed = pettyTileStrip(open, "", "today", TODAY);
+    expect(pettyTileStrip(pressed, "today", "today", TODAY)).toEqual(open);
+  });
+
+  it("keeps the answers a figure does not speak for", () => {
+    // Branch and sub category are not what a figure is counting, so pressing
+    // one must not quietly widen the list back to every branch.
+    const narrowed = { ...open, branch: "3", account: "610003" };
+    expect(pettyTileStrip(narrowed, "", "drafts", TODAY)).toEqual({
+      ...EMPTY_STRIP,
+      branch: "3",
+      account: "610003",
+      status: "Draft",
+    });
+  });
+});
+
+describe("the strip as a query", () => {
+  it("sends only what was answered", () => {
+    expect(pettyQuery({ ...EMPTY_STRIP, from: "2026-09-01", status: "Draft" })).toEqual({
+      from: "2026-09-01",
+      status: "Draft",
+    });
+  });
+
+  it("carries the search term under the name the register uses", () => {
+    expect(pettyQuery(EMPTY_STRIP, "  tea  ")).toEqual({ q: "tea" });
+  });
+
+  it("treats a box of spaces as unanswered", () => {
+    expect(pettyQuery({ ...EMPTY_STRIP, paid_to: "   " }, "   ")).toEqual({});
   });
 });
 
