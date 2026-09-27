@@ -97,7 +97,10 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   const [mode, setMode] = useState("");
   const [paidFrom, setPaidFrom] = useState("");
   const [paidTo, setPaidTo] = useState("");
-  const [lines, setLines] = useState<Line[]>([]);
+  // Line 1 exists before anybody asks, as it does in the ERP's grid: an
+  // expense is at least one thing bought, and an empty section with a
+  // button on it says the opposite.
+  const [lines, setLines] = useState<Line[]>([{ ...BLANK }]);
   const [bills, setBills] = useState<CapturedImage[]>([]);
   const [narration, setNarration] = useState("");
   const [narrationTouched, setTouched] = useState(false);
@@ -259,13 +262,18 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
       paid_from: paidFrom,
       reference,
       narration,
-      items: lines.map((l) => ({
-        account: l.account,
-        description: l.description,
-        quantity: l.quantity,
-        uom: l.uom,
-        rate: l.rate,
-      })),
+      // The line that is drawn before anybody asks is a prompt, not an
+      // answer: an untouched one is not sent, so the server is never asked
+      // to refuse a line the user never typed.
+      items: lines
+        .filter((l) => l.account || l.description.trim())
+        .map((l) => ({
+          account: l.account,
+          description: l.description,
+          quantity: l.quantity,
+          uom: l.uom,
+          rate: l.rate,
+        })),
       post,
     };
   }
@@ -454,32 +462,63 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
           {lines.length === 0 ? (
             <Text style={styles.muted}>Nothing on it yet. Add what was bought.</Text>
           ) : (
-            lines.map((line, index) => (
-              <Pressable
-                key={index}
-                style={styles.line}
-                onPress={() => !readOnly && setEditing(index)}
-              >
-                <Text style={styles.lineNo}>{index + 1}</Text>
-                <View style={[styles.lineIcon, { backgroundColor: withAlpha(colors.tint, 0.1) }]}>
-                  <AppIcon name={pettyIcon(line.categoryLabel, line.subLabel, line.description)} size={16} color={colors.tint} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.lineTitle} numberOfLines={1}>
-                    {line.subLabel || line.categoryLabel || "Not classified"}
-                  </Text>
-                  <Text style={styles.muted} numberOfLines={1}>
-                    {line.description || "—"}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.lineAmount}>{money(amountOf(line))}</Text>
-                  <Text style={styles.muted}>
-                    {line.quantity} × {Number(line.rate || 0).toFixed(2)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))
+            lines.map((line, index) => {
+              // A line nobody has filled in yet shows what it is for and
+              // where to press, instead of pretending to hold a figure.
+              const blank = !line.account && !line.description.trim();
+              return (
+                <Pressable
+                  key={index}
+                  style={[styles.line, blank && styles.lineBlank]}
+                  onPress={() => !readOnly && setEditing(index)}
+                >
+                  <Text style={styles.lineNo}>{index + 1}</Text>
+                  <View
+                    style={[
+                      styles.lineIcon,
+                      {
+                        backgroundColor: blank
+                          ? colors.surfaceAlt
+                          : withAlpha(colors.tint, 0.1),
+                      },
+                    ]}
+                  >
+                    <AppIcon
+                      name={
+                        blank
+                          ? "plus"
+                          : pettyIcon(line.categoryLabel, line.subLabel, line.description)
+                      }
+                      size={16}
+                      color={blank ? colors.textMuted : colors.tint}
+                    />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={[styles.lineTitle, blank && styles.lineTitleBlank]}
+                      numberOfLines={1}
+                    >
+                      {blank
+                        ? "Category, description, qty and rate"
+                        : line.subLabel || line.categoryLabel || "Not classified"}
+                    </Text>
+                    <Text style={styles.muted} numberOfLines={1}>
+                      {blank ? "Press to fill this line" : line.description || "—"}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={[styles.lineAmount, blank && styles.lineTitleBlank]}>
+                      {money(amountOf(line))}
+                    </Text>
+                    {!blank ? (
+                      <Text style={styles.muted}>
+                        {line.quantity} × {Number(line.rate || 0).toFixed(2)}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })
           )}
         </Section>
 
@@ -564,6 +603,7 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
           masters={M}
           line={lines[editing] ?? BLANK}
           isNew={editing >= lines.length}
+          canRemove={lines.length > 1}
           onClose={() => setEditing(null)}
           onRemove={() => {
             setLines((was) => was.filter((_, i) => i !== editing));
@@ -591,6 +631,7 @@ function LineEditor({
   masters,
   line,
   isNew,
+  canRemove,
   onSave,
   onRemove,
   onClose,
@@ -598,6 +639,8 @@ function LineEditor({
   masters: PettyMasters;
   line: Line;
   isNew: boolean;
+  /** The last line stays, as the ERP's grid keeps row 1. */
+  canRemove: boolean;
   onSave: (line: Line) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -725,7 +768,7 @@ function LineEditor({
             </View>
           </ScrollView>
           <View style={styles.sheetFoot}>
-            {!isNew ? (
+            {!isNew && canRemove ? (
               <Pressable style={[styles.footBtn, styles.removeBtn]} onPress={onRemove}>
                 <Text style={styles.removeText}>Remove</Text>
               </Pressable>
@@ -977,6 +1020,9 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.sm,
     padding: spacing.sm,
   },
+  lineBlank: { borderStyle: "dashed", borderColor: colors.borderStrong,
+    backgroundColor: colors.bg },
+  lineTitleBlank: { color: colors.textMuted, fontWeight: "400" },
   lineNo: { ...type.caption, color: colors.textFaint, width: 12 },
   lineIcon: {
     width: 32,
