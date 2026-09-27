@@ -946,11 +946,23 @@ class CategoryFromTheFormTests(PettyExpenseTestCase):
             description="Water Charges").exists())
 
 
+#: Uploads made by these tests go to a directory of their own, and the
+#: teardown deletes *that* path by name.
+#:
+#: It used to read ``settings.MEDIA_ROOT`` and remove whatever it found there.
+#: Without an override that is the project's own media folder, so running the
+#: account suite deleted every upload in the working copy -- bills, farm
+#: photographs, KYC scans, the lot. A test may not be able to reach outside
+#: its own sandbox by mistake, so the path it removes is now a constant it
+#: also installs, and the two cannot drift apart.
+ENDPOINT_MEDIA = tempfile.mkdtemp(prefix="petty-endpoint-media-")
+
+
+@override_settings(MEDIA_ROOT=ENDPOINT_MEDIA)
 class EndpointTests(PettyExpenseTestCase):
     @classmethod
     def tearDownClass(cls):
-        from django.conf import settings
-        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        shutil.rmtree(ENDPOINT_MEDIA, ignore_errors=True)
         super().tearDownClass()
 
     def setUp(self):
