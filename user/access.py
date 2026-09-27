@@ -306,7 +306,8 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("vouchers", "Journal Vouchers", (
-                        "api_voucher_list", "api_voucher_detail", "api_voucher_post",
+                        "api_voucher_list", "api_voucher_cards",
+                        "api_voucher_detail", "api_voucher_post",
                         "api_voucher_cancel", "api_trial_balance",
                         "api_voucher_attach", "api_voucher_detach",
                     )),

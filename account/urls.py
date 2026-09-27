@@ -42,6 +42,7 @@ urlpatterns = [
     path('api/reports/petty-expense/', petty_api.petty_expense_report_rows, name='api_petty_expense_report'),
     path('api/reports/petty-cash/', petty_api.petty_cash_statement_rows, name='api_petty_cash_statement'),
     path('api/vouchers/', journal_api.VoucherListCreateAPI.as_view(), name='api_voucher_list'),
+    path('api/vouchers/cards/', journal_api.voucher_cards, name='api_voucher_cards'),
     path('api/vouchers/<int:id>/', journal_api.VoucherDetailAPI.as_view(), name='api_voucher_detail'),
     path('api/vouchers/<int:id>/post/', journal_api.VoucherPostAPI.as_view(), name='api_voucher_post'),
     path('api/vouchers/<int:id>/cancel/', journal_api.VoucherCancelAPI.as_view(), name='api_voucher_cancel'),

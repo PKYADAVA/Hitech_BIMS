@@ -36,6 +36,85 @@
     border-radius: 50%; border: 0; background: var(--danger); color: #fff;
     font-size: .6rem; line-height: 1; display: flex; align-items: center;
     justify-content: center; cursor: pointer; padding: 0; }
+  /* The register at the Petty Expense register's measurements, so the two
+     transaction screens in this module read as one product. */
+  .jv-page { display: flex; flex-direction: column; gap: .6rem; }
+  .jv-head, .jv-card, .jv-filters, .jv-kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: .6rem; }
+  .jv-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .45rem .7rem; }
+  .jv-head-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: .5rem;
+    background: var(--primary); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-size: .85rem; }
+  .jv-title { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .jv-sub { font-size: .75rem; color: var(--text-secondary); line-height: 1.3; }
+  @media (min-width: 1200px) {
+    .jv-head > div:not(.jv-head-icon):not(.jv-head-actions) {
+      display: flex; align-items: baseline; gap: .6rem; }
+    .jv-head > div:not(.jv-head-icon):not(.jv-head-actions) .jv-sub::before {
+      content: "\2014"; margin-right: .4rem; color: var(--text-muted); }
+  }
+  .jv-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+  /* The figures. Each one narrows the register under it, which is the only
+     reason to put a number at the top of a list. */
+  .jv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: .5rem; }
+  .jv-kpi { padding: .45rem .6rem; display: flex; align-items: center; gap: .55rem;
+    text-align: left; cursor: pointer; }
+  .jv-kpi:hover { background: var(--primary-subtle); border-color: var(--primary); }
+  .jv-kpi.is-on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .jv-kpi-icon { width: 28px; height: 28px; flex: 0 0 28px; border-radius: .45rem;
+    display: flex; align-items: center; justify-content: center; font-size: .78rem;
+    background: var(--jv-bg); color: var(--jv-fg); }
+  .jv-kpi-body { min-width: 0; }
+  .jv-kpi-label { display: block; font-size: .64rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary);
+    line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jv-kpi-value { font-size: 1.02rem; font-weight: 700; color: var(--text);
+    line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .jv-kpi-note { display: block; font-size: .64rem; color: var(--text-muted); line-height: 1.2; }
+
+  /* The filter strip, as the Broiler and Petty registers wear it. */
+  .jv-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: .4rem; padding: .45rem; align-items: center; }
+  .jv-filter { display: flex; align-items: center; gap: .4rem; min-width: 0;
+    border: 1px solid var(--border); border-radius: .45rem; padding: .25rem .4rem; }
+  .jv-filter-icon { width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--jv-bg); color: var(--jv-fg); font-size: .7rem; }
+  .jv-filter-body { flex: 1; min-width: 0; }
+  .jv-filter label { display: block; font-size: .62rem; font-weight: 600;
+    color: var(--text-secondary); margin-bottom: 0; line-height: 1.2; }
+  .jv-filter .form-select, .jv-filter .form-control {
+    border: 0; box-shadow: none; padding: 0; height: auto; min-height: 0;
+    font-size: .8rem; background-color: transparent; color: var(--text);
+    background-position: right .1rem center; }
+  .jv-filter .form-select:focus, .jv-filter .form-control:focus { box-shadow: none; }
+  .jv-pair { grid-column: span 2; }
+  @media (max-width: 575.98px) { .jv-pair { grid-column: span 1; } }
+  .jv-two { display: flex; align-items: center; gap: .3rem; }
+  .jv-two .form-control { font-size: .76rem; padding: 0; }
+  .jv-two-sep { font-size: .68rem; color: var(--text-muted); }
+  .jv-strip-actions { display: flex; gap: .35rem; justify-self: end; }
+
+  /* The grid, at the sizes the other registers use. */
+  .jv-card > .card-header { padding: .4rem .7rem; font-size: .8rem; }
+  .jv-no { display: inline-block; font-weight: 600; font-size: .76rem;
+    color: var(--primary-dark); background: var(--primary-subtle);
+    border: 1px solid var(--border); border-radius: .35rem; padding: .1rem .45rem;
+    white-space: nowrap; }
+  html[data-theme="dark"] .jv-no { color: var(--primary-light); }
+  .jv-amount { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+    white-space: nowrap; }
+  .jv-acts { display: flex; gap: 2px; justify-content: center; }
+  #vouchers-table .btn-sm { width: 22px; height: 22px; padding: 0; min-height: 0;
+    min-width: 0; display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; font-size: .66rem; }
+  /* 1% is how a table is told "only as wide as your content". */
+  #vouchers-table th:last-child, #vouchers-table td:last-child {
+    width: 1%; white-space: nowrap; padding-left: 2px; padding-right: 2px; }
+
   /* The register was squeezing eight columns until "Payment" broke as
      "Paymen / t" and every row stood 56px tall. The columns that hold one
      token keep their line; the narration, which is a sentence, is the one
@@ -46,55 +125,95 @@
     white-space: normal; min-width: 260px; max-width: 520px; line-height: 1.3; }
   #vouchers-table td:nth-child(4) { white-space: normal; max-width: 150px; }
   #vouchers-table td { font-size: .78rem; padding: .3rem .5rem; }
-  #vouchers-table th { font-size: .68rem; }
+  #vouchers-table th { font-size: .68rem; letter-spacing: .02em;
+    text-transform: uppercase; color: var(--text-secondary); }
 
   .jv-bill-more { width: 72px; flex: 0 0 72px; height: 62px;
     border: 1px dashed var(--primary); border-radius: .45rem; background: transparent;
     color: var(--primary); font-size: 1rem; cursor: pointer; }
 </style>
 
-<div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title"><i class="fas fa-book"></i>Journal Vouchers</div>
-      <div class="page-header-subtitle">Double-entry vouchers; only postable ledger accounts accept lines</div>
-    </div>
-    <div class="page-header-right">
-      <div class="d-flex gap-2 flex-wrap">
-        <button class="btn btn-primary" id="new-voucher-btn"><i class="fas fa-plus"></i> New Voucher</button>
-        <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#trialBalanceModal">
-          <i class="fas fa-balance-scale"></i> Trial Balance
-        </button>
-      </div>
-    </div>
+<div class="jv-page">
+
+<div class="jv-head">
+  <div class="jv-head-icon"><i class="fas fa-book"></i></div>
+  <div>
+    <div class="jv-title">Journal Vouchers</div>
+    <div class="jv-sub">Double-entry vouchers; only postable ledger accounts accept lines</div>
+  </div>
+  <div class="jv-head-actions">
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#trialBalanceModal">
+      <i class="fas fa-balance-scale"></i> Trial Balance
+    </button>
+    <button class="btn btn-primary btn-sm" id="new-voucher-btn">
+      <i class="fas fa-plus"></i> New Voucher
+    </button>
+  </div>
 </div>
 
-<div class="card">
-  <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-    <span><i class="fas fa-table"></i> Vouchers</span>
-    <div class="d-flex gap-2 align-items-center flex-wrap">
-      <select id="filter-type" class="form-select form-select-sm" style="width:auto">
-        <option value="">All types</option>
-        {% for value, label in voucher_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-      </select>
-      <select id="filter-status" class="form-select form-select-sm" style="width:auto">
-        <option value="">All statuses</option>
-        <option>Draft</option><option>Posted</option><option>Cancelled</option>
-      </select>
-      <select id="filter-sector" class="form-select form-select-sm" style="width:auto">
-        <option value="">All sectors</option>
-        {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-      </select>
-      <!-- Bounded, and grouped with its own button. .form-control is width:100%,
-           which min-width cannot hold back: the box grew to the full width of
-           the header, took a line to itself and pushed the search button onto
-           a third one. -->
-      <div class="input-group input-group-sm" style="width:260px">
-        <input type="search" id="filter-q" class="form-control"
-               placeholder="Voucher no / narration..." />
-        <button class="btn btn-outline-secondary" id="filter-apply"><i class="fas fa-search"></i></button>
+<div class="jv-kpis" id="jv-kpis"></div>
+
+<div class="jv-filters" id="jv-filters">
+  <div class="jv-filter jv-pair">
+    <span class="jv-filter-icon" style="--jv-bg:#e7f7ee;--jv-fg:#067647"><i class="fas fa-calendar-day"></i></span>
+    <div class="jv-filter-body">
+      <label for="filter-from">Voucher date between</label>
+      <div class="jv-two">
+        <input type="date" id="filter-from" class="form-control" aria-label="On or after">
+        <span class="jv-two-sep">to</span>
+        <input type="date" id="filter-to" class="form-control" aria-label="On or before">
       </div>
     </div>
   </div>
+  <div class="jv-filter">
+    <span class="jv-filter-icon" style="--jv-bg:#e8f1fd;--jv-fg:#1d6fe0"><i class="fas fa-tags"></i></span>
+    <div class="jv-filter-body">
+      <label for="filter-type">Type</label>
+      <select id="filter-type" class="form-select">
+        <option value="">All types</option>
+        {% for value, label in voucher_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="jv-filter">
+    <span class="jv-filter-icon" style="--jv-bg:#e7f7ee;--jv-fg:#067647"><i class="fas fa-circle-check"></i></span>
+    <div class="jv-filter-body">
+      <label for="filter-status">Status</label>
+      <select id="filter-status" class="form-select">
+        <option value="">All statuses</option>
+        <option>Draft</option><option>Posted</option><option>Cancelled</option>
+      </select>
+    </div>
+  </div>
+  <div class="jv-filter">
+    <span class="jv-filter-icon" style="--jv-bg:#f1ebfd;--jv-fg:#6941c6"><i class="fas fa-building"></i></span>
+    <div class="jv-filter-body">
+      <label for="filter-sector">Sector</label>
+      <select id="filter-sector" class="form-select">
+        <option value="">All sectors</option>
+        {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="jv-filter">
+    <span class="jv-filter-icon" style="--jv-bg:#fff1db;--jv-fg:#b54708"><i class="fas fa-magnifying-glass"></i></span>
+    <div class="jv-filter-body">
+      <label for="filter-q">Voucher no / narration</label>
+      <input type="search" id="filter-q" class="form-control" placeholder="Anything in it">
+    </div>
+  </div>
+  <div class="jv-strip-actions">
+    <button type="button" class="btn btn-primary btn-sm" id="filter-apply">
+      <i class="fas fa-magnifying-glass"></i> Search
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="filter-clear">
+      <i class="fas fa-rotate-left"></i> Clear
+    </button>
+  </div>
+</div>
+
+<div class="card jv-card">
+  <div class="card-header"><i class="fas fa-table"></i> Vouchers</div>
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0 ds-grid" id="vouchers-table">
@@ -108,6 +227,8 @@
       </table>
     </div>
   </div>
+</div>
+
 </div>
 
 <!-- ============ Voucher form modal ============ -->
@@ -514,46 +635,171 @@ $(document).ready(function () {
 
     // ------------------------------------------------------------ vouchers
 
+    // Which figure is pressed, if any. A second press lets it go.
+    let kpi = '', cards = {};
+
+    function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+            + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // The register opens on the month being worked in, which is the window
+    // the figures above it are counted over -- so the list and the numbers
+    // above it are talking about the same period.
+    function thisMonth() {
+        const today = new Date();
+        $('#filter-from').val(iso(new Date(today.getFullYear(), today.getMonth(), 1)));
+        $('#filter-to').val(iso(today));
+    }
+
+    function clearFilters() {
+        kpi = '';
+        $('#filter-type, #filter-status, #filter-sector').val('');
+        $('#filter-q').val('');
+        thisMonth();
+        $('.jv-kpi').removeClass('is-on');
+    }
+
+    function money(value) {
+        return Number(value || 0).toLocaleString('en-IN',
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function kpiCard(key, icon, bg, fg, label, value, note) {
+        return '<button type="button" class="jv-kpi' + (kpi === key ? ' is-on' : '')
+            + '" data-kpi="' + key + '">'
+            + '<span class="jv-kpi-icon" style="--jv-bg:' + bg + ';--jv-fg:' + fg + '">'
+            + '<i class="fas ' + icon + '"></i></span>'
+            + '<span class="jv-kpi-body">'
+            + '<span class="jv-kpi-label">' + escapeHtml(label) + '</span>'
+            + '<span class="jv-kpi-value">' + value + '</span>'
+            + '<span class="jv-kpi-note">' + escapeHtml(note) + '</span>'
+            + '</span></button>';
+    }
+
+    function loadCards() {
+        $.get("{% url 'api_voucher_cards' %}", function (data) {
+            cards = data;
+            $('#jv-kpis').html(
+                kpiCard('today', 'fa-calendar-day', '#e8f1fd', '#1d6fe0',
+                        'Posted today', '&#8377;' + money(data.today),
+                        'Vouchers dated today')
+                + kpiCard('month', 'fa-calendar-alt', '#f1ebfd', '#6941c6',
+                        'This month', '&#8377;' + money(data.month),
+                        data.month_count + (data.month_count === 1 ? ' voucher' : ' vouchers'))
+                + kpiCard('drafts', 'fa-file-alt', '#fff1db', '#b54708',
+                        'Drafts', data.drafts, 'Waiting to be posted')
+                + kpiCard('cancelled', 'fa-ban', '#fdeced', '#b02a37',
+                        'Cancelled this month', data.cancelled, 'Reversed after posting'));
+        });
+    }
+
+    // Pressing a figure takes the register to the rows behind it; pressing
+    // it again puts the register back to the month it opened on.
+    $('#jv-kpis').on('click', '.jv-kpi', function () {
+        const key = this.dataset.kpi, same = kpi === key;
+        clearFilters();
+        if (!same) {
+            kpi = key;
+            if (key === 'today') {
+                $('#filter-from').val(cards.today_date);
+                $('#filter-to').val(cards.today_date);
+                $('#filter-status').val('Posted');
+            } else if (key === 'month') {
+                $('#filter-status').val('Posted');
+            } else if (key === 'drafts') {
+                // A draft can be any age, so its figure is not a month's worth.
+                $('#filter-from').val('');
+                $('#filter-to').val('');
+                $('#filter-status').val('Draft');
+            } else if (key === 'cancelled') {
+                $('#filter-status').val('Cancelled');
+            }
+            $('.jv-kpi[data-kpi="' + kpi + '"]').addClass('is-on');
+        }
+        loadVouchers();
+    });
+
+    function voucherRow(v) {
+        let acts = '<button class="btn btn-outline-primary btn-sm view-voucher"'
+            + ' data-id="' + v.id + '" title="View"><i class="fas fa-eye"></i></button>';
+        if (v.status === 'Draft') {
+            acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
+                + ' data-id="' + v.id + '" title="Edit"><i class="fas fa-pen"></i></button>'
+                + '<button class="btn btn-outline-success btn-sm post-voucher"'
+                + ' data-id="' + v.id + '" title="Post"><i class="fas fa-check"></i></button>'
+                + '<button class="btn btn-outline-danger btn-sm delete-voucher"'
+                + ' data-id="' + v.id + '" title="Delete draft"><i class="fas fa-trash"></i></button>';
+        }
+        if (v.status === 'Posted' && !v.system_generated) {
+            acts += '<button class="btn btn-outline-warning btn-sm revise-voucher"'
+                + ' data-id="' + v.id + '" title="Revise (cancel &amp; re-enter corrected copy)">'
+                + '<i class="fas fa-pen"></i></button>'
+                + '<button class="btn btn-outline-danger btn-sm cancel-voucher"'
+                + ' data-id="' + v.id + '" title="Cancel"><i class="fas fa-ban"></i></button>';
+        }
+        return '<tr>'
+            + '<td><span class="jv-no">' + escapeHtml(v.voucher_no) + '</span>'
+            + (v.system_generated ? ' <span class="badge bg-info text-dark">Auto</span>' : '')
+            + '</td>'
+            // Sorted on the date it holds, read as the date people write.
+            + '<td data-order="' + v.date + '">' + fmtDate(v.date) + '</td>'
+            + '<td>' + escapeHtml(v.voucher_type) + '</td>'
+            + '<td>' + escapeHtml(v.sector_name || '') + '</td>'
+            + '<td>' + escapeHtml(v.narration) + narrationSourceBadge(v) + '</td>'
+            + '<td class="jv-amount" data-order="' + v.total_debit + '">'
+            + money(v.total_debit) + '</td>'
+            + '<td>' + statusBadge(v.status) + '</td>'
+            + '<td><div class="jv-acts">' + acts + '</div></td>'
+            + '</tr>';
+    }
+
     function loadVouchers() {
-        const params = new URLSearchParams({ page_size: 100 });
+        const params = new URLSearchParams({ page_size: 500 });
         if ($('#filter-type').val()) params.set('type', $('#filter-type').val());
         if ($('#filter-status').val()) params.set('status', $('#filter-status').val());
         if ($('#filter-sector').val()) params.set('sector', $('#filter-sector').val());
         if ($('#filter-q').val()) params.set('q', $('#filter-q').val());
+        if ($('#filter-from').val()) params.set('date_from', $('#filter-from').val());
+        if ($('#filter-to').val()) params.set('date_to', $('#filter-to').val());
         $.get(`{% url 'api_voucher_list' %}?${params}`, function (response) {
-            const body = $('#voucher-table-body').empty();
-            if (!response.results.length) {
-                body.append('<tr><td colspan="8" class="text-center text-muted p-3">No vouchers yet. Click <strong>New Voucher</strong> to record your first entry.</td></tr>');
-                return;
+            const table = $('#vouchers-table');
+            // Rebuilt rather than redrawn: the rows come from the server
+            // already filtered, and DataTables would keep the old ones.
+            if ($.fn.DataTable.isDataTable(table)) {
+                table.DataTable().clear().destroy();
             }
-            response.results.forEach(v => {
-                body.append(`
-                  <tr>
-                    <td class="fw-bold">${escapeHtml(v.voucher_no)}${v.system_generated ? ' <span class="badge bg-info text-dark">Auto</span>' : ''}</td>
-                    <td>${fmtDate(v.date)}</td>
-                    <td>${escapeHtml(v.voucher_type)}</td>
-                    <td>${escapeHtml(v.sector_name || '')}</td>
-                    <td>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</td>
-                    <td class="text-end">${escapeHtml(v.total_debit)}</td>
-                    <td>${statusBadge(v.status)}</td>
-                    <td class="text-center">
-                      <div class="d-flex gap-1 justify-content-center">
-                        <button class="btn btn-outline-primary btn-sm view-voucher" data-id="${v.id}" title="View"><i class="fas fa-eye"></i></button>
-                        ${v.status === 'Draft' ? `
-                          <button class="btn btn-outline-warning btn-sm edit-voucher" data-id="${v.id}" title="Edit"><i class="fas fa-pen"></i></button>
-                          <button class="btn btn-outline-success btn-sm post-voucher" data-id="${v.id}" title="Post"><i class="fas fa-check"></i></button>
-                          <button class="btn btn-outline-danger btn-sm delete-voucher" data-id="${v.id}" title="Delete draft"><i class="fas fa-trash"></i></button>` : ''}
-                        ${v.status === 'Posted' && !v.system_generated ? `
-                          <button class="btn btn-outline-warning btn-sm revise-voucher" data-id="${v.id}" title="Revise (cancel &amp; re-enter corrected copy)"><i class="fas fa-pen"></i></button>
-                          <button class="btn btn-outline-danger btn-sm cancel-voucher" data-id="${v.id}" title="Cancel"><i class="fas fa-ban"></i></button>` : ''}
-                      </div>
-                    </td>
-                  </tr>`);
+            const body = table.find('tbody').empty();
+            response.results.forEach(v => body.append(voucherRow(v)));
+            table.DataTable({
+                responsive: true,
+                order: [[1, 'desc']],          // by date, newest first
+                columnDefs: [
+                    { orderable: false, targets: -1 },
+                    // Every column of data stays on screen at any width: a
+                    // register is read across the row, and a figure behind
+                    // an expander is a figure nobody sees.
+                    { className: 'all', targets: [0, 1, 2, 3, 4, 5, 6] },
+                    { responsivePriority: 20000, targets: [7] },
+                ],
+                language: {
+                    emptyTable: 'No vouchers in this window. Widen the dates,'
+                        + ' or click New Voucher to record one.',
+                },
             });
         }).fail(() => showToast('danger', 'Failed to load vouchers.'));
     }
-    $('#filter-apply').on('click', loadVouchers);
-    $('#filter-q').on('keydown', e => { if (e.key === 'Enter') loadVouchers(); });
+
+    // The rows come from the server filtered; the figures do not move with
+    // the filter, so only a change to the data reloads them.
+    function refresh() { loadVouchers(); loadCards(); }
+
+    function search() { kpi = ''; $('.jv-kpi').removeClass('is-on'); loadVouchers(); }
+    $('#filter-apply').on('click', search);
+    $('#filter-clear').on('click', function () { clearFilters(); loadVouchers(); });
+    $('#filter-q').on('keydown', e => { if (e.key === 'Enter') search(); });
+    $('#filter-type, #filter-status, #filter-sector, #filter-from, #filter-to')
+        .on('change', search);
 
     // -------------------------------------------------------- line editor
 
@@ -779,7 +1025,7 @@ $(document).ready(function () {
             if (saved) {
                 showToast('success', `${saved} voucher${saved > 1 ? 's' : ''} ${post ? 'posted' : 'saved as draft'}.`);
                 $('#voucherFormModal').modal('hide');
-                loadVouchers();
+                refresh();
             }
         });
     }
@@ -872,7 +1118,7 @@ $(document).ready(function () {
                 headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
                 data: JSON.stringify({ reason: reason || 'Revised' }),
                 success: function () {
-                    loadVouchers();
+                    refresh();
                     showToast('success', `${voucher.voucher_no} cancelled — correct the copy and Save & Post.`);
                     openVoucherForm(voucher, true);
                 },
@@ -987,7 +1233,7 @@ $(document).ready(function () {
                     // documents to until it exists.
                     jvSendFiles(id || voucher.id, function () {
                         $('#voucherFormModal').modal('hide');
-                        loadVouchers();
+                        refresh();
                         showToast('success', posted ? 'Voucher posted.' : 'Draft saved.');
                     });
                 }
@@ -1043,7 +1289,7 @@ $(document).ready(function () {
         const id = $(this).data('id');
         if (!(await window.bimsConfirm('Post this voucher? Posted vouchers cannot be edited.'))) return;
         $.ajax({ url: `/api/vouchers/${id}/post/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
-            success: function (v) { loadVouchers(); showToast('success', `Posted as ${v.voucher_no}.`); },
+            success: function (v) { refresh(); showToast('success', `Posted as ${v.voucher_no}.`); },
             error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Posting failed.') });
     });
 
@@ -1054,7 +1300,7 @@ $(document).ready(function () {
         $.ajax({ url: `/api/vouchers/${id}/cancel/`, method: 'POST',
             headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
             data: JSON.stringify({ reason }),
-            success: function () { loadVouchers(); showToast('success', 'Voucher cancelled.'); },
+            success: function () { refresh(); showToast('success', 'Voucher cancelled.'); },
             error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Cancel failed.') });
     });
 
@@ -1062,7 +1308,7 @@ $(document).ready(function () {
         const id = $(this).data('id');
         if (!(await window.bimsConfirm('Delete this draft voucher?'))) return;
         $.ajax({ url: `/api/vouchers/${id}/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
-            success: function () { loadVouchers(); showToast('success', 'Draft deleted.'); },
+            success: function () { refresh(); showToast('success', 'Draft deleted.'); },
             error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Delete failed.') });
     });
 
@@ -1115,7 +1361,8 @@ $(document).ready(function () {
         // offering a pick here that would just get rejected on save.
         costCenters = response.filter(cc => cc.is_active && cc.allow_manual_selection && !cc.allow_children_only);
     });
-    loadVouchers();
+    thisMonth();
+    refresh();
 });
 </script>
 {% endblock %}

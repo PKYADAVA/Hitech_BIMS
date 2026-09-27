@@ -362,6 +362,35 @@ class JournalTests(EngineTestCase):
         tb = self.client.get(reverse("api_trial_balance")).json()
         self.assertEqual(tb["totals"]["debit"], tb["totals"]["credit"])
 
+    def test_the_registers_figures_count_the_company_not_the_window(self):
+        # The four figures above the Journal Vouchers register are counted
+        # over the whole company, so pressing one can show you rows the
+        # register was not displaying.
+        from datetime import date
+
+        from account.services import journal
+
+        self.client.login(username="tester", password="secret123")
+        today = date.today()
+        month_start = today.replace(day=1)
+
+        self.make_voucher(post=True, amount="500", date=today.isoformat())
+        self.make_voucher(post=False, amount="700", date=today.isoformat())
+        cancelled = self.make_voucher(post=True, amount="900",
+                                      date=month_start.isoformat())
+        journal.cancel_voucher(cancelled, user=self.user, reason="entered twice")
+
+        cards = self.client.get(reverse("api_voucher_cards")).json()
+        self.assertEqual(cards["today"], "500.00")
+        # The cancelled one is no longer posted, so it leaves the month's total
+        # and shows up under its own figure instead.
+        self.assertEqual(cards["month"], "500.00")
+        self.assertEqual(cards["month_count"], 1)
+        self.assertEqual(cards["drafts"], 1)
+        self.assertEqual(cards["cancelled"], 1)
+        self.assertEqual(cards["month_from"], month_start.strftime("%Y-%m-%d"))
+        self.assertEqual(cards["today_date"], today.strftime("%Y-%m-%d"))
+
     def test_narration_engine_fields_persist_and_track_manual_edit(self):
         from account.services import journal
 

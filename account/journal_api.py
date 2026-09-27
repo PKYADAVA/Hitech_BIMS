@@ -2,6 +2,7 @@
 
 Routes (account/urls.py):
     GET  /api/vouchers/                 list (paginated, filterable)
+    GET  /api/vouchers/cards/           the register's four figures
     POST /api/vouchers/                 create draft; {"post": true} posts immediately
     GET  /api/vouchers/<id>/            detail with lines
     PUT  /api/vouchers/<id>/            update (drafts only)
@@ -12,6 +13,7 @@ Routes (account/urls.py):
     GET  /api/reports/trial-balance/           trial balance (?from&to)
 """
 from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -78,6 +80,35 @@ def _get_voucher(company, id):
     if voucher is None:
         raise Http404("Voucher not found")
     return voucher
+
+
+@login_required
+def voucher_cards(request):
+    """Posted today, posted this month, drafts waiting, cancelled this month.
+
+    Counted over the company, not over whatever the register is filtered to:
+    a figure that moves with the filter under it tells you nothing you could
+    not already see.
+    """
+    company = _company(request)
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    vouchers = Voucher.objects.filter(company=company)
+    posted = vouchers.filter(status="Posted")
+
+    def total(qs):
+        return qs.aggregate(t=Sum("total_debit"))["t"] or 0
+
+    return JsonResponse({
+        "today": str(total(posted.filter(date=today))),
+        "month": str(total(posted.filter(date__gte=month_start, date__lte=today))),
+        "month_count": posted.filter(date__gte=month_start, date__lte=today).count(),
+        "drafts": vouchers.filter(status="Draft").count(),
+        "cancelled": vouchers.filter(status="Cancelled",
+                                     date__gte=month_start, date__lte=today).count(),
+        "month_from": month_start.strftime("%Y-%m-%d"),
+        "today_date": today.strftime("%Y-%m-%d"),
+    })
 
 
 @method_decorator(login_required, name="dispatch")
