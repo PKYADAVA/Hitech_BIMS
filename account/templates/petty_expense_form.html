@@ -74,6 +74,36 @@
   }
   .pe-field label { display: block; font-size: .68rem; font-weight: 600;
     color: var(--text-secondary); margin-bottom: .1rem; }
+
+  /* The New Category box: a page each, and a list on each page. */
+  .pe-cat-tabs { display: flex; gap: 0; border: 1px solid var(--border-strong);
+    border-radius: .4rem; overflow: hidden; margin-bottom: .6rem; }
+  .pe-cat-tab { flex: 1; border: 0; background: transparent; cursor: pointer;
+    padding: .3rem .5rem; font-size: .76rem; font-weight: 600; color: var(--text-secondary); }
+  .pe-cat-tab + .pe-cat-tab { border-left: 1px solid var(--border-strong); }
+  .pe-cat-tab:hover:not(.is-on) { background: var(--primary-subtle); color: var(--primary); }
+  .pe-cat-tab.is-on { background: var(--primary); color: #fff; }
+  .pe-name-row { display: flex; align-items: center; gap: .35rem; margin-bottom: .3rem; }
+  .pe-name-row .pe-name-n { width: 16px; font-size: .7rem; color: var(--text-muted);
+    text-align: right; }
+  .pe-name-row .form-control { height: 32px; font-size: .84rem; }
+  .pe-name-row .btn { width: 28px; height: 28px; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center; font-size: .7rem; }
+  .pe-cat-made { font-size: .72rem; color: var(--success-text); margin-top: .35rem; }
+
+  /* Shed or batch: said before the list is opened, not found inside it. */
+  .pe-unit-head { display: flex; align-items: center; gap: .3rem; margin-bottom: .1rem; }
+  .pe-unit-head label { margin-bottom: 0; }
+  .pe-kinds { margin-left: auto; display: inline-flex; border: 1px solid var(--border-strong);
+    border-radius: .3rem; overflow: hidden; }
+  .pe-kind { border: 0; background: transparent; cursor: pointer; padding: 0 .35rem;
+    font-size: .62rem; font-weight: 700; letter-spacing: .02em; line-height: 1.5;
+    color: var(--text-secondary); }
+  .pe-kind + .pe-kind { border-left: 1px solid var(--border-strong); }
+  .pe-kind:hover:not(:disabled):not(.is-on) { background: var(--primary-subtle);
+    color: var(--primary); }
+  .pe-kind.is-on { background: var(--primary); color: #fff; }
+  .pe-kind:disabled { opacity: .45; cursor: not-allowed; }
   .pe-field .form-control, .pe-field .form-select { height: 32px; font-size: .84rem; }
   .pe-note { font-size: .7rem; color: var(--text-secondary); margin-top: .15rem; }
   .pe-note strong { color: var(--text); }
@@ -207,10 +237,20 @@
         <div class="pe-field">
           <label for="pe-farm">Location / Farm</label>
           <select id="pe-farm" class="form-select"></select>
+          <div class="pe-note">– keeps it on the branch itself.</div>
         </div>
         <div class="pe-field">
-          <label for="pe-shed">Shed / Unit</label>
+          <div class="pe-unit-head">
+            <label for="pe-shed">Shed / Unit</label>
+            <div class="pe-kinds" role="group" aria-label="Name a shed or a batch">
+              <button type="button" class="pe-kind is-on" id="pe-kind-s" data-kind="s"
+                      aria-pressed="true" disabled>Shed</button>
+              <button type="button" class="pe-kind" id="pe-kind-b" data-kind="b"
+                      aria-pressed="false" disabled>Batch</button>
+            </div>
+          </div>
           <select id="pe-shed" class="form-select" disabled></select>
+          <div class="pe-note" id="pe-shed-note">Choose a farm to pick a shed or batch.</div>
         </div>
         <div class="pe-field">
           <label for="pe-centre">Cost Centre</label>
@@ -220,6 +260,53 @@
       </div>
     </div>
   </section>
+
+  <!-- A category or a sub category, made where it is needed. It is a real
+       chart-of-accounts ledger, so it is created by the chart's own rules. -->
+  <div class="modal fade" id="pe-cat-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:520px">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-folder-plus me-2"></i>New category</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="pe-cat-tabs" role="tablist">
+            <button type="button" class="pe-cat-tab" id="pe-tab-category"
+                    role="tab" aria-selected="false">Category</button>
+            <button type="button" class="pe-cat-tab is-on" id="pe-tab-sub"
+                    role="tab" aria-selected="true">Sub Category</button>
+          </div>
+
+          <div class="pe-field mb-2" id="pe-cat-parent-wrap">
+            <label for="pe-cat-parent">Under category <span class="text-danger">*</span></label>
+            <select id="pe-cat-parent" class="form-select"></select>
+            <div class="pe-note">Not there yet? Make it on the Category page first.</div>
+          </div>
+
+          <div class="pe-field">
+            <label id="pe-names-label">Sub categories</label>
+            <div id="pe-names"></div>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="pe-name-add">
+              <i class="fas fa-plus"></i> Add another
+            </button>
+            <div class="pe-note" id="pe-names-note">Each one is a ledger a line
+              can be charged to.</div>
+          </div>
+          <div class="pe-note is-short d-none" id="pe-cat-error"></div>
+          <div class="pe-cat-made d-none" id="pe-cat-made"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm"
+                  data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary btn-sm" id="pe-cat-save">
+            <i class="fas fa-check"></i> Create
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="pe-main">
     <!-- 2 ─ who was paid, and out of what -------------------------------- -->
@@ -258,8 +345,9 @@
       <header>
         <span class="pe-step">3</span> Expense Items
         <span class="ms-auto">
-          <button type="button" class="btn btn-sm btn-outline-primary" id="pe-add-row">
-            <i class="fas fa-plus"></i> Add Item
+          <button type="button" class="btn btn-sm btn-outline-primary" id="pe-new-cat"
+                  title="Add a category or sub category to the chart of accounts">
+            <i class="fas fa-folder-plus"></i> New Category
           </button>
         </span>
       </header>
@@ -409,13 +497,80 @@ $(function () {
     return M.farms.filter(f => String(f.branch_id) === String(branch));
   }
 
+  // The Shed / Unit picker answers with what it is as well as which one:
+  // "s:12" is a shed, "b:17" a batch. One control, one question, and the
+  // server is never left guessing which kind of unit it was handed.
+  // Which kind of unit the picker is naming: "s" a shed, "b" a batch. The
+  // value carries it too ("s:12", "b:17"), so the server is never left
+  // guessing which of the two it was handed.
+  let unitKind = "s";
+
+  const unitsOn = farm => ({
+    s: M.sheds.filter(x => String(x.farm_id) === String(farm)),
+    // Only the flocks still running: a closed batch cannot take new cost.
+    b: (M.batches || []).filter(x => String(x.farm_id) === String(farm)),
+  });
+
+  function paintUnits(keepValue) {
+    const farm = el("pe-farm").value;
+    const has = unitsOn(farm);
+    const shedBtn = el("pe-kind-s"), batchBtn = el("pe-kind-b");
+    // A switch with nothing behind it is a trap, so a side with no units is
+    // turned off rather than left to disappoint.
+    shedBtn.disabled = !farm || !has.s.length;
+    batchBtn.disabled = !farm || !has.b.length;
+    if (unitKind === "b" && batchBtn.disabled) { unitKind = "s"; }
+    if (unitKind === "s" && shedBtn.disabled && !batchBtn.disabled) { unitKind = "b"; }
+    [shedBtn, batchBtn].forEach(btn => {
+      const on = btn.dataset.kind === unitKind;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+
+    const rows = has[unitKind] || [];
+    const was = keepValue ? el("pe-shed").value : "";
+    el("pe-shed").innerHTML = `<option value="">–</option>` + rows.map(x =>
+      `<option value="${unitKind}:${x.id}">${escapeHtml(x.label)}</option>`).join("");
+    el("pe-shed").value = was && was.startsWith(unitKind + ":") ? was : "";
+    el("pe-shed").disabled = !rows.length;
+    if (window.jQuery) { jQuery("#pe-shed").trigger("change.select2"); }
+
+    const note = el("pe-shed-note");
+    if (!farm) {
+      note.textContent = "Choose a farm to pick a shed or batch.";
+    } else if (!has.s.length && !has.b.length) {
+      note.textContent = "This farm has no shed and no open batch.";
+    } else if (unitKind === "b") {
+      note.textContent = has.b.length + (has.b.length === 1 ? " open batch" : " open batches")
+        + " on this farm. – keeps it on the whole farm.";
+    } else {
+      note.textContent = has.s.length + (has.s.length === 1 ? " shed" : " sheds")
+        + " on this farm. – keeps it on the whole farm.";
+    }
+  }
+
+  el("pe-kind-s").addEventListener("click", () => setUnitKind("s"));
+  el("pe-kind-b").addEventListener("click", () => setUnitKind("b"));
+
+  function setUnitKind(kind) {
+    if (unitKind === kind) { return; }
+    unitKind = kind;
+    // The other kind's answer is not this kind's answer, so it is let go
+    // rather than quietly kept on a row that now says something else.
+    el("pe-shed").value = "";
+    paintUnits(false);
+    narrate();
+  }
+
   el("pe-branch").addEventListener("change", function () {
     const branch = this.value;
     const farms = farmsFor(branch);
-    el("pe-farm").innerHTML = opts(farms, "id", "farm_name",
-      farms.length ? "whole branch" : "no farms on this branch");
-    el("pe-shed").innerHTML = `<option value="">select a farm first</option>`;
-    el("pe-shed").disabled = true;
+    // A dash, not a sentence: the empty choice IS the answer for most petty
+    // spend -- the expense belongs to the branch, and nothing narrows it.
+    el("pe-farm").innerHTML = `<option value="">–</option>` + farms.map(f =>
+      `<option value="${f.id}">${escapeHtml(f.farm_name)}</option>`).join("");
+    el("pe-shed").value = "";
+    paintUnits(false);
     // The branch owns a cost centre in this ERP, so it is filled in rather
     // than asked for. It stays changeable: a spend can belong elsewhere.
     const centre = M.centres.find(c => String(c.branch_id) === String(branch));
@@ -433,12 +588,10 @@ $(function () {
   });
 
   el("pe-farm").addEventListener("change", function () {
-    const sheds = M.sheds.filter(s => String(s.farm_id) === String(this.value));
-    el("pe-shed").innerHTML = opts(sheds, "id", "label",
-      sheds.length ? "whole farm" : "no sheds on this farm");
-    el("pe-shed").disabled = !sheds.length;
+    paintUnits(false);
     narrate();
   });
+  el("pe-shed").addEventListener("change", narrate);
 
   // The mode a payment was made by often names the account it came from.
   el("pe-mode").addEventListener("change", function () {
@@ -484,11 +637,39 @@ $(function () {
     M.categories.map((c, i) => `<option value="${i}">${escapeHtml(c.name)}</option>`).join("");
   const uomOptions = opts(M.uoms, "id", "name", "—");
 
+  // The sub category list: every ledger under its own category when no
+  // category has been named, that one category's when it has. A register
+  // is filled by people who know what they bought before they know which
+  // group it falls in, so the narrow column is answerable first.
+  function subOptions(categoryIndex) {
+    const one = M.categories[categoryIndex];
+    const item = i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`;
+    if (one) {
+      return `<option value="">select</option>` + one.items.map(item).join("");
+    }
+    return `<option value="">select</option>` + M.categories.map(c =>
+      `<optgroup label="${escapeHtml(c.name)}">`
+      + c.items.map(item).join("") + `</optgroup>`).join("");
+  }
+
+  // Which category holds a ledger, as the index the category picker uses.
+  function categoryOf(accountId) {
+    return M.categories.findIndex(c =>
+      c.items.some(i => String(i.id) === String(accountId)));
+  }
+
+  function fillSubs(tr, categoryIndex, keep) {
+    const sub = tr.querySelector(".pe-sub");
+    sub.innerHTML = subOptions(categoryIndex);
+    if (keep) { sub.value = keep; }
+    if (window.jQuery) { jQuery(sub).trigger("change.select2"); }
+  }
+
   function rowHtml(n) {
     return `<tr class="pe-row">
       <td class="text-center pe-n">${n}</td>
       <td class="col-cat"><select class="form-select pe-cat">${categoryOptions}</select></td>
-      <td class="col-sub"><select class="form-select pe-sub" disabled><option value="">choose a category</option></select></td>
+      <td class="col-sub"><select class="form-select pe-sub">${subOptions("")}</select></td>
       <td class="col-desc"><input type="text" class="form-control pe-desc" placeholder="what it was for"></td>
       <td class="col-qty"><input type="number" step="0.001" min="0" class="form-control pe-qty" value="1"></td>
       <td class="col-uom"><select class="form-select pe-uom">${uomOptions}</select></td>
@@ -516,8 +697,197 @@ $(function () {
     });
   }
 
+  // ---- a category made where it is needed ------------------------------
+  // The row the button was pressed from, so the new sub category can be
+  // put straight into the line that wanted it.
+  let catForRow = null;
+
+  // Which page of the box is open: "sub" makes the ledgers a line is
+  // charged to, "category" the groups they hang under.
+  let catMode = "sub";
+
+  function nameRow(value) {
+    return `<div class="pe-name-row">
+      <span class="pe-name-n"></span>
+      <input type="text" class="form-control pe-name" maxlength="100" value="${value || ""}">
+      <button type="button" class="btn btn-outline-danger pe-name-del" title="Remove">
+        <i class="fas fa-xmark"></i></button>
+    </div>`;
+  }
+
+  function renumberNames() {
+    const rows = [...el("pe-names").children];
+    rows.forEach((row, i) => {
+      row.querySelector(".pe-name-n").textContent = i + 1;
+      // One line left is the line being typed into, so it cannot be removed.
+      row.querySelector(".pe-name-del").disabled = rows.length === 1;
+    });
+    const placeholder = catMode === "category" ? "e.g. Farm Utilities"
+                                               : "e.g. Water Charges";
+    rows.forEach(row => row.querySelector(".pe-name").placeholder = placeholder);
+  }
+
+  function setNameRows(count) {
+    el("pe-names").innerHTML = Array.from({ length: count }, () => nameRow("")).join("");
+    renumberNames();
+  }
+
+  function setCatMode(mode) {
+    catMode = mode;
+    el("pe-tab-sub").classList.toggle("is-on", mode === "sub");
+    el("pe-tab-category").classList.toggle("is-on", mode === "category");
+    el("pe-tab-sub").setAttribute("aria-selected", mode === "sub" ? "true" : "false");
+    el("pe-tab-category").setAttribute("aria-selected",
+      mode === "category" ? "true" : "false");
+    // A category has nothing to hang under but the Expense branch itself,
+    // so the picker is only a question on the sub category page.
+    el("pe-cat-parent-wrap").classList.toggle("d-none", mode === "category");
+    el("pe-names-label").textContent = mode === "category" ? "Categories"
+                                                           : "Sub categories";
+    el("pe-names-note").textContent = mode === "category"
+      ? "A group to hold sub categories. Nothing posts to it directly."
+      : "Each one is a ledger a line can be charged to.";
+    el("pe-cat-error").classList.add("d-none");
+    setNameRows(1);
+  }
+
+  el("pe-tab-sub").addEventListener("click", () => setCatMode("sub"));
+  el("pe-tab-category").addEventListener("click", () => setCatMode("category"));
+  el("pe-name-add").addEventListener("click", () => {
+    el("pe-names").insertAdjacentHTML("beforeend", nameRow(""));
+    renumberNames();
+    el("pe-names").lastElementChild.querySelector(".pe-name").focus();
+  });
+  el("pe-names").addEventListener("click", e => {
+    const del = e.target.closest(".pe-name-del");
+    if (del && !del.disabled) { del.closest(".pe-name-row").remove(); renumberNames(); }
+  });
+  // Enter opens the next line rather than submitting a half-filled list.
+  el("pe-names").addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.target.classList.contains("pe-name")) {
+      e.preventDefault();
+      el("pe-name-add").click();
+    }
+  });
+
+  function fillParentPicker(selected) {
+    // Every group, empty ones included: a category just made holds nothing
+    // yet, and it is exactly the one about to be filled.
+    el("pe-cat-parent").innerHTML = `<option value="">select a category</option>`
+      + (M.groups || M.categories).map(c =>
+          `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    el("pe-cat-parent").value = selected || "";
+  }
+
+  function openCategoryModal(tr) {
+    catForRow = tr;
+    // The row's own category, where it has one: most of the time the new sub
+    // categories belong under the group already chosen.
+    const chosen = tr && tr.querySelector(".pe-cat").value;
+    const group = chosen === "" ? null : M.categories[chosen];
+    fillParentPicker(group ? group.id : "");
+    el("pe-cat-made").classList.add("d-none");
+    setCatMode("sub");
+    new bootstrap.Modal(el("pe-cat-modal")).show();
+    setTimeout(() => {
+      const first = el("pe-names").querySelector(".pe-name");
+      if (group) { first.focus(); } else { el("pe-cat-parent").focus(); }
+    }, 300);
+  }
+
+  el("pe-cat-save").addEventListener("click", function () {
+    const button = this;
+    const error = el("pe-cat-error");
+    const names = [...el("pe-names").querySelectorAll(".pe-name")]
+      .map(i => i.value.trim()).filter(Boolean);
+    error.classList.add("d-none");
+    if (!names.length) {
+      error.textContent = catMode === "category"
+        ? "Name at least one category." : "Name at least one sub category.";
+      error.classList.remove("d-none");
+      return;
+    }
+    button.disabled = true;
+    fetch("/api/petty-expenses/category/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify({
+        mode: catMode,
+        category: el("pe-cat-parent").value,
+        names: names,
+      }),
+    }).then(r => r.json().then(d => ({ ok: r.ok, d: d }))).then(({ ok, d }) => {
+      button.disabled = false;
+      if (!ok) {
+        // Every problem at once, so a list of five is not fixed one refusal
+        // at a time.
+        error.innerHTML = (d.problems || [d.error || "They could not be created."])
+          .map(escapeHtml).join("<br>");
+        error.classList.remove("d-none");
+        return;
+      }
+      // One answer rebuilds both pickers: the list comes back whole rather
+      // than being patched in two places and drifting apart.
+      M.categories = d.categories;
+      M.groups = d.groups || M.groups;
+      const made = d.created.map(a => `${a.name} (${a.code})`).join(", ");
+      el("pe-cat-made").textContent = "Added: " + made;
+      el("pe-cat-made").classList.remove("d-none");
+
+      if (d.mode === "sub") {
+        refreshCategoryPickers(d.category, d.created[0].id, catForRow);
+        bootstrap.Modal.getInstance(el("pe-cat-modal")).hide();
+        window.showToast("success", d.created.length === 1
+          ? `${d.category_name} › ${made} is ready to use.`
+          : `${d.created.length} sub categories added under ${d.category_name}.`);
+      } else {
+        // A category holds nothing yet, so a line cannot be charged to one:
+        // the box stays open on the page where it can be filled.
+        refreshCategoryPickers(null, null, null);
+        setCatMode("sub");
+        fillParentPicker(d.created[0].id);
+        el("pe-cat-made").textContent = "Added: " + made
+          + ". Now add sub categories under it.";
+        el("pe-cat-made").classList.remove("d-none");
+        window.showToast("success", d.created.length === 1
+          ? `${made} added.` : `${d.created.length} categories added.`);
+      }
+    }).catch(() => {
+      button.disabled = false;
+      error.textContent = "They could not be created.";
+      error.classList.remove("d-none");
+    });
+  });
+
+  function refreshCategoryPickers(categoryId, accountId, tr) {
+    // categoryId/accountId may be null: a category made on its own changes
+    // the lists without being anything a line can be charged to yet.
+    const index = M.categories.findIndex(c => String(c.id) === String(categoryId));
+    const html = `<option value="">select</option>` + M.categories.map((c, i) =>
+      `<option value="${i}">${escapeHtml(c.name)}</option>`).join("");
+    [...body.children].forEach(row => {
+      const cat = row.querySelector(".pe-cat");
+      const was = cat.selectedOptions[0] ? cat.selectedOptions[0].textContent : "";
+      cat.innerHTML = html;
+      // Rebuilt by name, because a category's index moves when the list grows.
+      const again = [...cat.options].find(o => o.textContent === was);
+      cat.value = again ? again.value : "";
+      if (row === tr && categoryId) { cat.value = index; }
+      cat.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    if (tr && accountId) {
+      tr.querySelector(".pe-sub").value = accountId;
+      tr.querySelector(".pe-sub").dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (window.jQuery) { jQuery(".pe-cat, .pe-sub").trigger("change.select2"); }
+  }
+
   document.addEventListener("click", e => {
-    if (e.target.closest("#pe-add-row") || e.target.closest(".pe-row-add")) { addRow(); }
+    if (e.target.closest("#pe-new-cat")) {
+      // From the last row, which is the one being typed into.
+      openCategoryModal(body.lastElementChild);
+    }
+    if (e.target.closest(".pe-row-add")) { addRow(); }
     const del = e.target.closest(".pe-row-del");
     if (del && !del.disabled) { del.closest("tr").remove(); renumber(); total(); }
   });
@@ -525,15 +895,27 @@ $(function () {
   body.addEventListener("change", e => {
     const tr = e.target.closest("tr");
     if (e.target.classList.contains("pe-cat")) {
-      const group = M.categories[e.target.value];
+      // A sub category already chosen is kept if the new category holds it,
+      // and dropped if it does not -- the list decides, not the old value.
       const sub = tr.querySelector(".pe-sub");
-      sub.innerHTML = group
-        ? `<option value="">select</option>` + group.items.map(
-            i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("")
-        : `<option value="">choose a category</option>`;
-      sub.disabled = !group;
+      const was = sub.value;
+      const stays = String(categoryOf(was)) === String(e.target.value);
+      fillSubs(tr, e.target.value, stays ? was : "");
+      if (!stays) { narrate(); entry(); }
     }
-    if (e.target.classList.contains("pe-sub")) { narrate(); entry(); }
+    if (e.target.classList.contains("pe-sub")) {
+      // Answered from the whole list: the category it belongs to is not a
+      // second question, it is already known.
+      const owner = categoryOf(e.target.value);
+      const cat = tr.querySelector(".pe-cat");
+      if (owner >= 0 && String(cat.value) !== String(owner)) {
+        cat.value = owner;
+        if (window.jQuery) { jQuery(cat).trigger("change.select2"); }
+        fillSubs(tr, owner, e.target.value);
+      }
+      narrate();
+      entry();
+    }
   });
 
   body.addEventListener("input", e => {
@@ -594,7 +976,12 @@ $(function () {
     const shed = el("pe-shed").selectedOptions[0];
     const from = el("pe-paid-from").selectedOptions[0];
     const where = (farm && farm.value) ? farm.text : (branch && branch.value ? branch.text : "");
-    const unit = (shed && shed.value) ? `, ${shed.text}` : "";
+    // A batch is listed with the shed it stands in, which the sentence
+    // does not need twice: "at Test Farm DE, FARMDE1-1" is what people say.
+    const unitName = shed && shed.value
+      ? (shed.value.startsWith("b:") ? shed.text.split(" · ")[0] : shed.text)
+      : "";
+    const unit = unitName ? `, ${unitName}` : "";
     const payee = el("pe-paid-to").value.trim();
     el("pe-narration").value =
       `Petty expense for ${what}${where ? " at " + where + unit : ""}` +
@@ -742,7 +1129,11 @@ $(function () {
       expense_date: el("pe-date").value,
       branch: el("pe-branch").value,
       farm: el("pe-farm").value,
-      shed: el("pe-shed").value,
+      // "s:12" / "b:17" -- split here, so the payload stays two plain ids.
+      shed: (el("pe-shed").value.startsWith("s:")
+             ? el("pe-shed").value.slice(2) : ""),
+      batch: (el("pe-shed").value.startsWith("b:")
+              ? el("pe-shed").value.slice(2) : ""),
       cost_centre: el("pe-centre").value,
       paid_to_name: el("pe-paid-to").value,
       payment_mode: el("pe-mode").value,
@@ -832,7 +1223,11 @@ $(function () {
     el("pe-branch").dispatchEvent(new Event("change"));
     el("pe-farm").value = d.farm || "";
     el("pe-farm").dispatchEvent(new Event("change"));
-    el("pe-shed").value = d.shed || "";
+    // A batch wins the switch when there is one: it is the narrower answer,
+    // and the shed it filled in is still on the record underneath.
+    unitKind = d.batch ? "b" : "s";
+    paintUnits(false);
+    el("pe-shed").value = d.batch ? "b:" + d.batch : (d.shed ? "s:" + d.shed : "");
     el("pe-centre").value = d.cost_centre || "";
     el("pe-paid-to").value = d.paid_to_name || "";
     el("pe-mode").value = d.payment_mode || "";
@@ -881,13 +1276,18 @@ $(function () {
     if (asCopy) { narrate(); }
   }
 
+  // Both location pickers open on a dash: until a branch is chosen there is
+  // no farm to offer, and the dash is what most expenses keep anyway.
+  el("pe-farm").innerHTML = `<option value="">–</option>`;
+  paintUnits(false);
+
   addRow();
   if (EXPENSE_ID) {
     fetch(`/api/petty-expenses/${EXPENSE_ID}/`).then(r => r.json()).then(d => {
       fillFrom(d, false);
       if (!d.editable) {
         document.querySelectorAll(".pe-grid input, .pe-grid select, .pe-grid textarea,"
-          + " #pe-add-row, #pe-draft, #pe-post").forEach(n => { n.disabled = true; });
+          + " #pe-new-cat, #pe-draft, #pe-post").forEach(n => { n.disabled = true; });
         window.showToast("info", `${d.expense_no} is ${d.status.toLowerCase()} and cannot be edited.`);
       } else if (d.status === "Posted") {
         // Editable, but not silently: this one is already in the books, and

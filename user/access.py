@@ -314,6 +314,7 @@ MODULE_REGISTRY = [
                     ("petty_expense_list", "Petty Expense", (
                         "petty_expense_add", "petty_expense_edit",
                         "api_petty_expense_rows", "api_petty_expense_create",
+                        "api_petty_expense_category",
                         "api_petty_expense_detail", "api_petty_expense_save",
                         "api_petty_expense_post", "api_petty_expense_cancel",
                         "api_petty_expense_delete",

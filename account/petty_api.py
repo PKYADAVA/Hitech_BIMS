@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import JsonResponse
@@ -19,10 +20,12 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from account.models import (BankCashMaster, PaymentMode, PettyExpense,
-                            PettyExpenseAttachment, PettyExpenseItem)
+from account.models import (AccountType, BankCashMaster, ChartOfAccount,
+                            PaymentMode, PettyExpense, PettyExpenseAttachment,
+                            PettyExpenseItem)
+from account.services.code_generator import AccountCodeGenerator
 from account.services import petty_expense as service
-from broiler.models import Branch, BroilerFarm, BroilerFarmShed
+from broiler.models import Branch, BroilerBatch, BroilerFarm, BroilerFarmShed
 from inventory.models import UnitOfMeasurement
 from user.access import user_can
 from user.services.scoping import branches_for, farms_for, scope_queryset
@@ -116,6 +119,13 @@ def _masters(user=None):
     sheds = list(BroilerFarmShed.objects.filter(farm__in=farm_qs)
                  .order_by("farm__farm_code", "unit_no")
                  .values("id", "farm_id", "shed_name", "shed_code", "unit_no"))
+    # Only the flocks still running: a closed batch cannot take new cost, and
+    # offering one is how an expense lands on last season's book. Open is the
+    # same test the rest of the ERP uses -- no end date, not settled.
+    batches = list(BroilerBatch.objects
+                   .filter(broiler_farm__in=farm_qs, end_date__isnull=True, is_closed=False)
+                   .select_related("shed")
+                   .order_by("broiler_farm__farm_code", "-start_date", "batch_name"))
     # A branch already owns a cost centre in this ERP, so the mapping the spec
     # asks for exists: it is read, not entered.
     centres = [{"id": b.organization_centre.id if hasattr(b, "organization_centre") and b.organization_centre else None,
@@ -129,8 +139,16 @@ def _masters(user=None):
         "sheds": [{"id": s["id"], "farm_id": s["farm_id"],
                    "label": (s["shed_name"] or s["shed_code"] or f"Unit {s['unit_no']}")}
                   for s in sheds],
+        "batches": [{"id": b.id, "farm_id": b.broiler_farm_id, "shed_id": b.shed_id,
+                     "label": (b.batch_name or f"Batch {b.id}")
+                              + (f" \u00b7 {b.shed.shed_name or b.shed.shed_code}"
+                                 if b.shed_id else "")}
+                    for b in batches],
         "centres": [c for c in centres if c["id"]],
         "categories": service.expense_categories(),
+        # Every group, empty ones included: this is what the New Category
+        # box offers as a parent, and a category just made has nothing in it.
+        "groups": service.expense_groups(),
         "paid_from": service.paid_from_accounts(),
         # Cash only, at both ends: a petty expense is money leaving the cash
         # box, so the pickers offer nothing that could take it elsewhere.
@@ -190,10 +208,131 @@ def petty_expense_form(request, id=None):
 
 
 @login_required
+@require_POST
+def petty_expense_category(request):
+    """Make categories, or sub categories, from the entry form.
+
+    ``mode`` says which: "category" creates groups under the Expense branch,
+    "sub" creates the postable ledgers a line is charged to, under the
+    category given. Only under Expense -- this button exists to classify a
+    spend, not to open a door into the rest of the chart.
+    """
+    # The chart is the company's accounting backbone, so the right to add to
+    # it is the chart's own -- not something the expense form confers.
+    if not user_can(request.user, "coa", "add"):
+        return JsonResponse(
+            {"error": "You are not allowed to add to the chart of accounts. "
+                      "Ask someone who is to add this category."}, status=403)
+
+    data = json.loads(request.body or b"{}")
+    company = service.company()
+    mode = "category" if data.get("mode") == "category" else "sub"
+    names = [_proper(n, 100) for n in (data.get("names") or [])]
+    names = [n for n in names if n]
+
+    expense_type = AccountType.objects.filter(name="Expense").first()
+    if expense_type is None:
+        return JsonResponse({"error": "This company has no Expense account type."},
+                            status=400)
+
+    parent = None
+    if mode == "sub":
+        parent = ChartOfAccount.objects.filter(
+            company=company, pk=_int(data.get("category")), is_group=True,
+            account_type=expense_type).first()
+        if parent is None:
+            return JsonResponse({"error": "Choose the category these belong under."},
+                                status=400)
+    else:
+        parent = (ChartOfAccount.objects
+                  .filter(company=company, account_type=expense_type,
+                          is_group=True, parent__isnull=True)
+                  .order_by("code").first())
+        if parent is None:
+            return JsonResponse(
+                {"error": "This company has no Expense branch to add to."}, status=400)
+
+    # Everything is checked before anything is written: a list of five names
+    # with one already-taken name in it should not leave four behind.
+    problems = _name_problems(company, parent, names, mode)
+    if problems:
+        return JsonResponse({"error": problems[0], "problems": problems}, status=400)
+
+    try:
+        with transaction.atomic():
+            made = [_new_account(request, company, parent, name, expense_type,
+                                 is_group=(mode == "category"))
+                    for name in names]
+    except (ValidationError, ValueError) as exc:
+        return JsonResponse({"error": _first_problem(exc)}, status=400)
+
+    return JsonResponse({
+        "mode": mode,
+        "category": parent.pk if mode == "sub" else None,
+        "category_name": parent.description if mode == "sub" else "",
+        "created": [{"id": a.pk, "name": a.description, "code": a.code} for a in made],
+        # The whole list back, so the pickers are rebuilt from one answer
+        # rather than patched in two places.
+        "categories": service.expense_categories(),
+        "groups": service.expense_groups(),
+    }, status=201)
+
+
+def _name_problems(company, parent, names, mode):
+    """Everything wrong with a list of names, in plain language."""
+    what = "category" if mode == "category" else "sub category"
+    problems = []
+    if not names:
+        return [f"Name at least one {what}."]
+
+    seen = set()
+    for name in names:
+        key = name.lower()
+        if key in seen:
+            problems.append(f"{name} is in the list twice.")
+        seen.add(key)
+
+    taken = {a.description.lower(): a for a in ChartOfAccount.objects.filter(
+        company=company, parent=parent, description__in=names)}
+    for name in names:
+        twin = taken.get(name.lower())
+        if twin is not None:
+            problems.append(f"{parent.description} already has "
+                            f"{twin.description} ({twin.code}).")
+    return problems
+
+
+def _new_account(request, company, parent, description, account_type, is_group):
+    """One ledger, coded and checked the way the chart of accounts does it."""
+    account = ChartOfAccount(
+        company=company, parent=parent,
+        code=AccountCodeGenerator(company).next_code(
+            parent=parent, account_type=account_type, is_group=is_group),
+        description=description,
+        account_type=account_type,
+        account_group=parent.account_group,
+        is_group=is_group,
+        is_postable=not is_group,
+        allow_manual_entry=True,
+        status="Active",
+        created_by=request.user,
+    )
+    account.full_clean(exclude=["type", "code"])
+    account.save()
+    return account
+
+
+def _first_problem(exc):
+    """A validation error as one plain sentence."""
+    messages = getattr(exc, "messages", None)
+    return messages[0] if messages else str(exc)
+
+
+@login_required
 def petty_expense_rows(request):
     """The register's rows, filtered — and the figures for the cards above it."""
     qs = (_visible(request)
-          .select_related("branch", "farm", "shed", "paid_from", "payment_mode",
+          .select_related("branch", "farm", "shed", "batch", "paid_from", "payment_mode",
                           "cost_centre", "journal")
           .prefetch_related("items__account", "attachments"))
 
@@ -241,6 +380,7 @@ def petty_expense_rows(request):
             "branch": expense.branch.branch_name,
             "farm": expense.farm.farm_name if expense.farm_id else "",
             "shed": (expense.shed.shed_name or expense.shed.shed_code) if expense.shed_id else "",
+            "batch": (expense.batch.batch_name or f"Batch {expense.batch_id}") if expense.batch_id else "",
             "centre": expense.cost_centre.name if expense.cost_centre_id else "",
             "category": ", ".join(sorted({(i.account.parent.description
                                            if i.account.parent_id else i.account.description)
@@ -284,7 +424,14 @@ def _apply(expense, data, user):
     expense.expense_date = parse_date(data.get("expense_date") or "") or timezone.localdate()
     expense.branch_id = _int(data.get("branch"))
     expense.farm_id = _int(data.get("farm"))
+    # One picker, two kinds of answer. A batch also fills the shed it is
+    # housed in, so a spend tagged to a flock is still found shed-wise.
     expense.shed_id = _int(data.get("shed"))
+    expense.batch_id = _int(data.get("batch"))
+    if expense.batch_id and not expense.shed_id:
+        housed = (BroilerBatch.objects.filter(pk=expense.batch_id)
+                  .values_list("shed_id", flat=True).first())
+        expense.shed_id = housed or None
     expense.cost_centre_id = _int(data.get("cost_centre"))
     expense.payment_mode_id = _int(data.get("payment_mode"))
     expense.paid_from_id = _int(data.get("paid_from"))
@@ -494,13 +641,14 @@ def petty_expense_delete(request, id):
 def petty_expense_detail(request, id):
     """One expense, in full: its lines, its bills and what it posted."""
     expense = get_object_or_404(_visible(request).select_related(
-        "branch", "farm", "shed", "cost_centre", "paid_from", "payment_mode",
+        "branch", "farm", "shed", "batch", "cost_centre", "paid_from", "payment_mode",
         "journal", "created_by", "posted_by", "cancelled_by"), pk=id)
     return JsonResponse({
         "id": expense.pk,
         "expense_no": expense.expense_no,
         "expense_date": expense.expense_date.isoformat(),
         "branch": expense.branch_id, "farm": expense.farm_id, "shed": expense.shed_id,
+        "batch": expense.batch_id,
         "cost_centre": expense.cost_centre_id,
         "paid_to_name": expense.paid_to_name,
         "payment_mode": expense.payment_mode_id,

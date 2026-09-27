@@ -1201,6 +1201,13 @@ class PettyExpense(models.Model):
                              null=True, blank=True, related_name="petty_expenses")
     shed = models.ForeignKey("broiler.BroilerFarmShed", on_delete=models.PROTECT,
                              null=True, blank=True, related_name="petty_expenses")
+    # On a farm, the unit a spend belongs to is as often the flock as the
+    # shed it stands in -- so the one picker offers both, and a batch chosen
+    # there also fills the shed it is housed in, which keeps shed-wise
+    # reporting true without a second question being asked.
+    batch = models.ForeignKey("broiler.BroilerBatch", on_delete=models.PROTECT,
+                              null=True, blank=True, related_name="petty_expenses",
+                              help_text=_("The flock this spend belongs to, where it belongs to one"))
     cost_centre = models.ForeignKey(
         "OrganizationCentre", on_delete=models.PROTECT, null=True, blank=True,
         related_name="petty_expenses",

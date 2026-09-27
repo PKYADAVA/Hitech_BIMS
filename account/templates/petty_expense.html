@@ -611,7 +611,10 @@ $(function () {
     const body = table.find("tbody").empty();
 
     rows.forEach(function (r) {
-      const place = [r.farm, r.shed].filter(Boolean).join(" · ");
+      // The flock where there is one, the shed otherwise: a batch is the
+      // narrower answer, and naming both would say the same thing twice.
+      const unit = r.batch || r.shed;
+      const place = [r.farm, unit].filter(Boolean).join(" · ");
       body.append('<tr>'
         + '<td><span class="px-no">' + escapeHtml(r.expense_no) + '</span></td>'
         + '<td data-order="' + r.date + '">' + fmtDate(r.date) + '</td>'

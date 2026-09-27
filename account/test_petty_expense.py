@@ -22,8 +22,8 @@ from account.services import CoAGeneratorService
 from account.services import journal
 from account.services import petty_expense as service
 from account.services.bank_cash import ledger_for_bank_cash
-from broiler.models import (Branch, BroilerFarm, BroilerFarmShed, Farmer,
-                            Region, Supervisor)
+from broiler.models import (Branch, BroilerBatch, BroilerFarm, BroilerFarmShed,
+                            Farmer, Region, Supervisor)
 from inventory.models import Sector
 
 TODAY = datetime.date.today()
@@ -66,6 +66,18 @@ class PettyExpenseTestCase(TestCase):
             region="East", line="L1", farm_name="Riverside")
         cls.shed = BroilerFarmShed.objects.create(farm=cls.farm)
         cls.other_shed = BroilerFarmShed.objects.create(farm=cls.other_farm)
+        # A flock still running, one that has been settled, and one on the
+        # farm that belongs to another branch.
+        cls.batch = BroilerBatch.objects.create(
+            broiler_farm=cls.farm, shed=cls.shed, batch_name="GV-1",
+            start_date=TODAY - datetime.timedelta(days=20))
+        cls.closed_batch = BroilerBatch.objects.create(
+            broiler_farm=cls.farm, shed=cls.shed, batch_name="GV-0",
+            start_date=TODAY - datetime.timedelta(days=90),
+            end_date=TODAY - datetime.timedelta(days=30), is_closed=True)
+        cls.other_batch = BroilerBatch.objects.create(
+            broiler_farm=cls.other_farm, batch_name="RS-1",
+            start_date=TODAY - datetime.timedelta(days=10))
 
         # The cash box and the bank account: each gets its ledger from the
         # Bank/Cash Master's own signal, which is the mapping this module uses.
@@ -734,6 +746,204 @@ class NarrationTests(PettyExpenseTestCase):
         voucher = service.post(expense, user=self.user)
         self.assertEqual(voucher.narration, "")
         self.assertEqual(voucher.auto_narration, "")
+
+
+class BatchTests(PettyExpenseTestCase):
+    """A spend on a farm is as often the flock's as the shed's."""
+
+    def test_a_spend_can_name_the_flock_it_belongs_to(self):
+        self.fund_cash(5000)
+        expense = self.make(batch=self.batch)
+        service.post(expense, self.user)
+        expense.refresh_from_db()
+        self.assertEqual(expense.status, PettyExpense.STATUS_POSTED)
+        self.assertEqual(expense.batch, self.batch)
+
+    def test_the_narration_names_the_flock_rather_than_the_shed(self):
+        expense = self.make(batch=self.batch, shed=self.shed)
+        self.assertIn("GV-1", service.compose_narration(expense))
+        self.assertNotIn(str(self.shed), service.compose_narration(expense))
+
+    def test_a_batch_on_another_farm_is_refused(self):
+        expense = self.make(batch=self.other_batch)
+        self.assertIn("That batch is not on the chosen farm.",
+                      service.validate(expense))
+
+    def test_a_batch_without_a_farm_is_refused(self):
+        expense = self.make(farm=None, batch=self.batch)
+        problems = " ".join(service.validate(expense))
+        self.assertIn("A batch belongs to a farm", problems)
+
+    def test_a_settled_flock_cannot_take_a_new_spend(self):
+        expense = self.make(batch=self.closed_batch)
+        problems = " ".join(service.validate(expense))
+        self.assertIn("closed", problems)
+
+    def test_the_report_carries_the_flock_a_spend_belongs_to(self):
+        expense = self.make(batch=self.batch, shed=self.shed)
+        row = service.report(PettyExpense.objects.filter(pk=expense.pk))["rows"][0]
+        self.assertEqual(row["batch"], "GV-1")
+
+
+class BatchEndpointTests(PettyExpenseTestCase):
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def payload(self, **over):
+        body = {
+            "expense_date": TODAY.isoformat(),
+            "branch": str(self.branch.pk),
+            "farm": str(self.farm.pk),
+            "paid_to_name": "Tea Stall",
+            "payment_mode": self.mode.pk,
+            "paid_from": self.cash.pk,
+            "items": [{"account": self.expense_ledger.pk, "description": "Tea",
+                       "quantity": "2", "rate": "60"}],
+        }
+        body.update(over)
+        return json.dumps(body)
+
+    def test_the_picker_offers_only_the_flocks_still_running(self):
+        page = self.client.get("/petty-expenses/new/")
+        names = [b["label"] for b in page.context["masters"]["batches"]]
+        self.assertTrue(any("GV-1" in n for n in names), names)
+        self.assertFalse(any("GV-0" in n for n in names), names)
+
+    def test_the_register_row_names_the_flock(self):
+        self.client.post("/api/petty-expenses/save/",
+                         data=self.payload(batch=str(self.batch.pk)),
+                         content_type="application/json")
+        rows = self.client.get("/api/petty-expenses/").json()["rows"]
+        self.assertEqual(rows[0]["batch"], "GV-1")
+
+    def test_choosing_a_batch_also_records_the_shed_it_is_housed_in(self):
+        """One question is asked; both answers are kept, so shed-wise
+        reporting stays true for a spend tagged to a flock."""
+        self.fund_cash(5000)
+        response = self.client.post(
+            "/api/petty-expenses/save/",
+            data=self.payload(batch=str(self.batch.pk), post=True),
+            content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.content)
+        expense = PettyExpense.objects.get(pk=response.json()["id"])
+        self.assertEqual(expense.batch, self.batch)
+        self.assertEqual(expense.shed, self.shed)
+
+
+class CategoryFromTheFormTests(PettyExpenseTestCase):
+    """The chart can be added to without leaving a half-typed expense."""
+
+    URL = "/api/petty-expenses/category/"
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def post(self, **body):
+        body.setdefault("mode", "sub")
+        return self.client.post(self.URL, data=json.dumps(body),
+                                content_type="application/json")
+
+    def test_several_sub_categories_are_made_in_one_go(self):
+        response = self.post(category=self.expense_group.pk,
+                             names=["Water Charges", "Borewell Repair"])
+        self.assertEqual(response.status_code, 201, response.content)
+        made = response.json()["created"]
+        self.assertEqual([m["name"] for m in made],
+                         ["Water Charges", "Borewell Repair"])
+        for entry in made:
+            account = ChartOfAccount.objects.get(pk=entry["id"])
+            self.assertEqual(account.parent, self.expense_group)
+            self.assertTrue(account.is_postable)
+            self.assertFalse(account.is_group)
+            self.assertTrue(account.code)      # minted by the chart's own rules
+
+    def test_several_categories_are_made_as_groups_under_expenses(self):
+        response = self.post(mode="category", names=["Farm Utilities", "Site Costs"])
+        self.assertEqual(response.status_code, 201, response.content)
+        for entry in response.json()["created"]:
+            group = ChartOfAccount.objects.get(pk=entry["id"])
+            self.assertTrue(group.is_group)
+            self.assertFalse(group.is_postable)
+            self.assertEqual(group.account_type.name, "Expense")
+            self.assertIsNone(group.parent.parent)      # the Expense branch
+
+    def test_a_category_just_made_can_be_filled_at_once(self):
+        """expense_categories() leaves out a group with nothing in it, which
+        is exactly the group someone is about to fill, so the parent picker
+        reads a list of its own."""
+        made = self.post(mode="category", names=["Farm Utilities"]).json()
+        group_id = made["created"][0]["id"]
+        self.assertIn(group_id, [g["id"] for g in made["groups"]])
+        self.assertNotIn(group_id, [c["id"] for c in made["categories"]])
+
+        under = self.post(category=group_id, names=["Borewell Repair"])
+        self.assertEqual(under.status_code, 201, under.content)
+        self.assertIn(group_id, [c["id"] for c in under.json()["categories"]])
+
+    def test_the_answer_carries_the_whole_list_back(self):
+        """The pickers are rebuilt from one answer rather than patched in
+        two places, which is how two lists drift apart."""
+        response = self.post(category=self.expense_group.pk, names=["Water Charges"])
+        names = [i["name"] for c in response.json()["categories"] for i in c["items"]]
+        self.assertIn("Water Charges", names)
+
+    def test_one_bad_name_leaves_none_of_them_behind(self):
+        """Everything is checked before anything is written: a list of three
+        with one already-taken name should not leave two behind."""
+        self.post(category=self.expense_group.pk, names=["Water Charges"])
+        again = self.post(category=self.expense_group.pk,
+                          names=["Cartage", "water charges", "Loading"])
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("already has", again.json()["error"])
+        self.assertFalse(ChartOfAccount.objects.filter(
+            description__in=["Cartage", "Loading"]).exists())
+
+    def test_the_same_name_twice_in_one_list_is_refused(self):
+        response = self.post(category=self.expense_group.pk,
+                             names=["Cartage", "cartage"])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("twice", " ".join(response.json()["problems"]))
+
+    def test_a_list_of_nothing_but_blanks_is_refused(self):
+        response = self.post(category=self.expense_group.pk, names=["  ", ""])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Name at least one sub category", response.json()["error"])
+
+    def test_sub_categories_need_the_category_they_go_under(self):
+        response = self.post(names=["Water Charges"])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Choose the category", response.json()["error"])
+
+    def test_a_ledger_cannot_be_used_as_a_category(self):
+        response = self.post(category=self.expense_ledger.pk, names=["Water Charges"])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Choose the category", response.json()["error"])
+
+    def test_without_the_right_to_add_to_the_chart_it_is_refused(self):
+        """Adding a ledger is a chart-of-accounts act, so it takes the
+        chart's own permission -- the expense form does not confer it.
+
+        A clerk who may work this screen, and only this screen: the matrix
+        exists, so open-by-default no longer applies to them.
+        """
+        from django.contrib.auth.models import Group
+
+        from user.models import GroupTabPermission
+
+        clerk = get_user_model().objects.create_user(
+            username="pettyclerk", password="x", email="c@example.com")
+        group = Group.objects.create(name="Petty clerks")
+        clerk.groups.add(group)
+        GroupTabPermission.objects.create(
+            group=group, tab_code="petty_expense_list", can_view=True,
+            can_add=True, can_edit=True)
+
+        self.client.force_login(clerk)
+        response = self.post(category=self.expense_group.pk, names=["Water Charges"])
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertIn("chart of accounts", response.json()["error"])
+        self.assertFalse(ChartOfAccount.objects.filter(
+            description="Water Charges").exists())
 
 
 class EndpointTests(PettyExpenseTestCase):

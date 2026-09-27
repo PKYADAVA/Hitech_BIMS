@@ -75,6 +75,24 @@ def expense_categories(profile=None):
     return sorted(groups.values(), key=lambda g: g["name"])
 
 
+def expense_groups(profile=None):
+    """Every expense group a sub category can be made under.
+
+    expense_categories() answers a different question -- what a line can be
+    charged to -- so it leaves out a group with no ledgers in it yet. A
+    category just created has none, and it is exactly the one someone is
+    about to fill, so the picker that fills it reads from here.
+    """
+    profile = profile or company()
+    return [
+        {"id": a.id, "code": a.code, "name": a.description}
+        for a in ChartOfAccount.objects
+        .filter(company=profile, account_type__name="Expense", status="Active",
+                is_group=True, parent__isnull=False)
+        .order_by("description")
+    ]
+
+
 def paid_from_accounts(cash_only=True):
     """The accounts a petty expense can be paid from, with each one's balance.
 
@@ -459,7 +477,7 @@ def report(expenses, group_by="category", limit=500):
 
     rows = []
     for expense in (expenses.select_related(
-            "branch", "farm", "shed", "paid_from", "payment_mode", "journal")
+            "branch", "farm", "shed", "batch", "paid_from", "payment_mode", "journal")
             .prefetch_related("items__account", "attachments")[:limit]):
         items = list(expense.items.all())
         rows.append({
@@ -470,6 +488,8 @@ def report(expenses, group_by="category", limit=500):
             "farm": (expense.farm.farm_name if expense.farm_id else ""),
             "shed": ((expense.shed.shed_name or expense.shed.shed_code)
                      if expense.shed_id else ""),
+            "batch": ((expense.batch.batch_name or f"Batch {expense.batch_id}")
+                      if expense.batch_id else ""),
             "category": ", ".join(sorted({(i.account.parent.description
                                            if i.account.parent_id
                                            else i.account.description) for i in items})),
@@ -534,7 +554,11 @@ def compose_narration(expense):
     items = list(expense.items.all())
     what = items[0].description if len(items) == 1 else f"{len(items)} items"
     where = expense.farm.farm_name if expense.farm_id else expense.branch.branch_name
-    if expense.shed_id:
+    if expense.batch_id:
+        # The flock, not the shed it stands in: "at Test Farm DE, FARMDE1-1"
+        # is how the spend is spoken about on the farm.
+        where = f"{where}, {expense.batch.batch_name or expense.batch}"
+    elif expense.shed_id:
         where = f"{where}, {expense.shed.shed_name or expense.shed.shed_code}"
     payee = f" to {expense.paid_to_name}" if expense.paid_to_name else ""
     return (f"Petty expense for {what} at {where}{payee}, "
@@ -591,6 +615,15 @@ def validate(expense, items=None):
     if (expense.shed_id and expense.farm_id
             and str(expense.shed.farm_id) != str(expense.farm_id)):
         problems.append("That shed is not on the chosen farm.")
+    if expense.batch_id and not expense.farm_id:
+        problems.append("A batch belongs to a farm \u2014 choose the farm as well.")
+    if (expense.batch_id and expense.farm_id
+            and str(expense.batch.broiler_farm_id) != str(expense.farm_id)):
+        problems.append("That batch is not on the chosen farm.")
+    # A settled flock cannot take new cost; its book is closed.
+    if expense.batch_id and (expense.batch.is_closed or expense.batch.end_date):
+        problems.append(f"{expense.batch.batch_name or 'That batch'} is closed \u2014 "
+                        f"a spend cannot be added to a settled flock.")
     if expense.farm_id and str(expense.farm.branch_id) != str(expense.branch_id):
         problems.append("That farm is not on the chosen branch.")
 

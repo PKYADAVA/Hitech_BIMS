@@ -26,6 +26,8 @@ urlpatterns = [
     path('petty-expenses/new/', petty_api.petty_expense_form, name='petty_expense_add'),
     path('petty-expenses/<int:id>/edit/', petty_api.petty_expense_form, name='petty_expense_edit'),
     path('api/petty-expenses/', petty_api.petty_expense_rows, name='api_petty_expense_rows'),
+    path('api/petty-expenses/category/', petty_api.petty_expense_category,
+         name='api_petty_expense_category'),
     path('api/petty-expenses/save/', petty_api.petty_expense_save, name='api_petty_expense_create'),
     path('api/petty-expenses/<int:id>/', petty_api.petty_expense_detail, name='api_petty_expense_detail'),
     path('api/petty-expenses/<int:id>/save/', petty_api.petty_expense_save, name='api_petty_expense_save'),
