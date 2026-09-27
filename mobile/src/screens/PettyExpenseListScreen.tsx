@@ -523,7 +523,11 @@ export function PettyExpenseListScreen({ navigation }: { navigation: Nav }) {
             <Row
               key={row.id}
               row={row}
-              onPress={() => navigation.navigate("PettyExpenseForm", { id: row.id })}
+              // The row opens what can be done with it, not the entry screen.
+              // A register is read far more often than it is corrected, and a
+              // stray tap that lands in an editable posted expense is how a
+              // voucher gets rewritten by accident.
+              onPress={() => setActing(row)}
               onActions={() => setActing(row)}
             />
           ))
