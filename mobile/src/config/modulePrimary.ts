@@ -16,6 +16,11 @@ export interface ModulePrimary {
   resourceKey: string;
   /** Button text — the reference's wording, not the resource's title. */
   label: string;
+  /**
+   * A screen that writes this record itself, where the generic form cannot.
+   * A voucher is a set of balanced lines, which is not a list of fields.
+   */
+  screen?: string;
 }
 
 export const MODULE_PRIMARY: Partial<Record<ModuleKey, ModulePrimary>> = {
@@ -24,7 +29,8 @@ export const MODULE_PRIMARY: Partial<Record<ModuleKey, ModulePrimary>> = {
   inventory: { resourceKey: "inventory-stock-transfers", label: "New Transfer" },
   purchase: { resourceKey: "purchase-general-purchases", label: "New Purchase" },
   sales: { resourceKey: "sales-invoices", label: "New Invoice" },
-  account: { resourceKey: "account-vouchers", label: "New Voucher" },
+  account: { resourceKey: "account-vouchers", label: "New Voucher",
+             screen: "VoucherForm" },
   // hr, user and change_requests have no single obvious thing to create from
   // the module header — an approval is raised from the record it concerns, not
   // from a menu — so they get no button rather than an arbitrary one.

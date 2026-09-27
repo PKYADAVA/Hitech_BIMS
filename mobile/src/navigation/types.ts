@@ -59,6 +59,8 @@ export type ModuleStackParams = {
   VoucherList: undefined;
   /** One voucher, with the lines that make it balance. */
   VoucherDetail: { id: number };
+  /** Writing an entry. `id` reopens a draft on the same screen. */
+  VoucherForm: { id?: number } | undefined;
   PettyExpenseList: undefined;
   /**
    * The entry screen. `id` opens a saved expense instead of a blank one;

@@ -26,6 +26,7 @@ import { EggPurchaseFormScreen } from "@/screens/EggPurchaseFormScreen";
 import { GeneralPurchaseFormScreen } from "@/screens/GeneralPurchaseFormScreen";
 import { PettyExpenseFormScreen } from "@/screens/PettyExpenseFormScreen";
 import { VoucherDetailScreen } from "@/screens/VoucherDetailScreen";
+import { VoucherFormScreen } from "@/screens/VoucherFormScreen";
 import { VoucherListScreen } from "@/screens/VoucherListScreen";
 import { PettyExpenseListScreen } from "@/screens/PettyExpenseListScreen";
 import { HatchSettingFormScreen } from "@/screens/HatchSettingFormScreen";
@@ -119,12 +120,18 @@ function ModulePrimaryButton({ moduleKey }: { moduleKey: ModuleKey }) {
   const { colors } = useTheme();
   const primary = MODULE_PRIMARY[moduleKey];
   const canResource = usePermissionsStore((s) => s.canResource);
-  if (!primary || !isEditable(primary.resourceKey)) return null;
+  // A record with a screen of its own does not need a generic form to
+  // exist before it can be created.
+  if (!primary || (!primary.screen && !isEditable(primary.resourceKey))) return null;
   if (!canResource(primary.resourceKey, moduleKey, "add")) return null;
   return (
     <Pressable
       hitSlop={12}
-      onPress={() => openRecordForm(navigation, primary.resourceKey, "create")}
+      onPress={() =>
+        primary.screen
+          ? navigation.navigate(primary.screen)
+          : openRecordForm(navigation, primary.resourceKey, "create")
+      }
       accessibilityRole="button"
       accessibilityLabel={primary.label}
       style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
@@ -225,6 +232,8 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
         options={{ title: "Journal Vouchers" }} />
       <ModuleStack.Screen name="VoucherDetail" component={VoucherDetailScreen}
         options={{ title: "Voucher" }} />
+      <ModuleStack.Screen name="VoucherForm" component={VoucherFormScreen}
+        options={{ title: "New Voucher" }} />
       <ModuleStack.Screen name="PettyExpenseForm" component={PettyExpenseFormScreen}
         options={{ title: "Add Petty Expense" }} />
       <ModuleStack.Screen name="FarmCaptureForm" component={FarmCaptureFormScreen} />

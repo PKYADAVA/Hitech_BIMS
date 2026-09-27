@@ -265,6 +265,14 @@ export function VoucherListScreen({ navigation }: { navigation: Nav }) {
           />
         </View>
 
+        <Pressable
+          style={({ pressed }) => [styles.add, shadow(2), pressed && { opacity: 0.9 }]}
+          onPress={() => navigation.navigate("VoucherForm", {})}
+        >
+          <AppIcon name="plus" size={20} color={colors.onDark} />
+          <Text style={styles.addText}>New Voucher</Text>
+        </Pressable>
+
         <SearchBar
           value={search}
           onChangeText={setSearch}
@@ -361,8 +369,12 @@ export function VoucherListScreen({ navigation }: { navigation: Nav }) {
           onClose={() => setActing(null)}
           onOpen={() => {
             const id = acting.id;
+            const draft = acting.status === "Draft" && !acting.system_generated;
             setActing(null);
-            navigation.navigate("VoucherDetail", { id });
+            // A draft opens where it can be changed; anything else opens to
+            // be read, because that is all that can be done with it.
+            if (draft && may.edit) navigation.navigate("VoucherForm", { id });
+            else navigation.navigate("VoucherDetail", { id });
           }}
           onPost={() =>
             act("post", acting, () => postVoucher(acting.id),
@@ -594,8 +606,12 @@ function RowActions({
             </View>
           ) : null}
 
-          <Action icon="eye-outline" label="View" note="Its lines, and what they charge"
-            onPress={onOpen} />
+          <Action
+            icon={row.status === "Draft" && !ownedElsewhere ? "pencil" : "eye-outline"}
+            label={row.status === "Draft" && !ownedElsewhere ? "Edit" : "View"}
+            note="Its lines, and what they charge"
+            onPress={onOpen}
+          />
 
           {row.status === "Draft" && may.edit && !ownedElsewhere ? (
             <Action icon="check" label="Post" tone={colors.success}
@@ -713,6 +729,17 @@ const useStyles = makeStyles((colors) => ({
   stripActions: { flexDirection: "row", justifyContent: "flex-end" },
   stripBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 },
   stripBtnText: { ...type.caption, color: colors.tint, fontWeight: "700" },
+
+  add: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.success,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+  },
+  addText: { ...type.body, fontWeight: "700", color: colors.onDark },
 
   count: { ...type.caption, color: colors.textMuted, marginTop: spacing.xs },
 

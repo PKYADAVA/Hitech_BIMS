@@ -91,6 +91,47 @@ export async function getVoucher(id: number): Promise<VoucherDetail> {
   return resp.data.data;
 }
 
+export interface VoucherMasters {
+  /** Postable ledgers that take manual entry: the only thing a line may hit. */
+  accounts: { id: number; code: string; name: string }[];
+  types: { value: string; label: string }[];
+  sectors: { id: number; name: string }[];
+  centres: { id: number; name: string }[];
+}
+
+/** One side of an entry, as the screen holds it before saving. */
+export interface VoucherLineInput {
+  account: string;
+  debit: string;
+  credit: string;
+  narration?: string;
+  cost_center?: string;
+}
+
+export interface VoucherInput {
+  date: string;
+  voucher_type: string;
+  narration: string;
+  reference?: string;
+  sector?: number | null;
+  lines: VoucherLineInput[];
+  post?: boolean;
+}
+
+/** Everything the entry screen's pickers hold, already filtered to what may
+ *  actually be chosen. */
+export async function voucherMasters(): Promise<VoucherMasters> {
+  const resp = await http.get<Envelope<VoucherMasters>>(`${BASE}/masters`);
+  return resp.data.data;
+}
+
+/** Write a voucher, or rewrite a draft. `post: true` puts it on the books. */
+export async function saveVoucher(body: VoucherInput, id?: number): Promise<VoucherRow> {
+  const url = id ? `${BASE}/save/${id}` : `${BASE}/save`;
+  const resp = await http.post<Envelope<VoucherRow>>(url, body);
+  return resp.data.data;
+}
+
 export async function postVoucher(id: number): Promise<VoucherRow> {
   const resp = await http.post<Envelope<VoucherRow>>(`${BASE}/${id}/post`);
   return resp.data.data;

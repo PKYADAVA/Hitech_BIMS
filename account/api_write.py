@@ -163,6 +163,55 @@ class VoucherCardsView(_VoucherView):
         return _delegate(journal_web.voucher_cards, request)
 
 
+class VoucherMastersView(_VoucherView):
+    """Everything the entry screen's pickers hold, asked for once.
+
+    The postable ledgers, the voucher types the engine mints numbers for, the
+    sectors and the cost centres a line may carry -- the same four lists the
+    browser's form fills itself from.
+    """
+
+    def get(self, request):
+        from inventory.models import Warehouse
+
+        from account.models import ChartOfAccount, OrganizationCentre, Voucher
+
+        company = web.service.company()
+        accounts = (ChartOfAccount.objects
+                    .filter(company=company, is_postable=True, is_group=False,
+                            status="Active", allow_manual_entry=True)
+                    .order_by("code")
+                    .values("id", "code", "description"))
+        return Response({
+            # A line may only be charged to a postable ledger that takes
+            # manual entry: offering anything else is offering a refusal.
+            "accounts": [{"id": a["id"], "code": a["code"], "name": a["description"]}
+                         for a in accounts],
+            "types": [{"value": value, "label": label}
+                      for value, label in Voucher.TYPE_CHOICES],
+            "sectors": list(Warehouse.objects.order_by("name").values("id", "name")),
+            "centres": [{"id": c.id, "name": c.name}
+                        for c in OrganizationCentre.objects
+                        .filter(is_active=True, allow_manual_selection=True,
+                                allow_children_only=False)
+                        .order_by("name")],
+        })
+
+
+class VoucherSaveView(_VoucherView):
+    """Write a voucher, or rewrite a draft, exactly as the browser does.
+
+    ``POST`` with no id creates; with an id it rewrites that draft. The engine
+    is what refuses an unbalanced entry, a group account or a locked year, so
+    a refusal here reads the same on both screens.
+    """
+
+    def post(self, request, pk=None):
+        if pk is None:
+            return _delegate(journal_web.VoucherListCreateAPI().post, request)
+        return _delegate(journal_web.VoucherDetailAPI().put, request, pk)
+
+
 class VoucherDetailView(_VoucherView):
     """One voucher in full, with the lines that make it balance.
 
@@ -218,6 +267,12 @@ def write_urls() -> list:
              name="account-vouchers-rows"),
         path("account/vouchers/cards", VoucherCardsView.as_view(),
              name="account-vouchers-cards"),
+        path("account/vouchers/masters", VoucherMastersView.as_view(),
+             name="account-vouchers-masters"),
+        path("account/vouchers/save", VoucherSaveView.as_view(),
+             name="account-vouchers-save-new"),
+        path("account/vouchers/save/<int:pk>", VoucherSaveView.as_view(),
+             name="account-vouchers-save"),
         path("account/vouchers/<int:pk>/full", VoucherDetailView.as_view(),
              name="account-vouchers-detail"),
         path("account/vouchers/<int:pk>/post", VoucherPostView.as_view(),

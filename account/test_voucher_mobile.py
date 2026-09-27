@@ -103,6 +103,71 @@ class VoucherMobileTests(EngineTestCase, APITestCase):
         self.assertEqual(debit, credit)
         self.assertEqual(debit, 1200)
 
+    # -- writing one ------------------------------------------------------
+
+    def test_the_pickers_are_filled_from_one_call(self):
+        masters = self.client.get("/api/v1/account/vouchers/masters").json()["data"]
+        for key in ("accounts", "types", "sectors", "centres"):
+            self.assertIn(key, masters, key)
+        self.assertTrue(masters["accounts"])
+        # Only what a line may actually be charged to: a group account offered
+        # here is a refusal offered here.
+        ids = {a["id"] for a in masters["accounts"]}
+        groups = ChartOfAccount.objects.filter(company=self.company, is_group=True)
+        self.assertFalse(ids & {g.id for g in groups})
+
+    def test_a_voucher_written_on_the_phone_posts(self):
+        body = {
+            "date": "2026-05-02",
+            "voucher_type": "Journal",
+            "narration": "Written on the phone",
+            "lines": [
+                {"account": self.cash.id, "debit": "400", "credit": "0"},
+                {"account": self.broiler_sales.id, "debit": "0", "credit": "400"},
+            ],
+            "post": True,
+        }
+        response = self.client.post("/api/v1/account/vouchers/save", body, format="json")
+        self.assertEqual(response.status_code, 201, response.content)
+        data = response.json()["data"]
+        self.assertEqual(data["status"], "Posted")
+        self.assertTrue(data["voucher_no"])
+
+    def test_an_unbalanced_entry_is_refused_in_the_engines_words(self):
+        """The screen does not check this and must not: the engine is the one
+        that knows, and its refusal is what the phone shows."""
+        body = {
+            "date": "2026-05-02",
+            "voucher_type": "Journal",
+            "narration": "Lopsided",
+            "lines": [
+                {"account": self.cash.id, "debit": "400", "credit": "0"},
+                {"account": self.broiler_sales.id, "debit": "0", "credit": "250"},
+            ],
+            "post": True,
+        }
+        response = self.client.post("/api/v1/account/vouchers/save", body, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("balance", str(response.json()).lower())
+        self.assertFalse(Voucher.objects.filter(narration="Lopsided").exists())
+
+    def test_a_draft_can_be_rewritten_from_the_phone(self):
+        draft = self.make(post=False, amount="100")
+        body = {
+            "date": "2026-05-03",
+            "narration": "Corrected on the phone",
+            "lines": [
+                {"account": self.cash.id, "debit": "900", "credit": "0"},
+                {"account": self.broiler_sales.id, "debit": "0", "credit": "900"},
+            ],
+        }
+        response = self.client.post(f"/api/v1/account/vouchers/save/{draft.pk}",
+                                    body, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        draft.refresh_from_db()
+        self.assertEqual(draft.narration, "Corrected on the phone")
+        self.assertEqual(draft.total_debit, 900)
+
     # -- the two endings --------------------------------------------------
 
     def test_posting_a_draft_from_the_phone_numbers_it(self):
