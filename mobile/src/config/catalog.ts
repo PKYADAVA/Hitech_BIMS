@@ -1090,7 +1090,10 @@ const accountResources: ResourceConfig[] = [
   {
     key: "account-vouchers",
     module: "account",
-    path: "/account/vouchers/",
+    // Its own screen: figures that filter, the web strip's questions, lines on
+    // the voucher, and the two endings kept apart.
+    nativeScreen: "VoucherList",
+    path: "/account/vouchers/rows",
     title: "Journal Vouchers",
     singular: "Voucher",
     icon: "book-open-variant",

@@ -55,6 +55,10 @@ export type ModuleStackParams = {
    * Petty Expenses — the register, read the way a phone is read: the figures
    * first, then the filters that narrow them, then the rows.
    */
+  /** The journal register: the figures, the filters, and the rows. */
+  VoucherList: undefined;
+  /** One voucher, with the lines that make it balance. */
+  VoucherDetail: { id: number };
   PettyExpenseList: undefined;
   /**
    * The entry screen. `id` opens a saved expense instead of a blank one;

@@ -25,6 +25,8 @@ import { FarmCaptureFormScreen } from "@/screens/FarmCaptureFormScreen";
 import { EggPurchaseFormScreen } from "@/screens/EggPurchaseFormScreen";
 import { GeneralPurchaseFormScreen } from "@/screens/GeneralPurchaseFormScreen";
 import { PettyExpenseFormScreen } from "@/screens/PettyExpenseFormScreen";
+import { VoucherDetailScreen } from "@/screens/VoucherDetailScreen";
+import { VoucherListScreen } from "@/screens/VoucherListScreen";
 import { PettyExpenseListScreen } from "@/screens/PettyExpenseListScreen";
 import { HatchSettingFormScreen } from "@/screens/HatchSettingFormScreen";
 import { FarmerFarmSetupRequestFormScreen } from "@/screens/FarmerFarmSetupRequestFormScreen";
@@ -219,6 +221,10 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="MedicineEntryForm" component={MedicineEntryFormScreen} />
       <ModuleStack.Screen name="PettyExpenseList" component={PettyExpenseListScreen}
         options={{ title: "Petty Expenses" }} />
+      <ModuleStack.Screen name="VoucherList" component={VoucherListScreen}
+        options={{ title: "Journal Vouchers" }} />
+      <ModuleStack.Screen name="VoucherDetail" component={VoucherDetailScreen}
+        options={{ title: "Voucher" }} />
       <ModuleStack.Screen name="PettyExpenseForm" component={PettyExpenseFormScreen}
         options={{ title: "Add Petty Expense" }} />
       <ModuleStack.Screen name="FarmCaptureForm" component={FarmCaptureFormScreen} />

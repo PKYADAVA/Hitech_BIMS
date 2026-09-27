@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { RESOURCE_TABS } from "@/api/permissions";
+import { RESOURCES } from "@/config/catalog";
 import { MODULES, ModuleKey } from "@/config/catalog";
 import { MODULE_SHORTCUT } from "@/config/modulePrimary";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -81,7 +82,13 @@ export function ModuleTabBar({ moduleKey }: { moduleKey: ModuleKey }) {
           label: shortcut!.label,
           icon: shortcut!.icon as IconName,
           on: false,
-          go: () => navigation.navigate("List", { resourceKey: shortcut!.resourceKey }),
+          // A register with its own screen opens that; everything else
+          // opens the generic list.
+          go: () => {
+            const native = RESOURCES[shortcut!.resourceKey]?.nativeScreen;
+            if (native) navigation.navigate(native as never);
+            else navigation.navigate("List", { resourceKey: shortcut!.resourceKey });
+          },
         }]
       : []),
     {

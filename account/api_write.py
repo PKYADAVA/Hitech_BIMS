@@ -27,12 +27,14 @@ from rest_framework.views import APIView
 from api.permissions import MatrixPermission
 from api.viewsets import V1ViewMixin
 
+from . import journal_api as journal_web
 from . import petty_api as web
 
-#: The matrix tab these endpoints belong to. Set explicitly so the phone is
+#: The matrix tabs these endpoints belong to. Set explicitly so the phone is
 #: held to the same Web-Access rights as the browser, and narrowed again by
 #: Mobile Access, without waiting for a model-to-tab mapping.
 TAB = "petty_expense_list"
+VOUCHER_TAB = "vouchers"
 
 
 def _delegate(view, request, *args) -> Response:
@@ -137,6 +139,56 @@ class PettyExpenseAttachView(_PettyView):
         return _delegate(web.petty_expense_detach, request, pk, attachment_id)
 
 
+class _VoucherView(V1ViewMixin, APIView):
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    tab_code = VOUCHER_TAB
+
+
+class VoucherListView(_VoucherView):
+    """The register's rows.
+
+    Takes the web register's own query -- ``type``, ``status``, ``sector``,
+    ``date_from``, ``date_to``, ``q``, ``page``, ``page_size`` -- so the
+    phone's filters and the browser's are the same filters.
+    """
+
+    def get(self, request):
+        return _delegate(journal_web.VoucherListCreateAPI().get, request)
+
+
+class VoucherCardsView(_VoucherView):
+    """The four figures above the register, counted over the company."""
+
+    def get(self, request):
+        return _delegate(journal_web.voucher_cards, request)
+
+
+class VoucherDetailView(_VoucherView):
+    """One voucher in full, with the lines that make it balance.
+
+    A voucher without its lines is a number and a date; the lines are the
+    thing anybody opens a voucher to read.
+    """
+
+    def get(self, request, pk):
+        return _delegate(journal_web.VoucherDetailAPI().get, request, pk)
+
+    def delete(self, request, pk):
+        # Drafts only. A posted voucher is cancelled, never deleted -- the
+        # web view says so itself, in its own words.
+        return _delegate(journal_web.VoucherDetailAPI().delete, request, pk)
+
+
+class VoucherPostView(_VoucherView):
+    def post(self, request, pk):
+        return _delegate(journal_web.VoucherPostAPI().post, request, pk)
+
+
+class VoucherCancelView(_VoucherView):
+    def post(self, request, pk):
+        return _delegate(journal_web.VoucherCancelAPI().post, request, pk)
+
+
 def write_urls() -> list:
     """URL patterns for the account transaction write endpoints."""
     return [
@@ -161,4 +213,15 @@ def write_urls() -> list:
         path("account/petty-expenses/<int:pk>/attach/<int:attachment_id>",
              PettyExpenseAttachView.as_view(),
              name="account-petty-expenses-detach"),
+
+        path("account/vouchers/rows", VoucherListView.as_view(),
+             name="account-vouchers-rows"),
+        path("account/vouchers/cards", VoucherCardsView.as_view(),
+             name="account-vouchers-cards"),
+        path("account/vouchers/<int:pk>/full", VoucherDetailView.as_view(),
+             name="account-vouchers-detail"),
+        path("account/vouchers/<int:pk>/post", VoucherPostView.as_view(),
+             name="account-vouchers-post"),
+        path("account/vouchers/<int:pk>/cancel", VoucherCancelView.as_view(),
+             name="account-vouchers-cancel"),
     ]
