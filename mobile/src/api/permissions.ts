@@ -96,6 +96,7 @@ export const RESOURCE_TABS: Record<string, string> = {
   "account-company-profiles": "company_profile",
   "account-terms": "terms",
   "account-vouchers": "vouchers",
+  "account-petty-expenses": "petty_expense_list",
   // Sales
   "sales-invoices": "sales_invoice_list",
   "sales-receipts": "sales_receipt_list",

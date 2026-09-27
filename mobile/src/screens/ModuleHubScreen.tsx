@@ -120,7 +120,13 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
                   key={key}
                   padded={false}
                   style={{ ...styles.tile, width: tileW }}
-                  onPress={() => navigation.navigate("List", { resourceKey: key })}
+                  onPress={() =>
+                    // A register with its own screen opens that; everything
+                    // else opens the generic list.
+                    RESOURCES[key].nativeScreen
+                      ? navigation.navigate(RESOURCES[key].nativeScreen as never)
+                      : navigation.navigate("List", { resourceKey: key })
+                  }
                 >
                   <IconCircle icon={r.icon} color={r.accent} size={40} />
                   <Text style={styles.tileTitle} numberOfLines={2}>

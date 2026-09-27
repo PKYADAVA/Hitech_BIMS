@@ -44,6 +44,13 @@ export interface ResourceConfig {
   key: string;
   module: ModuleKey;
   path: string;
+  /**
+   * Open this screen instead of the generic list, for a register the generic
+   * one cannot draw — figures above the rows, filters that are not a search
+   * box. The tile, its place in the hub and its matrix gating are unchanged:
+   * only what it opens differs.
+   */
+  nativeScreen?: string;
   title: string; // plural, e.g. "Daily Entries"
   singular: string;
   /**
@@ -1054,6 +1061,30 @@ const accountResources: ResourceConfig[] = [
     card: (r) => ({
       title: pick(r, ["type"], `Terms #${r.id}`),
       subtitle: joinParts([pick(r, ["party_type"]), pick(r, ["condition"])]),
+    }),
+  },
+  {
+    key: "account-petty-expenses",
+    module: "account",
+    // Its own screen: the register is four figures, a filter strip and rows,
+    // and each figure narrows the list under it.
+    nativeScreen: "PettyExpenseList",
+    path: "/account/petty-expenses/rows",
+    title: "Petty Expense",
+    singular: "Petty Expense",
+    icon: "receipt",
+    accent: A,
+    emptyMessage: "No petty expenses yet.",
+    dateField: "date",
+    searchKeys: ["expense_no", "paid_to", "description"],
+    card: (r) => ({
+      title: pick(r, ["expense_no"], `Expense #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["paid_to"]), pick(r, ["category"])]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+      badge: !isBlank(r.status)
+        ? { label: String(r.status),
+            tone: /post/.test(String(r.status).toLowerCase()) ? "success" : "neutral" }
+        : undefined,
     }),
   },
   {
@@ -2137,6 +2168,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Transactions",
         resourceKeys: [
           "account-vouchers",
+          "account-petty-expenses",
         ],
       },
     ],

@@ -13,6 +13,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from account.api import register as register_account
+from account.api_write import write_urls as account_write_urls
 from account.models import ChartOfAccount
 from inventory.api import (FarmBatchListView, StockTransferItemLookupView,
                            StockTransferStockLookupView)
@@ -242,6 +243,7 @@ urlpatterns = [
     path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     # Inventory + Purchase transaction writes — reuse the web posting logic
     # (declared before the router so they win over the read-only resource routes).
+    *account_write_urls(),
     *broiler_write_urls(),
     # The supervisor's own round: today's route and the check-in and
     # check-out at each farm on it.
