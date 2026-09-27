@@ -1,4 +1,7 @@
+import { Platform } from "react-native";
+
 import { IconName } from "@/components/AppIcon";
+import { MEDIA_BASE_URL } from "@/config";
 
 /**
  * The register's filter strip, and the two small decisions the screens that
@@ -143,6 +146,26 @@ export function pettyIcon(...parts: (string | undefined)[]): IconName {
   if (/repair|maintenance|electric/.test(text)) return "wrench";
   if (/stationery|printing|office/.test(text)) return "file-document-outline";
   return "receipt";
+}
+
+/**
+ * A stored bill's address.
+ *
+ * The API returns media as a server-relative path ("/media/..."), which a
+ * phone cannot resolve at all, so native hangs it off the base the client
+ * already talks to.
+ *
+ * The browser must not: on web the API goes through the dev server's
+ * same-origin proxy, while `MEDIA_BASE_URL` is whatever absolute base the
+ * config settled on -- in a web build with no Metro host to learn from, that
+ * is the production server, where a bill photographed against a local
+ * database does not exist. A same-origin path goes to the proxy, which
+ * forwards /media with the rest.
+ */
+export function billUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return Platform.OS === "web" ? path : `${MEDIA_BASE_URL}${path}`;
 }
 
 /** Rupees, as the register writes them. */

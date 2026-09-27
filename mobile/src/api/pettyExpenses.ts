@@ -162,6 +162,11 @@ export async function deletePettyExpense(id: number) {
   await http.post(`${BASE}/${id}/delete`);
 }
 
+/** Take a bill off a draft. A posted expense keeps its evidence. */
+export async function detachPettyBill(id: number, attachmentId: number) {
+  await http.delete(`${BASE}/${id}/attach/${attachmentId}`);
+}
+
 /** The bill, photographed at the counter. */
 export async function attachPettyBills(id: number, body: FormData) {
   const resp = await http.post<Envelope<{ bills: PettyRow["bills"]; refused: string[] }>>(

@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -35,7 +36,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   attachPettyBills,
+  detachPettyBill,
   getPettyExpense,
+  PettyRow,
   PettyExpenseInput,
   PettyItemInput,
   PettyMasters,
@@ -43,10 +46,11 @@ import {
   savePettyExpense,
 } from "@/api/pettyExpenses";
 import { capturePhoto, CapturedImage, CapturePermissionError, pickPhoto } from "@/capture";
-import { confirm } from "@/ui/confirm";
+import { confirm, notify } from "@/ui/confirm";
 import {
   isoDate,
   lineAmount as amountOf,
+  billUrl,
   pettyIcon,
   pettyMoney as money,
 } from "@/domain/pettyExpense";
@@ -83,6 +87,7 @@ const BLANK: Line = {
   subLabel: "",
 };
 
+
 export function PettyExpenseFormScreen({ route, navigation }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -111,6 +116,9 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   // button on it says the opposite.
   const [lines, setLines] = useState<Line[]>([{ ...BLANK }]);
   const [bills, setBills] = useState<CapturedImage[]>([]);
+  // Two kinds on one shelf: pictures taken in this sitting and not yet
+  // sent, and the bills the expense already carries.
+  const [saved, setSaved] = useState<PettyRow["bills"]>([]);
   const [narration, setNarration] = useState("");
   const [narrationTouched, setTouched] = useState(false);
   // Which line is open. Line 1 opens with the screen, as the ERP's grid
@@ -182,7 +190,8 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
       setPaidTo(String(data.paid_to_name ?? ""));
       // A copy writes its own sentence from what it now says.
       if (!asCopy) {
-        setNarration(String(data.narration ?? ""));
+        setSaved(asCopy ? [] : ((data.attachments ?? []) as PettyRow["bills"]));
+      setNarration(String(data.narration ?? ""));
         setTouched(true);
       }
       setReadOnly(!asCopy && !data.editable);
@@ -261,6 +270,27 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
         return;
       }
       Alert.alert("That did not work", "The picture could not be added.");
+    }
+  }
+
+  async function dropSaved(bill: PettyRow["bills"][number]) {
+    if (!id) return;
+    const ok = await confirm({
+      title: `Remove ${bill.name}?`,
+      message: "The picture is deleted. The expense keeps everything else.",
+      confirmLabel: "Remove",
+      cancelLabel: "Keep",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await detachPettyBill(id, bill.id);
+      setSaved((was) => was.filter((b) => b.id !== bill.id));
+    } catch (e) {
+      // A posted expense keeps its evidence, and says so in its own words.
+      const said = (e as { response?: { data?: { error?: { message?: string } } } })
+        ?.response?.data?.error?.message;
+      notify(said || "It could not be removed.");
     }
   }
 
@@ -552,9 +582,40 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
                 </Pressable>
               </>
             ) : null}
+            {/* On file already: the photograph itself where there is one, a
+                document mark where there is not. */}
+            {saved.map((bill) => (
+              <View key={`saved-${bill.id}`} style={styles.bill}>
+                <Pressable
+                  style={styles.billFace}
+                  onPress={() => Linking.openURL(billUrl(bill.url)).catch(() => undefined)}
+                  accessibilityLabel={`Open ${bill.name}`}
+                >
+                  {/^image/.test(bill.type || "") ? (
+                    <Image source={{ uri: billUrl(bill.url) }} style={styles.billImage} />
+                  ) : (
+                    <AppIcon name="file-pdf-box" size={22} color={colors.danger} />
+                  )}
+                </Pressable>
+                <Text style={styles.billName} numberOfLines={1}>
+                  {bill.name}
+                </Text>
+                {!readOnly ? (
+                  <Pressable style={styles.billX} onPress={() => dropSaved(bill)}>
+                    <AppIcon name="close" size={10} color={colors.onDark} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            {/* Taken here, not sent yet: they go up with the save. */}
             {bills.map((bill, index) => (
               <View key={bill.uri} style={styles.bill}>
-                <Image source={{ uri: bill.uri }} style={styles.billImage} />
+                <View style={styles.billFace}>
+                  <Image source={{ uri: bill.uri }} style={styles.billImage} />
+                </View>
+                <Text style={styles.billName} numberOfLines={1}>
+                  {bill.name}
+                </Text>
                 <Pressable
                   style={styles.billX}
                   onPress={() => setBills((was) => was.filter((_, i) => i !== index))}
@@ -1094,8 +1155,12 @@ const useStyles = makeStyles((colors) => ({
     gap: 2,
   },
   billAddText: { ...type.caption, color: colors.tint },
-  bill: { width: 72, height: 62 },
-  billImage: { width: 72, height: 62, borderRadius: radius.sm },
+  bill: { width: 72 },
+  billFace: { width: 72, height: 62, borderRadius: radius.sm, overflow: "hidden",
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
+    alignItems: "center", justifyContent: "center" },
+  billImage: { width: "100%", height: "100%" },
+  billName: { ...type.caption, color: colors.textMuted, fontSize: 10, marginTop: 2 },
   billX: {
     position: "absolute",
     top: -6,

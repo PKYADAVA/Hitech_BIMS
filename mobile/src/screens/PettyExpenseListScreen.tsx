@@ -44,7 +44,6 @@ import {
 } from "@/api/pettyExpenses";
 import { capturePhoto, CapturePermissionError, pickPhoto } from "@/capture";
 import { confirm, notify } from "@/ui/confirm";
-import { MEDIA_BASE_URL } from "@/config";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { DateField } from "@/components/DateField";
 import {
@@ -59,6 +58,7 @@ import {
 import {
   MONTHS,
   openingStrip,
+  billUrl,
   pettyIcon,
   pettyMoney as money,
   pettyQuery,
@@ -762,17 +762,6 @@ function Tile({
   );
 }
 
-/**
- * A stored file's absolute address.
- *
- * The API returns media as a server-relative path ("/media/..."), which a
- * browser resolves against the page it is on and a phone cannot resolve at
- * all. The base the client already talks to is the one to hang it off.
- */
-function mediaUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${MEDIA_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
-}
 
 /**
  * The bills on a row: the photograph itself where there is one, a document
@@ -793,11 +782,11 @@ function Bills({ bills }: { bills: PettyRow["bills"] }) {
         <Pressable
           key={bill.id}
           style={styles.bill}
-          onPress={() => Linking.openURL(mediaUrl(bill.url)).catch(() => undefined)}
+          onPress={() => Linking.openURL(billUrl(bill.url)).catch(() => undefined)}
           accessibilityLabel={`Open ${bill.name}`}
         >
           {/^image/.test(bill.type || "") ? (
-            <Image source={{ uri: mediaUrl(bill.url) }} style={styles.billImage} />
+            <Image source={{ uri: billUrl(bill.url) }} style={styles.billImage} />
           ) : (
             <AppIcon name="file-pdf-box" size={14} color={colors.danger} />
           )}
