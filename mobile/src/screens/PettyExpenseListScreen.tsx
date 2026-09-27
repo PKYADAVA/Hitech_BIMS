@@ -89,7 +89,9 @@ export function PettyExpenseListScreen({ navigation }: { navigation: Nav }) {
   const [strip, setStrip] = useState<PettyStrip>(() => openingStrip());
   const [tile, setTile] = useState<PettyTile>("");
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(true);
+  // Folded to start with: the register is opened to read the rows, and
+  // the window it opens on is already the one most people want.
+  const [open, setOpen] = useState(false);
   const [more, setMore] = useState(false);
 
   // The pickers' options: the same masters the entry screen fills itself
@@ -154,7 +156,7 @@ export function PettyExpenseListScreen({ navigation }: { navigation: Nav }) {
   const cash: CashBox[] = cards?.cash ?? [];
 
   return (
-    <Screen>
+    <Screen edges={["left", "right"]}>
       <ScrollView
         contentContainerStyle={styles.page}
         keyboardShouldPersistTaps="handled"

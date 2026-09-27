@@ -6,9 +6,12 @@
  * — because the two screens are filled in by the same people and one of them
  * teaching a different order is how a register ends up with two habits.
  *
- * What is different is the shape, not the questions. A phone has no grid, so a
- * line is a card that opens in a sheet; a phone has a camera, so the bill is
- * photographed at the counter rather than found on a disk later. The cash box
+ * What is different is the shape, not the questions. A phone has no room for
+ * a grid, so the lines stack: the one being worked on is open with its fields
+ * under it and the rest sit collapsed, which is the same row, folded. A line
+ * has no Save of its own, as a grid row has none -- what is typed is what the
+ * line says. A phone has a camera, so the bill is photographed at the counter
+ * rather than found on a disk later. The cash box
  * and what it holds sit at the top, because the answer to "can I pay this out
  * of petty cash" is the first thing anybody standing at a counter needs.
  *
@@ -40,6 +43,7 @@ import {
   savePettyExpense,
 } from "@/api/pettyExpenses";
 import { capturePhoto, CapturedImage, CapturePermissionError, pickPhoto } from "@/capture";
+import { confirm } from "@/ui/confirm";
 import {
   isoDate,
   lineAmount as amountOf,
@@ -104,7 +108,9 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   const [bills, setBills] = useState<CapturedImage[]>([]);
   const [narration, setNarration] = useState("");
   const [narrationTouched, setTouched] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
+  // Which line is open. Line 1 opens with the screen, as the ERP's grid
+  // row does: there is no "open this row" step on a grid, you type into it.
+  const [openLine, setOpenLine] = useState<number | null>(0);
   const [saving, setSaving] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [problem, setProblem] = useState("");
@@ -278,6 +284,30 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
     };
   }
 
+  // Leaving with something typed is asked about once, as the web form asks:
+  // nothing here is saved until a button says so, and a back gesture that
+  // silently threw away a filled sheet would be the worse surprise.
+  const typed = () =>
+    !!paidTo.trim() ||
+    !!reference.trim() ||
+    bills.length > 0 ||
+    lines.some((l) => l.account || l.description.trim() || Number(l.rate) > 0);
+
+  async function leave() {
+    if (!typed()) {
+      navigation.goBack();
+      return;
+    }
+    const ok = await confirm({
+      title: id ? "Leave without saving your changes?" : "Leave without saving this expense?",
+      message: "Anything typed here will be lost. Nothing has been saved yet.",
+      confirmLabel: "Leave",
+      cancelLabel: "Stay",
+      destructive: true,
+    });
+    if (ok) navigation.goBack();
+  }
+
   async function save(post: boolean) {
     setProblem("");
     setSaving(true);
@@ -318,7 +348,7 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
 
   if (masters.isLoading) {
     return (
-      <Screen>
+      <Screen edges={["left", "right"]}>
         <View style={styles.centre}>
           <ActivityIndicator />
           <Text style={styles.muted}>Reading the masters</Text>
@@ -328,7 +358,7 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen>
+    <Screen edges={["left", "right"]}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         {/* The box, and what it holds: the first thing anybody at a counter
             needs to know is whether this can come out of petty cash. */}
@@ -452,7 +482,13 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
           title="Expense Items"
           action={
             readOnly ? undefined : (
-              <Pressable style={styles.addItem} onPress={() => setEditing(lines.length)}>
+              <Pressable
+                style={styles.addItem}
+                onPress={() => {
+                  setLines((was) => [...was, { ...BLANK }]);
+                  setOpenLine(lines.length);
+                }}
+              >
                 <AppIcon name="plus" size={14} color={colors.tint} />
                 <Text style={styles.addItemText}>Add Item</Text>
               </Pressable>
@@ -462,63 +498,32 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
           {lines.length === 0 ? (
             <Text style={styles.muted}>Nothing on it yet. Add what was bought.</Text>
           ) : (
-            lines.map((line, index) => {
-              // A line nobody has filled in yet shows what it is for and
-              // where to press, instead of pretending to hold a figure.
-              const blank = !line.account && !line.description.trim();
-              return (
-                <Pressable
+            lines.map((line, index) =>
+              index === openLine && !readOnly ? (
+                <LineFields
                   key={index}
-                  style={[styles.line, blank && styles.lineBlank]}
-                  onPress={() => !readOnly && setEditing(index)}
-                >
-                  <Text style={styles.lineNo}>{index + 1}</Text>
-                  <View
-                    style={[
-                      styles.lineIcon,
-                      {
-                        backgroundColor: blank
-                          ? colors.surfaceAlt
-                          : withAlpha(colors.tint, 0.1),
-                      },
-                    ]}
-                  >
-                    <AppIcon
-                      name={
-                        blank
-                          ? "plus"
-                          : pettyIcon(line.categoryLabel, line.subLabel, line.description)
-                      }
-                      size={16}
-                      color={blank ? colors.textMuted : colors.tint}
-                    />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      style={[styles.lineTitle, blank && styles.lineTitleBlank]}
-                      numberOfLines={1}
-                    >
-                      {blank
-                        ? "Category, description, qty and rate"
-                        : line.subLabel || line.categoryLabel || "Not classified"}
-                    </Text>
-                    <Text style={styles.muted} numberOfLines={1}>
-                      {blank ? "Press to fill this line" : line.description || "—"}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={[styles.lineAmount, blank && styles.lineTitleBlank]}>
-                      {money(amountOf(line))}
-                    </Text>
-                    {!blank ? (
-                      <Text style={styles.muted}>
-                        {line.quantity} × {Number(line.rate || 0).toFixed(2)}
-                      </Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-              );
-            })
+                  masters={M}
+                  line={line}
+                  index={index}
+                  canRemove={lines.length > 1}
+                  onChange={(next) =>
+                    setLines((was) => was.map((l, i) => (i === index ? next : l)))
+                  }
+                  onRemove={() => {
+                    setLines((was) => was.filter((_, i) => i !== index));
+                    setOpenLine(null);
+                  }}
+                  onCollapse={() => setOpenLine(null)}
+                />
+              ) : (
+                <LineCard
+                  key={index}
+                  line={line}
+                  index={index}
+                  onPress={() => !readOnly && setOpenLine(index)}
+                />
+              )
+            )
           )}
         </Section>
 
@@ -577,6 +582,9 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
             <Text style={styles.muted}>Total expense</Text>
             <Text style={styles.total}>{money(subtotal)}</Text>
           </View>
+          <Pressable style={[styles.footBtn, styles.cancelBtn]} disabled={saving} onPress={leave}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
           <Pressable
             style={[styles.footBtn, styles.draftBtn]}
             disabled={saving}
@@ -598,192 +606,215 @@ export function PettyExpenseFormScreen({ route, navigation }: Props) {
         </View>
       ) : null}
 
-      {editing !== null && M ? (
-        <LineEditor
-          masters={M}
-          line={lines[editing] ?? BLANK}
-          isNew={editing >= lines.length}
-          canRemove={lines.length > 1}
-          onClose={() => setEditing(null)}
-          onRemove={() => {
-            setLines((was) => was.filter((_, i) => i !== editing));
-            setEditing(null);
-          }}
-          onSave={(line) => {
-            setLines((was) => {
-              const next = [...was];
-              next[editing] = line;
-              return next;
-            });
-            setEditing(null);
-          }}
-        />
-      ) : null}
     </Screen>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* One line, edited in a sheet                                         */
+/* One line                                                            */
 /* ------------------------------------------------------------------ */
 
-function LineEditor({
-  masters,
+/** A line at rest: what it is, what it came to, and how that was reached. */
+function LineCard({
   line,
-  isNew,
-  canRemove,
-  onSave,
-  onRemove,
-  onClose,
+  index,
+  onPress,
 }: {
-  masters: PettyMasters;
   line: Line;
-  isNew: boolean;
-  /** The last line stays, as the ERP's grid keeps row 1. */
-  canRemove: boolean;
-  onSave: (line: Line) => void;
-  onRemove: () => void;
-  onClose: () => void;
+  index: number;
+  onPress: () => void;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const [draft, setDraft] = useState<Line>(line);
+  // A line nobody has filled in yet says what it is for and where to press,
+  // instead of pretending to hold a figure.
+  const blank = !line.account && !line.description.trim();
+  return (
+    <Pressable style={[styles.line, blank && styles.lineBlank]} onPress={onPress}>
+      <Text style={styles.lineNo}>{index + 1}</Text>
+      <View
+        style={[
+          styles.lineIcon,
+          { backgroundColor: blank ? colors.surfaceAlt : withAlpha(colors.tint, 0.1) },
+        ]}
+      >
+        <AppIcon
+          name={blank ? "plus" : pettyIcon(line.categoryLabel, line.subLabel, line.description)}
+          size={16}
+          color={blank ? colors.textMuted : colors.tint}
+        />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.lineTitle, blank && styles.lineTitleBlank]} numberOfLines={1}>
+          {blank
+            ? "Category, description, qty and rate"
+            : line.subLabel || line.categoryLabel || "Not classified"}
+        </Text>
+        <Text style={styles.muted} numberOfLines={1}>
+          {blank ? "Press to fill this line" : line.description || "\u2014"}
+        </Text>
+      </View>
+      <View style={{ alignItems: "flex-end" }}>
+        <Text style={[styles.lineAmount, blank && styles.lineTitleBlank]}>
+          {money(amountOf(line))}
+        </Text>
+        {!blank ? (
+          <Text style={styles.muted}>
+            {line.quantity} × {Number(line.rate || 0).toFixed(2)}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * A line, open.
+ *
+ * Typed into directly, with no Save of its own: a grid row has no such
+ * button, and one here would leave a line that looks filled but is not.
+ */
+function LineFields({
+  masters,
+  line,
+  index,
+  canRemove,
+  onChange,
+  onRemove,
+  onCollapse,
+}: {
+  masters?: PettyMasters;
+  line: Line;
+  index: number;
+  /** The last line stays, as the ERP's grid keeps row 1. */
+  canRemove: boolean;
+  onChange: (line: Line) => void;
+  onRemove: () => void;
+  onCollapse: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const groups = masters?.categories ?? [];
 
   // Either column first: the sub categories of one group when a group is
   // named, all of them under their own headings when none is.
-  const group = masters.categories.find((c) => c.name === draft.categoryLabel);
+  const group = groups.find((c) => c.name === line.categoryLabel);
   const subs: Option[] = useMemo(() => {
-    const rows = group
+    return group
       ? group.items.map((i) => ({ value: String(i.id), label: i.name }))
-      : masters.categories.flatMap((c) =>
-          c.items.map((i) => ({ value: String(i.id), label: `${i.name}  ·  ${c.name}` }))
+      : groups.flatMap((c) =>
+          c.items.map((i) => ({ value: String(i.id), label: `${i.name}  \u00b7  ${c.name}` }))
         );
-    return rows;
-  }, [group, masters]);
+  }, [group, groups]);
 
-  const categories: Option[] = masters.categories.map((c) => ({
-    value: c.name,
-    label: c.name,
+  const categories: Option[] = groups.map((c) => ({ value: c.name, label: c.name }));
+  const uoms: Option[] = (masters?.uoms ?? []).map((u) => ({
+    value: String(u.id),
+    label: u.name,
   }));
-  const uoms: Option[] = masters.uoms.map((u) => ({ value: String(u.id), label: u.name }));
 
   function pickSub(value: string) {
     // Naming the sub category names its category too: it is not a second
     // question, it is already known.
-    const owner = masters.categories.find((c) =>
-      c.items.some((i) => String(i.id) === value)
-    );
+    const owner = groups.find((c) => c.items.some((i) => String(i.id) === value));
     const leaf = owner?.items.find((i) => String(i.id) === value);
-    setDraft((d) => ({
-      ...d,
+    onChange({
+      ...line,
       account: value,
       subLabel: leaf?.name ?? "",
-      categoryLabel: owner?.name ?? d.categoryLabel,
-    }));
+      categoryLabel: owner?.name ?? line.categoryLabel,
+    });
   }
 
-  const amount = amountOf(draft);
-  const ready = !!draft.account && !!draft.description.trim() && amount > 0;
-
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose} transparent>
-      <View style={styles.sheetBack}>
-        <SafeAreaView style={styles.sheet} edges={["bottom"]}>
-          <View style={styles.sheetHead}>
-            <Text style={styles.sheetTitle}>{isNew ? "Add item" : "Edit item"}</Text>
-            <Pressable onPress={onClose} hitSlop={12}>
-              <Text style={styles.sheetClose}>Close</Text>
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
-            <Field label="Category">
-              <Picker
-                title="Category"
-                value={draft.categoryLabel}
-                options={categories}
-                allowEmpty
-                emptyLabel="All categories"
-                onChange={(v) =>
-                  setDraft((d) => ({
-                    ...d,
-                    categoryLabel: v,
-                    // A sub category from another group is not this group's
-                    // answer, so it is let go rather than left wrong.
-                    account: v && group?.name !== v ? "" : d.account,
-                    subLabel: v && group?.name !== v ? "" : d.subLabel,
-                  }))
-                }
-              />
-            </Field>
-            <Field label="Sub Category" required>
-              <Picker title="Sub Category" value={draft.account} options={subs} onChange={pickSub} />
-            </Field>
-            <Field label="Description" required>
-              <TextInput
-                style={styles.input}
-                value={draft.description}
-                onChangeText={(v) => setDraft((d) => ({ ...d, description: v }))}
-                placeholder="What it was for"
-                placeholderTextColor={colors.textFaint}
-              />
-            </Field>
-            <View style={styles.pair}>
-              <Field label="Qty" style={{ flex: 1 }}>
-                <TextInput
-                  style={styles.input}
-                  value={draft.quantity}
-                  onChangeText={(v) => setDraft((d) => ({ ...d, quantity: v }))}
-                  keyboardType="decimal-pad"
-                />
-              </Field>
-              <Field label="Unit" style={{ flex: 1 }}>
-                <Picker
-                  title="Unit"
-                  value={draft.uom ?? ""}
-                  options={uoms}
-                  allowEmpty
-                  emptyLabel="—"
-                  onChange={(v) => setDraft((d) => ({ ...d, uom: v }))}
-                />
-              </Field>
-            </View>
-            <View style={styles.pair}>
-              <Field label="Rate" style={{ flex: 1 }} required>
-                <TextInput
-                  style={styles.input}
-                  value={draft.rate}
-                  onChangeText={(v) => setDraft((d) => ({ ...d, rate: v }))}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textFaint}
-                />
-              </Field>
-              <Field label="Amount" style={{ flex: 1 }}>
-                {/* Computed, never typed: an amount that disagrees with its
-                    own qty and rate is a line nobody can check. */}
-                <View style={[styles.input, styles.amountBox]}>
-                  <Text style={styles.amountText}>{money(amount)}</Text>
-                </View>
-              </Field>
-            </View>
-          </ScrollView>
-          <View style={styles.sheetFoot}>
-            {!isNew && canRemove ? (
-              <Pressable style={[styles.footBtn, styles.removeBtn]} onPress={onRemove}>
-                <Text style={styles.removeText}>Remove</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              style={[styles.footBtn, styles.postBtn, !ready && styles.disabled]}
-              disabled={!ready}
-              onPress={() => onSave(draft)}
-            >
-              <Text style={styles.postText}>{isNew ? "Add" : "Save"}</Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
+    <View style={styles.lineOpen}>
+      <View style={styles.lineOpenHead}>
+        <Text style={styles.lineNo}>{index + 1}</Text>
+        <Text style={styles.lineOpenTitle}>
+          {line.subLabel || "This line"}
+        </Text>
+        <View style={{ flex: 1 }} />
+        {canRemove ? (
+          <Pressable style={styles.lineTool} onPress={onRemove} hitSlop={8}>
+            <AppIcon name="trash-can-outline" size={15} color={colors.danger} />
+          </Pressable>
+        ) : null}
+        <Pressable style={styles.lineTool} onPress={onCollapse} hitSlop={8}>
+          <AppIcon name="chevron-up" size={17} color={colors.textMuted} />
+        </Pressable>
       </View>
-    </Modal>
+
+      <Field label="Category">
+        <Picker
+          title="Category"
+          value={line.categoryLabel}
+          options={categories}
+          allowEmpty
+          emptyLabel="All categories"
+          onChange={(v) =>
+            onChange({
+              ...line,
+              categoryLabel: v,
+              // A sub category from another group is not this group's answer,
+              // so it is let go rather than left wrong.
+              account: v && group?.name !== v ? "" : line.account,
+              subLabel: v && group?.name !== v ? "" : line.subLabel,
+            })
+          }
+        />
+      </Field>
+      <Field label="Sub Category" required>
+        <Picker title="Sub Category" value={line.account} options={subs} onChange={pickSub} />
+      </Field>
+      <Field label="Description" required>
+        <TextInput
+          style={styles.input}
+          value={line.description}
+          onChangeText={(v) => onChange({ ...line, description: v })}
+          placeholder="What it was for"
+          placeholderTextColor={colors.textFaint}
+        />
+      </Field>
+      <View style={styles.pair}>
+        <Field label="Qty" style={{ flex: 1 }}>
+          <TextInput
+            style={styles.input}
+            value={line.quantity}
+            onChangeText={(v) => onChange({ ...line, quantity: v })}
+            keyboardType="decimal-pad"
+          />
+        </Field>
+        <Field label="Unit" style={{ flex: 1 }}>
+          <Picker
+            title="Unit"
+            value={line.uom ?? ""}
+            options={uoms}
+            allowEmpty
+            emptyLabel="—"
+            onChange={(v) => onChange({ ...line, uom: v })}
+          />
+        </Field>
+      </View>
+      <View style={styles.pair}>
+        <Field label="Rate" style={{ flex: 1 }} required>
+          <TextInput
+            style={styles.input}
+            value={line.rate}
+            onChangeText={(v) => onChange({ ...line, rate: v })}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor={colors.textFaint}
+          />
+        </Field>
+        <Field label="Amount" style={{ flex: 1 }}>
+          {/* Computed, never typed: an amount that disagrees with its own
+              qty and rate is a line nobody can check. */}
+          <View style={[styles.input, styles.amountBox]}>
+            <Text style={styles.amountText}>{money(amountOf(line))}</Text>
+          </View>
+        </Field>
+      </View>
+    </View>
   );
 }
 
@@ -1022,6 +1053,11 @@ const useStyles = makeStyles((colors) => ({
   },
   lineBlank: { borderStyle: "dashed", borderColor: colors.borderStrong,
     backgroundColor: colors.bg },
+  lineOpen: { borderWidth: 1, borderColor: colors.tint, borderRadius: radius.sm,
+    padding: spacing.sm, gap: spacing.sm, backgroundColor: colors.surface },
+  lineOpenHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  lineOpenTitle: { ...type.title, color: colors.text },
+  lineTool: { padding: 2 },
   lineTitleBlank: { color: colors.textMuted, fontWeight: "400" },
   lineNo: { ...type.caption, color: colors.textFaint, width: 12 },
   lineIcon: {
@@ -1071,7 +1107,7 @@ const useStyles = makeStyles((colors) => ({
     bottom: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.xs,
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
@@ -1079,26 +1115,19 @@ const useStyles = makeStyles((colors) => ({
   },
   total: { ...type.h3, color: colors.success },
   footBtn: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 10,
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
+  cancelBtn: { borderWidth: 1, borderColor: colors.border },
+  cancelText: { ...type.caption, color: colors.textMuted, fontWeight: "700" },
   draftBtn: { borderWidth: 1, borderColor: colors.tint },
   draftText: { ...type.caption, color: colors.tint, fontWeight: "700" },
   postBtn: { backgroundColor: colors.success },
   postText: { ...type.caption, color: colors.onDark, fontWeight: "700" },
-  removeBtn: { borderWidth: 1, borderColor: colors.danger },
-  removeText: { ...type.caption, color: colors.danger, fontWeight: "700" },
 
-  sheetBack: { flex: 1, backgroundColor: "rgba(15,23,42,0.4)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    maxHeight: "88%",
-  },
   sheetHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -1109,15 +1138,6 @@ const useStyles = makeStyles((colors) => ({
   },
   sheetTitle: { ...type.h3, color: colors.text },
   sheetClose: { ...type.body, color: colors.tint, fontWeight: "700" },
-  sheetBody: { padding: spacing.md, gap: spacing.sm },
-  sheetFoot: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
   pair: { flexDirection: "row", gap: spacing.sm },
   amountBox: { justifyContent: "center", backgroundColor: colors.successLight },
   amountText: { ...type.body, color: colors.success, fontWeight: "700" },
