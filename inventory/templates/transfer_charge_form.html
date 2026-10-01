@@ -29,15 +29,15 @@
   <div class="ds-card mb-3">
     <div class="ds-card-body">
       <div class="ds-section-title mb-3">1. Select Stock Transfer</div>
-      <div class="row g-2 align-items-end">
-        <div class="col-md-8">
-          <label class="form-label">Stock Transfer No. (DC No.) <span class="text-danger">*</span></label>
+      <label class="form-label">Stock Transfer No. (DC No.) <span class="text-danger">*</span></label>
+      <div class="position-relative" style="max-width:520px;">
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
           <input type="text" class="form-control" id="st-search" placeholder="Type the DC No. to search…" autocomplete="off">
-          <div id="st-results" class="list-group position-absolute d-none" style="z-index:20; max-width:480px;"></div>
+          <span class="input-group-text bg-white d-none" id="st-search-spinner"><span class="spinner-border spinner-border-sm text-primary"></span></span>
         </div>
-        <div class="col-md-4">
-          <button type="button" class="btn btn-outline-primary w-100" id="st-search-btn"><i class="fas fa-search"></i> Search</button>
-        </div>
+        <div id="st-results" class="list-group position-absolute w-100 d-none shadow-sm" style="z-index:20;"></div>
+        <div class="form-text">Start typing — matching trips appear as you go. Press Enter to search immediately.</div>
       </div>
 
       <div id="st-readonly" class="row g-2 mt-2 d-none">
@@ -206,25 +206,34 @@ $(function () {
   // ---------------------------------------------------------------- Step 1
 
   let searchTimer;
+  function runStockTransferSearch(q) {
+    clearTimeout(searchTimer);
+    if (q.length < 2) { $("#st-results").addClass("d-none").empty(); $("#st-search-spinner").addClass("d-none"); return; }
+    $("#st-search-spinner").removeClass("d-none");
+    $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", { q }, rows => {
+      const list = $("#st-results").empty();
+      if (!rows.length) { list.append('<div class="list-group-item text-muted">No matching Stock Transfer</div>'); }
+      rows.forEach(r => {
+        list.append(`<button type="button" class="list-group-item list-group-item-action st-pick"
+          data-dc="${escapeHtml(r.dc_no)}" data-date="${r.date}">
+          <b>${escapeHtml(r.dc_no)}</b> — ${r.date} — ${r.farm_count} farm(s), ${r.item_count} item(s), ${r.total_quantity} qty
+        </button>`);
+      });
+      list.removeClass("d-none");
+    }).always(() => $("#st-search-spinner").addClass("d-none"));
+  }
   $("#st-search").on("input", function () {
     clearTimeout(searchTimer);
     const q = $(this).val().trim();
     if (q.length < 2) { $("#st-results").addClass("d-none").empty(); return; }
-    searchTimer = setTimeout(() => {
-      $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", { q }, rows => {
-        const list = $("#st-results").empty();
-        if (!rows.length) { list.append('<div class="list-group-item text-muted">No matching Stock Transfer</div>'); }
-        rows.forEach(r => {
-          list.append(`<button type="button" class="list-group-item list-group-item-action st-pick"
-            data-dc="${escapeHtml(r.dc_no)}" data-date="${r.date}">
-            <b>${escapeHtml(r.dc_no)}</b> — ${r.date} — ${r.farm_count} farm(s), ${r.item_count} item(s), ${r.total_quantity} qty
-          </button>`);
-        });
-        list.removeClass("d-none");
-      });
-    }, 250);
+    searchTimer = setTimeout(() => runStockTransferSearch(q), 250);
   });
-  $("#st-search-btn").on("click", () => $("#st-search").trigger("input"));
+  $("#st-search").on("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); runStockTransferSearch($(this).val().trim()); }
+  });
+  $(document).on("click", function (e) {
+    if (!$(e.target).closest("#st-search, #st-results").length) $("#st-results").addClass("d-none");
+  });
 
   $(document).on("click", ".st-pick", function () {
     const dc = $(this).data("dc"), date = $(this).data("date");

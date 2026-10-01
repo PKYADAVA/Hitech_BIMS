@@ -795,6 +795,9 @@ layouts open it from the account menu.
               {% if 'stock_receive_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'stock_receive_list' %}">
                 <i class="fas fa-inbox"></i>Stock Received
               </a></li>{% endif %}
+              {% if 'transfer_charge_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'transfer_charge_list' %}">
+                <i class="fas fa-truck-ramp-box"></i>Transfer Charges
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
@@ -808,6 +811,9 @@ layouts open it from the account menu.
             <ul class="dropdown-menu">
               {% if 'stock_transfer_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'stock_transfer_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-right-left"></i>Inventory Stock Transfer Report
+              </a></li>{% endif %}
+              {% if 'transfer_charges_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'transfer_charges_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-truck-ramp-box"></i>Transfer Charges Report
               </a></li>{% endif %}
               {% if 'item_ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'item_ledger_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-book-open"></i>Item Ledger Report
