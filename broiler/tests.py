@@ -505,3 +505,31 @@ class BagWeightWarningTests(TestCase):
         html = self.report()   # 1500 kg / 50
         self.assertNotIn("have no Bag Capacity", html)
         self.assertIn("30.00", html)
+
+
+class BroilerFarmPageSearchableSelectsTests(TestCase):
+    """Broiler > Master > Broiler Farm > Farm: every picker must be searchable.
+
+    The site makes every select.form-select searchable site-wide (see
+    static/js/main.js); a select left at the Bootstrap-only form-control class
+    is silently skipped by that upgrade. Region, Branch, Line, Supervisor,
+    Farmer Group and -- the one reported -- Farmer were all built with
+    form-control, so none of them could be typed into, on a page where Farmer
+    alone can hold hundreds of names.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_superuser(
+            username="farmpage", password="x", email="farmpage@example.com")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_every_picker_on_the_page_is_searchable(self):
+        html = self.client.get(reverse("branch_farm")).content.decode()
+        for field in ("farmer_group", "region", "branch", "line",
+                     "supervisor", "farmer"):
+            self.assertIn(f'id="{field}" class="form-select"', html, field)
+            # Never both: a select can only be upgraded once.
+            self.assertNotIn(f'id="{field}" class="form-control"', html, field)

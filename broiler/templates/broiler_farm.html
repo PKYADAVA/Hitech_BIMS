@@ -574,7 +574,7 @@
                     </div>
                     <div class="col-md-3">
                         <label for="farmer_group" class="form-label">Farmer Group<span class="text-danger">*</span></label>
-                        <select id="farmer_group" class="form-control" required>
+                        <select id="farmer_group" class="form-select" required>
                             <option value="" selected disabled>-Select-</option>
                             {% for fg in farmer_groups %}
                             <option value="{{ fg.id }}">{{ fg.description }}</option>
@@ -694,7 +694,7 @@
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
-                        <select id="region" class="form-control" required>
+                        <select id="region" class="form-select" required>
                             <option value="" selected disabled>-Select-</option>
                             {% for r in regions %}
                             <option value="{{ r.id }}">{{ r.description }}</option>
@@ -703,19 +703,19 @@
                     </div>
                     <div class="col-md-3">
                         <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
-                        <select id="branch" class="form-control" required>
+                        <select id="branch" class="form-select" required>
                             <option value="" selected disabled>-Select-</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="line" class="form-label">Line<span class="text-danger">*</span></label>
-                        <select id="line" class="form-control" required>
+                        <select id="line" class="form-select" required>
                             <option value="" selected disabled>-Select-</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="supervisor" class="form-label">Supervisor<span class="text-danger">*</span></label>
-                        <select id="supervisor" class="form-control" required>
+                        <select id="supervisor" class="form-select" required>
                             <option value="" selected disabled>Select a supervisor</option>
                         </select>
                     </div>
@@ -727,7 +727,7 @@
                     </div>
                     <div class="col-md-3">
                         <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
-                        <select id="farmer" class="form-control" required>
+                        <select id="farmer" class="form-select" required>
                             <option value="" selected disabled>-Select-</option>
                             {% for farmer in farmers %}
                             <option value="{{ farmer.id }}" data-name="{{ farmer.farmer_name }}">{% if farmer.farmer_code %}{{ farmer.farmer_code }} - {% endif %}{{ farmer.farmer_name }}</option>
