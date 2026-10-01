@@ -45,8 +45,10 @@ from .item_families import filter_by_item_family
 from .models import (
     ItemCategory, Item, ItemPriceList, Mapping, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
     MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
-    StockReceiveItem, warehouse_item_stock,
+    StockReceiveItem, warehouse_item_stock, ChargeType, TransferChargeHeader, TransferChargeLine,
+    TransferChargeAllocation, TransferChargeAttachment,
 )
+from inventory.services import transfer_charges as tc_service
 from hatchery_master.models import Hatchery
 from broiler.models import Branch, BroilerFarm, BroilerBatch
 from account.models import BankCashMaster, ChartOfAccount, OrganizationCentre
@@ -3976,3 +3978,454 @@ _CR_HANDLERS.update({
         "number": lambda obj: obj.trnum,
     },
 })
+
+
+# ==========================================================================
+# Transfer Charges
+# ==========================================================================
+
+def _scope_transfer_charge(user, qs):
+    return scope_any(user, qs, farms="stock_transfers__to_farm_id")
+
+
+def _charge_type_options():
+    return list(ChargeType.objects.filter(is_active=True).order_by("sort_order", "name")
+                .values("id", "name"))
+
+
+def _stock_transfer_group_to_dict(trnum_rows, dc_no, on_date):
+    summary = tc_service.transfer_summary(trnum_rows)
+    first = trnum_rows[0]
+    return {
+        "dc_no": dc_no, "date": on_date.isoformat(),
+        "stock_transfer_ids": [r.id for r in trnum_rows],
+        "from_location": str(first.from_location) if first.from_location else "",
+        "vehicle_no": first.vehicle_no, "driver_name": first.driver_name,
+        "farm_count": summary["farm_count"], "item_count": summary["item_count"],
+        "total_quantity": summary["total_quantity"], "total_stock_value": summary["total_stock_value"],
+        "farms": summary["farms"],
+    }
+
+
+@login_required
+def transfer_charge_stock_transfer_lookup(request):
+    """Search for the trip ('Stock Transfer No.') a Transfer Charge will be
+    costed against — resolved as every Stock Transfer row sharing one DC No.
+    on one date, since that is how one physical trip with several
+    items/farms is actually recorded (one row per item-per-destination)."""
+    q = (request.GET.get("q") or "").strip()
+    dc_no = (request.GET.get("dc_no") or "").strip()
+    on_date = (request.GET.get("date") or "").strip()
+
+    qs = _scope_transfer_charge(request.user, StockTransfer.objects.exclude(dc_no="")
+                                .select_related("from_warehouse", "from_farm", "to_farm", "item"))
+
+    if dc_no and on_date:
+        rows = list(qs.filter(dc_no=dc_no, date=on_date))
+        if not rows:
+            raise Http404("Stock transfer not found")
+        return JsonResponse(_stock_transfer_group_to_dict(rows, dc_no, rows[0].date))
+
+    if q:
+        qs = qs.filter(dc_no__icontains=q)
+    groups = {}
+    order = []
+    for row in qs.order_by("-date", "dc_no")[:500]:
+        key = (row.dc_no, row.date)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+    results = [_stock_transfer_group_to_dict(groups[k], k[0], k[1]) for k in order[:30]]
+    return JsonResponse(results, safe=False)
+
+
+@method_decorator(login_required, name="dispatch")
+class TransferChargeListTemplateView(View):
+    def get(self, request):
+        return render(request, "transfer_charge_list.html", {
+            "charge_types": _charge_type_options(),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+            "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+            "statuses": [c[0] for c in TransferChargeHeader.STATUS_CHOICES],
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class TransferChargeFormTemplateView(View):
+    def get(self, request):
+        return render(request, "transfer_charge_form.html", {
+            "charge_types": _charge_type_options(),
+            "charge_types_json": json.dumps(_charge_type_options()),
+            "allocation_methods_json": json.dumps([c[0] for c in TransferChargeLine.METHOD_CHOICES]),
+            "treatments": [c[0] for c in TransferChargeHeader.TREATMENT_CHOICES],
+            "bank_cash_accounts": list(BankCashMaster.objects.order_by("name")
+                                      .values("id", "name", "is_cash")),
+            "today": timezone.localdate().isoformat(),
+            "pk": request.GET.get("id") or "",
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class TransferChargeReportTemplateView(View):
+    def get(self, request):
+        return render(request, "transfer_charge_report.html", {
+            "charge_types": _charge_type_options(),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+            "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        })
+
+
+def _transfer_charge_to_dict(header, detail=False):
+    data = {
+        "id": header.id, "charge_no": header.charge_no, "charge_date": header.charge_date.isoformat(),
+        "dc_no": header.dc_no, "treatment": header.treatment, "status": header.status,
+        "total_transport": header.total_transport, "total_loading": header.total_loading,
+        "total_unloading": header.total_unloading, "total_other": header.total_other,
+        "total_charges": header.total_charges,
+        "paid_from": header.paid_from_id, "cost_centre": header.cost_centre_id,
+        "narration": header.narration, "header_remarks": header.header_remarks,
+        "voucher_id": header.voucher_id, "posted_by": str(header.posted_by) if header.posted_by_id else "",
+        "created_by": str(header.created_by) if header.created_by_id else "",
+    }
+    transfers = list(header.stock_transfers.select_related("from_warehouse", "from_farm", "to_farm").all())
+    summary = tc_service.transfer_summary(transfers)
+    data["from_location"] = str(transfers[0].from_location) if transfers else ""
+    data["vehicle_no"] = transfers[0].vehicle_no if transfers else ""
+    data["driver_name"] = transfers[0].driver_name if transfers else ""
+    data["destination_farms"] = summary["farms"]
+    data["farm_count"] = summary["farm_count"]
+    data["total_quantity"] = summary["total_quantity"]
+    data["total_stock_value"] = summary["total_stock_value"]
+    data["charge_types"] = sorted({l.charge_type.name for l in header.lines.select_related("charge_type")})
+    data["charge_scopes"] = sorted({l.charge_scope for l in header.lines.all()})
+
+    if detail:
+        data["stock_transfer_ids"] = [t.id for t in transfers]
+        data["lines"] = []
+        for line in header.lines.select_related("charge_type").prefetch_related("allocations__destination_farm"):
+            data["lines"].append({
+                "id": line.id, "charge_type": line.charge_type_id, "charge_type_name": line.charge_type.name,
+                "description": line.description, "charge_scope": line.charge_scope, "basis": line.basis,
+                "total_amount": line.total_amount, "allocation_method": line.allocation_method,
+                "line_total": line.line_total,
+                "allocations": [{
+                    "id": a.id, "destination_farm": a.destination_farm_id,
+                    "destination_farm_name": str(a.destination_farm),
+                    "quantity_basis": a.quantity_basis, "stock_value_basis": a.stock_value_basis,
+                    "distance_basis": a.distance_basis, "percentage": a.percentage,
+                    "allocated_amount": a.allocated_amount, "remarks": a.remarks,
+                } for a in line.allocations.all()],
+            })
+        data["attachments"] = [{
+            "id": a.id, "file_name": a.file_name, "file_type": a.file_type,
+            "url": a.file.url if a.file else "",
+        } for a in header.attachments.all()]
+    return data
+
+
+@method_decorator(login_required, name="dispatch")
+class TransferChargeAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            header = get_object_or_404(TransferChargeHeader.objects.select_related(
+                "paid_from", "cost_centre", "created_by", "posted_by"), id=id)
+            return JsonResponse(_transfer_charge_to_dict(header, detail=True))
+
+        qs = _scope_transfer_charge(request.user, TransferChargeHeader.objects.select_related(
+            "paid_from", "cost_centre"))
+        from_date = (request.GET.get("from_date") or "").strip()
+        to_date = (request.GET.get("to_date") or "").strip()
+        status = (request.GET.get("status") or "").strip()
+        charge_type_id = (request.GET.get("charge_type") or "").strip()
+        charge_scope = (request.GET.get("charge_scope") or "").strip()
+        farm_id = (request.GET.get("farm") or "").strip()
+        dc_no = (request.GET.get("dc_no") or "").strip()
+        branch_id = (request.GET.get("branch") or "").strip()
+        vehicle = (request.GET.get("vehicle") or "").strip()
+
+        if from_date:
+            qs = qs.filter(charge_date__gte=date_from_query(from_date))
+        if to_date:
+            qs = qs.filter(charge_date__lte=date_from_query(to_date))
+        if status:
+            qs = qs.filter(status=status)
+        if charge_type_id:
+            qs = qs.filter(lines__charge_type_id=charge_type_id).distinct()
+        if charge_scope:
+            qs = qs.filter(lines__charge_scope=charge_scope).distinct()
+        if farm_id:
+            qs = qs.filter(stock_transfers__to_farm_id=farm_id).distinct()
+        if dc_no:
+            qs = qs.filter(dc_no__icontains=dc_no)
+        if branch_id:
+            qs = qs.filter(stock_transfers__to_farm__branch_id=branch_id).distinct()
+        if vehicle:
+            qs = qs.filter(stock_transfers__vehicle_no__icontains=vehicle).distinct()
+
+        return JsonResponse([_transfer_charge_to_dict(h) for h in qs.order_by("-charge_date", "-id")], safe=False)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        try:
+            header = self._save(data, created_by=request.user)
+        except tc_service.TransferChargeError as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        except ValidationError as e:
+            return JsonResponse({"error": " ".join(e.messages) if hasattr(e, "messages") else str(e)}, status=400)
+
+        if data.get("action") == "post":
+            try:
+                tc_service.post(header, user=request.user)
+            except tc_service.TransferChargeError as e:
+                return JsonResponse({"error": str(e), "id": header.id}, status=400)
+
+        return JsonResponse(_transfer_charge_to_dict(header, detail=True), status=201)
+
+    @transaction.atomic
+    def put(self, request, id):
+        header = get_object_or_404(TransferChargeHeader, id=id)
+        if not header.is_editable:
+            return JsonResponse({"error": f"{header.charge_no} cannot be edited in its current status."},
+                               status=400)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        try:
+            header = self._save(data, header=header)
+        except tc_service.TransferChargeError as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+        if data.get("action") == "post":
+            try:
+                tc_service.post(header, user=request.user)
+            except tc_service.TransferChargeError as e:
+                return JsonResponse({"error": str(e), "id": header.id}, status=400)
+
+        return JsonResponse(_transfer_charge_to_dict(header, detail=True))
+
+    def delete(self, request, id):
+        header = get_object_or_404(TransferChargeHeader, id=id)
+        if header.status != TransferChargeHeader.STATUS_DRAFT:
+            return JsonResponse(
+                {"error": "Only a Draft can be deleted — cancel a posted Transfer Charge instead."}, status=400)
+        header.delete()
+        return JsonResponse({"message": "Transfer charge deleted"})
+
+    @staticmethod
+    def _save(data, header=None, created_by=None):
+        company = tc_service.company()
+        if header is None:
+            header = TransferChargeHeader(company=company, created_by=created_by)
+        header.charge_date = date_from_query(data.get("charge_date")) if data.get("charge_date") else timezone.localdate()
+        header.dc_no = (data.get("dc_no") or "").strip()
+        header.treatment = data.get("treatment") or TransferChargeHeader.TREATMENT_EXPENSE
+        header.paid_from_id = data.get("paid_from") or None
+        header.cost_centre_id = data.get("cost_centre") or None
+        header.narration = data.get("narration") or ""
+        header.header_remarks = data.get("header_remarks") or ""
+        header.status = TransferChargeHeader.STATUS_PENDING_APPROVAL if data.get("submit_for_approval") \
+            else (header.status if header.pk else TransferChargeHeader.STATUS_DRAFT)
+        header.save()
+
+        transfer_ids = data.get("stock_transfer_ids") or []
+        if transfer_ids:
+            header.stock_transfers.set(transfer_ids)
+
+        header.lines.all().delete()
+        for i, line_data in enumerate(data.get("lines") or []):
+            line = TransferChargeLine.objects.create(
+                header=header, charge_type_id=line_data["charge_type"],
+                description=(line_data.get("description") or "").strip(),
+                charge_scope=line_data.get("charge_scope") or TransferChargeLine.SCOPE_COMMON,
+                basis=line_data.get("basis") or "Fixed",
+                total_amount=Decimal(str(line_data.get("total_amount") or 0)),
+                allocation_method=line_data.get("allocation_method") or TransferChargeLine.METHOD_EQUAL,
+                sort_order=i)
+            if line.charge_scope == TransferChargeLine.SCOPE_FARM_WISE:
+                for a in line_data.get("allocations") or []:
+                    TransferChargeAllocation.objects.create(
+                        line=line, destination_farm_id=a["destination_farm"],
+                        allocated_amount=Decimal(str(a.get("allocated_amount") or 0)),
+                        remarks=a.get("remarks") or "")
+            elif line.allocation_method == TransferChargeLine.METHOD_MANUAL:
+                for a in line_data.get("allocations") or []:
+                    TransferChargeAllocation.objects.create(
+                        line=line, destination_farm_id=a["destination_farm"],
+                        allocated_amount=Decimal(str(a.get("allocated_amount") or 0)),
+                        percentage=Decimal(str(a.get("percentage") or 0)),
+                        remarks=a.get("remarks") or "")
+
+        tc_service.recompute_allocations(header)
+        return header
+
+
+@login_required
+def transfer_charge_allocate_preview(request):
+    """Live allocation preview for a Common line, computed straight from the
+    engine so the screen can never show a number the save wouldn't also
+    produce. No database write — the farms/amount come from the request."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    farms = data.get("farms") or []
+    for f in farms:
+        f["quantity"] = Decimal(str(f.get("quantity") or 0))
+        f["stock_value"] = Decimal(str(f.get("stock_value") or 0))
+        f["distance"] = Decimal(str(f["distance"])) if f.get("distance") not in (None, "") else None
+    total_amount = Decimal(str(data.get("total_amount") or 0))
+    method = data.get("allocation_method") or TransferChargeLine.METHOD_EQUAL
+    allocator = tc_service.ALLOCATORS.get(method)
+    if allocator is None:
+        return JsonResponse({"rows": [], "total": total_amount})
+    rows = allocator(farms, total_amount)
+    return JsonResponse({"rows": rows, "total": total_amount})
+
+
+@login_required
+def transfer_charge_post(request, id):
+    header = get_object_or_404(TransferChargeHeader, id=id)
+    try:
+        tc_service.post(header, user=request.user)
+    except tc_service.TransferChargeError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse(_transfer_charge_to_dict(header, detail=True))
+
+
+@login_required
+def transfer_charge_cancel(request, id):
+    header = get_object_or_404(TransferChargeHeader, id=id)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        data = {}
+    try:
+        tc_service.cancel(header, user=request.user, reason=data.get("reason") or "")
+    except tc_service.TransferChargeError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse(_transfer_charge_to_dict(header, detail=True))
+
+
+@login_required
+def transfer_charge_attachments(request, id):
+    header = get_object_or_404(TransferChargeHeader, id=id)
+    if request.method == "POST":
+        if not header.is_editable:
+            return JsonResponse({"error": "Attachments can only be added to a Draft or Pending Approval record."},
+                               status=400)
+        created = []
+        for f in request.FILES.getlist("files"):
+            att = TransferChargeAttachment.objects.create(header=header, file=f, uploaded_by=request.user)
+            created.append({"id": att.id, "file_name": att.file_name, "file_type": att.file_type,
+                           "url": att.file.url})
+        return JsonResponse({"attachments": created}, status=201)
+    return JsonResponse({"attachments": [{
+        "id": a.id, "file_name": a.file_name, "file_type": a.file_type, "url": a.file.url,
+    } for a in header.attachments.all()]})
+
+
+@login_required
+def transfer_charge_attachment_delete(request, id, attachment_id):
+    header = get_object_or_404(TransferChargeHeader, id=id)
+    if not header.is_editable:
+        return JsonResponse({"error": "Attachments can only be removed from a Draft or Pending Approval record."},
+                           status=400)
+    att = get_object_or_404(TransferChargeAttachment, id=attachment_id, header=header)
+    att.file.delete(save=False)
+    att.delete()
+    return JsonResponse({"message": "Attachment removed"})
+
+
+@login_required
+def transfer_charges_report_data(request):
+    """Everything the report page needs — KPIs, the breakdown views, and the
+    detailed table — from one filtered queryset so every figure on the page
+    reconciles with every other."""
+    qs = _scope_transfer_charge(request.user, TransferChargeHeader.objects.filter(
+        status=TransferChargeHeader.STATUS_POSTED).select_related("cost_centre"))
+
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    charge_type_id = (request.GET.get("charge_type") or "").strip()
+    charge_scope = (request.GET.get("charge_scope") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    vehicle = (request.GET.get("vehicle") or "").strip()
+    dc_no = (request.GET.get("transfer_no") or "").strip()
+
+    if from_date:
+        qs = qs.filter(charge_date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(charge_date__lte=date_from_query(to_date))
+    if charge_type_id:
+        qs = qs.filter(lines__charge_type_id=charge_type_id).distinct()
+    if charge_scope:
+        qs = qs.filter(lines__charge_scope=charge_scope).distinct()
+    if farm_id:
+        qs = qs.filter(stock_transfers__to_farm_id=farm_id).distinct()
+    if branch_id:
+        qs = qs.filter(stock_transfers__to_farm__branch_id=branch_id).distinct()
+    if vehicle:
+        qs = qs.filter(stock_transfers__vehicle_no__icontains=vehicle).distinct()
+    if dc_no:
+        qs = qs.filter(dc_no__icontains=dc_no)
+
+    headers = list(qs.order_by("charge_date"))
+    zero = Decimal("0")
+    kpis = {
+        "total_charges": sum((h.total_charges for h in headers), zero),
+        "transport": sum((h.total_transport for h in headers), zero),
+        "loading": sum((h.total_loading for h in headers), zero),
+        "unloading": sum((h.total_unloading for h in headers), zero),
+        "other": sum((h.total_other for h in headers), zero),
+    }
+
+    monthly = {}
+    by_charge_type = {}
+    by_farm = {}
+    by_vehicle = {}
+    by_branch = {}
+    detail = []
+    for h in headers:
+        month_key = h.charge_date.strftime("%Y-%m")
+        monthly[month_key] = monthly.get(month_key, zero) + h.total_charges
+
+        transfers = list(h.stock_transfers.select_related("from_warehouse", "from_farm", "to_farm__branch").all())
+        vehicle_nos = sorted({t.vehicle_no for t in transfers if t.vehicle_no})
+        branch_names = sorted({str(t.to_farm.branch) for t in transfers if t.to_location_type == "farm" and t.to_farm_id})
+        farm_names = sorted({str(t.to_farm) for t in transfers if t.to_location_type == "farm" and t.to_farm_id})
+        for v in (vehicle_nos or ["(none)"]):
+            by_vehicle[v] = by_vehicle.get(v, zero) + h.total_charges
+        for b in (branch_names or ["(none)"]):
+            by_branch[b] = by_branch.get(b, zero) + h.total_charges
+        for f in (farm_names or ["(none)"]):
+            by_farm[f] = by_farm.get(f, zero) + h.total_charges
+
+        for line in h.lines.select_related("charge_type").all():
+            by_charge_type[line.charge_type.name] = by_charge_type.get(line.charge_type.name, zero) + line.line_total
+
+        detail.append({
+            "id": h.id, "date": h.charge_date.isoformat(), "dc_no": h.dc_no,
+            "from_location": str(transfers[0].from_location) if transfers else "",
+            "to_farms": ", ".join(farm_names), "vehicle_no": ", ".join(vehicle_nos),
+            "transport": h.total_transport, "loading": h.total_loading,
+            "unloading": h.total_unloading, "other": h.total_other, "total_charges": h.total_charges,
+        })
+
+    return JsonResponse({
+        "kpis": kpis,
+        "monthly_trend": [{"month": k, "amount": v} for k, v in sorted(monthly.items())],
+        "by_charge_type": [{"name": k, "amount": v} for k, v in sorted(by_charge_type.items())],
+        "by_farm": [{"name": k, "amount": v} for k, v in sorted(by_farm.items())],
+        "by_vehicle": [{"name": k, "amount": v} for k, v in sorted(by_vehicle.items())],
+        "by_branch": [{"name": k, "amount": v} for k, v in sorted(by_branch.items())],
+        "detail": detail,
+    })
