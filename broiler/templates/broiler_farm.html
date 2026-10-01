@@ -8,6 +8,12 @@
 
 <style>
   .bf-page { display: flex; flex-direction: column; gap: .85rem; }
+  /* A native <input type="file"> has almost no real content -- a small
+     "Choose Files" button and a line of filename text -- so letting it
+     stretch the full width of its column (col-md-12 made this run the
+     entire modal) leaves a long dead strip with nothing in it. Capped to
+     what the control actually needs. */
+  .bf-file-input { max-width: 420px; }
   .bf-head, .bf-filters, .bf-card { background: #fff; border: 1px solid #e3e8ef; border-radius: .6rem; }
   /* A banner, not a title page: this sat 76px tall above a screen whose
      point is the two tables below it. The mark, the type and the padding all
@@ -739,11 +745,6 @@
                         <input type="text" id="farm_name" class="form-control" required />
                     </div>
                     <div class="col-md-3">
-                        <label for="farm_pincode" class="form-label">Farm (Pincode)</label>
-                        <input type="text" id="farm_pincode" class="form-control" />
-                    </div>
-
-                    <div class="col-md-3">
                         <label for="farm_capacity" class="form-label">Farm (Capacity) <small class="text-muted">(auto)</small></label>
                         <input type="number" min="0" id="farm_capacity" class="form-control" placeholder="Total of the sheds" />
                     </div>
@@ -770,17 +771,21 @@
             <div class="form-section">
                 <div class="form-section-label"><i class="fas fa-map-marker-alt"></i>Location</div>
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="state" class="form-label">State</label>
                         <input type="text" id="state" class="form-control" placeholder="Enter state" />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="district" class="form-label">District</label>
                         <input type="text" id="district" class="form-control" />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="area" class="form-label">Area</label>
                         <input type="text" id="area" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farm_pincode" class="form-label">Pincode</label>
+                        <input type="text" id="farm_pincode" class="form-control" />
                     </div>
                     <div class="col-md-12">
                         <label for="farm_address" class="form-label">Farm Address</label>
@@ -847,9 +852,9 @@
                         <div class="form-text">Used by the Map &amp; Route Planner to order a day's visits.</div>
                     </div>
 
-                    <div class="col-md-12">
+                    <div class="col-md-6">
                         <label for="farm_pictures" class="form-label">Farm Pictures (multiple)</label>
-                        <input type="file" id="farm_pictures" class="form-control" multiple accept="image/*" />
+                        <input type="file" id="farm_pictures" class="form-control bf-file-input" multiple accept="image/*" />
                         <div class="form-text" id="farm_pictures_current"></div>
                     </div>
                 </div>
@@ -1083,6 +1088,7 @@ $(document).ready(function () {
                 if (place.state) $("#state").val(place.state);
                 if (place.district) $("#district").val(place.district);
                 if (place.area) $("#area").val(place.area);
+                if (place.postcode) $("#farm_pincode").val(place.postcode);
 
                 // The address is the one field someone actually writes prose
                 // in, so it is filled only when blank; the rest are derived
@@ -1138,7 +1144,7 @@ $(document).ready(function () {
     });
 
     /* ---------------------------------------------------------------- */
-    /* Farm Name defaults to the selected Farmer's name (editable)       */
+    /* Farm Name defaults to "<Farmer> Farm" (editable)                  */
     /* ---------------------------------------------------------------- */
     let lastAutoFilledFarmName = "";
     $("#farmer").on("change", function () {
@@ -1146,10 +1152,11 @@ $(document).ready(function () {
         // data-name, not the label: the label is prefixed with the farmer code
         // and a farm should not be named "FRM-0001 - Ramesh".
         const farmerName = (chosen.data("name") || chosen.text()).toString().trim();
+        const suggestedFarmName = farmerName ? farmerName + " Farm" : "";
         const current = $("#farm_name").val().trim();
         if (!current || current === lastAutoFilledFarmName) {
-            $("#farm_name").val(farmerName);
-            lastAutoFilledFarmName = farmerName;
+            $("#farm_name").val(suggestedFarmName);
+            lastAutoFilledFarmName = suggestedFarmName;
         }
     });
 

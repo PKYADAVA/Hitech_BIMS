@@ -780,7 +780,7 @@ $(document).ready(function () {
    Used by Broiler > Transactions > Farm Location & Photos, so capturing a
    farm's pin also records where it is in words.
 
-   Resolves to {display, state, district, area}, or null.
+   Resolves to {display, state, district, area, postcode}, or null.
 
    OpenStreetMap's Nominatim needs no API key. It is best-effort by design: it
    is rate-limited and can be blocked or offline, so every caller must keep
@@ -807,6 +807,7 @@ window.reverseGeocode = function (latitude, longitude) {
         district: a.state_district || a.county || a.district || '',
         area: a.suburb || a.village || a.town || a.city_district
               || a.neighbourhood || a.hamlet || a.city || '',
+        postcode: a.postcode || '',
       };
     })
     .catch(function () { return null; });
