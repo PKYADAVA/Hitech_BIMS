@@ -40,31 +40,26 @@
         <div class="form-text">Start typing — matching trips appear as you go. Press Enter to search immediately.</div>
       </div>
 
-      <div id="st-readonly" class="row g-2 mt-2 d-none">
-        <div class="col-md-3"><label class="form-label">Transfer No.</label><input class="form-control" id="ro-dc-no" readonly></div>
-        <div class="col-md-3"><label class="form-label">Transfer Date</label><input class="form-control" id="ro-date" readonly></div>
-        <div class="col-md-3"><label class="form-label">From Location</label><input class="form-control" id="ro-from" readonly></div>
-        <div class="col-md-3"><label class="form-label">Vehicle</label><input class="form-control" id="ro-vehicle" readonly></div>
-        <div class="col-md-3"><label class="form-label">Driver</label><input class="form-control" id="ro-driver" readonly></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Read-only transfer summary -->
-  <div class="ds-card mb-3 d-none" id="summary-card">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">Transfer Summary</div>
-      <div class="row g-2 text-center mb-3">
-        <div class="col-3"><div class="border rounded p-2"><div class="text-muted small">Total Farms</div><div class="fs-5 fw-bold" id="sum-farms">0</div></div></div>
-        <div class="col-3"><div class="border rounded p-2"><div class="text-muted small">Total Items</div><div class="fs-5 fw-bold" id="sum-items">0</div></div></div>
-        <div class="col-3"><div class="border rounded p-2"><div class="text-muted small">Total Quantity</div><div class="fs-5 fw-bold" id="sum-qty">0</div></div></div>
-        <div class="col-3"><div class="border rounded p-2"><div class="text-muted small">Stock Value</div><div class="fs-5 fw-bold" id="sum-value">0</div></div></div>
-      </div>
-      <div id="farm-list-wrap">
-        <table class="table table-sm mb-0">
-          <thead><tr><th>Destination Farm</th><th class="text-end">Quantity</th><th class="text-end">Stock Value</th></tr></thead>
-          <tbody id="farm-list-body"></tbody>
-        </table>
+      <!-- Selected transfer, shown immediately — route, vehicle and farms
+           at a glance, not a grid of read-only boxes to scan one by one. -->
+      <div id="st-readonly" class="d-none mt-3 pt-3 border-top">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <div class="fs-5 fw-bold" id="ro-dc-no"></div>
+            <div class="text-muted" id="ro-route"></div>
+          </div>
+          <div class="text-end">
+            <div id="ro-date"></div>
+            <div class="text-muted small" id="ro-vehicle-driver"></div>
+          </div>
+        </div>
+        <div id="farm-list-wrap" class="mt-3">
+          <div class="text-muted small text-uppercase mb-1">Destination Farms</div>
+          <div id="farm-list-body"></div>
+        </div>
+        <div class="d-flex justify-content-between border-top pt-2 mt-2">
+          <span>Stock Value</span><span class="fw-bold" id="sum-value">0.00</span>
+        </div>
       </div>
     </div>
   </div>
@@ -96,11 +91,10 @@
   </div>
 
   <!-- 3. Charge Allocation / Details -->
-  <div class="ds-card mb-3" id="allocation-card">
+  <div class="ds-card mb-3 d-none" id="allocation-card">
     <div class="ds-card-body">
       <div class="ds-section-title mb-3">3. Charge Allocation / Details</div>
-      <p class="text-muted mb-0" id="allocation-empty">Add a charge line above to see how it's allocated across destination farms.</p>
-      <ul class="nav nav-tabs d-none" id="alloc-tabs"></ul>
+      <ul class="nav nav-tabs" id="alloc-tabs"></ul>
       <div class="tab-content pt-3" id="alloc-panels"></div>
     </div>
   </div>
@@ -118,10 +112,10 @@
     </div>
   </div>
 
-  <!-- 4. Documents & Remarks -->
+  <!-- 4. Documents & Accounting -->
   <div class="ds-card mb-3">
     <div class="ds-card-body">
-      <div class="ds-section-title mb-3">4. Documents &amp; Remarks</div>
+      <div class="ds-section-title mb-3">4. Documents &amp; Accounting</div>
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label">Attachments — bills, Bilty/LR, toll receipts, photos, PDF</label>
@@ -130,18 +124,22 @@
           <div class="d-flex flex-wrap gap-2 mt-2" id="attachment-list"></div>
         </div>
         <div class="col-md-6">
-          <label class="form-label">Treatment</label>
+          <label class="form-label">Header Remarks</label>
+          <textarea class="form-control" id="header-remarks" rows="2"></textarea>
+        </div>
+        <div class="col-md-6">
+          <div class="text-muted small text-uppercase mb-2">Accounting Treatment</div>
           <div class="form-check"><input class="form-check-input" type="radio" name="treatment" id="treatment-expense" value="Expense Only" checked><label class="form-check-label" for="treatment-expense">Expense Only</label></div>
           <div class="form-check mb-2"><input class="form-check-input" type="radio" name="treatment" id="treatment-capitalize" value="Add to Inventory Cost"><label class="form-check-label" for="treatment-capitalize">Add to Inventory Cost</label></div>
+        </div>
+        <div class="col-md-6">
+          <div class="text-muted small text-uppercase mb-2">Payment / Posting</div>
           <label class="form-label">Paid From (Cash/Bank) <span class="text-danger">*</span></label>
           <select class="form-select" id="paid-from">
             <option value="">select</option>
             {% for a in bank_cash_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
           </select>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Header Remarks</label>
-          <textarea class="form-control" id="header-remarks" rows="2"></textarea>
+          <div class="form-text">All charges in this transaction post from the same account.</div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Narration</label>
@@ -167,7 +165,9 @@
       <hr>
       <div class="d-flex justify-content-between py-1"><span>Destination Farms</span><b id="tcs-farms">0</b></div>
       <div class="d-flex justify-content-between py-1"><span>Stock Value</span><b id="tcs-stockvalue">0.00</b></div>
-      <div class="d-flex justify-content-between py-1 fw-bold"><span>Total Transfer Cost</span><b id="tcs-totalcost">0.00</b></div>
+      <div class="d-flex justify-content-between py-1"><span>Transfer Charges</span><b id="tcs-charges-repeat">0.00</b></div>
+      <hr>
+      <div class="d-flex justify-content-between py-1 fw-bold fs-5"><span>Total Transfer Cost</span><b id="tcs-totalcost">0.00</b></div>
     </div>
   </div>
 </div>
@@ -246,12 +246,6 @@ $(function () {
   function loadStockTransferGroup(dc, date) {
     $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", { dc_no: dc, date }, data => {
       state.transfer = data;
-      $("#st-readonly").removeClass("d-none");
-      $("#ro-dc-no").val(data.dc_no);
-      $("#ro-date").val(data.date);
-      $("#ro-from").val(data.from_location);
-      $("#ro-vehicle").val(data.vehicle_no);
-      $("#ro-driver").val(data.driver_name);
       renderSummary();
       if (!$("#narration").val().trim()) $("#narration").val(suggestNarration());
       recomputeAll();
@@ -269,18 +263,22 @@ $(function () {
   function renderSummary() {
     const t = state.transfer;
     if (!t) return;
-    $("#summary-card").toggleClass("d-none", false);
-    $("#sum-farms").text(t.farm_count);
-    $("#sum-items").text(t.item_count);
-    $("#sum-qty").text(money(t.total_quantity));
+    $("#st-readonly").removeClass("d-none");
+    $("#ro-dc-no").text(t.dc_no);
+    $("#ro-route").text(`${t.from_location} → ${t.farm_count} Farm${t.farm_count === 1 ? "" : "s"}`);
+    $("#ro-date").text(t.date);
+    const vd = [t.vehicle_no && `Vehicle: ${t.vehicle_no}`, t.driver_name && `Driver: ${t.driver_name}`]
+      .filter(Boolean).join(" • ");
+    $("#ro-vehicle-driver").text(vd);
     $("#sum-value").text(money(t.total_stock_value));
+
     const body = $("#farm-list-body").empty();
     if (t.farm_count <= 1) {
       $("#farm-list-wrap").toggleClass("d-none", true);
     } else {
       $("#farm-list-wrap").toggleClass("d-none", false);
-      t.farms.forEach(f => body.append(`<tr><td>${escapeHtml(f.farm_name)}</td>
-        <td class="text-end">${money(f.quantity)}</td><td class="text-end">${money(f.stock_value)}</td></tr>`));
+      t.farms.forEach(f => body.append(`<div class="d-flex justify-content-between py-1">
+        <span>${escapeHtml(f.farm_name)}</span><span>${money(f.quantity)}</span></div>`));
     }
   }
 
@@ -395,13 +393,8 @@ $(function () {
   function renderAllocationPreview() {
     const tabs = $("#alloc-tabs").empty();
     const panels = $("#alloc-panels").empty();
-    if (!state.lines.length) {
-      $("#allocation-empty").removeClass("d-none");
-      $("#alloc-tabs").addClass("d-none");
-      return;
-    }
-    $("#allocation-empty").addClass("d-none");
-    $("#alloc-tabs").removeClass("d-none");
+    if (!state.lines.length) { $("#allocation-card").addClass("d-none"); return; }
+    $("#allocation-card").removeClass("d-none");
 
     state.lines.forEach((line, idx) => {
       const tabId = `alloc-tab-${idx}`;
@@ -430,7 +423,7 @@ $(function () {
           url: "{% url 'transfer_charge_allocate_preview' %}", method: "POST", async: false,
           contentType: "application/json", headers: { "X-CSRFToken": csrfToken },
           data: JSON.stringify({
-            farms: state.transfer.farms.map(f => ({ farm_id: f.farm_id, quantity: f.quantity, stock_value: f.stock_value })),
+            farms: state.transfer.farms.map(f => ({ farm_id: f.farm_id, farm_name: f.farm_name, quantity: f.quantity, stock_value: f.stock_value })),
             total_amount: line.total_amount, allocation_method: line.allocation_method,
           }),
         }).done(resp => {
@@ -464,6 +457,7 @@ $(function () {
     const stockValue = state.transfer ? state.transfer.total_stock_value : 0;
     $("#tcs-farms").text(farms);
     $("#tcs-stockvalue").text(money(stockValue));
+    $("#tcs-charges-repeat").text(money(total));
     $("#tcs-totalcost").text(money(Number(stockValue) + total));
   }
 
@@ -599,9 +593,6 @@ $(function () {
         farm_count: data.farm_count, item_count: data.item_count,
         total_quantity: data.total_quantity, total_stock_value: data.total_stock_value,
       };
-      $("#st-readonly").removeClass("d-none");
-      $("#ro-dc-no").val(data.dc_no); $("#ro-date").val(data.charge_date);
-      $("#ro-from").val(data.from_location); $("#ro-vehicle").val(data.vehicle_no); $("#ro-driver").val(data.driver_name);
       $(`input[name="treatment"][value="${data.treatment}"]`).prop("checked", true);
       $("#paid-from").val(data.paid_from || "");
       $("#narration").val(data.narration || "");
