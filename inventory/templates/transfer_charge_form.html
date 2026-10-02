@@ -94,8 +94,7 @@
   <div class="ds-card mb-3 d-none" id="allocation-card">
     <div class="ds-card-body">
       <div class="ds-section-title mb-3">3. Charge Allocation / Details</div>
-      <ul class="nav nav-tabs" id="alloc-tabs"></ul>
-      <div class="tab-content pt-3" id="alloc-panels"></div>
+      <div class="row g-3" id="alloc-panels"></div>
     </div>
   </div>
 
@@ -391,16 +390,24 @@ $(function () {
   }
 
   function renderAllocationPreview() {
-    const tabs = $("#alloc-tabs").empty();
     const panels = $("#alloc-panels").empty();
     if (!state.lines.length) { $("#allocation-card").addClass("d-none"); return; }
     $("#allocation-card").removeClass("d-none");
 
+    // Compact cards, every charge visible at once — not tabs a user has to
+    // click through one at a time to see how the whole transaction splits.
     state.lines.forEach((line, idx) => {
-      const tabId = `alloc-tab-${idx}`;
-      tabs.append(`<li class="nav-item"><button class="nav-link ${idx === 0 ? "active" : ""}" data-bs-toggle="tab" data-bs-target="#${tabId}" type="button">${escapeHtml(ctName(line.charge_type) || "Charge")} <span class="badge bg-secondary">${line.charge_scope}</span></button></li>`);
-      const panel = $(`<div class="tab-pane fade ${idx === 0 ? "show active" : ""}" id="${tabId}"></div>`);
-      panels.append(panel);
+      const col = $(`<div class="col-md-6"></div>`);
+      const card = $(`<div class="border rounded h-100">
+        <div class="px-3 py-2 border-bottom bg-light fw-bold d-flex align-items-center gap-2">
+          ${escapeHtml(ctName(line.charge_type) || "Charge")}
+          <span class="badge bg-secondary fw-normal">${line.charge_scope}${line.charge_scope === "Common" ? " • " + line.allocation_method : ""}</span>
+        </div>
+        <div class="p-2"></div>
+      </div>`);
+      const panel = card.find("div.p-2");
+      col.append(card);
+      panels.append(col);
 
       if (line.charge_scope === "Farm-wise") {
         const total = lineTotal(line);
