@@ -1,0 +1,114 @@
+<style>
+  .tc-page { --tc-blue:#0875ee; --tc-green:#078845; --tc-line:#dce6f1; }
+  .tc-title-row { display:flex;align-items:center;gap:12px;margin-bottom:12px; }
+  .tc-title-icon { color:var(--tc-green);font-size:28px; }
+  .tc-page-title { margin:0;font-size:23px;font-weight:700; }
+  .tc-subtitle { color:#52627d;font-size:13px;margin:2px 0 0; }
+  .tc-title-actions { margin-left:auto;display:flex;flex-wrap:wrap;gap:8px; }
+  .tc-panel,.tc-side-card { border:1px solid var(--tc-line);border-radius:10px;background:#fff;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 2px #20304008; }
+  .tc-panel-head { display:flex;align-items:center;gap:9px;min-height:40px;padding:7px 11px;background:linear-gradient(90deg,#e8f3ff,#fbfdff);border-bottom:1px solid #e3edf6;font-size:15px;font-weight:700; }
+  .tc-panel-head.green { background:linear-gradient(90deg,#e8fbf1,#fbfffc); }
+  .tc-panel-head.purple { background:linear-gradient(90deg,#f2edff,#fff);color:#6844e8; }
+  .tc-step { width:27px;height:27px;border-radius:50%;background:var(--tc-blue);color:#fff;display:inline-grid;place-items:center;flex:none; }
+  .tc-panel-body { padding:11px; }
+  .tc-form-label { display:block;margin-bottom:4px;font-size:12px;font-weight:600; }
+  .tc-transfer-grid { display:grid;grid-template-columns:1.15fr .85fr 1.15fr .85fr .95fr;gap:9px 11px; }
+  .tc-transfer-grid .form-control,.tc-transfer-grid .form-select { height:36px;font-size:13px; }
+  .tc-metrics { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px; }
+  .tc-metric { display:flex;align-items:center;gap:9px;min-height:61px;padding:9px;border:1px solid #e0eaf5;border-radius:7px;background:#f9fbfe; }
+  .tc-metric-icon { width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#eaf2ff;color:#1263d2;font-size:16px; }
+  .tc-metric small { display:block;color:#50617d;font-size:11px; }
+  .tc-metric strong { display:block;font-size:15px; }
+  .tc-farms { margin-top:9px;padding:8px 10px;border-radius:7px;background:#f2f8ff;border:1px solid #e0ebf7; }
+  .tc-farms-head { display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px; }
+  .tc-farm-list { display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 12px; }
+  .tc-farm-chip { display:flex;justify-content:space-between;gap:8px;padding:4px 6px;background:#fff;border-radius:5px;font-size:12px; }
+  .tc-toolbar { margin-left:auto;display:flex;gap:7px; }
+  #lines-table { min-width:900px;margin:0; }
+  #lines-table th { white-space:nowrap;background:#f7f9fc;font-size:11px; }
+  #lines-table td { vertical-align:middle;padding:5px; }
+  #lines-table .form-control,#lines-table .form-select { min-width:72px;height:32px;font-size:12px;padding:4px 7px; }
+  #lines-table .line-description { min-width:110px; }
+  .tc-scope-toggle { display:flex;gap:5px;white-space:nowrap; }
+  .tc-scope-toggle label { display:inline-flex;align-items:center;gap:3px;border:1px solid #dce5ef;border-radius:16px;padding:4px 7px;font-size:10px;cursor:pointer; }
+  .tc-scope-toggle input { margin:0; }
+  .tc-alloc-chips { display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px; }
+  .tc-alloc-chip { background:#fff;border:1px solid #dce5ef;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:transform .1s; }
+  .tc-alloc-chip:hover { transform:translateY(-1px); }
+  .tc-allocation-grid { display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:9px; }
+  .tc-allocation-grid > .col-md-6 { grid-column:span 4;min-width:0;width:auto;max-width:none;flex:none; }
+  .tc-allocation-grid .table { margin-bottom:0;font-size:11px; }
+  .tc-allocation-grid .table th,.tc-allocation-grid .table td { padding:5px 6px; }
+  .tc-side-title { padding:10px 11px;background:linear-gradient(90deg,#e8fbf1,#fbfffc);font-weight:700; }
+  .tc-side-body { padding:9px 11px; }
+  .tc-sum-row { display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #edf1f5;font-size:12px; }
+  .tc-sum-total { display:flex;justify-content:space-between;padding:9px;margin:6px -1px 0;background:#e8faed;border-radius:6px;color:#087e3b;font-size:15px;font-weight:700; }
+  .tc-upload { position:relative;display:grid;place-items:center;text-align:center;min-height:82px;border:1px dashed #5aa0ff;border-radius:7px;background:#fbfdff;color:#0875ee;padding:8px;cursor:pointer;font-size:12px; }
+  .tc-upload input { position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer; }
+  .tc-upload i { font-size:22px; }
+  .tc-accounting { border-top:1px solid #e8edf3;padding-top:9px;margin-top:9px; }
+  .tc-accounting summary { cursor:pointer;color:#384c69;font-size:12px;font-weight:700; }
+  .tc-accounting-content { padding-top:9px; }
+  .tc-actionbar { display:flex;justify-content:flex-end;gap:8px;padding:1px 0 12px; }
+  @media(max-width:1100px){.tc-transfer-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.tc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 6}}
+  @media(max-width:767.98px){.tc-title-row{align-items:flex-start;flex-wrap:wrap}.tc-title-actions{width:100%;margin-left:0}.tc-transfer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 12}}
+</style>
+<div class="ds tc-page">
+  <div class="tc-title-row">
+    <i class="fas fa-truck tc-title-icon"></i>
+    <div><h1 class="tc-page-title">Add Transfer Charges</h1><p class="tc-subtitle">Record transport, loading, unloading and other charges for a stock transfer. Supports multiple farms and common or farm-wise charges.</p></div>
+    <div class="tc-title-actions"><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a><button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-btn"><i class="fas fa-check"></i> Save &amp; Post</button></div>
+  </div>
+  <div id="tc-status" class="alert d-none" role="alert"></div>
+  <div class="row g-2">
+    <div class="col-lg-9">
+      <section class="tc-panel">
+        <div class="tc-panel-head"><span class="tc-step">1</span>Select Stock Transfer</div>
+        <div class="tc-panel-body">
+          <div class="tc-transfer-grid">
+            <div><label class="tc-form-label">Stock Transfer No. <span class="text-danger">*</span></label><div class="position-relative"><div class="input-group"><input type="text" class="form-control" id="st-search" placeholder="Search transfer / DC no." autocomplete="off"><button class="btn btn-outline-secondary" type="button" id="st-search-button" aria-label="Search"><i class="fas fa-search"></i></button><span class="input-group-text bg-white d-none" id="st-search-spinner"><span class="spinner-border spinner-border-sm text-primary"></span></span></div><div id="st-results" class="list-group position-absolute w-100 d-none shadow-sm" style="z-index:20"></div></div></div>
+            <div><label class="tc-form-label">Transfer Date</label><div class="form-control bg-light"><span id="ro-date">—</span></div></div>
+            <div><label class="tc-form-label">From Location</label><div class="form-control bg-light text-truncate"><span id="ro-route">—</span></div></div>
+            <div><label class="tc-form-label">Vehicle No.</label><div class="form-control bg-light"><span id="ro-vehicle">—</span></div></div>
+            <div><label class="tc-form-label">Driver</label><div class="form-control bg-light"><span id="ro-driver">—</span></div></div>
+          </div>
+          <div id="st-readonly" class="d-none">
+            <div class="tc-metrics">
+              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-users"></i></span><div><small>Total Destination Farms</small><strong id="summary-farms">0</strong></div></div>
+              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-box"></i></span><div><small>Total Items</small><strong id="summary-items">0</strong></div></div>
+              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-weight-hanging"></i></span><div><small>Total Quantity</small><strong><span id="summary-quantity">0</span></strong></div></div>
+              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-indian-rupee-sign"></i></span><div><small>Items Value (₹)</small><strong id="sum-value">0.00</strong></div></div>
+            </div>
+            <div class="tc-farms" id="farm-list-wrap"><div class="tc-farms-head"><span>Destination Farms</span><span id="ro-farm-count"></span></div><div class="tc-farm-list" id="farm-list-body"></div></div>
+          </div>
+        </div>
+      </section>
+      <section class="tc-panel">
+        <div class="tc-panel-head green"><span class="tc-step" style="background:#078845">2</span>Transfer Charges Entry<div class="tc-toolbar"><button type="button" class="btn btn-sm btn-primary" id="add-charge-btn"><i class="fas fa-plus"></i> Add Charge</button><button type="button" class="btn btn-sm btn-outline-danger" id="clear-charges-btn"><i class="fas fa-trash"></i> Clear All</button></div></div>
+        <div class="table-responsive"><table class="table table-sm align-middle" id="lines-table"><thead><tr><th>#</th><th>Charge Type <span class="text-danger">*</span></th><th>Description</th><th>Charge Scope</th><th>Basis</th><th>Total Amount (₹)</th><th>Allocation Method</th><th>Action</th></tr></thead><tbody></tbody></table></div>
+      </section>
+      <section class="tc-panel d-none" id="allocation-card"><div class="tc-panel-head purple"><span class="tc-step" style="background:#754cff">3</span>Charge Allocation / Details</div><div class="tc-panel-body"><div class="tc-alloc-chips" id="alloc-chips"></div><div class="tc-allocation-grid" id="alloc-panels"></div></div></section>
+      <section class="tc-panel d-none" id="final-cost-card"><div class="tc-panel-head green"><span class="tc-step" style="background:#078845"><i class="fas fa-coins"></i></span>Farm-wise Total Charges (All Types)</div><div class="tc-panel-body"><div class="table-responsive"><table class="table table-sm" id="final-cost-table"><thead><tr id="final-cost-head"></tr></thead><tbody id="final-cost-body"></tbody></table></div></div></section>
+    </div>
+    <aside class="col-lg-3">
+      <section class="tc-side-card"><div class="tc-side-title"><i class="fas fa-clipboard-list text-success me-2"></i>Transfer Charge Summary</div><div class="tc-side-body">
+        <div class="tc-sum-row"><span>Transport (₹)</span><b id="tcs-transport">0.00</b></div><div class="tc-sum-row"><span>Loading (₹)</span><b id="tcs-loading">0.00</b></div><div class="tc-sum-row"><span>Unloading (₹)</span><b id="tcs-unloading">0.00</b></div><div class="tc-sum-row"><span>Toll / Other (₹)</span><b id="tcs-other">0.00</b></div><div class="tc-sum-total"><span>Total Charges (₹)</span><b id="tcs-total">0.00</b></div>
+        <div class="tc-sum-row mt-2"><span>Destination Farms</span><b id="tcs-farms">0</b></div><div class="tc-sum-row"><span>Items Value (₹)</span><b id="tcs-stockvalue">0.00</b></div><div class="tc-sum-row"><span>Transfer Charges (₹)</span><b id="tcs-charges-repeat">0.00</b></div><div class="tc-sum-total"><span>Total Transfer Cost (₹)</span><b id="tcs-totalcost">0.00</b></div>
+      </div></section>
+      <section class="tc-side-card"><div class="tc-side-title"><i class="fas fa-file-invoice text-primary me-2"></i>Supporting Documents &amp; Remarks</div><div class="tc-side-body">
+        <label class="tc-form-label">Attachments (Bills / Photos)</label><label class="tc-upload"><input type="file" id="attachment-input" multiple accept="image/*,.pdf"><i class="fas fa-cloud-upload-alt"></i><span><b>Click to upload or drag &amp; drop</b><br><small>PDF, JPG, PNG (Max 5 MB each)</small></span></label>
+        <div class="form-text" id="attachment-hint">Save as Draft first to attach bills.</div><div class="d-flex flex-wrap gap-2 mt-2" id="attachment-list"></div>
+        <label class="tc-form-label mt-3" for="header-remarks">Remarks</label><textarea class="form-control" id="header-remarks" rows="3" placeholder="Add remarks for this transfer charge"></textarea>
+        <label class="tc-form-label mt-3" for="narration">Narration</label><textarea class="form-control" id="narration" rows="2" placeholder="Posting narration"></textarea>
+        <details class="tc-accounting" open><summary>Accounting &amp; Payment</summary><div class="tc-accounting-content">
+          <div class="mb-2"><div class="tc-form-label">Accounting Treatment</div><div class="form-check"><input class="form-check-input" type="radio" name="treatment" id="treatment-expense" value="Expense Only" checked><label class="form-check-label" for="treatment-expense">Expense Only</label></div><div class="form-check"><input class="form-check-input" type="radio" name="treatment" id="treatment-capitalize" value="Add to Inventory Cost"><label class="form-check-label" for="treatment-capitalize">Add to Inventory Cost</label></div></div>
+          <div class="mb-2"><div class="tc-form-label">Payment / Posting</div><div class="form-check"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-now" value="Paid Now" checked><label class="form-check-label" for="payment-mode-now">Paid Now</label></div><div class="form-check mb-2"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-later" value="Pay Later"><label class="form-check-label" for="payment-mode-later">Pay Later</label></div>
+            <div id="payment-now-fields"><label class="tc-form-label">Paid From (Cash/Bank) <span class="text-danger">*</span></label><select class="form-select" id="paid-from"><option value="">select</option>{% for a in bank_cash_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
+            <div id="payment-later-fields" class="d-none"><label class="tc-form-label">Payable Ledger <span class="text-danger">*</span></label><select class="form-select mb-2" id="payable-account"><option value="">select</option>{% for a in payable_accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}</select><label class="tc-form-label">Payable To</label><input type="text" class="form-control" id="payee-name" placeholder="Who this is owed to"></div>
+          </div><div class="form-text">All charge lines post using the same payment method.</div>
+        </div></details>
+      </div></section>
+    </aside>
+  </div>
+  <div class="tc-actionbar"><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a><button type="button" class="btn btn-outline-primary" id="save-draft-bottom"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-bottom"><i class="fas fa-check"></i> Save &amp; Post</button></div>
+</div>

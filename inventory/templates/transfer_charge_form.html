@@ -6,187 +6,7 @@
 {% block content %}
 {% include '_inventory_transaction_subnavbar.html' with active_tab='transfer_charges' %}
 
-<div class="ds">
-
-<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-  <div>
-    <h1 class="ds-page-title"><i class="fas fa-truck-ramp-box text-primary"></i> Add Transfer Charges</h1>
-    <p class="ds-subtitle">Record and allocate transport, loading, unloading and other charges for a stock transfer</p>
-  </div>
-  <div class="ms-auto d-flex gap-2">
-    <a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}"><i class="fas fa-arrow-left"></i> Back to List</a>
-    <button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button>
-    <button type="button" class="btn btn-primary" id="save-post-btn"><i class="fas fa-check"></i> Save &amp; Post</button>
-  </div>
-</div>
-
-<div id="tc-status" class="alert d-none" role="alert"></div>
-
-<div class="row g-3">
-<div class="col-lg-8">
-
-  <!-- 1. Select Stock Transfer -->
-  <div class="ds-card mb-3">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">1. Select Stock Transfer</div>
-      <label class="form-label">Stock Transfer No. (DC No.) <span class="text-danger">*</span></label>
-      <div class="position-relative" style="max-width:520px;">
-        <div class="input-group">
-          <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
-          <input type="text" class="form-control" id="st-search" placeholder="Type the DC No. to search…" autocomplete="off">
-          <span class="input-group-text bg-white d-none" id="st-search-spinner"><span class="spinner-border spinner-border-sm text-primary"></span></span>
-        </div>
-        <div id="st-results" class="list-group position-absolute w-100 d-none shadow-sm" style="z-index:20;"></div>
-        <div class="form-text">Start typing — matching trips appear as you go. Press Enter to search immediately.</div>
-      </div>
-
-      <!-- Selected transfer, shown immediately — route, vehicle and farms
-           at a glance, not a grid of read-only boxes to scan one by one. -->
-      <div id="st-readonly" class="d-none mt-3 pt-3 border-top">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-          <div>
-            <div class="fs-5 fw-bold" id="ro-dc-no"></div>
-            <div class="text-muted" id="ro-route"></div>
-          </div>
-          <div class="text-end">
-            <div id="ro-date"></div>
-            <div class="text-muted small" id="ro-vehicle-driver"></div>
-          </div>
-        </div>
-        <div id="farm-list-wrap" class="mt-3">
-          <div class="text-muted small text-uppercase mb-1">Destination Farms</div>
-          <div id="farm-list-body"></div>
-        </div>
-        <div class="d-flex justify-content-between border-top pt-2 mt-2">
-          <span>Stock Value</span><span class="fw-bold" id="sum-value">0.00</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 2. Transfer Charge Entry -->
-  <div class="ds-card mb-3">
-    <div class="ds-card-body">
-      <div class="d-flex align-items-center mb-3">
-        <div class="ds-section-title">2. Transfer Charges Entry</div>
-        <div class="ms-auto d-flex gap-2">
-          <button type="button" class="btn btn-sm btn-outline-primary" id="add-charge-btn"><i class="fas fa-plus"></i> Add Charge</button>
-          <button type="button" class="btn btn-sm btn-outline-danger" id="clear-charges-btn"><i class="fas fa-eraser"></i> Clear All</button>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle" id="lines-table">
-          <thead>
-            <tr>
-              <th>#</th><th style="min-width:130px">Charge Type</th><th>Description</th>
-              <th style="min-width:120px">Scope</th><th style="min-width:110px">Basis</th>
-              <th style="min-width:110px">Total Amount</th><th style="min-width:140px">Allocation Method</th><th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="text-muted small mb-0">Each charge line has its own scope — mix Common and Farm-wise freely in the same transaction.</p>
-    </div>
-  </div>
-
-  <!-- 3. Charge Allocation / Details -->
-  <div class="ds-card mb-3 d-none" id="allocation-card">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">3. Charge Allocation / Details</div>
-      <div class="row g-3" id="alloc-panels"></div>
-    </div>
-  </div>
-
-  <!-- Farm-wise Final Cost -->
-  <div class="ds-card mb-3 d-none" id="final-cost-card">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">Farm-wise Final Cost</div>
-      <div class="table-responsive">
-        <table class="table table-sm" id="final-cost-table">
-          <thead><tr id="final-cost-head"></tr></thead>
-          <tbody id="final-cost-body"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4. Documents & Accounting -->
-  <div class="ds-card mb-3">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">4. Documents &amp; Accounting</div>
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label">Attachments — bills, Bilty/LR, toll receipts, photos, PDF</label>
-          <input type="file" class="form-control" id="attachment-input" multiple accept="image/*,.pdf">
-          <div class="form-text" id="attachment-hint">Save as Draft first to attach bills.</div>
-          <div class="d-flex flex-wrap gap-2 mt-2" id="attachment-list"></div>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Header Remarks</label>
-          <textarea class="form-control" id="header-remarks" rows="2"></textarea>
-        </div>
-        <div class="col-md-6">
-          <div class="text-muted small text-uppercase mb-2">Accounting Treatment</div>
-          <div class="form-check"><input class="form-check-input" type="radio" name="treatment" id="treatment-expense" value="Expense Only" checked><label class="form-check-label" for="treatment-expense">Expense Only</label></div>
-          <div class="form-check mb-2"><input class="form-check-input" type="radio" name="treatment" id="treatment-capitalize" value="Add to Inventory Cost"><label class="form-check-label" for="treatment-capitalize">Add to Inventory Cost</label></div>
-        </div>
-        <div class="col-md-6">
-          <div class="text-muted small text-uppercase mb-2">Payment / Posting</div>
-          <div class="form-check"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-now" value="Paid Now" checked><label class="form-check-label" for="payment-mode-now">Paid Now</label></div>
-          <div class="form-check mb-2"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-later" value="Pay Later"><label class="form-check-label" for="payment-mode-later">Pay Later</label></div>
-
-          <div id="payment-now-fields">
-            <label class="form-label">Paid From (Cash/Bank) <span class="text-danger">*</span></label>
-            <select class="form-select" id="paid-from">
-              <option value="">select</option>
-              {% for a in bank_cash_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
-            </select>
-          </div>
-          <div id="payment-later-fields" class="d-none">
-            <label class="form-label">Payable Ledger <span class="text-danger">*</span></label>
-            <select class="form-select mb-2" id="payable-account">
-              <option value="">select</option>
-              {% for a in payable_accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
-            </select>
-            <label class="form-label">Payable To <span class="text-muted">(vehicle owner, transporter…)</span></label>
-            <input type="text" class="form-control" id="payee-name" placeholder="Who this is owed to">
-          </div>
-          <div class="form-text">All charges in this transaction post the same way.</div>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Narration</label>
-          <textarea class="form-control" id="narration" rows="2"></textarea>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- Sticky right summary -->
-<div class="col-lg-4">
-  <div class="ds-card" style="position:sticky; top:70px;">
-    <div class="ds-card-body">
-      <div class="ds-section-title mb-3">Transfer Charge Summary</div>
-      <div class="d-flex justify-content-between py-1"><span>Transport</span><b id="tcs-transport">0.00</b></div>
-      <div class="d-flex justify-content-between py-1"><span>Loading</span><b id="tcs-loading">0.00</b></div>
-      <div class="d-flex justify-content-between py-1"><span>Unloading</span><b id="tcs-unloading">0.00</b></div>
-      <div class="d-flex justify-content-between py-1"><span>Other</span><b id="tcs-other">0.00</b></div>
-      <hr>
-      <div class="d-flex justify-content-between py-1 fw-bold fs-5"><span>Total Charges</span><b id="tcs-total">0.00</b></div>
-      <hr>
-      <div class="d-flex justify-content-between py-1"><span>Destination Farms</span><b id="tcs-farms">0</b></div>
-      <div class="d-flex justify-content-between py-1"><span>Stock Value</span><b id="tcs-stockvalue">0.00</b></div>
-      <div class="d-flex justify-content-between py-1"><span>Transfer Charges</span><b id="tcs-charges-repeat">0.00</b></div>
-      <hr>
-      <div class="d-flex justify-content-between py-1 fw-bold fs-5"><span>Total Transfer Cost</span><b id="tcs-totalcost">0.00</b></div>
-    </div>
-  </div>
-</div>
-</div>
-
-</div><!-- /.ds -->
+{% include 'transfer_charge_form_layout.html' %}
 
 <script id="tc-config" type="application/json">
 {
@@ -245,6 +65,7 @@ $(function () {
   $("#st-search").on("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); runStockTransferSearch($(this).val().trim()); }
   });
+  $("#st-search-button").on("click", () => runStockTransferSearch($("#st-search").val().trim()));
   $(document).on("click", function (e) {
     if (!$(e.target).closest("#st-search, #st-results").length) $("#st-results").addClass("d-none");
   });
@@ -277,22 +98,19 @@ $(function () {
     const t = state.transfer;
     if (!t) return;
     $("#st-readonly").removeClass("d-none");
-    $("#ro-dc-no").text(t.dc_no);
-    $("#ro-route").text(`${t.from_location} → ${t.farm_count} Farm${t.farm_count === 1 ? "" : "s"}`);
+    $("#ro-route").text(t.from_location || "—");
     $("#ro-date").text(t.date);
-    const vd = [t.vehicle_no && `Vehicle: ${t.vehicle_no}`, t.driver_name && `Driver: ${t.driver_name}`]
-      .filter(Boolean).join(" • ");
-    $("#ro-vehicle-driver").text(vd);
+    $("#ro-vehicle").text(t.vehicle_no || "—");
+    $("#ro-driver").text(t.driver_name || "—");
     $("#sum-value").text(money(t.total_stock_value));
+    $("#summary-farms,#ro-farm-count").text(t.farm_count || 0);
+    $("#summary-items").text(t.item_count || 0);
+    $("#summary-quantity").text(money(t.total_quantity));
 
     const body = $("#farm-list-body").empty();
-    if (t.farm_count <= 1) {
-      $("#farm-list-wrap").toggleClass("d-none", true);
-    } else {
-      $("#farm-list-wrap").toggleClass("d-none", false);
-      t.farms.forEach(f => body.append(`<div class="d-flex justify-content-between py-1">
-        <span>${escapeHtml(f.farm_name)}</span><span>${money(f.quantity)}</span></div>`));
-    }
+    t.farms.forEach((f, i) => body.append(`<div class="tc-farm-chip">
+      <span><span class="badge ${i % 2 ? "bg-success" : "bg-primary"} me-1">${i + 1}</span>${escapeHtml(f.farm_name)}</span>
+      <b>${money(f.quantity)} Qty</b></div>`));
   }
 
   // ---------------------------------------------------------------- Step 2
@@ -333,10 +151,7 @@ $(function () {
         <td>${idx + 1}</td>
         <td><select class="form-select form-select-sm line-charge-type">${typeOptions}</select></td>
         <td><input type="text" class="form-control form-control-sm line-description" value="${escapeHtml(line.description)}"></td>
-        <td><select class="form-select form-select-sm line-scope">
-              <option value="Common" ${isCommon ? "selected" : ""}>Common / Fixed</option>
-              <option value="Farm-wise" ${!isCommon ? "selected" : ""}>Farm-wise</option>
-            </select></td>
+        <td><div class="tc-scope-toggle"><label><input type="radio" class="line-scope" name="scope-${idx}" value="Common" ${isCommon ? "checked" : ""}> Common</label><label><input type="radio" class="line-scope" name="scope-${idx}" value="Farm-wise" ${!isCommon ? "checked" : ""}> Farm-wise</label></div></td>
         <td><input type="text" class="form-control form-control-sm line-basis" value="${escapeHtml(line.basis)}"></td>
         <td><input type="number" step="0.01" class="form-control form-control-sm line-amount" value="${line.total_amount}" ${isCommon ? "" : "disabled"}></td>
         <td><select class="form-select form-select-sm line-method" ${isCommon ? "" : "disabled"}>${methodOptions}</select></td>
@@ -403,19 +218,41 @@ $(function () {
     renderFinalCost();
   }
 
+  // One look per charge kind, so a row of cards reads at a glance instead
+  // of everything being the same grey box. Unlisted/custom charge types
+  // fall back to the neutral "Other" styling.
+  const CARD_STYLES = {
+    "Transport": { icon: "fa-truck", color: "#0875ee", bg: "#eaf3ff" },
+    "Loading": { icon: "fa-people-carry-box", color: "#e07b1f", bg: "#fff4e8" },
+    "Unloading": { icon: "fa-dolly", color: "#e0457b", bg: "#fdeaf1" },
+    "Toll": { icon: "fa-coins", color: "#754cff", bg: "#f2edff" },
+    "Handling": { icon: "fa-hand-holding-box", color: "#0b9488", bg: "#e6f8f6" },
+    "Weighment": { icon: "fa-weight-scale", color: "#b3771f", bg: "#fbf3e4" },
+    "Vehicle Hire": { icon: "fa-truck-moving", color: "#2a6fd6", bg: "#eaf1fd" },
+    "Other": { icon: "fa-receipt", color: "#5a6b85", bg: "#f1f3f6" },
+  };
+  function cardStyle(name) { return CARD_STYLES[name] || CARD_STYLES["Other"]; }
+
   function renderAllocationPreview() {
     const panels = $("#alloc-panels").empty();
+    const chips = $("#alloc-chips").empty();
     if (!state.lines.length) { $("#allocation-card").addClass("d-none"); return; }
     $("#allocation-card").removeClass("d-none");
 
     // Compact cards, every charge visible at once — not tabs a user has to
     // click through one at a time to see how the whole transaction splits.
     state.lines.forEach((line, idx) => {
+      const name = ctName(line.charge_type) || "Charge";
+      const style = cardStyle(name);
+      const cardId = `alloc-card-${idx}`;
+      chips.append(`<button type="button" class="tc-alloc-chip" style="border-color:${style.color};color:${style.color}"
+        data-target="${cardId}"><i class="fas ${style.icon} me-1"></i>${escapeHtml(name)}</button>`);
       const col = $(`<div class="col-md-6"></div>`);
-      const card = $(`<div class="border rounded h-100">
-        <div class="px-3 py-2 border-bottom bg-light fw-bold d-flex align-items-center gap-2">
-          ${escapeHtml(ctName(line.charge_type) || "Charge")}
-          <span class="badge bg-secondary fw-normal">${line.charge_scope}${line.charge_scope === "Common" ? " • " + line.allocation_method : ""}</span>
+      const card = $(`<div class="border rounded h-100" id="${cardId}" style="border-color:${style.bg} !important">
+        <div class="px-3 py-2 fw-bold d-flex align-items-center gap-2" style="background:${style.bg};border-bottom:1px solid ${style.bg}">
+          <span class="d-inline-flex align-items-center justify-content-center rounded-circle" style="width:26px;height:26px;background:${style.color};color:#fff;flex:none"><i class="fas ${style.icon}" style="font-size:12px"></i></span>
+          <span style="color:${style.color}">${escapeHtml(name)}</span>
+          <span class="badge bg-white border fw-normal ms-auto" style="color:${style.color};border-color:${style.color}!important">${line.charge_scope}${line.charge_scope === "Common" ? " • " + line.allocation_method : ""}</span>
         </div>
         <div class="p-2"></div>
       </div>`);
@@ -429,16 +266,16 @@ $(function () {
           const a = line.allocations.find(a => a.destination_farm == f.farm_id);
           const amt = a ? Number(a.allocated_amount || 0) : 0;
           const pct = total ? (amt / total * 100).toFixed(2) : "0.00";
-          return `<tr><td>${escapeHtml(f.farm_name)}</td><td class="text-end">${pct}%</td><td class="text-end">${money(amt)}</td></tr>`;
+          return `<tr><td>${escapeHtml(f.farm_name)}</td><td class="text-end">${money(f.quantity)}</td><td class="text-end">${pct}%</td><td class="text-end">${money(amt)}</td></tr>`;
         }).join("");
-        panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">% Share</th><th class="text-end">Allocated</th></tr></thead>
-          <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">${money(total)}</td></tr></tfoot></table>`);
+        panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">Qty</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
+          <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td>Total</td><td class="text-end">${money(state.transfer ? state.transfer.total_quantity : 0)}</td><td></td><td class="text-end">${money(total)}</td></tr></tfoot></table>`);
       } else if (!state.transfer || !state.transfer.farms.length) {
         panel.html('<p class="text-muted">Select a Stock Transfer first.</p>');
       } else if (state.transfer.farms.length === 1) {
         const f = state.transfer.farms[0];
-        panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">% Share</th><th class="text-end">Allocated</th></tr></thead>
-          <tbody><tr><td>${escapeHtml(f.farm_name)}</td><td class="text-end">100%</td><td class="text-end">${money(line.total_amount)}</td></tr></tbody></table>`);
+        panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">Qty</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
+          <tbody><tr><td>${escapeHtml(f.farm_name)}</td><td class="text-end">${money(f.quantity)}</td><td class="text-end">100%</td><td class="text-end">${money(line.total_amount)}</td></tr></tbody></table>`);
       } else {
         $.ajax({
           url: "{% url 'transfer_charge_allocate_preview' %}", method: "POST", async: false,
@@ -449,13 +286,21 @@ $(function () {
           }),
         }).done(resp => {
           line._previewRows = resp.rows;
-          const rows = resp.rows.map(r => `<tr><td>${escapeHtml(r.farm_name)}</td><td class="text-end">${r.percentage}%</td><td class="text-end">${money(r.allocated_amount)}</td></tr>`).join("");
-          panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">% Share</th><th class="text-end">Allocated</th></tr></thead>
-            <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">${money(resp.total)}</td></tr></tfoot></table>`);
+          const basisLabel = line.allocation_method === "By Stock Value" ? "Stock Value" : (line.allocation_method === "By Distance" ? "Distance" : "Qty");
+          const basisKey = line.allocation_method === "By Stock Value" ? "stock_value_basis" : (line.allocation_method === "By Distance" ? "distance_basis" : "quantity_basis");
+          const basisTotal = state.transfer.farms.reduce((sum, f) => sum + Number(line.allocation_method === "By Stock Value" ? f.stock_value : (line.allocation_method === "By Distance" ? (f.distance || 0) : f.quantity) || 0), 0);
+          const rows = resp.rows.map(r => `<tr><td>${escapeHtml(r.farm_name)}</td><td class="text-end">${money(r[basisKey])}</td><td class="text-end">${r.percentage}%</td><td class="text-end">${money(r.allocated_amount)}</td></tr>`).join("");
+          panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">${basisLabel}</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
+            <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td>Total</td><td class="text-end">${money(basisTotal)}</td><td>100%</td><td class="text-end">${money(resp.total)}</td></tr></tfoot></table>`);
         });
       }
     });
   }
+
+  $(document).on("click", ".tc-alloc-chip", function () {
+    const target = document.getElementById($(this).data("target"));
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 
   function renderSummaryPanel() {
     const buckets = { Transport: 0, Loading: 0, Unloading: 0 };
@@ -600,13 +445,13 @@ $(function () {
       state.status = data.status;
       flash(action === "post" ? `Posted as ${data.charge_no}.` : `Saved as draft ${data.charge_no}.`, "success");
       $("#attachment-hint").text(state.status === "Posted" ? "Posted — attachments are read-only." : "Attach bills, Bilty/LR, toll receipts or photos.");
-      if (state.status === "Posted") { $("#save-draft-btn,#save-post-btn").prop("disabled", true); }
+      if (state.status === "Posted") { $("#save-draft-btn,#save-post-btn,#save-draft-bottom,#save-post-bottom").prop("disabled", true); }
       renderAttachments(data.attachments);
     }).fail(xhr => flash(xhr.responseJSON?.error || "Could not save.", "danger"));
   }
 
-  $("#save-draft-btn").on("click", () => save("draft"));
-  $("#save-post-btn").on("click", () => {
+  $("#save-draft-btn,#save-draft-bottom").on("click", () => save("draft"));
+  $("#save-post-btn,#save-post-bottom").on("click", () => {
     if (!confirm("Save & Post? Once posted this Transfer Charge cannot be edited.")) return;
     save("post");
   });
@@ -616,6 +461,7 @@ $(function () {
   function loadExisting(id) {
     $.getJSON(`/transfer_charge_api/${id}/`, data => {
       state.id = data.id; state.status = data.status;
+      $("#st-search").val(data.dc_no || "");
       state.transfer = {
         dc_no: data.dc_no, date: data.charge_date, from_location: data.from_location,
         vehicle_no: data.vehicle_no, driver_name: data.driver_name,
@@ -639,7 +485,7 @@ $(function () {
       renderLines();
       renderAttachments(data.attachments);
       if (data.status !== "Draft" && data.status !== "Pending Approval") {
-        $("#save-draft-btn,#save-post-btn").prop("disabled", true);
+        $("#save-draft-btn,#save-post-btn,#save-draft-bottom,#save-post-bottom").prop("disabled", true);
         $("input,select,textarea,button").not("#save-draft-btn,#save-post-btn").prop("disabled", true);
         flash(`${data.charge_no} is ${data.status} and is read-only.`, "success");
       }
