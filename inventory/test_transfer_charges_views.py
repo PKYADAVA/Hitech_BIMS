@@ -156,3 +156,29 @@ class TransferChargeViewTests(TransferChargePostingTests):
         self.assertEqual(resp.status_code, 200)
         ids = [r["id"] for r in resp.json()]
         self.assertIn(header.id, ids)
+
+    def test_post_action_endpoint_flags_duplicate_and_allows_override(self):
+        from inventory.models import TransferChargeLine
+        from inventory.services import transfer_charges as service
+
+        first = self.make_header()
+        TransferChargeLine.objects.create(
+            header=first, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        service.post(first, user=self.user)
+
+        second = self.make_header()
+        TransferChargeLine.objects.create(
+            header=second, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("300"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+
+        resp = self.client.post(reverse("transfer_charge_post", args=[second.id]))
+        self.assertEqual(resp.status_code, 400)
+        body = resp.json()
+        self.assertTrue(body["duplicate"])
+        self.assertIn(first.charge_no, body["existing"])
+
+        resp2 = self.client.post(reverse("transfer_charge_post", args=[second.id]),
+                                 data=json.dumps({"allow_duplicate": True}), content_type="application/json")
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(resp2.json()["status"], "Posted")

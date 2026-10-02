@@ -4077,6 +4077,17 @@ class TransferChargeReportTemplateView(View):
         })
 
 
+def _post_error_response(e, header):
+    """A failed post, as JSON — flagged `duplicate` when it's one the screen
+    can offer to override, so the client never has to string-match an error
+    message to know whether "post anyway" makes sense."""
+    body = {"error": str(e), "id": header.id}
+    if isinstance(e, tc_service.DuplicateChargeError):
+        body["duplicate"] = True
+        body["existing"] = e.existing
+    return JsonResponse(body, status=400)
+
+
 def _transfer_charge_to_dict(header, detail=False):
     data = {
         "id": header.id, "charge_no": header.charge_no, "charge_date": header.charge_date.isoformat(),
@@ -4184,9 +4195,9 @@ class TransferChargeAPI(View):
 
         if data.get("action") == "post":
             try:
-                tc_service.post(header, user=request.user)
+                tc_service.post(header, user=request.user, allow_duplicate=bool(data.get("allow_duplicate")))
             except tc_service.TransferChargeError as e:
-                return JsonResponse({"error": str(e), "id": header.id}, status=400)
+                return _post_error_response(e, header)
 
         return JsonResponse(_transfer_charge_to_dict(header, detail=True), status=201)
 
@@ -4207,9 +4218,9 @@ class TransferChargeAPI(View):
 
         if data.get("action") == "post":
             try:
-                tc_service.post(header, user=request.user)
+                tc_service.post(header, user=request.user, allow_duplicate=bool(data.get("allow_duplicate")))
             except tc_service.TransferChargeError as e:
-                return JsonResponse({"error": str(e), "id": header.id}, status=400)
+                return _post_error_response(e, header)
 
         return JsonResponse(_transfer_charge_to_dict(header, detail=True))
 
@@ -4298,11 +4309,17 @@ def transfer_charge_allocate_preview(request):
 
 @login_required
 def transfer_charge_post(request, id):
+    from django.http.request import RawPostDataException
+
     header = get_object_or_404(TransferChargeHeader, id=id)
     try:
-        tc_service.post(header, user=request.user)
+        data = json.loads(request.body) if request.body else {}
+    except (json.JSONDecodeError, RawPostDataException):
+        data = {}
+    try:
+        tc_service.post(header, user=request.user, allow_duplicate=bool(data.get("allow_duplicate")))
     except tc_service.TransferChargeError as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        return _post_error_response(e, header)
     return JsonResponse(_transfer_charge_to_dict(header, detail=True))
 
 

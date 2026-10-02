@@ -407,7 +407,7 @@ $(function () {
 
   // ------------------------------------------------------------------ Save
 
-  function payload(action) {
+  function payload(action, allowDuplicate) {
     return {
       dc_no: state.transfer ? state.transfer.dc_no : "",
       charge_date: state.transfer ? state.transfer.date : null,
@@ -420,6 +420,7 @@ $(function () {
       narration: $("#narration").val(),
       header_remarks: $("#header-remarks").val(),
       action,
+      allow_duplicate: !!allowDuplicate,
       lines: state.lines.map(line => ({
         charge_type: line.charge_type, description: line.description,
         charge_scope: line.charge_scope, basis: line.basis,
@@ -435,13 +436,13 @@ $(function () {
     $("#payment-later-fields").toggleClass("d-none", !later);
   });
 
-  function save(action) {
+  function save(action, allowDuplicate) {
     if (!state.transfer) { flash("Select a Stock Transfer first.", "danger"); return; }
     if (!state.lines.length) { flash("Add at least one charge line.", "danger"); return; }
     const url = state.id ? `/transfer_charge_api/${state.id}/` : "{% url 'transfer_charge_api_list' %}";
     const method = state.id ? "PUT" : "POST";
     $.ajax({
-      url, method, contentType: "application/json", data: JSON.stringify(payload(action)),
+      url, method, contentType: "application/json", data: JSON.stringify(payload(action, allowDuplicate)),
       headers: { "X-CSRFToken": csrfToken },
     }).done(data => {
       state.id = data.id;
@@ -450,7 +451,18 @@ $(function () {
       $("#attachment-hint").text(state.status === "Posted" ? "Posted — attachments are read-only." : "Attach bills, Bilty/LR, toll receipts or photos.");
       if (state.status === "Posted") { $("#save-draft-btn,#save-post-btn,#save-draft-bottom,#save-post-bottom").prop("disabled", true); }
       renderAttachments(data.attachments);
-    }).fail(xhr => flash(xhr.responseJSON?.error || "Could not save.", "danger"));
+    }).fail(xhr => {
+      const body = xhr.responseJSON;
+      if (body?.duplicate && confirm(`${body.error}\n\nPost anyway?`)) {
+        // A failed post still saves the header as a draft, so the retry
+        // must PUT against that same id -- POSTing again would silently
+        // leave the first attempt behind as an orphan draft.
+        if (body.id) state.id = body.id;
+        save(action, true);
+        return;
+      }
+      flash(body?.error || "Could not save.", "danger");
+    });
   }
 
   $("#save-draft-btn,#save-draft-bottom").on("click", () => save("draft"));

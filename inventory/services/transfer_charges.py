@@ -22,6 +22,16 @@ class TransferChargeError(Exception):
     """Something that must stop a save/post, said in words a user can act on."""
 
 
+class DuplicateChargeError(TransferChargeError):
+    """The one kind of stop that isn't necessarily wrong — a second charge
+    against a trip that already has one posted is sometimes exactly what's
+    wanted (extra charges arriving later). Carries the existing charge
+    numbers so the screen can offer "post anyway" instead of a dead end."""
+    def __init__(self, message, existing):
+        super().__init__(message)
+        self.existing = existing
+
+
 def company():
     profile = CompanyProfile.objects.filter(pk=1).first()
     if profile is None:
@@ -256,6 +266,25 @@ def validate(header):
     return problems
 
 
+def posted_charges_sharing_transfers(header):
+    """Other POSTED headers covering any of the same Stock Transfer rows —
+    the real signal that this trip already has charges on the books, not a
+    dc_no text match (two different trips can legitimately reuse a DC No.
+    on different dates, and this header's own stock_transfers are the ones
+    actually selected, not just whatever shares its DC No.)."""
+    from inventory.models import TransferChargeHeader
+
+    transfer_ids = list(header.stock_transfers.values_list('id', flat=True))
+    if not transfer_ids:
+        return TransferChargeHeader.objects.none()
+    qs = TransferChargeHeader.objects.filter(
+        status=TransferChargeHeader.STATUS_POSTED, stock_transfers__id__in=transfer_ids
+    ).distinct()
+    if header.pk:
+        qs = qs.exclude(pk=header.pk)
+    return qs
+
+
 # --------------------------------------------------------------------------
 # Posting — one debit per (charge type x farm) allocation, to the ledger the
 # charge type is mapped to for this header's treatment; one credit to the
@@ -282,13 +311,22 @@ def _allocation_rows(header):
 
 
 @transaction.atomic
-def post(header, user=None):
+def post(header, user=None, allow_duplicate=False):
     from account.services.bank_cash import ledger_for_bank_cash
 
     if header.status == header.STATUS_POSTED:
         raise TransferChargeError(f"{header.charge_no} is already posted.")
     if header.status == header.STATUS_CANCELLED:
         raise TransferChargeError(f"{header.charge_no} has been cancelled and cannot be posted.")
+
+    if not allow_duplicate:
+        dupes = posted_charges_sharing_transfers(header)
+        if dupes.exists():
+            existing = list(dupes.values_list('charge_no', flat=True))
+            raise DuplicateChargeError(
+                f"Transfer charges for this trip have already been posted ({', '.join(existing)}). "
+                "Confirm if you want to post additional charges for the same trip.",
+                existing=existing)
 
     recompute_allocations(header)
     problems = validate(header)

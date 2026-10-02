@@ -180,12 +180,21 @@ $(function () {
     loadRows();
   });
 
+  function postCharge(id, allowDuplicate) {
+    $.ajax({ url: `/transfer-charges/${id}/post/`, method: "POST",
+            contentType: "application/json", data: JSON.stringify({ allow_duplicate: !!allowDuplicate }),
+            headers: { "X-CSRFToken": csrfToken } })
+      .done(() => loadRows())
+      .fail(xhr => {
+        const body = xhr.responseJSON;
+        if (body?.duplicate && confirm(`${body.error}\n\nPost anyway?`)) { postCharge(id, true); return; }
+        alert(body?.error || "Could not post.");
+      });
+  }
   $("#tc-table").on("click", ".post-btn", function () {
     const id = $(this).data("id");
     if (!confirm("Save & Post this Transfer Charge? Once posted it cannot be edited.")) return;
-    $.ajax({ url: `/transfer-charges/${id}/post/`, method: "POST",
-            headers: { "X-CSRFToken": csrfToken } })
-      .done(() => loadRows()).fail(xhr => alert(xhr.responseJSON?.error || "Could not post."));
+    postCharge(id);
   });
   $("#tc-table").on("click", ".cancel-btn", function () {
     const id = $(this).data("id");

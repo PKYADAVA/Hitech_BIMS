@@ -255,3 +255,56 @@ class TransferChargePostingTests(TestCase):
             total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
         problems = service.validate(header)
         self.assertTrue(any("Cash/Bank" in p for p in problems))
+
+    def test_second_header_for_the_same_trip_is_blocked(self):
+        first = self.make_header()
+        TransferChargeLine.objects.create(
+            header=first, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        service.post(first, user=self.user)
+
+        second = self.make_header()
+        TransferChargeLine.objects.create(
+            header=second, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("300"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        with self.assertRaises(service.DuplicateChargeError) as ctx:
+            service.post(second, user=self.user)
+        self.assertIn(first.charge_no, ctx.exception.existing)
+        second.refresh_from_db()
+        self.assertEqual(second.status, TransferChargeHeader.STATUS_DRAFT)
+
+    def test_second_header_for_the_same_trip_allowed_when_confirmed(self):
+        first = self.make_header()
+        TransferChargeLine.objects.create(
+            header=first, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        service.post(first, user=self.user)
+
+        second = self.make_header()
+        TransferChargeLine.objects.create(
+            header=second, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("300"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        voucher = service.post(second, user=self.user, allow_duplicate=True)
+        self.assertEqual(voucher.status, "Posted")
+
+    def test_duplicate_check_ignores_drafts_and_cancelled_charges(self):
+        draft = self.make_header()
+        TransferChargeLine.objects.create(
+            header=draft, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        # draft is never posted — just sitting there against the same trip.
+
+        cancelled = self.make_header()
+        line = TransferChargeLine.objects.create(
+            header=cancelled, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        service.post(cancelled, user=self.user)
+        cancelled.refresh_from_db()
+        service.cancel(cancelled, user=self.user, reason="test")
+
+        third = self.make_header()
+        TransferChargeLine.objects.create(
+            header=third, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("300"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        voucher = service.post(third, user=self.user)
+        self.assertEqual(voucher.status, "Posted")
