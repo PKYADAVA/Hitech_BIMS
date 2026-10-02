@@ -96,10 +96,11 @@
   </div>
 
   <!-- 3. Charge Allocation / Details -->
-  <div class="ds-card mb-3 d-none" id="allocation-card">
+  <div class="ds-card mb-3" id="allocation-card">
     <div class="ds-card-body">
       <div class="ds-section-title mb-3">3. Charge Allocation / Details</div>
-      <ul class="nav nav-tabs" id="alloc-tabs"></ul>
+      <p class="text-muted mb-0" id="allocation-empty">Add a charge line above to see how it's allocated across destination farms.</p>
+      <ul class="nav nav-tabs d-none" id="alloc-tabs"></ul>
       <div class="tab-content pt-3" id="alloc-panels"></div>
     </div>
   </div>
@@ -394,8 +395,13 @@ $(function () {
   function renderAllocationPreview() {
     const tabs = $("#alloc-tabs").empty();
     const panels = $("#alloc-panels").empty();
-    if (!state.lines.length) { $("#allocation-card").addClass("d-none"); return; }
-    $("#allocation-card").removeClass("d-none");
+    if (!state.lines.length) {
+      $("#allocation-empty").removeClass("d-none");
+      $("#alloc-tabs").addClass("d-none");
+      return;
+    }
+    $("#allocation-empty").addClass("d-none");
+    $("#alloc-tabs").removeClass("d-none");
 
     state.lines.forEach((line, idx) => {
       const tabId = `alloc-tab-${idx}`;
