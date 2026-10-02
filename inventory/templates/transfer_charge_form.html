@@ -124,23 +124,6 @@ $(function () {
     renderLines();
   }
 
-  function farmWiseRowsHtml(line, idx) {
-    const farms = (state.transfer && state.transfer.farms) || [];
-    if (!farms.length) return `<tr><td colspan="8" class="text-muted small">Select a Stock Transfer first.</td></tr>`;
-    return farms.map(f => {
-      const existing = line.allocations.find(a => a.destination_farm == f.farm_id);
-      const amt = existing ? existing.allocated_amount : 0;
-      const remarks = existing ? (existing.remarks || "") : "";
-      return `<tr class="farm-wise-row" data-line="${idx}">
-        <td></td>
-        <td colspan="2">${escapeHtml(f.farm_name)}</td>
-        <td colspan="2" class="text-muted small">Farm amount</td>
-        <td><input type="number" step="0.01" class="form-control form-control-sm farm-amount" data-farm="${f.farm_id}" value="${amt}"></td>
-        <td colspan="2"><input type="text" class="form-control form-control-sm farm-remarks" data-farm="${f.farm_id}" placeholder="Remarks" value="${escapeHtml(remarks)}"></td>
-      </tr>`;
-    }).join("");
-  }
-
   function renderLines() {
     const tbody = $("#lines-table tbody").empty();
     state.lines.forEach((line, idx) => {
@@ -153,11 +136,14 @@ $(function () {
         <td><input type="text" class="form-control form-control-sm line-description" value="${escapeHtml(line.description)}"></td>
         <td><div class="tc-scope-toggle"><label><input type="radio" class="line-scope" name="scope-${idx}" value="Common" ${isCommon ? "checked" : ""}> Common</label><label><input type="radio" class="line-scope" name="scope-${idx}" value="Farm-wise" ${!isCommon ? "checked" : ""}> Farm-wise</label></div></td>
         <td><input type="text" class="form-control form-control-sm line-basis" value="${escapeHtml(line.basis)}"></td>
-        <td><input type="number" step="0.01" class="form-control form-control-sm line-amount" value="${line.total_amount}" ${isCommon ? "" : "disabled"}></td>
-        <td><select class="form-select form-select-sm line-method" ${isCommon ? "" : "disabled"}>${methodOptions}</select></td>
+        <td>${isCommon
+          ? `<input type="number" step="0.01" class="form-control form-control-sm line-amount" value="${line.total_amount}">`
+          : `<span class="text-muted">—</span>`}</td>
+        <td>${isCommon
+          ? `<select class="form-select form-select-sm line-method">${methodOptions}</select>`
+          : `<span class="text-muted small">Manual (per farm)</span>`}</td>
         <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="fas fa-trash"></i></button></td>
       </tr>`);
-      if (!isCommon) tbody.append(farmWiseRowsHtml(line, idx));
     });
     recomputeAll();
   }
@@ -192,15 +178,20 @@ $(function () {
     state.lines[$(this).closest("tr").data("idx")].allocation_method = $(this).val();
     recomputeAll();
   });
-  $("#lines-table").on("input", ".farm-amount, .farm-remarks", function () {
-    const idx = $(this).closest(".farm-wise-row").data("line");
+  // Farm-wise amounts are entered in the allocation card (Step 3), not the
+  // charge table — the table isn't wide enough for a credible per-farm
+  // amount + remarks entry once there's more than a couple of farms.
+  $("#alloc-panels").on("input", ".farm-amount, .farm-remarks", function () {
+    const idx = $(this).closest(".tc-alloc-card").data("line");
     const farmId = $(this).data("farm");
     const line = state.lines[idx];
     let alloc = line.allocations.find(a => a.destination_farm == farmId);
     if (!alloc) { alloc = { destination_farm: farmId, allocated_amount: 0, remarks: "" }; line.allocations.push(alloc); }
     if ($(this).hasClass("farm-amount")) alloc.allocated_amount = Number($(this).val() || 0);
     else alloc.remarks = $(this).val();
-    recomputeAll();
+    renderSummaryPanel();
+    renderFinalCost();
+    renderFarmWiseCardTotals(idx);
   });
 
   // ------------------------------------------------------- Step 3 & summary
@@ -248,7 +239,7 @@ $(function () {
       chips.append(`<button type="button" class="tc-alloc-chip" style="border-color:${style.color};color:${style.color}"
         data-target="${cardId}"><i class="fas ${style.icon} me-1"></i>${escapeHtml(name)}</button>`);
       const col = $(`<div class="col-md-6"></div>`);
-      const card = $(`<div class="border rounded h-100" id="${cardId}" style="border-color:${style.bg} !important">
+      const card = $(`<div class="border rounded h-100 tc-alloc-card" id="${cardId}" data-line="${idx}" style="border-color:${style.bg} !important">
         <div class="px-3 py-2 fw-bold d-flex align-items-center gap-2" style="background:${style.bg};border-bottom:1px solid ${style.bg}">
           <span class="d-inline-flex align-items-center justify-content-center rounded-circle" style="width:26px;height:26px;background:${style.color};color:#fff;flex:none"><i class="fas ${style.icon}" style="font-size:12px"></i></span>
           <span style="color:${style.color}">${escapeHtml(name)}</span>
@@ -261,15 +252,18 @@ $(function () {
       panels.append(col);
 
       if (line.charge_scope === "Farm-wise") {
-        const total = lineTotal(line);
-        let rows = (state.transfer ? state.transfer.farms : []).map(f => {
+        const farms = (state.transfer && state.transfer.farms) || [];
+        const rows = farms.map(f => {
           const a = line.allocations.find(a => a.destination_farm == f.farm_id);
-          const amt = a ? Number(a.allocated_amount || 0) : 0;
-          const pct = total ? (amt / total * 100).toFixed(2) : "0.00";
-          return `<tr><td>${escapeHtml(f.farm_name)}</td><td class="text-end">${money(f.quantity)}</td><td class="text-end">${pct}%</td><td class="text-end">${money(amt)}</td></tr>`;
-        }).join("");
-        panel.html(`<table class="table table-sm"><thead><tr><th>Farm</th><th class="text-end">Qty</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
-          <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td>Total</td><td class="text-end">${money(state.transfer ? state.transfer.total_quantity : 0)}</td><td></td><td class="text-end">${money(total)}</td></tr></tfoot></table>`);
+          const amt = a ? a.allocated_amount : 0;
+          const remarks = a ? (a.remarks || "") : "";
+          return `<tr><td>${escapeHtml(f.farm_name)}</td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm farm-amount" data-farm="${f.farm_id}" value="${amt}"></td>
+            <td><input type="text" class="form-control form-control-sm farm-remarks" data-farm="${f.farm_id}" placeholder="Remarks" value="${escapeHtml(remarks)}"></td></tr>`;
+        }).join("") || `<tr><td colspan="3" class="text-muted small">Select a Stock Transfer first.</td></tr>`;
+        panel.html(`<table class="table table-sm mb-0"><thead><tr><th>Destination Farm</th><th>Amount (₹)</th><th>Remarks</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+          <div class="d-flex justify-content-between px-1 pt-2 fw-bold alloc-card-total"><span>Total</span><span>${money(lineTotal(line))}</span></div>`);
       } else if (!state.transfer || !state.transfer.farms.length) {
         panel.html('<p class="text-muted">Select a Stock Transfer first.</p>');
       } else if (state.transfer.farms.length === 1) {
@@ -301,6 +295,15 @@ $(function () {
     const target = document.getElementById($(this).data("target"));
     if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+
+  // Updates just one card's own Total line in place — a full
+  // renderAllocationPreview() on every keystroke would rebuild the inputs
+  // and throw away whatever the person is mid-typing.
+  function renderFarmWiseCardTotals(idx) {
+    const line = state.lines[idx];
+    if (!line) return;
+    $(`#alloc-card-${idx} .alloc-card-total span:last-child`).text(money(lineTotal(line)));
+  }
 
   function renderSummaryPanel() {
     const buckets = { Transport: 0, Loading: 0, Unloading: 0 };

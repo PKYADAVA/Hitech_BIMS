@@ -19,7 +19,10 @@
   .tc-metric-icon { width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#eaf2ff;color:#1263d2;font-size:16px; }
   .tc-metric small { display:block;color:#50617d;font-size:11px; }
   .tc-metric strong { display:block;font-size:15px; }
-  .tc-farms { margin-top:9px;padding:8px 10px;border-radius:7px;background:#f2f8ff;border:1px solid #e0ebf7; }
+  .tc-summary-label { font-size:13px;font-weight:700;color:#334663;margin:12px 0 8px;padding-top:10px;border-top:1px solid #edf1f5; }
+  .tc-summary-split { display:grid;grid-template-columns:1.55fr 1fr;gap:12px;align-items:start; }
+  .tc-summary-split .tc-metrics { margin-top:0; }
+  .tc-farms { margin-top:0;padding:8px 10px;border-radius:7px;background:#f2f8ff;border:1px solid #e0ebf7;height:100%; }
   .tc-farms-head { display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px; }
   .tc-farm-list { display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 12px; }
   .tc-farm-chip { display:flex;justify-content:space-between;gap:8px;padding:4px 6px;background:#fff;border-radius:5px;font-size:12px; }
@@ -51,13 +54,13 @@
   .tc-accounting-content { padding-top:9px; }
   .tc-actionbar { display:flex;justify-content:flex-end;gap:8px;padding:1px 0 12px; }
   @media(max-width:1100px){.tc-transfer-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.tc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 6}}
-  @media(max-width:767.98px){.tc-title-row{align-items:flex-start;flex-wrap:wrap}.tc-title-actions{width:100%;margin-left:0}.tc-transfer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 12}}
+  @media(max-width:767.98px){.tc-title-row{align-items:flex-start;flex-wrap:wrap}.tc-title-actions{width:100%;margin-left:0}.tc-transfer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 12}.tc-summary-split{grid-template-columns:1fr}}
 </style>
 <div class="ds tc-page">
   <div class="tc-title-row">
     <i class="fas fa-truck tc-title-icon"></i>
     <div><h1 class="tc-page-title">Add Transfer Charges</h1><p class="tc-subtitle">Record transport, loading, unloading and other charges for a stock transfer. Supports multiple farms and common or farm-wise charges.</p></div>
-    <div class="tc-title-actions"><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a><button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-btn"><i class="fas fa-check"></i> Save &amp; Post</button></div>
+    <div class="tc-title-actions"><button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-btn"><i class="fas fa-check"></i> Save &amp; Post</button><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a></div>
   </div>
   <div id="tc-status" class="alert d-none" role="alert"></div>
   <div class="row g-2">
@@ -73,13 +76,16 @@
             <div><label class="tc-form-label">Driver</label><div class="form-control bg-light"><span id="ro-driver">—</span></div></div>
           </div>
           <div id="st-readonly" class="d-none">
-            <div class="tc-metrics">
-              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-users"></i></span><div><small>Total Destination Farms</small><strong id="summary-farms">0</strong></div></div>
-              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-box"></i></span><div><small>Total Items</small><strong id="summary-items">0</strong></div></div>
-              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-weight-hanging"></i></span><div><small>Total Quantity</small><strong><span id="summary-quantity">0</span></strong></div></div>
-              <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-indian-rupee-sign"></i></span><div><small>Items Value (₹)</small><strong id="sum-value">0.00</strong></div></div>
+            <div class="tc-summary-label"><i class="fas fa-list-check me-1"></i>Transfer Summary (Read Only from Stock Transfer)</div>
+            <div class="tc-summary-split">
+              <div class="tc-metrics">
+                <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-users"></i></span><div><small>Total Destination Farms</small><strong id="summary-farms">0</strong></div></div>
+                <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-box"></i></span><div><small>Total Items</small><strong id="summary-items">0</strong></div></div>
+                <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-weight-hanging"></i></span><div><small>Total Quantity</small><strong><span id="summary-quantity">0</span></strong></div></div>
+                <div class="tc-metric"><span class="tc-metric-icon"><i class="fas fa-indian-rupee-sign"></i></span><div><small>Items Value (₹)</small><strong id="sum-value">0.00</strong></div></div>
+              </div>
+              <div class="tc-farms" id="farm-list-wrap"><div class="tc-farms-head"><span>Destination Farms</span><span id="ro-farm-count"></span></div><div class="tc-farm-list" id="farm-list-body"></div></div>
             </div>
-            <div class="tc-farms" id="farm-list-wrap"><div class="tc-farms-head"><span>Destination Farms</span><span id="ro-farm-count"></span></div><div class="tc-farm-list" id="farm-list-body"></div></div>
           </div>
         </div>
       </section>
@@ -110,5 +116,5 @@
       </div></section>
     </aside>
   </div>
-  <div class="tc-actionbar"><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a><button type="button" class="btn btn-outline-primary" id="save-draft-bottom"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-bottom"><i class="fas fa-check"></i> Save &amp; Post</button></div>
+  <div class="tc-actionbar"><button type="button" class="btn btn-outline-primary" id="save-draft-bottom"><i class="fas fa-save"></i> Save Draft</button><button type="button" class="btn btn-success" id="save-post-bottom"><i class="fas fa-check"></i> Save &amp; Post</button><a class="btn btn-outline-secondary" href="{% url 'transfer_charge_list' %}">Cancel</a></div>
 </div>
