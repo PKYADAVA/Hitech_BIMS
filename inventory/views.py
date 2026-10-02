@@ -4061,6 +4061,7 @@ class TransferChargeFormTemplateView(View):
             "treatments": [c[0] for c in TransferChargeHeader.TREATMENT_CHOICES],
             "bank_cash_accounts": list(BankCashMaster.objects.order_by("name")
                                       .values("id", "name", "is_cash")),
+            "payable_accounts": tc_service.payable_accounts(),
             "today": timezone.localdate().isoformat(),
             "pk": request.GET.get("id") or "",
         })
@@ -4083,7 +4084,9 @@ def _transfer_charge_to_dict(header, detail=False):
         "total_transport": header.total_transport, "total_loading": header.total_loading,
         "total_unloading": header.total_unloading, "total_other": header.total_other,
         "total_charges": header.total_charges,
-        "paid_from": header.paid_from_id, "cost_centre": header.cost_centre_id,
+        "payment_mode": header.payment_mode, "paid_from": header.paid_from_id,
+        "payable_account": header.payable_account_id, "payee_name": header.payee_name,
+        "cost_centre": header.cost_centre_id,
         "narration": header.narration, "header_remarks": header.header_remarks,
         "voucher_id": header.voucher_id, "posted_by": str(header.posted_by) if header.posted_by_id else "",
         "created_by": str(header.created_by) if header.created_by_id else "",
@@ -4130,11 +4133,11 @@ class TransferChargeAPI(View):
     def get(self, request, id=None):
         if id:
             header = get_object_or_404(TransferChargeHeader.objects.select_related(
-                "paid_from", "cost_centre", "created_by", "posted_by"), id=id)
+                "paid_from", "payable_account", "cost_centre", "created_by", "posted_by"), id=id)
             return JsonResponse(_transfer_charge_to_dict(header, detail=True))
 
         qs = _scope_transfer_charge(request.user, TransferChargeHeader.objects.select_related(
-            "paid_from", "cost_centre"))
+            "paid_from", "payable_account", "cost_centre"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         status = (request.GET.get("status") or "").strip()
@@ -4226,7 +4229,10 @@ class TransferChargeAPI(View):
         header.charge_date = date_from_query(data.get("charge_date")) if data.get("charge_date") else timezone.localdate()
         header.dc_no = (data.get("dc_no") or "").strip()
         header.treatment = data.get("treatment") or TransferChargeHeader.TREATMENT_EXPENSE
+        header.payment_mode = data.get("payment_mode") or TransferChargeHeader.PAYMENT_MODE_PAID_NOW
         header.paid_from_id = data.get("paid_from") or None
+        header.payable_account_id = data.get("payable_account") or None
+        header.payee_name = (data.get("payee_name") or "").strip()
         header.cost_centre_id = data.get("cost_centre") or None
         header.narration = data.get("narration") or ""
         header.header_remarks = data.get("header_remarks") or ""

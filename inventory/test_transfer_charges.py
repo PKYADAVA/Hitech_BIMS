@@ -112,6 +112,10 @@ class TransferChargePostingTests(TestCase):
         cls.unloading = ChargeType.objects.get(name="Unloading")
         # Deliberately left unmapped — the "mapping not configured" test needs it.
 
+        cls.payable_ledger = ChartOfAccount.objects.filter(
+            company=cls.company, account_type__name="Liability", is_postable=True, is_group=False
+        ).order_by("code").first()
+
         cls.user = get_user_model().objects.create_superuser(
             username="tctester", password="x", email="tc@example.com")
 
@@ -214,3 +218,40 @@ class TransferChargePostingTests(TestCase):
             line=line, destination_farm=self.farm1, allocated_amount=Decimal("400"))
         problems = service.validate(header)
         self.assertTrue(any("does not equal" in p for p in problems))
+
+    def test_pay_later_credits_the_payable_ledger_not_cash(self):
+        header = self.make_header()
+        header.payment_mode = TransferChargeHeader.PAYMENT_MODE_PAY_LATER
+        header.payable_account = self.payable_ledger
+        header.payee_name = "Ramesh Transport"
+        header.save(update_fields=["payment_mode", "payable_account", "payee_name"])
+        TransferChargeLine.objects.create(
+            header=header, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        voucher = service.post(header, user=self.user)
+        self.assertEqual(voucher.voucher_type, "Journal")
+        credit_lines = [l for l in voucher.lines.all() if l.credit]
+        self.assertEqual(len(credit_lines), 1)
+        self.assertEqual(credit_lines[0].account_id, self.payable_ledger.id)
+        self.assertEqual(credit_lines[0].credit, Decimal("500"))
+
+    def test_pay_later_requires_a_payable_ledger(self):
+        header = self.make_header()
+        header.payment_mode = TransferChargeHeader.PAYMENT_MODE_PAY_LATER
+        header.payable_account = None
+        header.save(update_fields=["payment_mode", "payable_account"])
+        TransferChargeLine.objects.create(
+            header=header, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        problems = service.validate(header)
+        self.assertTrue(any("payable ledger" in p for p in problems))
+
+    def test_paid_now_requires_a_cash_bank_account(self):
+        header = self.make_header()
+        header.paid_from = None
+        header.save(update_fields=["paid_from"])
+        TransferChargeLine.objects.create(
+            header=header, charge_type=self.transport, charge_scope=TransferChargeLine.SCOPE_COMMON,
+            total_amount=Decimal("500"), allocation_method=TransferChargeLine.METHOD_EQUAL)
+        problems = service.validate(header)
+        self.assertTrue(any("Cash/Bank" in p for p in problems))

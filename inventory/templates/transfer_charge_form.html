@@ -133,12 +133,26 @@
         </div>
         <div class="col-md-6">
           <div class="text-muted small text-uppercase mb-2">Payment / Posting</div>
-          <label class="form-label">Paid From (Cash/Bank) <span class="text-danger">*</span></label>
-          <select class="form-select" id="paid-from">
-            <option value="">select</option>
-            {% for a in bank_cash_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
-          </select>
-          <div class="form-text">All charges in this transaction post from the same account.</div>
+          <div class="form-check"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-now" value="Paid Now" checked><label class="form-check-label" for="payment-mode-now">Paid Now</label></div>
+          <div class="form-check mb-2"><input class="form-check-input" type="radio" name="payment-mode" id="payment-mode-later" value="Pay Later"><label class="form-check-label" for="payment-mode-later">Pay Later</label></div>
+
+          <div id="payment-now-fields">
+            <label class="form-label">Paid From (Cash/Bank) <span class="text-danger">*</span></label>
+            <select class="form-select" id="paid-from">
+              <option value="">select</option>
+              {% for a in bank_cash_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div id="payment-later-fields" class="d-none">
+            <label class="form-label">Payable Ledger <span class="text-danger">*</span></label>
+            <select class="form-select mb-2" id="payable-account">
+              <option value="">select</option>
+              {% for a in payable_accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+            </select>
+            <label class="form-label">Payable To <span class="text-muted">(vehicle owner, transporter…)</span></label>
+            <input type="text" class="form-control" id="payee-name" placeholder="Who this is owed to">
+          </div>
+          <div class="form-text">All charges in this transaction post the same way.</div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Narration</label>
@@ -551,7 +565,10 @@ $(function () {
       charge_date: state.transfer ? state.transfer.date : null,
       stock_transfer_ids: state.transfer ? state.transfer.stock_transfer_ids : [],
       treatment: $('input[name="treatment"]:checked').val(),
+      payment_mode: $('input[name="payment-mode"]:checked').val(),
       paid_from: $("#paid-from").val() || null,
+      payable_account: $("#payable-account").val() || null,
+      payee_name: $("#payee-name").val(),
       narration: $("#narration").val(),
       header_remarks: $("#header-remarks").val(),
       action,
@@ -563,6 +580,12 @@ $(function () {
       })),
     };
   }
+
+  $('input[name="payment-mode"]').on("change", function () {
+    const later = $(this).val() === "Pay Later";
+    $("#payment-now-fields").toggleClass("d-none", later);
+    $("#payment-later-fields").toggleClass("d-none", !later);
+  });
 
   function save(action) {
     if (!state.transfer) { flash("Select a Stock Transfer first.", "danger"); return; }
@@ -601,7 +624,10 @@ $(function () {
         total_quantity: data.total_quantity, total_stock_value: data.total_stock_value,
       };
       $(`input[name="treatment"][value="${data.treatment}"]`).prop("checked", true);
+      $(`input[name="payment-mode"][value="${data.payment_mode}"]`).prop("checked", true).trigger("change");
       $("#paid-from").val(data.paid_from || "");
+      $("#payable-account").val(data.payable_account || "");
+      $("#payee-name").val(data.payee_name || "");
       $("#narration").val(data.narration || "");
       $("#header-remarks").val(data.header_remarks || "");
       renderSummary();

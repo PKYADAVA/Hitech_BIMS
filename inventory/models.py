@@ -1251,6 +1251,13 @@ class TransferChargeHeader(models.Model):
         (TREATMENT_CAPITALIZE, 'Add to Inventory Cost'),
     ]
 
+    PAYMENT_MODE_PAID_NOW = 'Paid Now'
+    PAYMENT_MODE_PAY_LATER = 'Pay Later'
+    PAYMENT_MODE_CHOICES = [
+        (PAYMENT_MODE_PAID_NOW, 'Paid Now'),
+        (PAYMENT_MODE_PAY_LATER, 'Pay Later'),
+    ]
+
     company = models.ForeignKey('account.CompanyProfile', on_delete=models.CASCADE,
                                 related_name='transfer_charges')
     charge_no = models.CharField(max_length=30, blank=True, editable=False, db_index=True,
@@ -1271,9 +1278,16 @@ class TransferChargeHeader(models.Model):
     total_other = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_charges = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default=PAYMENT_MODE_PAID_NOW,
+                                    help_text="Paid Now credits a Cash/Bank account; Pay Later credits a payable ledger")
     paid_from = models.ForeignKey('account.BankCashMaster', on_delete=models.PROTECT, null=True,
                                   blank=True, related_name='transfer_charges',
-                                  help_text="The cash/bank account the money left, where paid directly")
+                                  help_text="Paid Now only — the cash/bank account the money left")
+    payable_account = models.ForeignKey('account.ChartOfAccount', on_delete=models.PROTECT, null=True,
+                                        blank=True, related_name='transfer_charges_payable',
+                                        help_text="Pay Later only — the payable/liability ledger credited")
+    payee_name = models.CharField(max_length=150, blank=True,
+                                  help_text="Pay Later only — who this is owed to, as it should read on the voucher")
     cost_centre = models.ForeignKey('account.OrganizationCentre', on_delete=models.PROTECT,
                                     null=True, blank=True, related_name='transfer_charges')
 

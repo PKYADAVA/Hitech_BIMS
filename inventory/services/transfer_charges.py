@@ -29,6 +29,19 @@ def company():
     return profile
 
 
+def payable_accounts(profile=None):
+    """Liability ledgers a Transfer Charge can be credited to under Pay
+    Later — the same free choice of ledger Purchase uses for its own
+    pay_later purchases, rather than a ledger owned by a Party master."""
+    from account.models import ChartOfAccount
+
+    profile = profile or company()
+    return list(
+        ChartOfAccount.objects
+        .filter(company=profile, account_type__name="Liability", is_postable=True, status="Active")
+        .order_by("code").values("id", "code", "description"))
+
+
 def _round2(value):
     return Decimal(value).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
@@ -235,6 +248,11 @@ def validate(header):
         ledger = line.charge_type.ledger_for(header.treatment)
         if ledger is None:
             problems.append("Accounting mapping is not configured for this charge type.")
+    if header.payment_mode == header.PAYMENT_MODE_PAY_LATER:
+        if not header.payable_account_id:
+            problems.append("Select the payable ledger this is credited to under Pay Later.")
+    elif not header.paid_from_id:
+        problems.append("Select the Cash/Bank account the charges were paid from.")
     return problems
 
 
@@ -294,14 +312,19 @@ def post(header, user=None):
     if not rows:
         raise TransferChargeError("Nothing to post — every charge line is zero.")
 
-    if header.paid_from_id:
-        credit_ledger = ledger_for_bank_cash(header.paid_from)
+    if header.payment_mode == header.PAYMENT_MODE_PAY_LATER:
+        credit_ledger_id = header.payable_account_id
+        voucher_type = 'Journal'
     else:
+        credit_ledger_id = ledger_for_bank_cash(header.paid_from).pk if header.paid_from_id else None
+        voucher_type = 'Payment'
+    if not credit_ledger_id:
         raise TransferChargeError("Select the Cash/Bank account the charges were paid from.")
 
     rows.append({
-        'account': credit_ledger.pk, 'cost_center': centre, 'debit': 0,
-        'credit': sum((r['debit'] for r in rows), ZERO), 'narration': header.dc_no[:255],
+        'account': credit_ledger_id, 'cost_center': centre, 'debit': 0,
+        'credit': sum((r['debit'] for r in rows), ZERO),
+        'narration': (header.payee_name or header.dc_no)[:255],
     })
 
     narration = header.narration or compose_narration(header)
@@ -309,7 +332,7 @@ def post(header, user=None):
     try:
         voucher = journal.create_voucher(
             profile, header.charge_date, rows,
-            user=user, voucher_type='Payment', manual=False, system_generated=True,
+            user=user, voucher_type=voucher_type, manual=False, system_generated=True,
             reference=header.dc_no or header.charge_no,
             narration=narration, post=True,
         )
