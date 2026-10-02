@@ -148,6 +148,28 @@ window.fmtDate = function (value) {
   });
 };
 
+// ---------------------------------------------------------------------------
+// Every register sorts its Date column as plain text by default, and
+// fmtDate's own DD-MM-YYYY is exactly the format text-sorting gets wrong —
+// "02-10-2026" reads as earlier than "29-09-2026" because "0" < "2". A grid
+// with `order: [[0, "desc"]]` on a fmtDate'd column looked "almost sorted"
+// (right within a month, wrong across one) rather than obviously broken,
+// which is why it went unnoticed on page after page. Registered once, here,
+// rather than patched per grid: every table gets correct date ordering for
+// free, including ones that never think about sorting at all.
+// ---------------------------------------------------------------------------
+if (window.jQuery && jQuery.fn.dataTable) {
+  jQuery.fn.dataTable.ext.type.detect.unshift(function (data) {
+    return (typeof data === "string" && /^\d{2}-\d{2}-\d{4}$/.test(data.trim()))
+      ? "date-dd-mm-yyyy" : null;
+  });
+  jQuery.fn.dataTable.ext.type.order["date-dd-mm-yyyy-pre"] = function (data) {
+    if (!data) return 0;
+    const parts = String(data).trim().split("-");
+    return parseInt(parts[2] + parts[1] + parts[0], 10);
+  };
+}
+
 window.localDay = function (date) {
   const d = date ? new Date(date) : new Date();
   if (isNaN(d.getTime())) return "";
