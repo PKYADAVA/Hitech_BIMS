@@ -4,18 +4,57 @@ import { Platform } from "react-native";
 /**
  * API base URL resolution order:
  *   1. EXPO_PUBLIC_API_BASE_URL env var (set in .env or the shell)
- *   2. app.json -> expo.extra.apiBaseUrl
- *   3. localhost fallback (simulator only)
+ *   2. dev only: the Metro host's LAN address, port 8000 (see below)
+ *   3. app.json -> expo.extra.apiBaseUrl
+ *   4. localhost fallback (simulator only)
  *
- * On a physical device, localhost points at the phone itself — set
- * EXPO_PUBLIC_API_BASE_URL to your machine's LAN IP, e.g.
- *   EXPO_PUBLIC_API_BASE_URL=http://192.168.1.20:8000/api/v1
- * and add that host to Django's ALLOWED_HOSTS.
+ * Step 2 exists so development needs no hand-written address at all. Step 1
+ * stays ahead of it as a deliberate override — that is how a release build is
+ * pointed at production.
+ *
+ * On a physical device, localhost points at the phone itself. Setting
+ * EXPO_PUBLIC_API_BASE_URL to the machine's LAN IP also works, but it goes
+ * stale on the next DHCP lease; prefer leaving it unset in development.
+ * Whichever host ends up in play must be in Django's ALLOWED_HOSTS.
  */
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string };
 
+/** The Django dev server's port — the API lives beside Metro, not on it. */
+const DEV_API_PORT = 8000;
+
+/**
+ * The development API's origin, learned from Metro instead of configured.
+ *
+ * `hostUri` is the authority this bundle was downloaded from ("192.168.1.4:8081"),
+ * and is present only when @expo/cli served it. That host is by definition one
+ * the client could just reach — it is how the bundle arrived — so reusing it for
+ * the API tracks a changing LAN address for free.
+ *
+ * A hardcoded LAN IP instead breaks every time the machine joins a new network,
+ * and breaks invisibly: the app loads (the bundle came from Metro, which is
+ * reachable) and then fails every request against the old address, surfacing as
+ * a bare "network error" with no status to explain it.
+ *
+ * Returns null in a release build and anywhere hostUri is absent, so the
+ * configured URLs below still decide production.
+ */
+function devApiBaseUrl(): string | null {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (!__DEV__ || !hostUri) return null;
+
+  // hostUri is host[:port][/path] and never carries a scheme, so it cannot be
+  // handed to URL() directly. An IPv6 literal keeps its brackets: [::1]:8081.
+  const authority = hostUri.split("/")[0];
+  const host = authority.startsWith("[")
+    ? authority.slice(0, authority.indexOf("]") + 1)
+    : authority.split(":")[0];
+
+  return host ? `http://${host}:${DEV_API_PORT}/api/v1` : null;
+}
+
 const absoluteBaseUrl =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
+  devApiBaseUrl() ||
   extra.apiBaseUrl ||
   "http://localhost:8000/api/v1";
 

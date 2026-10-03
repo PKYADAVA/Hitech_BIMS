@@ -1,0 +1,847 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add Transfer Charges - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
+{% block content %}
+{% include '_inventory_transaction_subnavbar.html' with active_tab='transfer_charges' %}
+
+{% include 'transfer_charge_form_layout.html' %}
+
+<script id="tc-config" type="application/json">
+{
+  "chargeTypes": {{ charge_types_json|safe }},
+  "allocationMethods": {{ allocation_methods_json|safe }},
+  "pk": "{{ pk }}",
+  "today": "{{ today }}"
+}
+</script>
+
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const cfg = JSON.parse(document.getElementById("tc-config").textContent);
+  const CHARGE_TYPES = cfg.chargeTypes;
+  const ALLOC_METHODS = cfg.allocationMethods;
+
+  function refreshTxnNoPreview() {
+    if (cfg.pk) return; // an existing header already has its real charge_no
+    $.getJSON("{% url 'transfer_charge_next_number_preview' %}", { charge_date: $("#tc-charge-date").val() },
+      data => $("#tc-txn-no").text(data.preview));
+  }
+
+  if (!cfg.pk) {
+    $("#tc-charge-date").val(cfg.today);
+    refreshTxnNoPreview();
+  }
+  $("#tc-charge-date").on("change", refreshTxnNoPreview);
+
+  const state = {
+    id: cfg.pk || null,
+    transfers: [],    // picked Stock Transfer groups: [{dc_no, date, from_location, vehicle_no, driver_name, stock_transfer_ids, farms, farm_count, item_count, total_quantity, total_stock_value}]
+    lines: [],        // {charge_type, description, charge_scope, basis, total_amount, allocation_method, allocations: [{destination_farm, destination_farm_name, allocated_amount, remarks}]}
+    status: "Draft",
+  };
+
+  function money(n) { return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function ddmmyyyy(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return (y && m && d) ? `${d}-${m}-${y}` : iso;
+  }
+  function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function ctName(id) { const c = CHARGE_TYPES.find(c => c.id == id); return c ? c.name : ""; }
+
+  // Basis choices narrow by Charge Type, so the dropdown only shows what
+  // actually applies to that kind of charge instead of one long list for
+  // every row.
+  const BASIS_OPTIONS = {
+    "Transport": ["Fixed Amount", "Per Trip", "Per KM", "Per Quantity", "By Distance"],
+    "Loading": ["Fixed Amount", "Per Trip", "Per Quantity", "Per Bag"],
+    "Unloading": ["Fixed Amount", "Per Farm", "Per Quantity", "Per Bag"],
+    "Toll": ["Fixed Amount", "Per Trip"],
+    "Handling": ["Fixed Amount", "Per Quantity", "Per Bag", "Per Farm"],
+    "Weighment": ["Fixed Amount", "Per Trip", "Per Quantity"],
+    "Vehicle Hire": ["Fixed Amount", "Per Trip", "Per KM"],
+    "Labour": ["Fixed Amount", "Per Farm", "Per Quantity", "Per Bag"],
+    "Parking": ["Fixed Amount", "Per Trip", "Per Day"],
+    "Other": ["Fixed Amount", "Per Quantity", "Percentage"],
+  };
+  const DEFAULT_BASIS_OPTIONS = ["Fixed Amount", "Per Trip", "Per Quantity"];
+  function basisOptionsFor(chargeTypeId) {
+    return BASIS_OPTIONS[ctName(chargeTypeId)] || DEFAULT_BASIS_OPTIONS;
+  }
+
+  // Suggested wording per Charge Type -- a starting point, not a master:
+  // the field stays free text so a farm-specific description still fits.
+  const DESCRIPTION_SUGGESTIONS = {
+    "Transport": ["Primary Freight", "Secondary Freight", "Vehicle Freight", "Farm Delivery Freight", "Inter-Branch Transport"],
+    "Loading": ["Loading Labour", "Loading Charges", "Warehouse Loading"],
+    "Unloading": ["Farm Unloading", "Unloading Labour", "Farm Handling"],
+    "Toll": ["Toll Plaza", "Road Toll", "Entry Fee"],
+  };
+  function descriptionSuggestionsFor(chargeTypeId) {
+    return DESCRIPTION_SUGGESTIONS[ctName(chargeTypeId)] || [];
+  }
+  let flashTimer = null;
+  function flash(msg, type) {
+    clearTimeout(flashTimer);
+    $("#tc-status")
+      .removeClass("d-none alert-danger alert-success")
+      .addClass("alert-" + (type || "danger"));
+    $("#tc-status-msg").text(msg);
+    flashTimer = setTimeout(() => $("#tc-status").addClass("d-none"), 5000);
+  }
+
+  // ---------------------------------------------------------------- Step 1
+
+  let lastSearchRows = [];
+
+  function isPicked(dc, date) {
+    return state.transfers.some(t => t.dc_no === dc && t.date === date);
+  }
+
+  function runStockTransferSearch() {
+    const params = {};
+    const from = $("#st-from-date").val(), to = $("#st-to-date").val();
+    // Comma-separated DC numbers match any of them (OR), not one combined
+    // substring -- picking charges for several trips at once usually means
+    // searching for several specific DC numbers together.
+    const terms = $("#st-search").val().split(",").map(s => s.trim()).filter(Boolean);
+    if (from) params.from_date = from;
+    if (to) params.to_date = to;
+    if (terms.length) params.q = terms.join(",");
+    if (state.id) params.exclude_header = state.id;
+    $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", params, rows => {
+      lastSearchRows = rows;
+      renderStResultsTable();
+    });
+  }
+  let dcFilterTimer;
+  $("#st-search").on("input", function () {
+    clearTimeout(dcFilterTimer);
+    dcFilterTimer = setTimeout(runStockTransferSearch, 300);
+  });
+  $("#st-from-date, #st-to-date").on("change", runStockTransferSearch);
+
+  function renderStResultsTable() {
+    const body = $("#st-results-body").empty();
+    if (!lastSearchRows.length) {
+      body.append('<tr><td colspan="13" class="text-muted text-center py-3">No matching Stock Transfer in this range.</td></tr>');
+      $("#st-select-all").prop("checked", false);
+      return;
+    }
+    const joinOrCount = (list, unit) => !list || !list.length ? "—" :
+      (list.length === 1 ? escapeHtml(list[0]) : `${list.length} ${unit}`);
+    lastSearchRows.forEach((r, i) => {
+      const picked = isPicked(r.dc_no, r.date);
+      const trnumLabel = joinOrCount(r.trnums, "nos.");
+      const batchLabel = joinOrCount(r.batches, "batches");
+      const itemCodeLabel = joinOrCount(r.item_codes, "items");
+      const itemNameLabel = joinOrCount(r.item_names, "items");
+      const toLocationLabel = joinOrCount(r.to_locations, "locations");
+      const rowClasses = [picked ? "tc-st-row-picked" : "", r.already_charged ? "tc-st-row-charged" : ""].filter(Boolean).join(" ");
+      const chargedBadge = r.already_charged
+        ? `<br><span class="badge bg-warning text-dark tc-st-charged-badge" title="Already on ${escapeHtml(r.existing_charge_nos.join(', '))}">
+             <i class="fas fa-triangle-exclamation"></i> ${escapeHtml(r.existing_charge_nos.join(', '))}</span>` : "";
+      body.append(`<tr data-i="${i}" class="${rowClasses}">
+        <td><input type="checkbox" class="st-row-check" ${picked ? "checked" : ""}></td>
+        <td>${ddmmyyyy(r.date)}</td>
+        <td>${trnumLabel}</td>
+        <td><b>${escapeHtml(r.dc_no)}</b>${chargedBadge}</td>
+        <td class="tc-st-ellipsis" title="${escapeHtml(r.from_location || "")}">${escapeHtml(r.from_location || "—")}</td>
+        <td class="tc-st-ellipsis" title="${escapeHtml((r.item_codes || []).join(", "))}">${itemCodeLabel}</td>
+        <td class="tc-st-ellipsis" title="${escapeHtml((r.item_names || []).join(", "))}">${itemNameLabel}</td>
+        <td class="text-end">${money(r.total_quantity)}</td>
+        <td class="tc-st-ellipsis" title="${escapeHtml((r.to_locations || []).join(", "))}">${toLocationLabel}</td>
+        <td class="tc-st-ellipsis" title="${escapeHtml((r.batches || []).join(", "))}">${batchLabel}</td>
+        <td>${escapeHtml(r.vehicle_no || "—")}</td>
+        <td>${escapeHtml(r.driver_name || "—")}</td>
+        <td class="text-end">${r.farm_count}</td>
+      </tr>`);
+    });
+    $("#st-select-all").prop("checked", lastSearchRows.every(r => isPicked(r.dc_no, r.date)));
+  }
+
+  function toggleStRow(i, checked) {
+    const r = lastSearchRows[i];
+    if (!r) return;
+    if (checked && !isPicked(r.dc_no, r.date)) {
+      addStockTransferGroup(r.dc_no, r.date);
+    } else if (!checked && isPicked(r.dc_no, r.date)) {
+      const idx = state.transfers.findIndex(t => t.dc_no === r.dc_no && t.date === r.date);
+      if (idx > -1) { state.transfers.splice(idx, 1); renderSummary(); recomputeAll(); }
+    }
+  }
+
+  $("#st-results-body").on("change", ".st-row-check", function () {
+    const i = $(this).closest("tr").data("i");
+    toggleStRow(i, this.checked);
+    $(this).closest("tr").toggleClass("tc-st-row-picked", this.checked);
+    $("#st-select-all").prop("checked", lastSearchRows.every(r => isPicked(r.dc_no, r.date)));
+  });
+  $("#st-results-body").on("click", "tr", function (e) {
+    if ($(e.target).is("input,label")) return;
+    const cb = $(this).find(".st-row-check");
+    cb.prop("checked", !cb.prop("checked")).trigger("change");
+  });
+  $("#st-select-all").on("change", function () {
+    const checked = this.checked;
+    lastSearchRows.forEach((r, i) => toggleStRow(i, checked));
+    renderStResultsTable();
+  });
+
+  function addStockTransferGroup(dc, date) {
+    $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", { dc_no: dc, date }, data => {
+      state.transfers.push(data);
+      renderSummary();
+      if (!$("#narration").val().trim()) $("#narration").val(suggestNarration());
+      recomputeAll();
+    }).fail(() => flash("Could not find a Stock Transfer with that DC No. and date.", "danger"));
+  }
+
+  $(document).on("click", ".st-chip-remove", function () {
+    const i = $(this).closest(".tc-st-chip").data("i");
+    state.transfers.splice(i, 1);
+    renderSummary();
+    recomputeAll();
+    renderStResultsTable();
+  });
+
+  function suggestNarration() {
+    if (!state.transfers.length) return "";
+    const allFarms = aggregateFarms();
+    const names = allFarms.map(f => f.farm_name);
+    const to = names.length <= 1 ? (names[0] || "destination") :
+      names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+    const dcLabel = state.transfers.map(t => t.dc_no).join(", ");
+    return `Transfer charges for ${dcLabel} to ${to}.`;
+  }
+
+  // Merge farms/items/quantity/value across every picked Stock Transfer
+  // group, summing the same destination farm when it appears in more than
+  // one of them (e.g. two trips both dropping at the same farm).
+  function aggregateFarms() {
+    const byFarm = {};
+    const order = [];
+    state.transfers.forEach(t => (t.farms || []).forEach(f => {
+      if (!(f.farm_id in byFarm)) { byFarm[f.farm_id] = Object.assign({}, f); order.push(f.farm_id); }
+      else { byFarm[f.farm_id].quantity = Number(byFarm[f.farm_id].quantity) + Number(f.quantity); byFarm[f.farm_id].stock_value = Number(byFarm[f.farm_id].stock_value) + Number(f.stock_value); }
+    }));
+    return order.map(id => byFarm[id]);
+  }
+
+  function renderSummary() {
+    const list = state.transfers;
+    const chips = $("#st-picked").empty();
+    list.forEach((t, i) => chips.append(`<span class="tc-st-chip" data-i="${i}">
+      <b>${escapeHtml(t.dc_no)}</b> · ${ddmmyyyy(t.date)}
+      <button type="button" class="st-chip-remove" aria-label="Remove">&times;</button></span>`));
+
+    const dcLabel = list.map(t => t.dc_no).join(", ") || "—";
+    $("#tcs-costing-label").text(dcLabel);
+
+    if (!list.length) {
+      $("#st-readonly").addClass("d-none");
+      $("#tcs-costing-farms").text("0 farms");
+      return;
+    }
+    $("#st-readonly").removeClass("d-none");
+
+    const totalQty = list.reduce((s, t) => s + Number(t.total_quantity || 0), 0);
+    const items = list.reduce((s, t) => s + Number(t.item_count || 0), 0);
+    $("#summary-items").text(items);
+    $("#summary-quantity").text(money(totalQty));
+
+    const farms = aggregateFarms();
+    $("#summary-farms,#ro-farm-count").text(farms.length || 0);
+    $("#tcs-costing-farms").text(`${farms.length || 0} farm${farms.length === 1 ? "" : "s"}`);
+    const body = $("#farm-list-body").empty();
+    farms.forEach((f, i) => body.append(`<div class="tc-farm-chip">
+      <span><span class="badge ${i % 2 ? "bg-success" : "bg-primary"} me-1">${i + 1}</span>${escapeHtml(f.farm_name)}</span>
+      <b>${money(f.quantity)} Qty</b></div>`));
+  }
+
+  // ---------------------------------------------------------------- Step 2
+
+  function addLine(data) {
+    state.lines.push(Object.assign({
+      charge_type: "",
+      description: "", charge_scope: "Common", basis: "Fixed Amount",
+      total_amount: 0, allocation_method: "Equal", allocations: [],
+      // Basis-specific detail -- only the fields the chosen Basis actually
+      // needs are shown inline in the Rate/Amount cell, but all are kept on
+      // the line so switching Basis and back doesn't lose what was typed.
+      rate: 0, manual_qty: 0, base_amount: 0, percentage: 0,
+    }, data || {}));
+    renderLines();
+  }
+
+  // Which Basis values need the expandable detail panel (a rate times some
+  // quantity) vs. which are a single direct amount entered in the row.
+  const BASIS_NEEDS_DETAIL = new Set([
+    "Per KM", "By Distance", "Per Quantity", "Per Bag", "Per Bird", "Per Farm", "Percentage",
+  ]);
+
+  // The multiplier Per Quantity/Per Bag/Per Bird share: this system doesn't
+  // track bags or birds as units distinct from the transfer's own quantity,
+  // so all three read the same aggregated figure, just labelled to match
+  // what the Basis calls it.
+  function multiplierFor(line) {
+    const farms = aggregateFarms();
+    const totalQty = state.transfers.reduce((s, t) => s + Number(t.total_quantity || 0), 0);
+    switch (line.basis) {
+      case "Per KM": case "By Distance": case "Per Bag": case "Per Bird": return Number(line.manual_qty || 0);
+      case "Per Quantity": return totalQty;
+      case "Per Farm": return farms.length;
+      default: return 0;
+    }
+  }
+  function multiplierLabel(basis) {
+    return { "Per KM": "Distance (KM)", "By Distance": "Distance (KM)", "Per Quantity": "Transfer Quantity",
+      "Per Bag": "Number of Bags", "Per Bird": "Bird Quantity", "Per Farm": "Number of Destination Farms" }[basis] || "";
+  }
+  function rateLabel(basis) {
+    return { "Per KM": "Rate / KM", "By Distance": "Rate / KM", "Per Quantity": "Rate / Qty",
+      "Per Bag": "Rate / Bag", "Per Bird": "Rate / Bird", "Per Farm": "Rate / Farm" }[basis] || "Rate";
+  }
+  // The multiplier is auto-derived from the transfer (quantity, farm count)
+  // except Distance and Bag/Bird counts, which this system has no master
+  // for and so stay a manual entry on the line itself.
+  function multiplierIsManual(basis) {
+    return basis === "Per KM" || basis === "By Distance" || basis === "Per Bag" || basis === "Per Bird";
+  }
+
+  function calculatedTotal(line) {
+    if (line.basis === "Percentage") {
+      return Number(line.base_amount || 0) * Number(line.percentage || 0) / 100;
+    }
+    if (BASIS_NEEDS_DETAIL.has(line.basis)) {
+      return Number(line.rate || 0) * multiplierFor(line);
+    }
+    return Number(line.total_amount || 0);
+  }
+
+  function renderLines() {
+    const tbody = $("#lines-table tbody").empty();
+    state.lines.forEach((line, idx) => {
+      const typeOptions = `<option value="" ${line.charge_type ? "" : "selected"}>Select charge type</option>` +
+        CHARGE_TYPES.map(c => `<option value="${c.id}" ${c.id == line.charge_type ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+      const methodOptions = ALLOC_METHODS.map(m => `<option value="${m}" ${m === line.allocation_method ? "selected" : ""}>${m}</option>`).join("");
+      const isCommon = line.charge_scope === "Common";
+      tbody.append(`<tr data-idx="${idx}">
+        <td>${idx + 1}</td>
+        <td><select class="form-select form-select-sm line-charge-type">${typeOptions}</select></td>
+        <td><input type="text" class="form-control form-control-sm line-description" list="desc-suggest-${idx}" value="${escapeHtml(line.description)}">
+          <datalist id="desc-suggest-${idx}">${descriptionSuggestionsFor(line.charge_type).map(s => `<option value="${escapeHtml(s)}">`).join("")}</datalist></td>
+        <td><div class="tc-scope-toggle"><label><input type="radio" class="line-scope" name="scope-${idx}" value="Common" ${isCommon ? "checked" : ""}> Common</label><label><input type="radio" class="line-scope" name="scope-${idx}" value="Farm-wise" ${!isCommon ? "checked" : ""}> Farm-wise</label></div></td>
+        <td>${(() => {
+          const opts = basisOptionsFor(line.charge_type);
+          const current = line.basis || "Fixed Amount";
+          const list = opts.includes(current) ? opts : [current, ...opts];
+          return `<select class="form-select form-select-sm line-basis">${list.map(o =>
+            `<option value="${escapeHtml(o)}" ${o === current ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select>`;
+        })()}</td>
+        <td>${(() => {
+          if (!isCommon) return '<span class="text-muted">—</span>';
+          if (!BASIS_NEEDS_DETAIL.has(line.basis)) {
+            // Fixed Amount / Per Trip: the row IS the whole charge, no
+            // extra fields needed -- a single direct amount.
+            return `<input type="number" step="0.01" class="form-control form-control-sm line-amount" value="${line.total_amount}">`;
+          }
+          return renderInlineRateFields(line);
+        })()}</td>
+        <td>${isCommon
+          ? `<select class="form-select form-select-sm line-method">${methodOptions}</select>`
+          : `<span class="text-muted small">Manual (per farm)</span>`}</td>
+        <td><div class="d-flex gap-1">${idx === state.lines.length - 1
+          ? `<button type="button" class="btn btn-sm btn-primary add-line-inline" title="Add Charge"><i class="fas fa-plus"></i></button>` : ""}
+          <button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="fas fa-trash"></i></button></div></td>
+      </tr>`);
+    });
+    recomputeAll();
+  }
+
+  // Rate + multiplier fields directly in the Rate/Amount cell, two small
+  // inputs side by side plus the calculated total -- replaces the earlier
+  // expand/collapse detail panel per request, so the row carries everything
+  // itself instead of a separate block below it.
+  function renderInlineRateFields(line) {
+    const basis = line.basis;
+    let fieldsHtml;
+    if (basis === "Percentage") {
+      fieldsHtml = `
+        <div class="tc-inline-rate-field"><label>Percentage (%)</label><input type="number" step="0.01" class="form-control form-control-sm detail-percentage" value="${line.percentage}"></div>
+        <div class="tc-inline-rate-field"><label>Base Amount (₹)</label><input type="number" step="0.01" class="form-control form-control-sm detail-base-amount" value="${line.base_amount}"></div>`;
+    } else {
+      const manual = multiplierIsManual(basis);
+      const multiplierValue = manual ? line.manual_qty : multiplierFor(line);
+      fieldsHtml = `
+        <div class="tc-inline-rate-field"><label>${rateLabel(basis)} (₹)</label><input type="number" step="0.01" class="form-control form-control-sm detail-rate" value="${line.rate}"></div>
+        <div class="tc-inline-rate-field"><label>${multiplierLabel(basis)}</label><input type="number" step="0.01" class="form-control form-control-sm detail-manual-qty" value="${multiplierValue}" ${manual ? "" : "readonly"}></div>`;
+    }
+    return `<div class="tc-inline-rate">
+      <div class="tc-inline-rate-fields">${fieldsHtml}</div>
+      <div class="tc-inline-rate-total">₹${money(calculatedTotal(line))}</div>
+    </div>`;
+  }
+
+  $("#lines-table").on("click", ".add-line-inline", () => addLine());
+  $("#clear-charges-btn").on("click", () => { if (confirm("Remove all charge lines?")) { state.lines = []; renderLines(); } });
+
+  $("#lines-table").on("click", ".remove-line", function () {
+    const idx = $(this).closest("tr").data("idx");
+    state.lines.splice(idx, 1);
+    renderLines();
+  });
+  $("#lines-table").on("change", ".line-charge-type", function () {
+    const line = state.lines[$(this).closest("tr").data("idx")];
+    line.charge_type = $(this).val();
+    // Basis choices are specific to the charge type; a value that applied to
+    // the old type (e.g. "Per KM" for Transport) rarely makes sense for the
+    // new one, so it resets to that type's first/default option.
+    line.basis = basisOptionsFor(line.charge_type)[0];
+    renderLines();
+  });
+  $("#lines-table").on("input", ".line-description", function () {
+    state.lines[$(this).closest("tr").data("idx")].description = $(this).val();
+  });
+  $("#lines-table").on("change", ".line-basis", function () {
+    const line = state.lines[$(this).closest("tr").data("idx")];
+    line.basis = $(this).val();
+    syncCalculatedAmount(line);
+    renderLines();
+  });
+  function syncCalculatedAmount(line) {
+    if (BASIS_NEEDS_DETAIL.has(line.basis)) line.total_amount = calculatedTotal(line);
+  }
+  // Updates the calculated total in place rather than a full renderLines(),
+  // which would rebuild the inputs and steal focus mid-keystroke -- same
+  // reasoning as the farm-wise allocation card's own live total.
+  function updateDetailTotal(idx, line) {
+    syncCalculatedAmount(line);
+    $(`#lines-table tbody tr[data-idx="${idx}"] .tc-inline-rate-total`).text(`₹${money(calculatedTotal(line))}`);
+    recomputeAll();
+  }
+  $("#lines-table").on("input", ".detail-rate", function () {
+    const idx = $(this).closest("tr").data("idx"), line = state.lines[idx];
+    line.rate = Number($(this).val() || 0);
+    updateDetailTotal(idx, line);
+  });
+  $("#lines-table").on("input", ".detail-manual-qty", function () {
+    const idx = $(this).closest("tr").data("idx"), line = state.lines[idx];
+    line.manual_qty = Number($(this).val() || 0);
+    updateDetailTotal(idx, line);
+  });
+  $("#lines-table").on("input", ".detail-percentage", function () {
+    const idx = $(this).closest("tr").data("idx"), line = state.lines[idx];
+    line.percentage = Number($(this).val() || 0);
+    updateDetailTotal(idx, line);
+  });
+  $("#lines-table").on("input", ".detail-base-amount", function () {
+    const idx = $(this).closest("tr").data("idx"), line = state.lines[idx];
+    line.base_amount = Number($(this).val() || 0);
+    updateDetailTotal(idx, line);
+  });
+  $("#lines-table").on("change", ".line-scope", function () {
+    state.lines[$(this).closest("tr").data("idx")].charge_scope = $(this).val();
+    renderLines();
+  });
+  $("#lines-table").on("input", ".line-amount", function () {
+    state.lines[$(this).closest("tr").data("idx")].total_amount = Number($(this).val() || 0);
+    recomputeAll();
+  });
+  $("#lines-table").on("change", ".line-method", function () {
+    state.lines[$(this).closest("tr").data("idx")].allocation_method = $(this).val();
+    recomputeAll();
+  });
+  // Farm-wise amounts are entered in the allocation card (Step 3), not the
+  // charge table — the table isn't wide enough for a credible per-farm
+  // amount + remarks entry once there's more than a couple of farms.
+  $("#alloc-panels").on("input", ".farm-amount, .farm-remarks", function () {
+    const idx = $(this).closest(".tc-alloc-card").data("line");
+    const farmId = $(this).data("farm");
+    const line = state.lines[idx];
+    let alloc = line.allocations.find(a => a.destination_farm == farmId);
+    if (!alloc) { alloc = { destination_farm: farmId, allocated_amount: 0, remarks: "" }; line.allocations.push(alloc); }
+    if ($(this).hasClass("farm-amount")) alloc.allocated_amount = Number($(this).val() || 0);
+    else alloc.remarks = $(this).val();
+    renderSummaryPanel();
+    renderFinalCost();
+    renderFarmWiseCardTotals(idx);
+  });
+
+  // ------------------------------------------------------- Step 3 & summary
+
+  function lineTotal(line) {
+    if (line.charge_scope === "Farm-wise") {
+      return line.allocations.reduce((s, a) => s + Number(a.allocated_amount || 0), 0);
+    }
+    return Number(line.total_amount || 0);
+  }
+
+  function recomputeAll() {
+    renderAllocationPreview();
+    renderSummaryPanel();
+    renderFinalCost();
+  }
+
+  // One look per charge kind, so a row of cards reads at a glance instead
+  // of everything being the same grey box. Unlisted/custom charge types
+  // fall back to the neutral "Other" styling.
+  const CARD_STYLES = {
+    "Transport": { icon: "fa-truck", color: "#0875ee", bg: "#eaf3ff" },
+    "Loading": { icon: "fa-people-carry-box", color: "#e07b1f", bg: "#fff4e8" },
+    "Unloading": { icon: "fa-dolly", color: "#e0457b", bg: "#fdeaf1" },
+    "Toll": { icon: "fa-coins", color: "#754cff", bg: "#f2edff" },
+    "Handling": { icon: "fa-hand-holding-box", color: "#0b9488", bg: "#e6f8f6" },
+    "Weighment": { icon: "fa-weight-scale", color: "#b3771f", bg: "#fbf3e4" },
+    "Vehicle Hire": { icon: "fa-truck-moving", color: "#2a6fd6", bg: "#eaf1fd" },
+    "Other": { icon: "fa-receipt", color: "#5a6b85", bg: "#f1f3f6" },
+  };
+  function cardStyle(name) { return CARD_STYLES[name] || CARD_STYLES["Other"]; }
+
+  function renderAllocationPreview() {
+    const panels = $("#alloc-panels").empty();
+    const chips = $("#alloc-chips").empty();
+    if (!state.lines.length) { $("#allocation-card").addClass("d-none"); return; }
+    $("#allocation-card").removeClass("d-none");
+
+    // Compact cards, every charge visible at once — not tabs a user has to
+    // click through one at a time to see how the whole transaction splits.
+    state.lines.forEach((line, idx) => {
+      const name = ctName(line.charge_type) || "Charge";
+      const style = cardStyle(name);
+      const cardId = `alloc-card-${idx}`;
+      chips.append(`<button type="button" class="tc-alloc-chip" style="border-color:${style.color};color:${style.color}"
+        data-target="${cardId}"><i class="fas ${style.icon} me-1"></i>${escapeHtml(name)}</button>`);
+      const col = $(`<div class="col-md-6"></div>`);
+      const card = $(`<div class="border rounded h-100 tc-alloc-card" id="${cardId}" data-line="${idx}" style="border-color:${style.bg} !important">
+        <div class="px-3 py-2 fw-bold d-flex align-items-center gap-2" style="background:${style.bg};border-bottom:1px solid ${style.bg}">
+          <span class="d-inline-flex align-items-center justify-content-center rounded-circle" style="width:26px;height:26px;background:${style.color};color:#fff;flex:none"><i class="fas ${style.icon}" style="font-size:12px"></i></span>
+          <span style="color:${style.color}">${escapeHtml(name)}</span>
+          <span class="badge bg-white border fw-normal ms-auto" style="color:${style.color};border-color:${style.color}!important">${line.charge_scope}${line.charge_scope === "Common" ? " • " + line.allocation_method : ""}</span>
+        </div>
+        <div class="p-2"></div>
+      </div>`);
+      const panel = card.find("div.p-2");
+      col.append(card);
+      panels.append(col);
+
+      if (line.charge_scope === "Farm-wise") {
+        const farms = aggregateFarms();
+        const rows = farms.map((f, i) => {
+          const a = line.allocations.find(a => a.destination_farm == f.farm_id);
+          const amt = a ? a.allocated_amount : 0;
+          const remarks = a ? (a.remarks || "") : "";
+          return `<tr><td>${i + 1}</td><td>${escapeHtml(f.farm_name)}</td>
+            <td class="text-end">${money(f.quantity)}</td>
+            <td class="text-end">${money(f.stock_value)}</td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm farm-amount" data-farm="${f.farm_id}" value="${amt}"></td>
+            <td><input type="text" class="form-control form-control-sm farm-remarks" data-farm="${f.farm_id}" placeholder="Remarks" value="${escapeHtml(remarks)}"></td></tr>`;
+        }).join("") || `<tr><td colspan="6" class="text-muted small">Select a Stock Transfer first.</td></tr>`;
+        panel.html(`<table class="table table-sm mb-0"><thead><tr><th>#</th><th>Farm</th><th class="text-end">Quantity</th><th class="text-end">Stock Value</th><th>Charge Amount (₹)</th><th>Remarks</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr class="fw-bold alloc-card-total"><td colspan="4">Total</td><td>${money(lineTotal(line))}</td><td></td></tr></tfoot></table>`);
+      } else if (!aggregateFarms().length) {
+        panel.html('<p class="text-muted">Select a Stock Transfer first.</p>');
+      } else if (aggregateFarms().length === 1) {
+        const f = aggregateFarms()[0];
+        panel.html(`<table class="table table-sm"><thead><tr><th>#</th><th>Farm</th><th class="text-end">Qty</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
+          <tbody><tr><td>1</td><td>${escapeHtml(f.farm_name)}</td><td class="text-end">${money(f.quantity)}</td><td class="text-end">100%</td><td class="text-end">${money(line.total_amount)}</td></tr></tbody>
+          <tfoot><tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(f.quantity)}</td><td class="text-end">100%</td><td class="text-end">${money(line.total_amount)}</td></tr></tfoot></table>`);
+      } else {
+        $.ajax({
+          url: "{% url 'transfer_charge_allocate_preview' %}", method: "POST", async: false,
+          contentType: "application/json", headers: { "X-CSRFToken": csrfToken },
+          data: JSON.stringify({
+            farms: aggregateFarms().map(f => ({ farm_id: f.farm_id, farm_name: f.farm_name, quantity: f.quantity, stock_value: f.stock_value })),
+            total_amount: line.total_amount, allocation_method: line.allocation_method,
+          }),
+        }).done(resp => {
+          line._previewRows = resp.rows;
+          const basisLabel = line.allocation_method === "By Stock Value" ? "Stock Value" : (line.allocation_method === "By Distance" ? "Distance" : "Qty");
+          const basisKey = line.allocation_method === "By Stock Value" ? "stock_value_basis" : (line.allocation_method === "By Distance" ? "distance_basis" : "quantity_basis");
+          const basisTotal = aggregateFarms().reduce((sum, f) => sum + Number(line.allocation_method === "By Stock Value" ? f.stock_value : (line.allocation_method === "By Distance" ? (f.distance || 0) : f.quantity) || 0), 0);
+          const rows = resp.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.farm_name)}</td><td class="text-end">${money(r[basisKey])}</td><td class="text-end">${r.percentage}%</td><td class="text-end">${money(r.allocated_amount)}</td></tr>`).join("");
+          panel.html(`<table class="table table-sm"><thead><tr><th>#</th><th>Farm</th><th class="text-end">${basisLabel}</th><th class="text-end">% Share</th><th class="text-end">Allocated (₹)</th></tr></thead>
+            <tbody>${rows}</tbody><tfoot><tr class="fw-bold"><td colspan="2">Total</td><td class="text-end">${money(basisTotal)}</td><td>100%</td><td class="text-end">${money(resp.total)}</td></tr></tfoot></table>`);
+        });
+      }
+    });
+  }
+
+  $(document).on("click", ".tc-alloc-chip", function () {
+    const target = document.getElementById($(this).data("target"));
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  // Updates just one card's own Total line in place — a full
+  // renderAllocationPreview() on every keystroke would rebuild the inputs
+  // and throw away whatever the person is mid-typing.
+  function renderFarmWiseCardTotals(idx) {
+    const line = state.lines[idx];
+    if (!line) return;
+    $(`#alloc-card-${idx} .alloc-card-total td:nth-child(2)`).text(money(lineTotal(line)));
+  }
+
+  function renderSummaryPanel() {
+    const buckets = { Transport: 0, Loading: 0, Unloading: 0 };
+    let other = 0, total = 0;
+    state.lines.forEach(line => {
+      const amt = lineTotal(line);
+      const name = ctName(line.charge_type);
+      total += amt;
+      if (name === "Transport") buckets.Transport += amt;
+      else if (name === "Loading") buckets.Loading += amt;
+      else if (name === "Unloading") buckets.Unloading += amt;
+      else other += amt;
+    });
+    $("#tcs-transport").text(money(buckets.Transport));
+    $("#tcs-loading").text(money(buckets.Loading));
+    $("#tcs-unloading").text(money(buckets.Unloading));
+    $("#tcs-other").text(money(other));
+    $("#tcs-total").text(money(total));
+    const farms = aggregateFarms().length;
+    $("#tcs-farms").text(farms);
+    $("#tcs-charges-repeat").text(money(total));
+    $("#tcs-totalcost").text(money(total));
+  }
+
+  function renderFinalCost() {
+    const farmsForCost = aggregateFarms();
+    if (!farmsForCost.length || !state.lines.length) {
+      $("#final-cost-card").addClass("d-none"); return;
+    }
+    $("#final-cost-card").removeClass("d-none");
+    const chargeTypeNames = [...new Set(state.lines.map(l => ctName(l.charge_type)))];
+    const head = $("#final-cost-head").empty();
+    head.append("<th>#</th><th>Farm</th>");
+    chargeTypeNames.forEach(n => head.append(`<th class="text-end">${escapeHtml(n)}</th>`));
+    head.append("<th class='text-end'>Total Charges</th>");
+
+    const body = $("#final-cost-body").empty();
+    let grandCharges = 0;
+    const perTypeTotals = {};
+    farmsForCost.forEach((f, i) => {
+      let farmCharges = 0;
+      const cells = chargeTypeNames.map(name => {
+        let amt = 0;
+        state.lines.filter(l => ctName(l.charge_type) === name).forEach(line => {
+          if (line.charge_scope === "Farm-wise") {
+            const a = line.allocations.find(a => a.destination_farm == f.farm_id);
+            amt += a ? Number(a.allocated_amount || 0) : 0;
+          } else if (farmsForCost.length === 1) {
+            amt += Number(line.total_amount || 0);
+          } else {
+            const rows = line._previewRows || [];
+            const r = rows.find(r => r.farm_id == f.farm_id);
+            amt += r ? Number(r.allocated_amount || 0) : 0;
+          }
+        });
+        perTypeTotals[name] = (perTypeTotals[name] || 0) + amt;
+        farmCharges += amt;
+        return amt;
+      });
+      grandCharges += farmCharges;
+      body.append(`<tr><td>${i + 1}</td><td>${escapeHtml(f.farm_name)}</td>
+        ${cells.map(c => `<td class="text-end">${money(c)}</td>`).join("")}
+        <td class="text-end fw-bold">${money(farmCharges)}</td></tr>`);
+    });
+    body.append(`<tr class="fw-bold"><td colspan="2">Total</td>
+      ${chargeTypeNames.map(n => `<td class="text-end">${money(perTypeTotals[n] || 0)}</td>`).join("")}
+      <td class="text-end">${money(grandCharges)}</td></tr>`);
+  }
+
+  // ------------------------------------------------------------ Attachments
+
+  const IMAGE_TYPES = ["jpg", "jpeg", "png", "gif", "webp"];
+  function renderAttachments(list) {
+    const wrap = $("#attachment-list").empty();
+    (list || []).forEach(a => {
+      const isImage = IMAGE_TYPES.includes((a.file_type || "").toLowerCase());
+      const preview = isImage
+        ? `<img src="${a.url}" alt="${escapeHtml(a.file_name)}" class="tc-attachment-thumb">`
+        : `<span class="tc-attachment-thumb tc-attachment-thumb-file"><i class="fas fa-file"></i></span>`;
+      wrap.append(`<div class="tc-attachment-card">
+        <a href="${a.url}" target="_blank">${preview}</a>
+        <div class="d-flex align-items-center gap-1">
+          <a href="${a.url}" target="_blank" class="text-truncate small">${escapeHtml(a.file_name)}</a>
+          <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-auto remove-attachment" data-id="${a.id}"><i class="fas fa-times"></i></button>
+        </div>
+      </div>`);
+    });
+  }
+  function uploadAttachments(input) {
+    const fd = new FormData();
+    [...input.files].forEach(f => fd.append("files", f));
+    $.ajax({
+      url: `/transfer-charges/${state.id}/attachments/`, method: "POST",
+      data: fd, processData: false, contentType: false, headers: { "X-CSRFToken": csrfToken },
+    }).done(resp => {
+      $.getJSON(`/transfer-charges/${state.id}/attachments/`, d => renderAttachments(d.attachments));
+      if (resp.refused && resp.refused.length) flash(resp.refused.join(" "), "danger");
+    }).fail(xhr => {
+      const refused = xhr.responseJSON?.refused;
+      flash((refused && refused.join(" ")) || xhr.responseJSON?.error || "Upload failed.", "danger");
+    });
+  }
+
+  $("#attachment-input").on("change", function () {
+    const input = this;
+    if (state.id) { uploadAttachments(input); return; }
+    // No draft saved yet -- save one silently first, then attach, so
+    // picking a file doesn't force a separate manual "Save Draft" step.
+    if (!state.transfers.length || !state.lines.length) {
+      flash("Select a Stock Transfer and add a charge line first, then attach bills.", "danger");
+      input.value = "";
+      return;
+    }
+    // main.js stamps every jQuery AJAX write with a page-wide Idempotency-Key
+    // tied to the last-clicked element, retired only once site-wide
+    // ajaxComplete fires -- which runs after this save's own .done(). Calling
+    // uploadAttachments() synchronously here would still carry the save's
+    // now-spent key and get replayed its response instead of actually
+    // uploading. Deferring one tick lets that global retirement happen first.
+    save("draft", false, () => setTimeout(() => uploadAttachments(input), 0));
+  });
+  $("#attachment-list").on("click", ".remove-attachment", function () {
+    const attId = $(this).data("id");
+    $.ajax({ url: `/transfer-charges/${state.id}/attachments/${attId}/`, method: "DELETE",
+            headers: { "X-CSRFToken": csrfToken } })
+      .done(() => $.getJSON(`/transfer-charges/${state.id}/attachments/`, d => renderAttachments(d.attachments)));
+  });
+
+  // ------------------------------------------------------------------ Save
+
+  function payload(action, allowDuplicate) {
+    return {
+      dc_no: state.transfers.map(t => t.dc_no).join(", "),
+      charge_date: $("#tc-charge-date").val() || null,
+      stock_transfer_ids: state.transfers.flatMap(t => t.stock_transfer_ids),
+      treatment: $('input[name="treatment"]:checked').val(),
+      payment_mode: $('input[name="payment-mode"]:checked').val(),
+      paid_from: $("#paid-from").val() || null,
+      payable_account: $("#payable-account").val() || null,
+      payee_name: $("#payee-name").val(),
+      narration: $("#narration").val(),
+      header_remarks: $("#header-remarks").val(),
+      action,
+      allow_duplicate: !!allowDuplicate,
+      lines: state.lines.map(line => ({
+        charge_type: line.charge_type, description: line.description,
+        charge_scope: line.charge_scope, basis: line.basis,
+        total_amount: line.total_amount, allocation_method: line.allocation_method,
+        allocations: line.allocations,
+      })),
+    };
+  }
+
+  $('input[name="payment-mode"]').on("change", function () {
+    const later = $(this).val() === "Pay Later";
+    $("#payment-now-fields").toggleClass("d-none", later);
+    $("#payment-later-fields").toggleClass("d-none", !later);
+    $("#payee-name-label").text(later ? "Payable To" : "Paid To");
+    $("#payee-name").attr("placeholder", later
+      ? "Who this is owed to" : "Who this was paid to (vendor, transporter, etc.)");
+  });
+
+  function save(action, allowDuplicate, onDone) {
+    if (!state.transfers.length) { flash("Select at least one Stock Transfer first.", "danger"); return; }
+    if (!state.lines.length) { flash("Add at least one charge line.", "danger"); return; }
+    const url = state.id ? `/transfer_charge_api/${state.id}/` : "{% url 'transfer_charge_api_list' %}";
+    const method = state.id ? "PUT" : "POST";
+    $.ajax({
+      url, method, contentType: "application/json", data: JSON.stringify(payload(action, allowDuplicate)),
+      headers: { "X-CSRFToken": csrfToken },
+    }).done(data => {
+      state.id = data.id;
+      state.status = data.status;
+      $("#tc-txn-no").text(data.charge_no);
+      flash(action === "post" ? `Posted as ${data.charge_no}.` : `Saved as draft ${data.charge_no}.`, "success");
+      $("#attachment-hint").text(state.status === "Posted" ? "Posted — attachments are read-only." : "Attach bills, Bilty/LR, toll receipts or photos.");
+      if (state.status === "Posted") { $("#save-draft-btn,#save-post-btn,#save-draft-bottom,#save-post-bottom").prop("disabled", true); }
+      renderAttachments(data.attachments);
+      if (onDone) onDone();
+    }).fail(xhr => {
+      const body = xhr.responseJSON;
+      if (body?.duplicate && confirm(`${body.error}\n\nPost anyway?`)) {
+        // A failed post still saves the header as a draft, so the retry
+        // must PUT against that same id -- POSTing again would silently
+        // leave the first attempt behind as an orphan draft.
+        if (body.id) state.id = body.id;
+        save(action, true, onDone);
+        return;
+      }
+      flash(body?.error || "Could not save.", "danger");
+    });
+  }
+
+  $("#save-draft-btn,#save-draft-bottom").on("click", () => save("draft"));
+  $("#save-post-btn,#save-post-bottom").on("click", () => {
+    if (!confirm("Save & Post? Once posted this Transfer Charge cannot be edited.")) return;
+    save("post");
+  });
+
+  // ----------------------------------------------------------- Edit/view load
+
+  function loadExisting(id) {
+    $.getJSON(`/transfer_charge_api/${id}/`, data => {
+      state.id = data.id; state.status = data.status;
+      $("#tc-txn-no").text(data.charge_no);
+      $("#tc-charge-date").val(data.charge_date);
+      $(`input[name="treatment"][value="${data.treatment}"]`).prop("checked", true);
+      $(`input[name="payment-mode"][value="${data.payment_mode}"]`).prop("checked", true).trigger("change");
+      $("#paid-from").val(data.paid_from || "");
+      $("#payable-account").val(data.payable_account || "");
+      $("#payee-name").val(data.payee_name || "");
+      $("#narration").val(data.narration || "");
+      $("#header-remarks").val(data.header_remarks || "");
+
+      const idsParam = (data.stock_transfer_ids || []).join(",");
+      const loadLines = () => {
+        state.lines = data.lines.map(l => ({
+          charge_type: l.charge_type, description: l.description, charge_scope: l.charge_scope,
+          basis: l.basis, total_amount: l.total_amount, allocation_method: l.allocation_method,
+          allocations: l.allocations.map(a => ({ destination_farm: a.destination_farm, allocated_amount: a.allocated_amount, remarks: a.remarks })),
+        }));
+        renderLines();
+        renderAttachments(data.attachments);
+        if (data.status !== "Draft" && data.status !== "Pending Approval") {
+          $("#save-draft-btn,#save-post-btn,#save-draft-bottom,#save-post-bottom").prop("disabled", true);
+          $("input,select,textarea,button").not("#save-draft-btn,#save-post-btn").prop("disabled", true);
+          flash(`${data.charge_no} is ${data.status} and is read-only.`, "success");
+        }
+      };
+
+      // Re-expand the saved ids back into their original (dc_no, date)
+      // groups so the picked chips match what was actually selected,
+      // instead of collapsing everything into one merged group.
+      if (idsParam) {
+        $.getJSON("{% url 'transfer_charge_stock_transfer_lookup' %}", { ids: idsParam }, groups => {
+          state.transfers = groups;
+          renderSummary();
+          loadLines();
+        }).fail(loadLines);
+      } else {
+        loadLines();
+      }
+    });
+  }
+
+  $("#tcs-jump-step1").on("click", () => document.getElementById("step1").scrollIntoView({ behavior: "smooth" }));
+
+  if (state.id) {
+    loadExisting(state.id);
+  } else {
+    // Default to the last 7 days; the user can widen the range from here.
+    const today = cfg.today ? new Date(cfg.today) : new Date();
+    const past = new Date(today); past.setDate(past.getDate() - 7);
+    $("#st-to-date").val(today.toISOString().slice(0, 10));
+    $("#st-from-date").val(past.toISOString().slice(0, 10));
+    runStockTransferSearch();
+    addLine(); // start with one charge line ready to fill in, Charge Type pre-selected
+  }
+});
+</script>
+{% endblock %}

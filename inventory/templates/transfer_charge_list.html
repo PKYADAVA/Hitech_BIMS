@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Transfer Charges - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
+{% block content %}
+{% include '_inventory_transaction_subnavbar.html' with active_tab='transfer_charges' %}
+
+<style>
+  .tc-list-thumbs { display:flex;align-items:center;gap:3px; }
+  .tc-list-thumb { width:28px;height:28px;border-radius:5px;object-fit:cover;border:1px solid #e0eaf5;background:#f2f6fb;display:block; }
+  .tc-list-thumb-file { display:grid;place-items:center;color:#8a93a6;font-size:12px; }
+  .tc-list-thumb-more { font-size:10.5px;color:#52627d;font-weight:600;margin-left:1px; }
+</style>
+
+<div class="ds">
+
+<input type="file" id="tc-attach-files" multiple accept=".pdf,.jpg,.jpeg,.png" class="d-none">
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="ds-page-title"><i class="fas fa-truck-ramp-box text-primary"></i> Transfer Charges</h1>
+    <p class="ds-subtitle">Transport, loading, unloading and other costs recorded against a Stock Transfer</p>
+  </div>
+  <div class="ms-auto">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'transfer_charge_add' %}"><i class="fas fa-plus"></i> Add Transfer Charges</a>{% endif %}
+  </div>
+</div>
+
+<div class="ds-card mb-3">
+  <div class="ds-card-body">
+    <div class="ds-section-title mb-3">Filters</div>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Transfer No. (DC)</label>
+        <input type="text" class="form-control" id="dc-no" placeholder="DC No.">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" id="branch">
+          <option value="">-All-</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Destination Farm</label>
+        <select class="form-select" id="farm">
+          <option value="">-All-</option>
+          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Charge Type</label>
+        <select class="form-select" id="charge-type">
+          <option value="">-All-</option>
+          {% for c in charge_types %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Vehicle No.</label>
+        <input type="text" class="form-control" id="vehicle" placeholder="Vehicle No.">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Charge Scope</label>
+        <select class="form-select" id="charge-scope">
+          <option value="">-All-</option>
+          <option value="Common">Common / Fixed</option>
+          <option value="Farm-wise">Farm-wise</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="status">
+          <option value="">-All-</option>
+          {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="filter-clear">Reset</button>
+        <button class="btn btn-primary" id="filter-submit"><i class="fas fa-search"></i> Search</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ds-card">
+  <div class="ds-card-body flush">
+    <div class="ds-grid-wrap">
+      <table class="table ds-grid" id="tc-table">
+        <thead>
+          <tr>
+            <th class="ds-mid w-code">Charge No.</th>
+            <th class="w-code">Date</th>
+            <th class="w-code">Transfer No.</th>
+            <th class="w-farm">From Location</th>
+            <th class="w-farm">Destination Farm(s)</th>
+            <th class="w-code">Vehicle</th>
+            <th class="w-item">Charge Types</th>
+            <th class="w-code">Scope</th>
+            <th class="w-code">Attachments</th>
+            <th class="ds-num w-qty">Total Charges</th>
+            <th class="ds-mid w-code">Status</th>
+            <th class="w-code">Posted By</th>
+            <th class="ds-mid w-action">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="ds-grid-foot">
+      <span id="tc-count">—</span>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.ds -->
+
+<script>
+$(function () {
+  let table;
+  const csrfToken = "{{ csrf_token }}";
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function money(n) { return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  function statusBadge(s) {
+    const cls = { Draft: "secondary", "Pending Approval": "warning", Posted: "success", Cancelled: "danger" }[s] || "secondary";
+    return `<span class="badge bg-${cls}">${escapeHtml(s)}</span>`;
+  }
+
+  const IMAGE_TYPES = ["jpg", "jpeg", "png", "gif", "webp"];
+  function attachmentsCell(row) {
+    const list = row.attachments || [];
+    const shown = list.slice(0, 3);
+    const thumbs = shown.map(a => {
+      const isImage = IMAGE_TYPES.includes((a.file_type || "").toLowerCase());
+      const inner = isImage
+        ? `<img src="${a.url}" alt="${escapeHtml(a.file_name)}" class="tc-list-thumb">`
+        : `<span class="tc-list-thumb tc-list-thumb-file"><i class="fas fa-file"></i></span>`;
+      return `<a href="${a.url}" target="_blank" title="${escapeHtml(a.file_name)}">${inner}</a>`;
+    }).join("");
+    const extra = list.length > shown.length ? `<span class="tc-list-thumb-more">+${list.length - shown.length}</span>` : "";
+    // A bill often arrives after the charge is entered, so attaching isn't
+    // limited to a draft -- only a cancelled record takes no more evidence.
+    const uploadBtn = row.status !== "Cancelled"
+      ? `<button type="button" class="btn btn-outline-info btn-sm tc-attach-btn" title="Attach a bill"
+           data-id="${row.id}" data-no="${escapeHtml(row.charge_no)}"><i class="fas fa-paperclip"></i></button>` : "";
+    if (!list.length && !uploadBtn) return '<span class="text-muted">—</span>';
+    return `<div class="tc-list-thumbs">${thumbs}${extra}${uploadBtn}</div>`;
+  }
+
+  function renderRows(rows) {
+    if (table) { table.destroy(); $("#tc-table tbody").empty(); }
+    const tbody = $("#tc-table tbody");
+    rows.forEach(row => {
+      const farmNames = (row.destination_farms || []).map(f => f.farm_name).join(", ") || "-";
+      const canEdit = row.status === "Draft" || row.status === "Pending Approval";
+      tbody.append(`<tr>
+        <td><a href="{% url 'transfer_charge_add' %}?id=${row.id}">${escapeHtml(row.charge_no)}</a></td>
+        <td>${escapeHtml(row.charge_date)}</td>
+        <td>${escapeHtml(row.dc_no)}</td>
+        <td>${escapeHtml(row.from_location)}</td>
+        <td>${escapeHtml(farmNames)}</td>
+        <td>${escapeHtml(row.vehicle_no)}</td>
+        <td>${escapeHtml((row.charge_types || []).join(", "))}</td>
+        <td>${escapeHtml((row.charge_scopes || []).join(", "))}</td>
+        <td>${attachmentsCell(row)}</td>
+        <td class="ds-num">${money(row.total_charges)}</td>
+        <td class="ds-mid">${statusBadge(row.status)}</td>
+        <td>${escapeHtml(row.posted_by)}</td>
+        <td class="ds-mid">
+          <div class="d-flex gap-1 justify-content-center">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'transfer_charge_add' %}?id=${row.id}" title="${canEdit ? 'Edit' : 'View'}"><i class="fas fa-${canEdit ? 'pen' : 'eye'}"></i></a>
+            ${canEdit ? `<button type="button" class="btn btn-outline-success btn-sm post-btn" data-id="${row.id}" title="Save &amp; Post"><i class="fas fa-check"></i></button>` : ""}
+            ${row.status === "Posted" ? `<button type="button" class="btn btn-outline-danger btn-sm cancel-btn" data-id="${row.id}" title="Cancel"><i class="fas fa-ban"></i></button>` : ""}
+            ${row.status === "Draft" ? `<button type="button" class="btn btn-outline-danger btn-sm delete-btn" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>` : ""}
+          </div>
+        </td>
+      </tr>`);
+    });
+    $("#tc-count").text(rows.length + (rows.length === 1 ? " record" : " records"));
+    table = $("#tc-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: -1 }],
+      language: { emptyTable: "No data available in table" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'transfer_charge_api_list' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      dc_no: $("#dc-no").val(), branch: $("#branch").val(), farm: $("#farm").val(),
+      charge_type: $("#charge-type").val(), vehicle: $("#vehicle").val(),
+      charge_scope: $("#charge-scope").val(), status: $("#status").val(),
+    }, renderRows).fail(() => alert("Failed to load Transfer Charges."));
+  }
+
+  function defaultDateRange() {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 6); // last 7 days inclusive of today
+    const iso = d => d.toISOString().slice(0, 10);
+    $("#from-date").val(iso(from));
+    $("#to-date").val(iso(to));
+  }
+
+  $("#filter-submit").on("click", loadRows);
+  $("#filter-clear").on("click", function () {
+    $("#dc-no,#vehicle").val("");
+    $("#branch,#farm,#charge-type,#charge-scope,#status").val("");
+    defaultDateRange();
+    loadRows();
+  });
+
+  // Attach-from-list: a bill often arrives after the charge was entered, so
+  // this skips opening the Add/Edit page just to attach one.
+  let attachTo = null;
+  $("#tc-table").on("click", ".tc-attach-btn", function () {
+    attachTo = { id: this.dataset.id, no: this.dataset.no };
+    const picker = document.getElementById("tc-attach-files");
+    picker.value = "";
+    picker.click();
+  });
+  document.getElementById("tc-attach-files").addEventListener("change", function () {
+    if (!attachTo || !this.files.length) return;
+    const form = new FormData();
+    [...this.files].forEach(f => form.append("files", f));
+    const target = attachTo;
+    attachTo = null;
+    $.ajax({
+      url: `/transfer-charges/${target.id}/attachments/`, method: "POST",
+      data: form, processData: false, contentType: false, headers: { "X-CSRFToken": csrfToken },
+    }).done(resp => {
+      const kept = (resp.attachments || []).length;
+      if (kept) alert(`${kept} file${kept === 1 ? "" : "s"} attached to ${target.no}.`);
+      (resp.refused || []).forEach(why => alert(why));
+      loadRows();
+    }).fail(xhr => {
+      const refused = xhr.responseJSON?.refused;
+      alert((refused && refused.join(" ")) || xhr.responseJSON?.error || "Could not attach it.");
+    });
+  });
+
+  function postCharge(id, allowDuplicate) {
+    $.ajax({ url: `/transfer-charges/${id}/post/`, method: "POST",
+            contentType: "application/json", data: JSON.stringify({ allow_duplicate: !!allowDuplicate }),
+            headers: { "X-CSRFToken": csrfToken } })
+      .done(() => loadRows())
+      .fail(xhr => {
+        const body = xhr.responseJSON;
+        if (body?.duplicate && confirm(`${body.error}\n\nPost anyway?`)) { postCharge(id, true); return; }
+        alert(body?.error || "Could not post.");
+      });
+  }
+  $("#tc-table").on("click", ".post-btn", function () {
+    const id = $(this).data("id");
+    if (!confirm("Save & Post this Transfer Charge? Once posted it cannot be edited.")) return;
+    postCharge(id);
+  });
+  $("#tc-table").on("click", ".cancel-btn", function () {
+    const id = $(this).data("id");
+    const reason = prompt("Reason for cancelling this Transfer Charge:");
+    if (reason === null) return;
+    $.ajax({ url: `/transfer-charges/${id}/cancel/`, method: "POST",
+            contentType: "application/json", data: JSON.stringify({ reason }),
+            headers: { "X-CSRFToken": csrfToken } })
+      .done(() => loadRows()).fail(xhr => alert(xhr.responseJSON?.error || "Could not cancel."));
+  });
+  $("#tc-table").on("click", ".delete-btn", function () {
+    const id = $(this).data("id");
+    if (!confirm("Delete this draft Transfer Charge?")) return;
+    $.ajax({ url: `/transfer_charge_api/${id}/`, method: "DELETE",
+            headers: { "X-CSRFToken": csrfToken } })
+      .done(() => loadRows()).fail(xhr => alert(xhr.responseJSON?.error || "Could not delete."));
+  });
+
+  defaultDateRange();
+  loadRows();
+});
+</script>
+{% endblock %}

@@ -1187,3 +1187,275 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
         item_id=item_id, sale__warehouse_id=warehouse_id), "sale__date"), "total_qty")
 
     return inflow - outflow
+
+
+# ==========================================================================
+# Transfer Charges — transport/loading/unloading etc. cost recorded against
+# an existing Stock Transfer, with per-line Common/Farm-wise allocation.
+# ==========================================================================
+
+class ChargeType(models.Model):
+    """What kind of cost this is (Transport, Loading, Toll, ...), and which
+    Chart-of-Account ledger it posts to. A separate small master rather than
+    letting a charge line point straight at a ledger (the way Petty Expense
+    does) because the spec names a fixed vocabulary of charge kinds that a
+    register/report group and filter by — the ledger mapping rides on top of
+    that, it doesn't replace it."""
+
+    name = models.CharField(max_length=100, unique=True)
+    expense_ledger = models.ForeignKey(
+        'account.ChartOfAccount', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='transfer_charge_types_expense',
+        help_text="Debited when a charge of this type is posted as Expense Only")
+    capitalize_ledger = models.ForeignKey(
+        'account.ChartOfAccount', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='transfer_charge_types_capitalize',
+        help_text="Debited when a charge of this type is posted as Add to Inventory Cost")
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+    def ledger_for(self, treatment):
+        return (self.capitalize_ledger if treatment == TransferChargeHeader.TREATMENT_CAPITALIZE
+                else self.expense_ledger)
+
+
+class TransferChargeHeader(models.Model):
+    """One costing event for a Stock Transfer 'trip' — everything moved under
+    one DC/vehicle run, however many items or destination farms it touched.
+    A trip is identified by `dc_no` + `charge_date` rather than a single
+    StockTransfer row, because one physical trip is recorded in Stock
+    Transfer as one row per item-per-destination; `stock_transfers` is the
+    resolved set of those rows this cost is being spread across."""
+
+    STATUS_DRAFT = 'Draft'
+    STATUS_PENDING_APPROVAL = 'Pending Approval'
+    STATUS_POSTED = 'Posted'
+    STATUS_CANCELLED = 'Cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_PENDING_APPROVAL, 'Pending Approval'),
+        (STATUS_POSTED, 'Posted'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    TREATMENT_EXPENSE = 'Expense Only'
+    TREATMENT_CAPITALIZE = 'Add to Inventory Cost'
+    TREATMENT_CHOICES = [
+        (TREATMENT_EXPENSE, 'Expense Only'),
+        (TREATMENT_CAPITALIZE, 'Add to Inventory Cost'),
+    ]
+
+    PAYMENT_MODE_PAID_NOW = 'Paid Now'
+    PAYMENT_MODE_PAY_LATER = 'Pay Later'
+    PAYMENT_MODE_CHOICES = [
+        (PAYMENT_MODE_PAID_NOW, 'Paid Now'),
+        (PAYMENT_MODE_PAY_LATER, 'Pay Later'),
+    ]
+
+    company = models.ForeignKey('account.CompanyProfile', on_delete=models.CASCADE,
+                                related_name='transfer_charges')
+    charge_no = models.CharField(max_length=30, blank=True, editable=False, db_index=True,
+                                 help_text="Auto-generated, e.g. TC-2026-00001")
+    charge_date = models.DateField(default=now)
+
+    dc_no = models.CharField(max_length=100,
+                             help_text="DC / trip reference shared by the linked Stock Transfer rows")
+    stock_transfers = models.ManyToManyField(StockTransfer, related_name='transfer_charges',
+                                             blank=True)
+
+    treatment = models.CharField(max_length=30, choices=TREATMENT_CHOICES, default=TREATMENT_EXPENSE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+
+    total_transport = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_loading = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_unloading = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_other = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_charges = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default=PAYMENT_MODE_PAID_NOW,
+                                    help_text="Paid Now credits a Cash/Bank account; Pay Later credits a payable ledger")
+    paid_from = models.ForeignKey('account.BankCashMaster', on_delete=models.PROTECT, null=True,
+                                  blank=True, related_name='transfer_charges',
+                                  help_text="Paid Now only — the cash/bank account the money left")
+    payable_account = models.ForeignKey('account.ChartOfAccount', on_delete=models.PROTECT, null=True,
+                                        blank=True, related_name='transfer_charges_payable',
+                                        help_text="Pay Later only — the payable/liability ledger credited")
+    payee_name = models.CharField(max_length=150, blank=True,
+                                  help_text="Pay Later only — who this is owed to, as it should read on the voucher")
+    cost_centre = models.ForeignKey('account.OrganizationCentre', on_delete=models.PROTECT,
+                                    null=True, blank=True, related_name='transfer_charges')
+
+    narration = models.TextField(blank=True)
+    header_remarks = models.TextField(blank=True)
+
+    voucher = models.ForeignKey('account.Voucher', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='transfer_charge_source')
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='transfer_charges_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                  blank=True, related_name='transfer_charges_posted')
+    posted_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                     blank=True, related_name='transfer_charges_cancelled')
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-charge_date', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['company', 'charge_no'], name='uniq_transfer_charge_no'),
+        ]
+
+    def __str__(self):
+        return self.charge_no or f"DRAFT-{self.pk}"
+
+    @property
+    def is_editable(self):
+        return self.status in (self.STATUS_DRAFT, self.STATUS_PENDING_APPROVAL)
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.charge_no:
+            self.charge_no = self.next_charge_no(self.company, self.charge_date)
+            return mint_with_retry(
+                lambda: super(TransferChargeHeader, self).save(*args, **kwargs),
+                lambda: setattr(self, 'charge_no', self.next_charge_no(self.company, self.charge_date)),
+                label="transfer charge number")
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def next_charge_no(cls, company, on_date=None):
+        """TC-<year>-<serial>, serial per company per calendar year."""
+        year = (on_date or now().date()).year
+        prefix = f"TC-{year}-"
+        last = (cls.objects.filter(company=company, charge_no__startswith=prefix)
+                .order_by('-charge_no').values_list('charge_no', flat=True).first())
+        serial = int(last.rsplit('-', 1)[1]) + 1 if last else 1
+        return f"{prefix}{serial:05d}"
+
+    def recalculate(self):
+        """Totals from the lines, grouped the way the register/report need —
+        by the four headline buckets, not by the arbitrary set of charge
+        types a company might configure."""
+        zero = Decimal('0')
+        buckets = {'total_transport': zero, 'total_loading': zero,
+                  'total_unloading': zero, 'total_other': zero}
+        for line in self.lines.select_related('charge_type').all():
+            amount = line.line_total
+            key_name = (line.charge_type.name or '').strip().lower()
+            if key_name == 'transport':
+                buckets['total_transport'] += amount
+            elif key_name == 'loading':
+                buckets['total_loading'] += amount
+            elif key_name == 'unloading':
+                buckets['total_unloading'] += amount
+            else:
+                buckets['total_other'] += amount
+        for field, value in buckets.items():
+            setattr(self, field, value)
+        self.total_charges = sum(buckets.values(), zero)
+        return self.total_charges
+
+
+class TransferChargeLine(models.Model):
+    """One charge (Transport, Loading, ...) on a Transfer Charge — its own
+    scope and, when Common, its own allocation method. Scope lives on the
+    line, never the header, so Transport=Common and Unloading=Farm-wise can
+    coexist on the same transaction."""
+
+    SCOPE_COMMON = 'Common'
+    SCOPE_FARM_WISE = 'Farm-wise'
+    SCOPE_CHOICES = [(SCOPE_COMMON, 'Common / Fixed'), (SCOPE_FARM_WISE, 'Farm-wise')]
+
+    METHOD_EQUAL = 'Equal'
+    METHOD_QUANTITY = 'By Quantity'
+    METHOD_STOCK_VALUE = 'By Stock Value'
+    METHOD_DISTANCE = 'By Distance'
+    METHOD_MANUAL = 'Manual'
+    METHOD_CHOICES = [
+        (METHOD_EQUAL, 'Equal'),
+        (METHOD_QUANTITY, 'By Quantity'),
+        (METHOD_STOCK_VALUE, 'By Stock Value'),
+        (METHOD_DISTANCE, 'By Distance'),
+        (METHOD_MANUAL, 'Manual'),
+    ]
+
+    header = models.ForeignKey(TransferChargeHeader, on_delete=models.CASCADE, related_name='lines')
+    charge_type = models.ForeignKey(ChargeType, on_delete=models.PROTECT, related_name='transfer_charge_lines')
+    description = models.CharField(max_length=255, blank=True)
+    charge_scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default=SCOPE_COMMON)
+    basis = models.CharField(max_length=50, blank=True, default='Fixed',
+                             help_text="How the Total Amount was arrived at, e.g. Fixed, Fixed / Trip")
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+                                       help_text="Common/Fixed only — ignored for Farm-wise lines")
+    allocation_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default=METHOD_EQUAL)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return f"{self.charge_type} ({self.charge_scope})"
+
+    @property
+    def line_total(self):
+        """What this line actually costs, however its scope prices it —
+        the Common amount as typed, or the sum of its farm-wise amounts."""
+        if self.charge_scope == self.SCOPE_FARM_WISE:
+            return sum((a.allocated_amount or Decimal('0')) for a in self.allocations.all()) or Decimal('0')
+        return self.total_amount or Decimal('0')
+
+
+class TransferChargeAllocation(models.Model):
+    """What one destination farm carries of one charge line — the row a
+    Common line's allocation method computes, or a Farm-wise line's
+    person-entered amount."""
+
+    line = models.ForeignKey(TransferChargeLine, on_delete=models.CASCADE, related_name='allocations')
+    destination_farm = models.ForeignKey('broiler.BroilerFarm', on_delete=models.PROTECT,
+                                         related_name='transfer_charge_allocations')
+    quantity_basis = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    stock_value_basis = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    distance_basis = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    percentage = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    allocated_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(fields=['line', 'destination_farm'], name='uniq_allocation_per_farm_per_line'),
+        ]
+
+    def __str__(self):
+        return f"{self.destination_farm} — {self.allocated_amount}"
+
+
+class TransferChargeAttachment(models.Model):
+    header = models.ForeignKey(TransferChargeHeader, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='transfer_charges/%Y/%m/')
+    file_name = models.CharField(max_length=255, blank=True)
+    file_type = models.CharField(max_length=50, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='transfer_charge_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def save(self, *args, **kwargs):
+        if self.file and not self.file_name:
+            self.file_name = self.file.name.rsplit('/', 1)[-1]
+            self.file_type = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.file_name

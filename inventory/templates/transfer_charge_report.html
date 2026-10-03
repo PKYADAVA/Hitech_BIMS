@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Transfer Charges Report - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab='transfer_charges_report' %}
+
+<div class="ds">
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="ds-page-title"><i class="fas fa-chart-column text-primary"></i> Transfer Charges Report</h1>
+    <p class="ds-subtitle">Posted Transfer Charges — totals, breakdowns and the detailed register</p>
+  </div>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-3"><div class="ds-card"><div class="ds-card-body text-center"><div class="text-muted small">Total Transfer Charges</div><div class="fs-4 fw-bold" id="kpi-total">0.00</div></div></div></div>
+  <div class="col-md-3"><div class="ds-card"><div class="ds-card-body text-center"><div class="text-muted small">Transport</div><div class="fs-4 fw-bold" id="kpi-transport">0.00</div></div></div></div>
+  <div class="col-md-3"><div class="ds-card"><div class="ds-card-body text-center"><div class="text-muted small">Loading</div><div class="fs-4 fw-bold" id="kpi-loading">0.00</div></div></div></div>
+  <div class="col-md-3"><div class="ds-card"><div class="ds-card-body text-center"><div class="text-muted small">Unloading</div><div class="fs-4 fw-bold" id="kpi-unloading">0.00</div></div></div></div>
+</div>
+
+<div class="ds-card mb-3">
+  <div class="ds-card-body">
+    <div class="ds-section-title mb-3">Filters</div>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2"><label class="form-label">Date From</label><input type="date" class="form-control" id="from-date"></div>
+      <div class="col-md-2"><label class="form-label">Date To</label><input type="date" class="form-control" id="to-date"></div>
+      <div class="col-md-2"><label class="form-label">Transfer No.</label><input type="text" class="form-control" id="transfer-no"></div>
+      <div class="col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" id="branch"><option value="">-All-</option>{% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Destination Farm</label>
+        <select class="form-select" id="farm"><option value="">-All-</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Charge Type</label>
+        <select class="form-select" id="charge-type"><option value="">-All-</option>{% for c in charge_types %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+      </div>
+      <div class="col-md-2"><label class="form-label">Vehicle No.</label><input type="text" class="form-control" id="vehicle"></div>
+      <div class="col-md-2">
+        <label class="form-label">Charge Scope</label>
+        <select class="form-select" id="charge-scope"><option value="">-All-</option><option value="Common">Common / Fixed</option><option value="Farm-wise">Farm-wise</option></select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="filter-clear">Reset</button>
+        <button class="btn btn-primary" id="filter-submit"><i class="fas fa-search"></i> Search</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-section-title mb-2">Monthly Charge Trend</div>
+      <div id="chart-monthly"></div>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-section-title mb-2">Charge Type-wise</div>
+      <div id="chart-charge-type"></div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-section-title mb-2">Farm-wise</div>
+      <div id="chart-farm"></div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-section-title mb-2">Vehicle-wise</div>
+      <div id="chart-vehicle"></div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-section-title mb-2">Branch-wise</div>
+      <div id="chart-branch"></div>
+    </div></div>
+  </div>
+</div>
+
+<div class="ds-card">
+  <div class="ds-card-body flush">
+    <div class="ds-grid-wrap">
+      <table class="table ds-grid" id="detail-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Transfer No.</th><th>From</th><th>To Farm</th><th>Vehicle</th>
+            <th class="ds-num">Transport</th><th class="ds-num">Loading</th><th class="ds-num">Unloading</th>
+            <th class="ds-num">Other</th><th class="ds-num">Total Charges</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.ds -->
+
+<script>
+$(function () {
+  let table;
+  function money(n) { return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  function bars(container, rows, labelKey) {
+    const el = $(container).empty();
+    if (!rows.length) { el.append('<p class="text-muted mb-0">No data.</p>'); return; }
+    const max = Math.max(...rows.map(r => r.amount)) || 1;
+    rows.forEach(r => {
+      const pct = Math.max(2, Math.round(r.amount / max * 100));
+      el.append(`<div class="mb-2">
+        <div class="d-flex justify-content-between small"><span>${escapeHtml(r[labelKey])}</span><span>${money(r.amount)}</span></div>
+        <div class="progress" style="height:8px;"><div class="progress-bar" style="width:${pct}%"></div></div>
+      </div>`);
+    });
+  }
+
+  function loadReport() {
+    $.getJSON("{% url 'transfer_charges_report_data' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(), transfer_no: $("#transfer-no").val(),
+      branch: $("#branch").val(), farm: $("#farm").val(), charge_type: $("#charge-type").val(),
+      vehicle: $("#vehicle").val(), charge_scope: $("#charge-scope").val(),
+    }, data => {
+      $("#kpi-total").text(money(data.kpis.total_charges));
+      $("#kpi-transport").text(money(data.kpis.transport));
+      $("#kpi-loading").text(money(data.kpis.loading));
+      $("#kpi-unloading").text(money(data.kpis.unloading));
+
+      bars("#chart-monthly", data.monthly_trend.map(r => ({ month: r.month, amount: r.amount })), "month");
+      bars("#chart-charge-type", data.by_charge_type, "name");
+      bars("#chart-farm", data.by_farm, "name");
+      bars("#chart-vehicle", data.by_vehicle, "name");
+      bars("#chart-branch", data.by_branch, "name");
+
+      if (table) { table.destroy(); $("#detail-table tbody").empty(); }
+      const tbody = $("#detail-table tbody");
+      data.detail.forEach(r => {
+        tbody.append(`<tr>
+          <td>${escapeHtml(r.date)}</td>
+          <td><a href="{% url 'transfer_charge_list' %}">${escapeHtml(r.dc_no)}</a></td>
+          <td>${escapeHtml(r.from_location)}</td><td>${escapeHtml(r.to_farms)}</td><td>${escapeHtml(r.vehicle_no)}</td>
+          <td class="ds-num">${money(r.transport)}</td><td class="ds-num">${money(r.loading)}</td>
+          <td class="ds-num">${money(r.unloading)}</td><td class="ds-num">${money(r.other)}</td>
+          <td class="ds-num fw-bold">${money(r.total_charges)}</td>
+        </tr>`);
+      });
+      table = $("#detail-table").DataTable({
+        responsive: true, order: [[0, "desc"]],
+        dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print"],
+        language: { emptyTable: "No data available in table" },
+      });
+    });
+  }
+
+  $("#filter-submit").on("click", loadReport);
+  $("#filter-clear").on("click", function () {
+    $("#from-date,#to-date,#transfer-no,#vehicle").val("");
+    $("#branch,#farm,#charge-type,#charge-scope").val("");
+    loadReport();
+  });
+
+  loadReport();
+});
+</script>
+{% endblock %}
