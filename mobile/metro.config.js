@@ -2,8 +2,6 @@
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 
-const appJson = require("./app.json");
-
 const config = getDefaultConfig(__dirname);
 
 /**
@@ -47,16 +45,26 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
  * applies. This runs only in the Metro dev server — it has no effect on any
  * production build, and native still calls the API directly.
  *
- * The upstream is derived from the same config the app reads, so the two can't
- * drift.
+ * The upstream is derived from the same env var the app reads, so an explicit
+ * override cannot make the two drift.
+ *
+ * Without that override the default is loopback, not app.json's apiBaseUrl:
+ * this middleware only ever runs inside the Metro dev server, which runs on the
+ * same machine as the Django dev server, so the backend is always reachable at
+ * 127.0.0.1 here — no LAN address needed, and nothing to go stale. Falling back
+ * to app.json instead would quietly proxy web development at production.
  */
-const UPSTREAM = new URL(
-  process.env.EXPO_PUBLIC_API_BASE_URL || appJson.expo.extra.apiBaseUrl
-);
+const DEV_UPSTREAM = "http://127.0.0.1:8000/api/v1";
+const UPSTREAM = new URL(process.env.EXPO_PUBLIC_API_BASE_URL || DEV_UPSTREAM);
 // The versioned API, plus alerthub, which sits outside it (`/api/alerthub`)
 // and is called with the browser's own origin — without it here those calls
 // reach Metro instead of the backend and come back 404.
-const PROXY_PREFIXES = [UPSTREAM.pathname.replace(/\/$/, ""), "/api/alerthub"];
+const PROXY_PREFIXES = [UPSTREAM.pathname.replace(/\/$/, ""), "/api/alerthub",
+  // Stored files, so a bill photographed against this backend is the bill
+  // the browser shows. Without it the web build resolves media against
+  // whatever absolute base the config settled on -- in a build with no
+  // Metro host to learn from, the production server.
+  "/media"];
 const transport = UPSTREAM.protocol === "https:" ? require("https") : require("http");
 
 config.server = {
