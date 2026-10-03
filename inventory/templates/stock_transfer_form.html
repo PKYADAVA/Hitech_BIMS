@@ -88,9 +88,17 @@ function parseLocation(value) {
 }
 
 function row() {
+  // A new row starts on the same date as the one before it -- entering a
+  // batch of transfers for one day shouldn't mean re-picking that date on
+  // every single row.
+  const existingRows = get('row-table').tBodies[0].rows;
+  const lastDate = existingRows.length
+    ? existingRows[existingRows.length - 1].querySelector('.date').value
+    : '';
+  const defaultDate = lastDate || TODAY;
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input class="form-control date" type="date" value="${TODAY}" required></td>
+    <td><input class="form-control date" type="date" value="${defaultDate}" required></td>
     <td><input class="form-control dc-no"></td>
     <td><select class="form-select item" required>${itemOptions}</select></td>
     <td><input class="form-control bg-light uom" readonly></td>

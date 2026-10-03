@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -1405,6 +1405,13 @@ class StockTransferFormTemplateView(View):
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "today": timezone.localdate().isoformat(),
         })
+
+
+@method_decorator(login_required, name="dispatch")
+class StockTransferPreviewView(View):
+    """Read-only UI concept for reviewing the multi-farm transfer layout."""
+    def get(self, request):
+        return render(request, "stock_transfer_ui_preview.html")
 
 
 @method_decorator(login_required, name="dispatch")
@@ -3993,17 +4000,49 @@ def _charge_type_options():
                 .values("id", "name"))
 
 
-def _stock_transfer_group_to_dict(trnum_rows, dc_no, on_date):
+def _existing_charge_nos_by_transfer_id(stock_transfer_ids, exclude_header_id=None):
+    """Which of these StockTransfer ids are already covered by a POSTED
+    Transfer Charge, and which charge_no(s) -- one batch query for however
+    many rows are on screen, so the Select Stock Transfer table can flag
+    'already charged' without an N+1 query per row."""
+    if not stock_transfer_ids:
+        return {}
+    qs = TransferChargeHeader.objects.filter(
+        status=TransferChargeHeader.STATUS_POSTED, stock_transfers__id__in=stock_transfer_ids,
+    )
+    if exclude_header_id:
+        qs = qs.exclude(pk=exclude_header_id)
+    by_transfer = {}
+    for charge_no, transfer_id in qs.values_list("charge_no", "stock_transfers__id"):
+        by_transfer.setdefault(transfer_id, set()).add(charge_no)
+    return by_transfer
+
+
+def _stock_transfer_group_to_dict(trnum_rows, dc_no, on_date, charged_by_transfer_id=None):
     summary = tc_service.transfer_summary(trnum_rows)
     first = trnum_rows[0]
+    charged_by_transfer_id = charged_by_transfer_id or {}
+    existing_charge_nos = sorted({cn for r in trnum_rows for cn in charged_by_transfer_id.get(r.id, ())})
+    # One trip (one dc_no + date) is recorded as several StockTransfer rows
+    # -- one per item-per-destination -- each with its own trnum and batch,
+    # same as it's listed on the Stock Transfer list page. Shown joined so
+    # the trip-grouped row here still surfaces that detail.
+    trnums = sorted({r.trnum for r in trnum_rows if r.trnum})
+    batches = sorted({str(r.to_batch or r.from_batch) for r in trnum_rows if (r.to_batch_id or r.from_batch_id)})
+    item_codes = sorted({r.item.item_code for r in trnum_rows if r.item_id})
+    item_names = sorted({r.item.description for r in trnum_rows if r.item_id})
+    to_locations = sorted({str(r.to_location) for r in trnum_rows if r.to_location})
     return {
         "dc_no": dc_no, "date": on_date.isoformat(),
         "stock_transfer_ids": [r.id for r in trnum_rows],
         "from_location": str(first.from_location) if first.from_location else "",
         "vehicle_no": first.vehicle_no, "driver_name": first.driver_name,
+        "trnums": trnums, "batches": batches,
+        "item_codes": item_codes, "item_names": item_names, "to_locations": to_locations,
         "farm_count": summary["farm_count"], "item_count": summary["item_count"],
         "total_quantity": summary["total_quantity"], "total_stock_value": summary["total_stock_value"],
         "farms": summary["farms"],
+        "already_charged": bool(existing_charge_nos), "existing_charge_nos": existing_charge_nos,
     }
 
 
@@ -4016,27 +4055,74 @@ def transfer_charge_stock_transfer_lookup(request):
     q = (request.GET.get("q") or "").strip()
     dc_no = (request.GET.get("dc_no") or "").strip()
     on_date = (request.GET.get("date") or "").strip()
+    ids = (request.GET.get("ids") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
 
     qs = _scope_transfer_charge(request.user, StockTransfer.objects.exclude(dc_no="")
-                                .select_related("from_warehouse", "from_farm", "to_farm", "item"))
+                                .select_related("from_warehouse", "from_farm", "to_farm", "item",
+                                                "from_batch", "to_batch"))
+
+    editing_header_id = int(request.GET.get("exclude_header") or 0) or None
 
     if dc_no and on_date:
         rows = list(qs.filter(dc_no=dc_no, date=on_date))
         if not rows:
             raise Http404("Stock transfer not found")
-        return JsonResponse(_stock_transfer_group_to_dict(rows, dc_no, rows[0].date))
+        charged = _existing_charge_nos_by_transfer_id([r.id for r in rows], editing_header_id)
+        return JsonResponse(_stock_transfer_group_to_dict(rows, dc_no, rows[0].date, charged))
+
+    if ids:
+        # Re-expand a saved Transfer Charge's stock_transfer_ids back into its
+        # original (dc_no, date) groups, so editing a draft can re-show the
+        # same picked chips instead of one merged blob.
+        id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+        rows = list(qs.filter(id__in=id_list))
+        charged = _existing_charge_nos_by_transfer_id(id_list, editing_header_id)
+        groups = {}
+        order = []
+        for row in rows:
+            key = (row.dc_no, row.date)
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(row)
+        results = [_stock_transfer_group_to_dict(groups[k], k[0], k[1], charged) for k in order]
+        return JsonResponse(results, safe=False)
 
     if q:
-        qs = qs.filter(dc_no__icontains=q)
+        # Comma-separated DC numbers match any of them (OR) -- filtering
+        # for several specific trips at once, not one combined substring.
+        terms = [t.strip() for t in q.split(",") if t.strip()]
+        if len(terms) > 1:
+            term_filter = Q()
+            for term in terms:
+                term_filter |= Q(dc_no__icontains=term)
+            qs = qs.filter(term_filter)
+        elif terms:
+            qs = qs.filter(dc_no__icontains=terms[0])
+    if from_date:
+        qs = qs.filter(date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(date__lte=date_from_query(to_date))
+    # With no filter at all, show nothing rather than an unbounded scan —
+    # the date-range picker is the normal way to narrow this down.
+    if not (q or from_date or to_date):
+        return JsonResponse([], safe=False)
+
     groups = {}
     order = []
-    for row in qs.order_by("-date", "dc_no")[:500]:
+    all_rows = list(qs.order_by("-date", "dc_no")[:500])
+    for row in all_rows:
         key = (row.dc_no, row.date)
         if key not in groups:
             groups[key] = []
             order.append(key)
         groups[key].append(row)
-    results = [_stock_transfer_group_to_dict(groups[k], k[0], k[1]) for k in order[:30]]
+    order = order[:100]
+    visible_ids = [r.id for k in order for r in groups[k]]
+    charged = _existing_charge_nos_by_transfer_id(visible_ids, editing_header_id)
+    results = [_stock_transfer_group_to_dict(groups[k], k[0], k[1], charged) for k in order]
     return JsonResponse(results, safe=False)
 
 
@@ -4065,6 +4151,17 @@ class TransferChargeFormTemplateView(View):
             "today": timezone.localdate().isoformat(),
             "pk": request.GET.get("id") or "",
         })
+
+
+@login_required
+def transfer_charge_next_number_preview(request):
+    """What the Transaction No. will look like if saved against the given
+    Charge Date — not reserved, so a concurrent save can still take it
+    first; the actual number is only locked in on save (next_charge_no)."""
+    charge_date = (request.GET.get("charge_date") or "").strip()
+    on_date = date_from_query(charge_date) if charge_date else timezone.localdate()
+    preview = TransferChargeHeader.next_charge_no(tc_service.company(), on_date)
+    return JsonResponse({"preview": preview})
 
 
 @method_decorator(login_required, name="dispatch")
@@ -4113,6 +4210,10 @@ def _transfer_charge_to_dict(header, detail=False):
     data["total_stock_value"] = summary["total_stock_value"]
     data["charge_types"] = sorted({l.charge_type.name for l in header.lines.select_related("charge_type")})
     data["charge_scopes"] = sorted({l.charge_scope for l in header.lines.all()})
+    data["attachments"] = [{
+        "id": a.id, "file_name": a.file_name, "file_type": a.file_type,
+        "url": a.file.url if a.file else "",
+    } for a in header.attachments.all()]
 
     if detail:
         data["stock_transfer_ids"] = [t.id for t in transfers]
@@ -4131,10 +4232,6 @@ def _transfer_charge_to_dict(header, detail=False):
                     "allocated_amount": a.allocated_amount, "remarks": a.remarks,
                 } for a in line.allocations.all()],
             })
-        data["attachments"] = [{
-            "id": a.id, "file_name": a.file_name, "file_type": a.file_type,
-            "url": a.file.url if a.file else "",
-        } for a in header.attachments.all()]
     return data
 
 
@@ -4148,7 +4245,7 @@ class TransferChargeAPI(View):
             return JsonResponse(_transfer_charge_to_dict(header, detail=True))
 
         qs = _scope_transfer_charge(request.user, TransferChargeHeader.objects.select_related(
-            "paid_from", "payable_account", "cost_centre"))
+            "paid_from", "payable_account", "cost_centre").prefetch_related("attachments"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         status = (request.GET.get("status") or "").strip()
@@ -4257,6 +4354,8 @@ class TransferChargeAPI(View):
 
         header.lines.all().delete()
         for i, line_data in enumerate(data.get("lines") or []):
+            if not line_data.get("charge_type"):
+                raise tc_service.TransferChargeError(f"Line {i + 1}: select a Charge Type before saving.")
             line = TransferChargeLine.objects.create(
                 header=header, charge_type_id=line_data["charge_type"],
                 description=(line_data.get("description") or "").strip(),
@@ -4344,12 +4443,20 @@ def transfer_charge_attachments(request, id):
         if not header.is_editable:
             return JsonResponse({"error": "Attachments can only be added to a Draft or Pending Approval record."},
                                status=400)
-        created = []
+        allowed = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
+        created, refused = [], []
         for f in request.FILES.getlist("files"):
+            if f.content_type not in allowed:
+                refused.append(f"{f.name}: only PDF, JPG and PNG are accepted.")
+                continue
+            if f.size > 5 * 1024 * 1024:
+                refused.append(f"{f.name}: larger than 5 MB.")
+                continue
             att = TransferChargeAttachment.objects.create(header=header, file=f, uploaded_by=request.user)
             created.append({"id": att.id, "file_name": att.file_name, "file_type": att.file_type,
                            "url": att.file.url})
-        return JsonResponse({"attachments": created}, status=201)
+        return JsonResponse({"attachments": created, "refused": refused},
+                            status=400 if refused and not created else 201)
     return JsonResponse({"attachments": [{
         "id": a.id, "file_name": a.file_name, "file_type": a.file_type, "url": a.file.url,
     } for a in header.attachments.all()]})

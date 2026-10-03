@@ -6,7 +6,16 @@
 {% block content %}
 {% include '_inventory_transaction_subnavbar.html' with active_tab='transfer_charges' %}
 
+<style>
+  .tc-list-thumbs { display:flex;align-items:center;gap:3px; }
+  .tc-list-thumb { width:28px;height:28px;border-radius:5px;object-fit:cover;border:1px solid #e0eaf5;background:#f2f6fb;display:block; }
+  .tc-list-thumb-file { display:grid;place-items:center;color:#8a93a6;font-size:12px; }
+  .tc-list-thumb-more { font-size:10.5px;color:#52627d;font-weight:600;margin-left:1px; }
+</style>
+
 <div class="ds">
+
+<input type="file" id="tc-attach-files" multiple accept=".pdf,.jpg,.jpeg,.png" class="d-none">
 
 <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
   <div>
@@ -96,6 +105,7 @@
             <th class="w-code">Vehicle</th>
             <th class="w-item">Charge Types</th>
             <th class="w-code">Scope</th>
+            <th class="w-code">Attachments</th>
             <th class="ds-num w-qty">Total Charges</th>
             <th class="ds-mid w-code">Status</th>
             <th class="w-code">Posted By</th>
@@ -127,6 +137,27 @@ $(function () {
     return `<span class="badge bg-${cls}">${escapeHtml(s)}</span>`;
   }
 
+  const IMAGE_TYPES = ["jpg", "jpeg", "png", "gif", "webp"];
+  function attachmentsCell(row) {
+    const list = row.attachments || [];
+    const shown = list.slice(0, 3);
+    const thumbs = shown.map(a => {
+      const isImage = IMAGE_TYPES.includes((a.file_type || "").toLowerCase());
+      const inner = isImage
+        ? `<img src="${a.url}" alt="${escapeHtml(a.file_name)}" class="tc-list-thumb">`
+        : `<span class="tc-list-thumb tc-list-thumb-file"><i class="fas fa-file"></i></span>`;
+      return `<a href="${a.url}" target="_blank" title="${escapeHtml(a.file_name)}">${inner}</a>`;
+    }).join("");
+    const extra = list.length > shown.length ? `<span class="tc-list-thumb-more">+${list.length - shown.length}</span>` : "";
+    // A bill often arrives after the charge is entered, so attaching isn't
+    // limited to a draft -- only a cancelled record takes no more evidence.
+    const uploadBtn = row.status !== "Cancelled"
+      ? `<button type="button" class="btn btn-outline-info btn-sm tc-attach-btn" title="Attach a bill"
+           data-id="${row.id}" data-no="${escapeHtml(row.charge_no)}"><i class="fas fa-paperclip"></i></button>` : "";
+    if (!list.length && !uploadBtn) return '<span class="text-muted">—</span>';
+    return `<div class="tc-list-thumbs">${thumbs}${extra}${uploadBtn}</div>`;
+  }
+
   function renderRows(rows) {
     if (table) { table.destroy(); $("#tc-table tbody").empty(); }
     const tbody = $("#tc-table tbody");
@@ -142,6 +173,7 @@ $(function () {
         <td>${escapeHtml(row.vehicle_no)}</td>
         <td>${escapeHtml((row.charge_types || []).join(", "))}</td>
         <td>${escapeHtml((row.charge_scopes || []).join(", "))}</td>
+        <td>${attachmentsCell(row)}</td>
         <td class="ds-num">${money(row.total_charges)}</td>
         <td class="ds-mid">${statusBadge(row.status)}</td>
         <td>${escapeHtml(row.posted_by)}</td>
@@ -173,11 +205,50 @@ $(function () {
     }, renderRows).fail(() => alert("Failed to load Transfer Charges."));
   }
 
+  function defaultDateRange() {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 6); // last 7 days inclusive of today
+    const iso = d => d.toISOString().slice(0, 10);
+    $("#from-date").val(iso(from));
+    $("#to-date").val(iso(to));
+  }
+
   $("#filter-submit").on("click", loadRows);
   $("#filter-clear").on("click", function () {
-    $("#from-date,#to-date,#dc-no,#vehicle").val("");
+    $("#dc-no,#vehicle").val("");
     $("#branch,#farm,#charge-type,#charge-scope,#status").val("");
+    defaultDateRange();
     loadRows();
+  });
+
+  // Attach-from-list: a bill often arrives after the charge was entered, so
+  // this skips opening the Add/Edit page just to attach one.
+  let attachTo = null;
+  $("#tc-table").on("click", ".tc-attach-btn", function () {
+    attachTo = { id: this.dataset.id, no: this.dataset.no };
+    const picker = document.getElementById("tc-attach-files");
+    picker.value = "";
+    picker.click();
+  });
+  document.getElementById("tc-attach-files").addEventListener("change", function () {
+    if (!attachTo || !this.files.length) return;
+    const form = new FormData();
+    [...this.files].forEach(f => form.append("files", f));
+    const target = attachTo;
+    attachTo = null;
+    $.ajax({
+      url: `/transfer-charges/${target.id}/attachments/`, method: "POST",
+      data: form, processData: false, contentType: false, headers: { "X-CSRFToken": csrfToken },
+    }).done(resp => {
+      const kept = (resp.attachments || []).length;
+      if (kept) alert(`${kept} file${kept === 1 ? "" : "s"} attached to ${target.no}.`);
+      (resp.refused || []).forEach(why => alert(why));
+      loadRows();
+    }).fail(xhr => {
+      const refused = xhr.responseJSON?.refused;
+      alert((refused && refused.join(" ")) || xhr.responseJSON?.error || "Could not attach it.");
+    });
   });
 
   function postCharge(id, allowDuplicate) {
@@ -213,6 +284,7 @@ $(function () {
       .done(() => loadRows()).fail(xhr => alert(xhr.responseJSON?.error || "Could not delete."));
   });
 
+  defaultDateRange();
   loadRows();
 });
 </script>

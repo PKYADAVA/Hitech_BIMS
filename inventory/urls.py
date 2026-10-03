@@ -57,6 +57,7 @@ urlpatterns = [
 
     path('stock-transfer/', views.StockTransferListTemplateView.as_view(), name='stock_transfer_list'),
     path('stock-transfer/add/', views.StockTransferFormTemplateView.as_view(), name='stock_transfer_add'),
+    path('stock-transfer/preview/', views.StockTransferPreviewView.as_view(), name='stock_transfer_preview'),
     path('stock_transfer_api/', views.StockTransferAPI.as_view(), name='stock_transfer_api_list'),
     path('stock_transfer_api/<int:id>/', views.StockTransferAPI.as_view(), name='stock_transfer_api'),
     path('stock-transfer/item-lookup/', views.stock_transfer_item_lookup, name='stock_transfer_item_lookup'),
@@ -67,6 +68,8 @@ urlpatterns = [
     path('transfer-charges/add/', views.TransferChargeFormTemplateView.as_view(), name='transfer_charge_add'),
     path('transfer-charges/stock-transfer-lookup/', views.transfer_charge_stock_transfer_lookup,
         name='transfer_charge_stock_transfer_lookup'),
+    path('transfer-charges/next-number/', views.transfer_charge_next_number_preview,
+        name='transfer_charge_next_number_preview'),
     path('transfer-charges/allocate-preview/', views.transfer_charge_allocate_preview,
         name='transfer_charge_allocate_preview'),
     path('transfer_charge_api/', views.TransferChargeAPI.as_view(), name='transfer_charge_api_list'),

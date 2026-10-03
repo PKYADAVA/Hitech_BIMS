@@ -242,8 +242,8 @@ def validate(header):
     if not lines:
         problems.append("Add at least one charge line.")
     for line in lines:
-        if (line.total_amount or ZERO) < 0:
-            problems.append(f"{line.charge_type}: amount cannot be negative.")
+        if line.charge_scope == line.SCOPE_COMMON and (line.total_amount or ZERO) <= 0:
+            problems.append(f"{line.charge_type}: amount must be greater than zero.")
         if line.charge_scope == line.SCOPE_COMMON:
             allocated = sum((a.allocated_amount or ZERO) for a in line.allocations.all())
             if allocated != (line.total_amount or ZERO):
