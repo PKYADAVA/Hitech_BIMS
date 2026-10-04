@@ -86,16 +86,16 @@
           <input type="text" id="place" name="place" class="form-control" placeholder="Enter Place..." value="{{ supplier.place|default:'' }}">
         </div>
 
-        <div class="col-md-5">
+        <div class="col-md-5 d-flex flex-column">
           <label class="form-label">Billing Address<span class="text-danger">*</span></label>
-          <div class="border rounded p-2 bg-light" id="billing_address_preview" role="button" style="cursor:pointer;">
+          <div class="border rounded p-2 bg-light flex-grow-1" id="billing_address_preview" role="button" style="cursor:pointer;">
             <div id="billing_address_summary">{{ supplier.address|default:'No billing address added.' }}</div>
           </div>
           <textarea id="address" name="address" class="d-none">{{ supplier.address|default:'' }}</textarea>
         </div>
-        <div class="col-md-5">
+        <div class="col-md-5 d-flex flex-column">
           <label class="form-label">Shipping Address</label>
-          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview">
+          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light flex-grow-1" id="shipping_address_preview">
             <div id="shipping_address_summary" class="flex-grow-1">No shipping address selected.</div>
             <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address">Change Shipping Address</button>
           </div>
@@ -380,7 +380,14 @@ let pendingShippingAddressId = null;
 let editingShippingAddressId = null;
 const shippingAddressModal = new bootstrap.Modal(get('shippingAddressModal'));
 const changeShippingAddressModal = new bootstrap.Modal(get('changeShippingAddressModal'));
-function addressCard(a){ const p=parseComposedAddress(a.address); const heading=p.city||p.state||p.street.slice(0,40)||'Shipping Address'; return `<b>${heading}</b>${a.is_default?' <span class="badge bg-primary">Default</span>':''}<br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`; }
+function addressCard(a){
+  // p.street only holds the raw address when parsing fails (not exactly
+  // street/city/state/pincode) -- falling back to a slice of it then
+  // duplicates the full address shown right below. A generic label never does.
+  const p=parseComposedAddress(a.address);
+  const heading=p.city||p.state||'Shipping Address';
+  return `<b>${heading}</b>${a.is_default?' <span class="badge bg-primary">Default</span>':''}<br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`;
+}
 function billingAsShippingFallback(){
   const billing = get('address').value.trim();
   return billing ? {label:'Billing Address', address: billing, is_default:true} : null;

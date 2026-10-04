@@ -81,13 +81,13 @@
           <label class="form-label">Driver</label>
           <input class="form-control" id="driver">
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 d-flex flex-column">
           <label class="form-label">Billing Address</label>
-          <div class="form-control bg-light" id="billing_address" style="height:auto;min-height:58px"></div>
+          <div class="form-control bg-light flex-grow-1" id="billing_address" style="height:auto;min-height:58px"></div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 d-flex flex-column">
           <label class="form-label">Shipping Address</label>
-          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview">
+          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light flex-grow-1" id="shipping_address_preview">
             <div id="shipping_address_summary" class="flex-grow-1">Select a customer first.</div>
             <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address" disabled>Change Shipping Address</button>
           </div>
@@ -346,7 +346,14 @@ function composeAddress(street, city, state, pincode){ return [street, city, sta
 function parseComposedAddress(current){ const parts=(current||'').split(',').map(s=>s.trim()).filter(Boolean); if(parts.length===4){ return {street:parts[0], city:parts[1], state:parts[2], pincode:parts[3]}; } return {street:current||'', city:'', state:'', pincode:''}; }
 function composeShippingAddress(){ return composeAddress(get('shipping_street').value, get('shipping_city').value, get('shipping_state').value, get('shipping_pincode').value); }
 function fillShippingAddressFields(composed){ const p=parseComposedAddress(composed||''); get('shipping_street').value=p.street; get('shipping_city').value=p.city; get('shipping_state').value=p.state; get('shipping_pincode').value=p.pincode; }
-function addressCard(a){ const p=parseComposedAddress(a.address); const heading=p.city||p.state||p.street.slice(0,40)||'Shipping Address'; return `<b>${heading}</b><br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`; }
+function addressCard(a){
+  // p.street only holds the raw address when parsing fails (not exactly
+  // street/city/state/pincode) -- falling back to a slice of it then
+  // duplicates the full address shown right below. A generic label never does.
+  const p=parseComposedAddress(a.address);
+  const heading=p.city||p.state||'Shipping Address';
+  return `<b>${heading}</b><br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`;
+}
 function billingAsShippingFallback(){ const billing=get('billing_address').textContent.trim(); return billing ? {label:'Billing Address', address:billing, is_default:true} : null; }
 function showShippingAddress(address){
   const shown = address || billingAsShippingFallback();
