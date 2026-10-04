@@ -8,16 +8,27 @@
 
 <style>
   .tc-list-thumbs { display:flex;align-items:center;gap:3px; }
-  .tc-list-thumb { width:28px;height:28px;border-radius:5px;object-fit:cover;border:1px solid #e0eaf5;background:#f2f6fb;display:block; }
-  .tc-list-thumb-file { display:grid;place-items:center;color:#8a93a6;font-size:12px; }
-  .tc-list-thumb-more { font-size:10.5px;color:#52627d;font-weight:600;margin-left:1px; }
+  .tc-list-thumb { width:24px;height:24px;border-radius:5px;object-fit:cover;border:1px solid #e0eaf5;background:#f2f6fb;display:block; }
+  .tc-list-thumb-file { display:grid;place-items:center;color:#8a93a6;font-size:11px; }
+  .tc-list-thumb-more { font-size:10px;color:#52627d;font-weight:600;margin-left:1px; }
+
+  /* Compact override, scoped to this page only -- the shared .ds tokens stay
+     as-is for every other screen; these just run tighter here. */
+  #tc-page { --ds-control-h: 30px; --ds-row-h: 30px; --ds-grid-header-h: 32px; }
+  #tc-page .ds-page-title { font-size: 19px; }
+  #tc-page .ds-card-body { padding: 10px; }
+  #tc-page .ds-section-title { font-size: 13px; margin-bottom: 6px !important; }
+  #tc-page .row.g-3 { --bs-gutter-x: 0.6rem; --bs-gutter-y: 0.5rem; }
+  #tc-page .form-label { margin-bottom: 3px; font-size: 11.5px; }
+  #tc-page table.ds-grid thead th { padding: 0 8px; font-size: 11px; }
+  #tc-page table.ds-grid tbody td { padding: 3px 8px; font-size: 11.5px; }
 </style>
 
-<div class="ds">
+<div class="ds" id="tc-page">
 
 <input type="file" id="tc-attach-files" multiple accept=".pdf,.jpg,.jpeg,.png" class="d-none">
 
-<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
   <div>
     <h1 class="ds-page-title"><i class="fas fa-truck-ramp-box text-primary"></i> Transfer Charges</h1>
     <p class="ds-subtitle">Transport, loading, unloading and other costs recorded against a Stock Transfer</p>
@@ -27,9 +38,9 @@
   </div>
 </div>
 
-<div class="ds-card mb-3">
+<div class="ds-card mb-2">
   <div class="ds-card-body">
-    <div class="ds-section-title mb-3">Filters</div>
+    <div class="ds-section-title mb-2">Filters</div>
     <div class="row g-3 align-items-end">
       <div class="col-md-2">
         <label class="form-label">From Date</label>
