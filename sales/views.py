@@ -51,6 +51,7 @@ def _customer_form_context(customer=None):
 def _apply_posted_customer_fields(instance, request):
     instance.name = request.POST.get("name", "").strip()
     instance.address = request.POST.get("address", "").strip()
+    instance.place = request.POST.get("place", "").strip()
     instance.mobile = request.POST.get("mobile", "").strip()
     instance.mobile_2 = request.POST.get("mobile_2", "").strip()
     instance.customer_group_id = request.POST.get("customer_group") or None
