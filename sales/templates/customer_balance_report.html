@@ -38,6 +38,14 @@
   .cb-table tbody tr:hover td { background:#f4f8fc; }
   .cb-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
   .cb-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .cb-table th.frz, .cb-table td.frz { position:sticky; background-color:#fff; z-index:4 !important; }
+  .cb-table thead th.frz { z-index:5 !important; }
+  .cb-table tfoot td.frz { z-index:4 !important; }
+  .cb-table td.frz.name { background-color:#fff; }
+  .cb-table tbody tr:hover td.frz { background:#f4f8fc; }
+  .cb-table .frz-name { left:0; width:200px; min-width:200px; max-width:200px; overflow:hidden; text-overflow:ellipsis; box-shadow:2px 0 4px rgba(0,0,0,.08); }
+  .cb-table thead th.frz-name { background-color:#1b3a6b !important; }
+  .cb-table tfoot td.frz-name { background-color:#eaf0f8; }
   .neg { color:#c0392b; }
   .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
   .exceeded { color:#c0392b; font-weight:700; }
@@ -89,7 +97,7 @@
         <tr>
           <th rowspan="2">Group</th>
           <th rowspan="2">Code</th>
-          <th rowspan="2">Name</th>
+          <th rowspan="2" class="frz frz-name">Name</th>
           <th rowspan="2" class="ds-num num">Opening Balance</th>
           <th colspan="5">Selected Period</th>
           <th class="ds-num" colspan="2">Balance</th>
@@ -109,7 +117,7 @@
         <tr>
           <td>{{ r.group }}</td>
           <td>{{ r.code }}</td>
-          <td class="name"><a href="{% url 'customer_ledger' %}?customer={{ r.id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.name }}</a></td>
+          <td class="frz frz-name name"><a href="{% url 'customer_ledger' %}?customer={{ r.id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.name }}</a></td>
           <td class="num {% if r.opening < 0 %}neg{% endif %}">{{ r.opening|indian_currency }}</td>
           <td class="num">{{ r.quantity|floatformat:0 }}</td>
           <td class="num">{{ r.weight|floatformat:2 }}</td>
@@ -129,7 +137,9 @@
       </tbody>
       {% if rows %}
       <tfoot><tr>
-        <td colspan="3" class="text-center">Total</td>
+        <td></td>
+        <td></td>
+        <td class="text-center frz frz-name">Total</td>
         <td class="num {% if totals.opening < 0 %}neg{% endif %}">{{ totals.opening|indian_currency }}</td>
         <td class="num">{{ totals.quantity|floatformat:0 }}</td>
         <td class="num">{{ totals.weight|floatformat:2 }}</td>
