@@ -118,6 +118,57 @@
   @media(max-width:1100px){.tc-transfer-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 6}}
   @media(max-width:767.98px){.tc-title-row{align-items:flex-start;flex-wrap:wrap}.tc-title-actions{width:100%;margin-left:0}.tc-transfer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-allocation-grid > .col-md-6{grid-column:span 12}.tc-summary-split{grid-template-columns:1fr}.tc-header-grid{grid-template-columns:1fr}.tc-st-filter-row{grid-template-columns:1fr 1fr}}
 @media(max-width:1200px){.tc-st-filter-row{grid-template-columns:1fr 1fr 1fr}}
+
+html[data-theme="dark"] .tc-page { --tc-line:var(--border); }
+html[data-theme="dark"] .tc-subtitle { color:var(--text-secondary); }
+html[data-theme="dark"] .tc-panel,
+html[data-theme="dark"] .tc-side-card,
+html[data-theme="dark"] .tc-sticky-bar,
+html[data-theme="dark"] .tc-farm-chip,
+html[data-theme="dark"] .tc-alloc-chip,
+html[data-theme="dark"] .tc-attachment-card { background:var(--surface);box-shadow:none; }
+html[data-theme="dark"] .tc-panel-head { background:var(--bg-subtle);border-bottom-color:var(--border);color:var(--text); }
+html[data-theme="dark"] .tc-panel-head.green { background:var(--success-subtle); }
+html[data-theme="dark"] .tc-panel-head.purple { background:#201a33;color:#b79dff; }
+html[data-theme="dark"] .tc-st-table-wrap { border-color:var(--border); }
+html[data-theme="dark"] #st-results-table thead th { background:var(--bg-subtle);color:var(--text); }
+html[data-theme="dark"] #st-results-table tbody tr.tc-st-row-picked { background:var(--success-subtle); }
+html[data-theme="dark"] #st-results-table tbody tr.tc-st-row-charged { background:var(--warning-subtle); }
+html[data-theme="dark"] #st-results-table tbody tr.tc-st-row-charged.tc-st-row-picked { background:#3a2f12; }
+html[data-theme="dark"] .tc-st-charged-badge { background:var(--warning-subtle) !important;color:var(--warning-text) !important; }
+html[data-theme="dark"] .tc-metric { border-color:var(--border);background:var(--bg-subtle); }
+html[data-theme="dark"] .tc-metric-icon { background:var(--primary-subtle);color:var(--primary-light); }
+html[data-theme="dark"] .tc-metric small { color:var(--text-secondary); }
+html[data-theme="dark"] .tc-summary-label { color:var(--text-secondary);border-top-color:var(--border); }
+html[data-theme="dark"] .tc-sticky-bar .tc-costing { border-right-color:var(--border); }
+html[data-theme="dark"] .tc-sticky-bar .tc-costing .chip { background:var(--success-subtle);color:var(--success-text); }
+html[data-theme="dark"] .tc-sticky-bar .tc-tot-item small { color:var(--text-secondary); }
+html[data-theme="dark"] .tc-sticky-bar .tc-grand { background:var(--success-subtle); }
+html[data-theme="dark"] .tc-sticky-bar .tc-grand small { color:var(--success-text); }
+html[data-theme="dark"] .tc-sticky-bar .tc-grand b { color:var(--success-text); }
+html[data-theme="dark"] .tc-empty-note { color:var(--text-muted); }
+html[data-theme="dark"] .tc-st-chip { background:var(--primary-subtle);border-color:var(--border);color:var(--primary-light); }
+html[data-theme="dark"] .tc-st-chip button.st-chip-remove { color:var(--primary-light); }
+html[data-theme="dark"] .tc-farms { background:var(--bg-subtle);border-color:var(--border); }
+html[data-theme="dark"] #lines-table th { background:var(--bg-subtle);color:var(--text); }
+html[data-theme="dark"] .tc-scope-toggle label { border-color:var(--border); }
+html[data-theme="dark"] .tc-inline-rate-field label { color:var(--text-secondary); }
+html[data-theme="dark"] .tc-alloc-chip { border-color:var(--border); }
+html[data-theme="dark"] .tc-alloc-card { background:var(--surface); }
+html[data-theme="dark"] .tc-alloc-card > div:first-child { background:var(--bg-subtle) !important;border-bottom-color:var(--border) !important; }
+html[data-theme="dark"] .tc-alloc-card .badge.bg-white { background:var(--surface) !important;border-color:var(--border) !important; }
+html[data-theme="dark"] .tc-alloc-card .table { color:var(--text); }
+html[data-theme="dark"] .tc-alloc-card .table thead th { color:var(--text-secondary);border-color:var(--border); }
+html[data-theme="dark"] .tc-alloc-card .table td { border-color:var(--border); }
+html[data-theme="dark"] .tc-side-title { background:var(--success-subtle); }
+html[data-theme="dark"] .tc-sum-row { border-bottom-color:var(--border); }
+html[data-theme="dark"] .tc-sum-total { background:var(--success-subtle);color:var(--success-text); }
+html[data-theme="dark"] .tc-upload { background:var(--bg-subtle);border-color:var(--primary);color:var(--primary-light); }
+html[data-theme="dark"] .tc-attachment-card { border-color:var(--border); }
+html[data-theme="dark"] .tc-attachment-thumb { background:var(--bg-subtle); }
+html[data-theme="dark"] .tc-attachment-thumb-file { color:var(--text-muted); }
+html[data-theme="dark"] .tc-accounting { border-top-color:var(--border); }
+html[data-theme="dark"] .tc-accounting summary { color:var(--text-secondary); }
 </style>
 <div class="ds tc-page">
   <div class="tc-title-row">
