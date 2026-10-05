@@ -12,7 +12,7 @@ from account.models import (BankCashMaster, ChartOfAccount, CoATemplate,
                             CompanyProfile, FinancialYear, OrganizationCentre)
 from account.services import CoAGeneratorService
 from account.services.bank_cash import ledger_for_bank_cash
-from broiler.models import Branch, BroilerFarm, Farmer, Region, Supervisor
+from broiler.models import Branch, BroilerBatch, BroilerFarm, Farmer, Region, Supervisor
 from inventory.models import (ChargeType, Item, ItemCategory, Sector,
                               StockTransfer, TransferChargeAllocation,
                               TransferChargeHeader, TransferChargeLine,
@@ -141,6 +141,27 @@ class TransferChargePostingTests(TestCase):
         self.assertEqual(summary["farm_count"], 2)
         self.assertEqual(summary["total_quantity"], Decimal("230"))
         self.assertEqual(summary["total_stock_value"], Decimal("150") * 42 + Decimal("80") * 42)
+
+    def test_destination_farm_carries_its_batch_codes(self):
+        batch1 = BroilerBatch.objects.create(broiler_farm=self.farm1, batch_name="AKB-1121-1")
+        batch2 = BroilerBatch.objects.create(broiler_farm=self.farm2, batch_name="AKB-1124-1")
+        self.t1.to_batch = batch1
+        self.t1.save(update_fields=["to_batch"])
+        self.t2.to_batch = batch2
+        self.t2.save(update_fields=["to_batch"])
+
+        header = self.make_header()
+        summary = service.transfer_summary(header.stock_transfers.all())
+        by_farm = {f["farm_id"]: f["batches"] for f in summary["farms"]}
+        self.assertEqual(by_farm[self.farm1.id], ["AKB-1121-1"])
+        self.assertEqual(by_farm[self.farm2.id], ["AKB-1124-1"])
+
+    def test_destination_farm_without_a_batch_lists_none(self):
+        # t1/t2 carry no to_batch in the base fixture — a warehouse-to-farm
+        # move need not be tied to a flock (e.g. non-chick stock).
+        header = self.make_header()
+        summary = service.transfer_summary(header.stock_transfers.all())
+        self.assertTrue(all(f["batches"] == [] for f in summary["farms"]))
 
     def test_common_by_quantity_allocates_without_rounding_loss(self):
         header = self.make_header()

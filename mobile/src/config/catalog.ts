@@ -1235,6 +1235,30 @@ const inventoryResources: ResourceConfig[] = [
     }),
   },
   {
+    key: "inventory-transfer-charges",
+    module: "inventory",
+    // Its own screen: figures above the rows, an allocation engine behind
+    // the entry screen's lines — the generic list/form cannot draw either.
+    nativeScreen: "TransferChargeList",
+    path: "/inventory/transfer-charges/rows",
+    title: "Transfer Charges",
+    singular: "Transfer Charge",
+    icon: "truck-fast",
+    accent: I,
+    emptyMessage: "No transfer charges yet.",
+    dateField: "charge_date",
+    searchKeys: ["charge_no", "dc_no"],
+    card: (r) => ({
+      title: pick(r, ["charge_no"], `Charge #${r.id}`),
+      subtitle: joinParts([formatDate(r.charge_date), dcNo(r)]),
+      trailing: !isBlank(r.total_charges) ? { value: formatMoney(r.total_charges) } : undefined,
+      badge: !isBlank(r.status)
+        ? { label: String(r.status),
+            tone: /post/.test(String(r.status).toLowerCase()) ? "success" : "neutral" }
+        : undefined,
+    }),
+  },
+  {
     key: "inventory-medicine-transfers",
     module: "inventory",
     path: "/inventory/medicine-transfers/",
@@ -2207,6 +2231,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Transactions",
         resourceKeys: [
           "inventory-stock-transfers",
+          "inventory-transfer-charges",
           "inventory-medicine-transfers",
           "inventory-adjustments",
           "inventory-stock-issues",
