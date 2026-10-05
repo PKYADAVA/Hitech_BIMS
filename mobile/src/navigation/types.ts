@@ -67,6 +67,15 @@ export type ModuleStackParams = {
    * `copy` opens the same spend again as a new one.
    */
   PettyExpenseForm: { id?: number; copy?: number } | undefined;
+  /**
+   * Transfer Charges — the register, read the same way: the figures, the
+   * filters, then the rows. Posting and cancelling happen from a row's own
+   * menu rather than the entry screen.
+   */
+  TransferChargeList: undefined;
+  /** The entry screen. `id` opens a saved charge instead of a blank one;
+   *  it also doubles as the detail view, exactly as Petty Expense's does. */
+  TransferChargeForm: { id?: number } | undefined;
   /** Batch Creation. `row` corrects a saved batch; the farm is fixed then. */
   BatchForm: { row?: Row } | undefined;
   FarmCaptureForm: { row?: Row; propose?: boolean } | undefined;

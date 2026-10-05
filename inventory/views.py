@@ -3992,7 +3992,23 @@ _CR_HANDLERS.update({
 # ==========================================================================
 
 def _scope_transfer_charge(user, qs):
+    """Scope a ``TransferChargeHeader`` queryset -- ``stock_transfers`` is its
+    own M2M to ``StockTransfer``, so this reaches each linked transfer's
+    destination farm."""
     return scope_any(user, qs, farms="stock_transfers__to_farm_id")
+
+
+def _scope_stock_transfer(user, qs):
+    """Scope a ``StockTransfer`` queryset directly by its own destination farm.
+
+    Not the same field path as ``_scope_transfer_charge``: ``stock_transfers``
+    is not a field on ``StockTransfer`` itself (only ``Item`` has a reverse
+    relation of that name), so reusing that helper here silently scoped by
+    every *other* transfer sharing the same item instead of this row's own
+    ``to_farm`` -- which hid rows a limited-permission user should have seen,
+    and could leak others never scoped there at all.
+    """
+    return scope_any(user, qs, farms="to_farm_id")
 
 
 def _charge_type_options():
@@ -4059,7 +4075,7 @@ def transfer_charge_stock_transfer_lookup(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
 
-    qs = _scope_transfer_charge(request.user, StockTransfer.objects.exclude(dc_no="")
+    qs = _scope_stock_transfer(request.user, StockTransfer.objects.exclude(dc_no="")
                                 .select_related("from_warehouse", "from_farm", "to_farm", "item",
                                                 "from_batch", "to_batch"))
 
@@ -4199,7 +4215,7 @@ def _transfer_charge_to_dict(header, detail=False):
         "voucher_id": header.voucher_id, "posted_by": str(header.posted_by) if header.posted_by_id else "",
         "created_by": str(header.created_by) if header.created_by_id else "",
     }
-    transfers = list(header.stock_transfers.select_related("from_warehouse", "from_farm", "to_farm").all())
+    transfers = list(header.stock_transfers.select_related("from_warehouse", "from_farm", "to_farm", "to_batch").all())
     summary = tc_service.transfer_summary(transfers)
     data["from_location"] = str(transfers[0].from_location) if transfers else ""
     data["vehicle_no"] = transfers[0].vehicle_no if transfers else ""

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "529311645307",
+    "project_id": "hitech-bims-157d2",
+    "storage_bucket": "hitech-bims-157d2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:529311645307:android:f46236686b240c6cc7acde",
+        "android_client_info": {
+          "package_name": "com.hitechfarms.bims"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDfv0kkwZ-HLA_5a0TlBeiKGUUPFLvSQY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

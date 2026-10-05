@@ -20,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.permissions import MatrixPermission
 from api.viewsets import V1ViewMixin
 
 from . import views as web
@@ -198,4 +199,174 @@ def write_urls() -> list:
                          name=f"inventory-{suffix}-save-new"))
         urls.append(path(f"inventory/{suffix}/save/<int:pk>", view.as_view(),
                          name=f"inventory-{suffix}-save"))
+    urls.extend(_transfer_charge_urls())
     return urls
+
+
+# --------------------------------------------------------------------------
+# Transfer Charges — same delegation shape as account.api_write, matrix-gated
+# on the web register's own tab rather than bare IsAuthenticated: unlike the
+# five write views above (gated only by login), a Transfer Charge has its own
+# tab in the Web-Access matrix, so the phone is held to it too.
+# --------------------------------------------------------------------------
+
+from .models import TransferChargeHeader  # noqa: E402
+from .services import transfer_charges as tc_service  # noqa: E402
+
+
+def _tc_delegate(bound_method, request, *args) -> Response:
+    """``_delegate``, but for the plain Django views Transfer Charges uses
+    (``@login_required`` functions and a non-DRF ``View``) rather than a web
+    ``*API`` class's bound method -- same envelope either way."""
+    django_request = getattr(request, "_request", request)
+    django_request.user = request.user
+    try:
+        resp = bound_method(django_request, *args)
+    except DjangoHttp404 as exc:
+        raise NotFound(str(exc) or "Record not found.")
+
+    payload = json.loads(resp.content or b"{}")
+    if resp.status_code >= 400:
+        detail = payload.get("error") if isinstance(payload, dict) else None
+        raise ValidationError(detail or payload or "Could not save.")
+    return Response(payload, status=resp.status_code)
+
+
+class _TransferChargeView(V1ViewMixin, APIView):
+    permission_classes = [IsAuthenticated, MatrixPermission]
+    tab_code = "transfer_charge_list"
+
+
+class TransferChargeListView(_TransferChargeView):
+    """The register's rows — the same filters the web list page takes."""
+
+    def get(self, request):
+        return _tc_delegate(web.TransferChargeAPI().get, request)
+
+
+class TransferChargeMastersView(_TransferChargeView):
+    """Everything the Add Transfer Charges screen's pickers hold.
+
+    Branches and farms come scoped the way Petty Expense's own masters are —
+    through ``farms_for``/``branches_for`` — because a Transfer Charge is also
+    gated by Web-Access farm/branch scope, not by the (unscoped) matrix tab
+    alone.
+    """
+
+    def get(self, request):
+        from broiler.models import Branch, BroilerFarm
+        from user.services.scoping import branches_for, farms_for
+
+        return Response({
+            "charge_types": web._charge_type_options(),
+            "branches": list(branches_for(request.user, Branch.objects.order_by("branch_name"))
+                             .values("id", "branch_name")),
+            "farms": list(farms_for(request.user, BroilerFarm.objects.order_by("farm_name"))
+                          .values("id", "farm_name", "branch_id")),
+            "statuses": [c[0] for c in TransferChargeHeader.STATUS_CHOICES],
+            "treatments": [c[0] for c in TransferChargeHeader.TREATMENT_CHOICES],
+            "payment_modes": [c[0] for c in TransferChargeHeader.PAYMENT_MODE_CHOICES],
+            "allocation_methods": [c[0] for c in web.TransferChargeLine.METHOD_CHOICES],
+            "scopes": [c[0] for c in web.TransferChargeLine.SCOPE_CHOICES],
+            "bank_cash_accounts": list(web.BankCashMaster.objects.order_by("name")
+                                       .values("id", "name", "is_cash")),
+            "payable_accounts": tc_service.payable_accounts(),
+        })
+
+
+class TransferChargeDetailView(_TransferChargeView):
+    def get(self, request, pk):
+        return _tc_delegate(web.TransferChargeAPI().get, request, pk)
+
+    def delete(self, request, pk):
+        return _tc_delegate(web.TransferChargeAPI().delete, request, pk)
+
+
+class TransferChargeSaveView(_TransferChargeView):
+    """Save a draft, submit for approval, or save and post, exactly as the
+    web form's three buttons do -- ``submit_for_approval``/``action: "post"``
+    in the body are the web form's own flags, carried through unchanged."""
+
+    def post(self, request, pk=None):
+        if pk is None:
+            return _tc_delegate(web.TransferChargeAPI().post, request)
+        return _tc_delegate(web.TransferChargeAPI().put, request, pk)
+
+
+class TransferChargeStockTransferLookupView(_TransferChargeView):
+    """Trip search: a Stock Transfer row group by ``dc_no`` + date, exactly
+    as the web Add screen's Step 1 picker searches it."""
+
+    def get(self, request):
+        return _tc_delegate(web.transfer_charge_stock_transfer_lookup, request)
+
+
+class TransferChargeNextNumberView(_TransferChargeView):
+    def get(self, request):
+        return _tc_delegate(web.transfer_charge_next_number_preview, request)
+
+
+class TransferChargeAllocatePreviewView(_TransferChargeView):
+    """Live allocation math for a Common line, straight from the engine --
+    never recomputed here, so the screen can never show a number the save
+    would not also produce."""
+
+    def post(self, request):
+        return _tc_delegate(web.transfer_charge_allocate_preview, request)
+
+
+class TransferChargePostView(_TransferChargeView):
+    def post(self, request, pk):
+        return _tc_delegate(web.transfer_charge_post, request, pk)
+
+
+class TransferChargeCancelView(_TransferChargeView):
+    def post(self, request, pk):
+        return _tc_delegate(web.transfer_charge_cancel, request, pk)
+
+
+class TransferChargeAttachView(_TransferChargeView):
+    """Bills, Bilty/LR and toll receipts, photographed at the counter --
+    multipart, so the request goes through unparsed and the web view reads
+    ``request.FILES`` itself, same as Petty Expense's own attach view."""
+
+    def get(self, request, pk):
+        return _tc_delegate(web.transfer_charge_attachments, request, pk)
+
+    def post(self, request, pk):
+        return _tc_delegate(web.transfer_charge_attachments, request, pk)
+
+    def delete(self, request, pk, attachment_id):
+        return _tc_delegate(web.transfer_charge_attachment_delete, request, pk, attachment_id)
+
+
+def _transfer_charge_urls() -> list:
+    return [
+        path("inventory/transfer-charges/rows", TransferChargeListView.as_view(),
+             name="inventory-transfer-charges-rows"),
+        path("inventory/transfer-charges/masters", TransferChargeMastersView.as_view(),
+             name="inventory-transfer-charges-masters"),
+        path("inventory/transfer-charges/next-number", TransferChargeNextNumberView.as_view(),
+             name="inventory-transfer-charges-next-number"),
+        path("inventory/transfer-charges/stock-transfer-lookup",
+             TransferChargeStockTransferLookupView.as_view(),
+             name="inventory-transfer-charges-stock-transfer-lookup"),
+        path("inventory/transfer-charges/allocate-preview",
+             TransferChargeAllocatePreviewView.as_view(),
+             name="inventory-transfer-charges-allocate-preview"),
+        path("inventory/transfer-charges/save", TransferChargeSaveView.as_view(),
+             name="inventory-transfer-charges-save-new"),
+        path("inventory/transfer-charges/save/<int:pk>", TransferChargeSaveView.as_view(),
+             name="inventory-transfer-charges-save"),
+        path("inventory/transfer-charges/<int:pk>", TransferChargeDetailView.as_view(),
+             name="inventory-transfer-charges-detail"),
+        path("inventory/transfer-charges/<int:pk>/post", TransferChargePostView.as_view(),
+             name="inventory-transfer-charges-post"),
+        path("inventory/transfer-charges/<int:pk>/cancel", TransferChargeCancelView.as_view(),
+             name="inventory-transfer-charges-cancel"),
+        path("inventory/transfer-charges/<int:pk>/attach", TransferChargeAttachView.as_view(),
+             name="inventory-transfer-charges-attach"),
+        path("inventory/transfer-charges/<int:pk>/attach/<int:attachment_id>",
+             TransferChargeAttachView.as_view(),
+             name="inventory-transfer-charges-detach"),
+    ]

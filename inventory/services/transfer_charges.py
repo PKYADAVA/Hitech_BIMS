@@ -78,13 +78,20 @@ def destination_farms(stock_transfers):
         if farm.id not in by_farm:
             by_farm[farm.id] = {
                 'farm_id': farm.id, 'farm_name': str(farm),
-                'quantity': ZERO, 'stock_value': ZERO,
+                'quantity': ZERO, 'stock_value': ZERO, 'batches': [],
             }
             order.append(farm.id)
         qty = row.quantity or ZERO
         rate = row.rate or ZERO
         by_farm[farm.id]['quantity'] += qty
         by_farm[farm.id]['stock_value'] += (qty * rate)
+        # One trip can carry several items onto the same farm under different
+        # batches (a placement and a later top-up); every one is relevant to
+        # what this charge is costing, not just the first seen. The bare code
+        # (not str(batch), which repeats the farm name already shown beside it).
+        batch = row.to_batch and row.to_batch.batch_name
+        if batch and batch not in by_farm[farm.id]['batches']:
+            by_farm[farm.id]['batches'].append(batch)
     return [by_farm[fid] for fid in order]
 
 
