@@ -10,6 +10,7 @@ import { LockGate } from "@/components/LockGate";
 import { OfflineBar } from "@/components/OfflineBar";
 import { UpdateGate } from "@/components/UpdateGate";
 import { startOnlineWatch } from "@/net/online";
+import { requestOnboardingPermissions } from "@/permissions/onboarding";
 import { runSync } from "@/offline/engine";
 import { saveOffline } from "@/offline/save";
 import { insertEntry, listEntries, summarise } from "@/offline/queue";
@@ -58,10 +59,14 @@ export default function App() {
     };
   }, []);
 
-  // Once signed in: register for push + load this user's module permissions.
-  // On sign-out: clear permissions so the next user starts fresh.
+  // Once signed in: ask for the OS permissions the app uses anywhere (so
+  // they're granted together up front rather than one at a time across a
+  // supervisor's first week), register for push, and load this user's
+  // module permissions. On sign-out: clear permissions so the next user
+  // starts fresh.
   useEffect(() => {
     if (status === "signedIn") {
+      requestOnboardingPermissions();
       registerForPush();
       loadPermissions();
     } else if (status === "signedOut") {
