@@ -138,6 +138,17 @@
 $(function () {
   let table;
   const csrfToken = "{{ csrf_token }}";
+
+  // The form redirects here after a save; this is where the charge now is,
+  // so this is where the save is confirmed.
+  try {
+    const saved = sessionStorage.getItem("bims-transfer-charge-saved");
+    if (saved) {
+      sessionStorage.removeItem("bims-transfer-charge-saved");
+      showToast("success", saved);
+    }
+  } catch (e) { /* private browsing: a toast is not worth an error */ }
+
   function escapeHtml(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }

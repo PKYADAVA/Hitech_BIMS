@@ -6,10 +6,13 @@ Charge needs.
 import json
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.urls import reverse
 
 from inventory.models import ChargeType, TransferChargeHeader
 from inventory.test_transfer_charges import TransferChargePostingTests
+from user.models import GroupAccessProfile, GroupTabPermission
 
 
 class TransferChargeViewTests(TransferChargePostingTests):
@@ -35,6 +38,29 @@ class TransferChargeViewTests(TransferChargePostingTests):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["farm_count"], 2)
         self.assertEqual(set(rows[0]["stock_transfer_ids"]), {self.t1.id, self.t2.id})
+
+    def test_stock_transfer_lookup_is_scoped_to_the_users_own_farm(self):
+        # A group scoped to farm1 only -- farm2's half of the same DC/trip
+        # must not show, but farm1's own half must, exactly as the matrix
+        # scopes every other register. This is what regressed: the lookup's
+        # farm-scoping filter was built with the wrong field path (reusing
+        # TransferChargeHeader's own ``stock_transfers`` relation name on a
+        # ``StockTransfer`` queryset, where that name doesn't exist on the
+        # row itself) and so filtered by an unrelated join instead.
+        group = Group.objects.create(name="Farm1 Only")
+        profile = GroupAccessProfile.objects.create(group=group, all_branches=True, all_farms=False)
+        profile.farms.set([self.farm1])
+        GroupTabPermission.objects.create(group=group, tab_code="transfer_charge_list", can_view=True)
+        limited_user = get_user_model().objects.create_user(username="farm1user", password="x")
+        limited_user.groups.add(group)
+        self.client.force_login(limited_user)
+
+        resp = self.client.get(reverse("transfer_charge_stock_transfer_lookup"), {"q": "DC-TEST-1"})
+        self.assertEqual(resp.status_code, 200)
+        rows = resp.json()
+        self.assertEqual(len(rows), 1)
+        # farm1's own transfer is visible; farm2's is scoped out of the group.
+        self.assertEqual(rows[0]["stock_transfer_ids"], [self.t1.id])
 
     def test_stock_transfer_lookup_detail_by_dc_and_date(self):
         resp = self.client.get(reverse("transfer_charge_stock_transfer_lookup"),
