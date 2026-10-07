@@ -71,6 +71,29 @@ class WhatsappService:
             return MockWhatsappProvider()
         return factory(config)
 
+    def check_contact(self, phone_number):
+        """Advisory check: is ``phone_number`` a number LemIn AI already
+        knows about (a saved contact)?
+
+        This is NOT a "does this number have WhatsApp" check — no provider
+        in this codebase can answer that; see
+        :meth:`~notification.providers.whatsapp_base.WhatsappProvider.lookup_contact`
+        for why. Returns ``True``/``False`` for a clean answer or ``None``
+        when the check is inconclusive (disabled config, bad number, network
+        failure) — callers must treat ``None`` the same as "unknown, proceed
+        with a caveat", never as a block.
+        """
+        try:
+            recipient = normalize_phone(phone_number, self._config.default_country_code)
+        except SmsValidationError:
+            return None
+        try:
+            return self._provider.lookup_contact(recipient)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp contact check raised unexpectedly recipient=%s",
+                           mask_phone(phone_number))
+            return None
+
     def send_template(self, template_key, phone_number, context=None) -> WhatsappResult:
         """Resolve a :class:`~notification.models.WhatsappTemplate` by key
         against ``context`` and send it.

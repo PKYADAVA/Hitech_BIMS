@@ -817,6 +817,23 @@ def toggle_whatsapp_template_active(request, template_id: int) -> JsonResponse:
 
 
 @login_required
+def check_whatsapp_contact(request) -> JsonResponse:
+    """Advisory-only: is this phone number a contact LemIn AI already knows
+    about? NOT a real "has WhatsApp" check — see
+    ``WhatsappService.check_contact`` for why. Never blocks a send; the
+    frontend uses this to show a soft warning before the user confirms.
+    """
+    phone = (request.GET.get("phone") or "").strip()
+    if not phone:
+        return JsonResponse({"error": "Phone number is required."}, status=400)
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    known = get_whatsapp_service().check_contact(phone)
+    return JsonResponse({"known": known})
+
+
+@login_required
 def send_whatsapp_template(request, template_id: int) -> JsonResponse:
     """Send this template to a phone number using values supplied in the form.
 

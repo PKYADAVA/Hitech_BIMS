@@ -121,6 +121,7 @@
             <label for="send-wa-phone" class="form-label">Phone Number<span class="text-danger">*</span></label>
             <input type="tel" id="send-wa-phone" name="phone" class="form-control"
                    placeholder="e.g. 919876543210" required>
+            <div class="form-text" id="send-wa-contact-check"></div>
           </div>
           <div class="row g-3" id="send-wa-fields">
             <!-- One input per parameter, injected by JS -->
@@ -416,12 +417,36 @@ $(document).ready(function () {
                      placeholder="${escapeHtml(name)}" required>
             </div>`);
         });
+        $("#send-wa-contact-check").html("");
         $("#sendWaModal").modal("show");
       },
       error: function (xhr, status, error) {
         showToast('danger', 'Failed to load template: ' + error);
       }
     });
+  });
+
+  // Advisory-only contact check, debounced on typing. NOT a "has WhatsApp"
+  // check — LemIn AI has no such thing — only "have we seen this number
+  // before". Never blocks Send; it's a hint, not a gate.
+  let waContactCheckTimer = null;
+  $(document).on("input", "#send-wa-phone", function () {
+    const phone = $(this).val().trim();
+    const out = $("#send-wa-contact-check");
+    clearTimeout(waContactCheckTimer);
+    if (phone.length < 10) { out.html(""); return; }
+    waContactCheckTimer = setTimeout(function () {
+      $.getJSON("{% url 'whatsapp_contact_check' %}", { phone: phone }, function (res) {
+        if (res.known === true) {
+          out.html('<span class="text-success"><i class="fas fa-circle-check me-1"></i>Known contact</span>');
+        } else if (res.known === false) {
+          out.html('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>' +
+                   'No prior record for this number — not a guarantee it has WhatsApp, just unverified.</span>');
+        } else {
+          out.html("");
+        }
+      }).fail(function () { out.html(""); });
+    }, 500);
   });
 
   // Submit Send — calls the service, respects WHATSAPP_ENABLED/WHATSAPP_MOCK.

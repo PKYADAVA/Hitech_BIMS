@@ -29,6 +29,21 @@ class WhatsappProvider(ABC):
         :class:`~notification.exceptions.WhatsappPermanentError` otherwise.
         """
 
+    def lookup_contact(self, phone: str):
+        """Return ``True``/``False``/``None`` for whether ``phone`` is a
+        known contact on this channel.
+
+        This is NOT a genuine "is this number on WhatsApp" check — no such
+        check exists in the LemIn AI API this provider wraps. It only
+        answers "has this number been seen before" (saved as a contact).
+        ``None`` means the provider cannot answer (no lookup support, or the
+        check itself failed) and callers should treat that as "unknown",
+        never as a reason to block a send.
+
+        Default: unsupported. Providers that can answer this override it.
+        """
+        return None
+
     def close(self) -> None:
         """Release any network resources (HTTP session/sockets) held.
 

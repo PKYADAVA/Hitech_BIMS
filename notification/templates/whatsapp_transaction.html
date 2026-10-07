@@ -85,7 +85,7 @@
             <th>Document No</th>
             <th class="ds-num">Amount</th>
             <th>WhatsApp Status</th>
-            <th class="text-center">Preview</th>
+            <th>Message Preview</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -187,6 +187,33 @@ $(function () {
     return ALL_TEMPLATES.find(t => String(t.id) === String(id)) || null;
   }
 
+  // WhatsApp templates aren't free text — the approved wording lives in
+  // Meta's system, unknown to the ERP. The preview shows what WILL be sent:
+  // each parameter's resolved value, in order, against the selected template.
+  function paramLabel(n) {
+    return "{" + "{" + n + "}" + "}";
+  }
+  // A genuine 0/0.00 is a real value and must not read as missing — only
+  // undefined/null/empty-string count as "this row has nothing to send
+  // here", which Meta would otherwise receive as a blank parameter.
+  function paramValueHtml(value) {
+    const missing = value === undefined || value === null || value === "";
+    return missing
+      ? '<span class="text-danger" title="No value for this parameter on this row"><i class="fas fa-xmark"></i></span>'
+      : escapeHtml(value);
+  }
+  function messagePreviewCell(r) {
+    const t = selectedTemplate();
+    if (!t) return '<span class="text-muted small">Select a template</span>';
+    if (!t.parameter_map.length) {
+      return `<div class="small"><code>${escapeHtml(t.template_name)}</code><br><span class="text-muted">No parameters.</span></div>`;
+    }
+    const params = t.parameter_map.map((name, n) =>
+      `<div>${paramLabel(n + 1)} <span class="text-muted">${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
+    ).join("");
+    return `<div class="small"><code>${escapeHtml(t.template_name)}</code>${params}</div>`;
+  }
+
   // Successful sends of the CURRENTLY selected template for this document.
   function sentForSelectedTemplate(r) {
     const sel = $("#template").val();
@@ -227,7 +254,7 @@ $(function () {
         <td>${escapeHtml(r.doc_no)}</td>
         <td class="text-end">${Number(r.amount).toFixed(2)}</td>
         <td>${waStatusCell(r)}</td>
-        <td class="text-center"><button class="btn btn-outline-info btn-sm row-preview" data-index="${i}"><i class="fas fa-eye"></i></button></td>
+        <td>${messagePreviewCell(r)}</td>
       </tr>`);
     });
     table = $("#wa-doc-table").DataTable({
@@ -271,18 +298,14 @@ $(function () {
     return $(".row-check:checked").map(function () { return Number($(this).data("index")); }).get();
   }
 
-  // WhatsApp templates aren't free text — the approved wording lives in
-  // Meta's system, unknown to the ERP. The preview shows what WILL be sent:
-  // the template name plus each parameter's resolved value, in order.
-  function paramLabel(n) {
-    return "{" + "{" + n + "}" + "}";
-  }
+  // Bulk preview modal — same resolved-parameter info as the grid's own
+  // Message Preview column, just gathered for every selected row at once.
   function previewCards(indexes) {
     const t = selectedTemplate();
     return indexes.map(i => {
       const r = rows[i];
       const params = (t?.parameter_map || []).map((name, n) =>
-        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${escapeHtml(r.context[name] ?? "")}</div>`
+        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
       ).join("") || '<div class="text-muted">No parameters.</div>';
       return `<div class="border rounded p-2 mb-2">
         <div class="d-flex justify-content-between small text-muted">
@@ -309,12 +332,6 @@ $(function () {
     new bootstrap.Modal(document.getElementById("previewModal")).show();
   });
 
-  $(document).on("click", ".row-preview", async function () {
-    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return; }
-    $("#preview-body").html(previewCards([Number($(this).data("index"))]));
-    new bootstrap.Modal(document.getElementById("previewModal")).show();
-  });
-
   async function sendOne(r, force) {
     const resp = await fetch("{% url 'whatsapp_transaction_send' %}", {
       method: "POST",
@@ -323,6 +340,23 @@ $(function () {
                              template_id: $("#template").val(), force: force }),
     });
     return { status: resp.status, data: await resp.json() };
+  }
+
+  // Advisory-only, and only for what's actually selected (never the whole
+  // loaded grid) — LemIn AI has no real "has WhatsApp" check, only "have we
+  // seen this number before". Run in parallel since these are independent
+  // GETs; a failed/inconclusive check is silently treated as "unknown".
+  async function checkContacts(idx) {
+    const checks = await Promise.all(idx.map(async i => {
+      const phone = (rows[i].mobile || "").trim();
+      if (!phone) return null;
+      try {
+        const resp = await fetch("{% url 'whatsapp_contact_check' %}?phone=" + encodeURIComponent(phone));
+        const data = await resp.json();
+        return data.known;
+      } catch (e) { return null; }
+    }));
+    return idx.filter((_, n) => checks[n] === false);
   }
 
   async function sendSelected() {
@@ -334,6 +368,13 @@ $(function () {
       if (!(await window.bimsConfirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`))) {
         idx = idx.filter(i => !sentForSelectedTemplate(rows[i]).length);
         if (!idx.length) { window.showToast('danger', "Nothing left to send — all selected documents already received this WhatsApp template."); return; }
+      }
+    }
+    const unknown = await checkContacts(idx);
+    if (unknown.length) {
+      const names = unknown.slice(0, 5).map(i => rows[i].party_name).join(", ");
+      if (!(await window.bimsConfirm(`${unknown.length} of the selected number(s) have no prior record with the WhatsApp provider (${names}${unknown.length > 5 ? ", …" : ""}). This isn't a guarantee they lack WhatsApp — just unverified.\n\nOK = send anyway.\nCancel = go back and review your selection.`))) {
+        return;
       }
     }
     $("#send-btn, #preview-send-btn").prop("disabled", true);

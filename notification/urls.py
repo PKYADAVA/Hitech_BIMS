@@ -12,6 +12,7 @@ from .views import (
     WhatsappTemplateAPI,
     WhatsappTemplateManageView,
     WhatsappTransactionPageView,
+    check_whatsapp_contact,
     sms_settings_test,
     send_sms_template,
     send_whatsapp_template,
@@ -60,6 +61,7 @@ urlpatterns = [
          name="whatsapp_template_toggle_active"),
     path("whatsapp-templates/<int:template_id>/send/", send_whatsapp_template,
          name="whatsapp_template_send"),
+    path("whatsapp-contact-check/", check_whatsapp_contact, name="whatsapp_contact_check"),
 
     path("whatsapp-settings/", WhatsappSettingsPageView.as_view(), name="whatsapp_settings"),
     path("whatsapp-settings/test/", whatsapp_settings_test, name="whatsapp_settings_test"),

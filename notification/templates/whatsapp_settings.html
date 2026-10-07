@@ -77,6 +77,7 @@
         <div class="mb-2">
           <label class="form-label">Mobile Number</label>
           <input type="text" class="form-control" id="test-mobile" placeholder="With country code, e.g. 919876543210">
+          <div class="form-text" id="test-mobile-check"></div>
         </div>
         <div class="mb-2">
           <label class="form-label">Template</label>
@@ -150,6 +151,28 @@ $(function () {
           <input type="text" class="form-control form-control-sm test-param-input" data-name="${name}" placeholder="${name}">
         </div>`);
     });
+  });
+
+  // Advisory-only contact check, debounced on typing — see whatsapp_templates.html
+  // for the same pattern and the caveat about what this can and can't tell you.
+  let waTestContactCheckTimer = null;
+  $("#test-mobile").on("input", function () {
+    const phone = $(this).val().trim();
+    const out = $("#test-mobile-check");
+    clearTimeout(waTestContactCheckTimer);
+    if (phone.length < 10) { out.html(""); return; }
+    waTestContactCheckTimer = setTimeout(function () {
+      $.getJSON("{% url 'whatsapp_contact_check' %}", { phone: phone }, function (res) {
+        if (res.known === true) {
+          out.html('<span class="text-success"><i class="fas fa-circle-check me-1"></i>Known contact</span>');
+        } else if (res.known === false) {
+          out.html('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>' +
+                   'No prior record for this number — not a guarantee it has WhatsApp, just unverified.</span>');
+        } else {
+          out.html("");
+        }
+      }).fail(function () { out.html(""); });
+    }, 500);
   });
 
   $("#test-send-btn").on("click", function () {

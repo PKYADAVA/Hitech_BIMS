@@ -19,7 +19,11 @@ import logging
 import requests
 
 from ..conf import WhatsappConfig
-from ..constants import LEMINAI_SEND_TEMPLATE_ENDPOINT, WhatsappProviderName
+from ..constants import (
+    LEMINAI_CONTACT_LOOKUP_ENDPOINT,
+    LEMINAI_SEND_TEMPLATE_ENDPOINT,
+    WhatsappProviderName,
+)
 from ..dtos import WhatsappResult
 from ..exceptions import (
     WhatsappConfigurationError,
@@ -76,6 +80,42 @@ class LeminaiProvider(WhatsappProvider):
             raise WhatsappTransientError("Network error contacting WhatsApp provider.") from exc
 
         return self._handle_response(phone, response)
+
+    def lookup_contact(self, phone: str):
+        """Return whether ``phone`` is already a saved LemIn AI contact.
+
+        Not a real WhatsApp-presence check (see WhatsappProvider.lookup_contact
+        for why) — GET /api/v1/contacts/lookup only knows about numbers this
+        account has already messaged or saved. Returns ``True``/``False`` on
+        a clean answer, ``None`` if the check itself couldn't be completed
+        (network error, bad credentials, unexpected response) — never raises,
+        since this is an advisory check that must not block a send.
+        """
+        try:
+            self._ensure_configured()
+        except WhatsappConfigurationError:
+            return None
+
+        url = f"{self._config.base_url}{LEMINAI_CONTACT_LOOKUP_ENDPOINT}"
+        try:
+            response = self._session.get(
+                url, params={"phone": phone},
+                headers={"Authorization": f"Bearer {self._config.api_key}"},
+                timeout=self._config.timeout,
+            )
+        except requests.RequestException:
+            logger.warning("WhatsApp contact lookup failed (network) recipient=%s", mask_phone(phone))
+            return None
+
+        if response.status_code == 404:
+            return False
+        if response.status_code == 200:
+            return True
+        logger.warning(
+            "WhatsApp contact lookup unexpected status=%s recipient=%s",
+            response.status_code, mask_phone(phone),
+        )
+        return None
 
     def _ensure_configured(self):
         if not self._config.api_key:

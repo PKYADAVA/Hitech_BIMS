@@ -24,6 +24,11 @@ class MockWhatsappProvider(WhatsappProvider):
     def __init__(self, *_args, **_kwargs):
         self.outbox = []
 
+    def lookup_contact(self, phone: str):
+        """Mock contacts are never pre-known — always answers False (not
+        found), which is a harmless, informative default for local testing."""
+        return False
+
     def send_template(self, phone: str, template_name: str, language: str,
                       components: list) -> WhatsappResult:
         message_id = f"mock-wamid-{uuid.uuid4().hex[:16]}"

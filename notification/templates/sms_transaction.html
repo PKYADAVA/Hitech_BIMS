@@ -85,7 +85,7 @@
             <th>Document No</th>
             <th class="ds-num">Amount</th>
             <th>SMS Status</th>
-            <th class="text-center">Preview</th>
+            <th>Message Preview</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -209,8 +209,42 @@ $(function () {
     return body.replace(/\{(\w+)\}/g, (m, name) => (name in full ? full[name] : m));
   }
 
+  // Same substitution as renderMessage, but marks every placeholder this
+  // row has no real value for with a cross — blank/undefined only, a
+  // genuine 0/0.00 is a real value and stays as-is. Used for the on-screen
+  // preview only; the actual sent message still goes through renderMessage
+  // unmarked (the gateway must receive plain text, not HTML).
+  function renderMessageMarked(body, ctx) {
+    const now = new Date();
+    const full = Object.assign({
+      CompanyName: COMPANY_NAME, UserName: USER_NAME,
+      CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
+      CurrentTime: now.toTimeString().slice(0, 5),
+    }, ctx);
+    return escapeHtml(body).replace(/\{(\w+)\}/g, function (m, name) {
+      const value = full[name];
+      const missing = value === undefined || value === null || value === "";
+      if (missing) {
+        return '<span class="text-danger" title="No value for this placeholder on this row">' +
+               '<i class="fas fa-xmark"></i></span>';
+      }
+      return escapeHtml(String(value));
+    });
+  }
+
   function templateBody() {
     return $("#template option:selected").data("body") || "";
+  }
+
+  function messagePreviewCell(r) {
+    const body = templateBody();
+    if (!body) return '<span class="text-muted small">Select a template</span>';
+    // Metrics (char count/parts) are computed from the real plain-text
+    // message that would actually be sent — the marked-up HTML version
+    // below is display-only and must never be measured as if it were SMS text.
+    const m = smsMetrics(renderMessage(body, r.context));
+    return `<div class="small">${renderMessageMarked(body, r.context)}` +
+           `<div class="text-muted">${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</div></div>`;
   }
 
   // Successful sends of the CURRENTLY selected template for this document.
@@ -256,7 +290,7 @@ $(function () {
         <td>${escapeHtml(r.doc_no)}</td>
         <td class="text-end">${Number(r.amount).toFixed(2)}</td>
         <td>${smsStatusCell(r)}</td>
-        <td class="text-center"><button class="btn btn-outline-info btn-sm row-preview" data-index="${i}"><i class="fas fa-eye"></i></button></td>
+        <td>${messagePreviewCell(r)}</td>
       </tr>`);
     });
     table = $("#sms-doc-table").DataTable({
@@ -306,14 +340,13 @@ $(function () {
     const body = templateBody();
     return indexes.map(i => {
       const r = rows[i];
-      const msg = renderMessage(body, r.context);
-      const m = smsMetrics(msg);
+      const m = smsMetrics(renderMessage(body, r.context));
       return `<div class="border rounded p-2 mb-2">
         <div class="d-flex justify-content-between small text-muted">
           <span><b>${escapeHtml(r.party_name)}</b> — ${escapeHtml(r.mobile)}</span>
           <span>${escapeHtml(r.doc_no)} | ${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</span>
         </div>
-        <div class="mt-1">${escapeHtml(msg)}</div>
+        <div class="mt-1">${renderMessageMarked(body, r.context)}</div>
       </div>`;
     }).join("");
   }
@@ -332,11 +365,6 @@ $(function () {
     new bootstrap.Modal(document.getElementById("previewModal")).show();
   });
 
-  $(document).on("click", ".row-preview", async function () {
-    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return; }
-    $("#preview-body").html(previewCards([Number($(this).data("index"))]));
-    new bootstrap.Modal(document.getElementById("previewModal")).show();
-  });
 
   async function sendOne(r, force) {
     // r.module is the document's real source key (backend-stamped) — required
