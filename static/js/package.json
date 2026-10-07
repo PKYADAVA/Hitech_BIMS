@@ -11,6 +11,6 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "testMatch": ["<rootDir>/static/js/__tests__/*.test.js"]
+    "testMatch": ["<rootDir>/__tests__/*.test.js"]
   }
 }
