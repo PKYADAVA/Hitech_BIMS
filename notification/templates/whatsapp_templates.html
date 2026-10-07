@@ -8,6 +8,15 @@
 
 {% block content %}
 {% include '_subnav.html' with module='notification_master' active_tab='whatsapp_templates' %}
+<style>
+  .tpl-param-row { flex-wrap:nowrap; }
+  .tpl-param-badge {
+    flex:0 0 auto; font-size:.78rem; font-family:monospace; color:var(--text-muted,#6c757d);
+    background:var(--bg-subtle,#f1f3f5); border:1px solid var(--border-strong,#ced4da);
+    border-radius:.25rem; padding:.25rem .45rem; min-width:2.2rem; text-align:center;
+  }
+  .tpl-param-row .select2-container { width:100% !important; }
+</style>
 
 <div class="page-header">
     <div class="page-header-main">
@@ -173,10 +182,10 @@ $(document).ready(function () {
     const list = form.find(".tpl-param-list");
     const idx = list.children().length + 1;
     const row = $(`
-      <div class="input-group input-group-sm mb-1 tpl-param-row">
-        <span class="input-group-text">${paramLabel(idx)}</span>
-        <select class="form-select tpl-param-select"></select>
-        <button type="button" class="btn btn-outline-danger tpl-param-remove" title="Remove"><i class="fas fa-times"></i></button>
+      <div class="d-flex align-items-center gap-2 mb-1 tpl-param-row">
+        <span class="tpl-param-badge">${paramLabel(idx)}</span>
+        <div class="flex-grow-1"><select class="form-select form-select-sm tpl-param-select"></select></div>
+        <button type="button" class="btn btn-outline-danger btn-sm tpl-param-remove" title="Remove"><i class="fas fa-times"></i></button>
       </div>`);
     const select = row.find(".tpl-param-select");
     {% for var, hint in sms_variables.items %}

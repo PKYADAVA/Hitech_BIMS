@@ -4,6 +4,28 @@
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
 {% block content %}
 {% include '_subnav.html' with module='notification_transaction' active_tab='sms_transaction' %}
+<style>
+  .sms-txn-page .page-header { margin-bottom:.6rem; }
+  .sms-txn-page .page-header-title { font-size:1.15rem; }
+  .sms-txn-page .page-header-subtitle { font-size:.8rem; }
+  .sms-txn-page .card { margin-bottom:.6rem !important; }
+  .sms-txn-page .card-body { padding:.65rem .75rem; }
+  .sms-txn-page .card-header { padding:.45rem .75rem; font-size:.9rem; }
+  .sms-txn-filter-grid { display:flex; flex-wrap:nowrap; gap:.4rem; align-items:end; }
+  .sms-txn-filter-grid > div { flex:1 1 0; min-width:0; }
+  .sms-txn-filter-grid .txn-actions { flex:0 0 auto; display:flex; gap:.3rem; flex-wrap:nowrap; }
+  .sms-txn-filter-grid .txn-actions .btn { white-space:nowrap; padding:.3rem .55rem; font-size:.82rem; }
+  .sms-txn-filter-grid .form-label { font-size:.75rem; margin-bottom:.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sms-txn-filter-grid .form-control, .sms-txn-filter-grid .form-select { font-size:.82rem; padding:.3rem .5rem; }
+  @media (max-width:1100px) { .sms-txn-filter-grid { flex-wrap:wrap; }
+                              .sms-txn-filter-grid > div { flex:1 1 180px; } }
+  #sms-doc-table { font-size:.82rem; }
+  #sms-doc-table th, #sms-doc-table td { padding:.4rem .5rem; }
+  #sms-doc-table td:nth-child(2), #sms-doc-table td:nth-child(3),
+  #sms-doc-table td:nth-child(4), #sms-doc-table td:nth-child(6),
+  #sms-doc-table td:nth-child(7), #sms-doc-table td:nth-child(9) { white-space:nowrap; }
+</style>
+<div class="sms-txn-page">
 <div class="page-header">
     <div class="page-header-main">
       <div class="page-header-title"><i class="fas fa-paper-plane"></i> SMS Transaction</div>
@@ -14,16 +36,16 @@
 <!-- Filters -->
 <div class="card mb-3">
   <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-2">
+    <div class="sms-txn-filter-grid">
+      <div>
         <label class="form-label">From Date</label>
         <input type="date" class="form-control" id="from-date">
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">To Date</label>
         <input type="date" class="form-control" id="to-date">
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">Module</label>
         <select class="form-select" id="module">
           <option value="" data-party-type="" data-transaction="" data-module="">All</option>
@@ -32,7 +54,16 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-3">
+      <div>
+        <label class="form-label">Party Type</label>
+        <select class="form-select" id="party-type-filter">
+          <option value="">All</option>
+          {% for key, label, rows in party_lists %}
+          <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
         <label class="form-label" id="party-label">Customer</label>
         {% for key, label, rows in party_lists %}
         <select class="form-select party-select {% if not forloop.first %}d-none{% endif %}"
@@ -42,14 +73,14 @@
         </select>
         {% endfor %}
       </div>
-      <div class="col-md-3">
+      <div>
         <label class="form-label">Template <span class="text-danger">*</span></label>
         <select class="form-select" id="template">
           <option value="">select template</option>
           {% for t in templates %}<option value="{{ t.id }}" data-body="{{ t.body }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-4 d-flex gap-2">
+      <div class="txn-actions">
         <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
         <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
         <button class="btn btn-outline-info" id="preview-btn"><i class="fas fa-eye"></i> Preview</button>
@@ -109,6 +140,7 @@
       </div>
     </div>
   </div>
+</div>
 </div>
 
 {% endblock %}
@@ -274,12 +306,23 @@ $(function () {
     return '<span class="badge bg-secondary">Not Sent</span>';
   }
 
+  // Party Type filters the already-loaded rows client-side, independent of
+  // Module — every row already carries its own party_type regardless of
+  // source, so this works even with Module=All (where the server-side
+  // "party" id filter is disabled since different document sources draw
+  // from different party tables).
+  function visibleRows() {
+    const pt = $("#party-type-filter").val();
+    return pt ? rows.filter(r => r.party_type === pt) : rows;
+  }
+
   function renderRows() {
     const checked = new Set(selectedIndexes());
     if (table) { table.destroy(); }
     const tbody = $("#sms-doc-table tbody");
     tbody.empty();
-    rows.forEach(function (r, i) {
+    visibleRows().forEach(function (r) {
+      const i = rows.indexOf(r);
       tbody.append(`<tr>
         <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
         <td>${fmtDate(r.date)}</td>
@@ -321,10 +364,14 @@ $(function () {
   $("#template").on("change", function () {
     if (rows.length) renderRows();
   });
+  $("#party-type-filter").on("change", function () {
+    $("#select-all").prop("checked", false);
+    if (rows.length) renderRows();
+  });
   $("#clear-btn").on("click", function () {
     $("#from-date").val(today); $("#to-date").val(today);
     $("#party-customer").val(""); $("#party-supplier").val("");
-    $("#template").val("");
+    $("#template").val(""); $("#party-type-filter").val("");
     loadRows();
   });
 
