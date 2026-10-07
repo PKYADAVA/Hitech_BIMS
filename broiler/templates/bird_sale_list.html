@@ -21,6 +21,8 @@
                         display:inline-flex; align-items:center; justify-content:center;
                         font-size:.75rem; font-weight:600; color:#334155; background:#e2e8f0; }
   .bs-thumbs:focus-visible { outline:2px solid var(--bs-primary, #2563eb); outline-offset:2px; border-radius:4px; }
+  .bs-dr { color:#c0392b; font-weight:600; }
+  .bs-cr { color:#0e8698; font-weight:600; }
 </style>
 
 <div class="page-header">
@@ -171,7 +173,7 @@ $(function () {
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.sale_no)}</td>
         <td>${escapeHtml(row.doc_no) || "-"}</td>
-        <td>${escapeHtml(row.buyer_name)}</td>
+        <td>${escapeHtml(row.buyer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
         <td>${escapeHtml(row.farm_name)}</td>
         <td>${escapeHtml(row.batch_name) || "-"}</td>
         <td>${row.birds}</td>

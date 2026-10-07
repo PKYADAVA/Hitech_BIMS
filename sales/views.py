@@ -1144,6 +1144,76 @@ def _customer_closing_balances(customers):
     }
 
 
+def customer_balance_timelines(customer_ids):
+    """Per-customer event timeline for an as-of-any-date closing balance,
+    in a fixed 8 queries regardless of how many customers or dates a caller
+    needs — built for list pages that show one customer's balance as of
+    each row's own date (many different cutoffs over a handful of
+    customers), where calling `_customer_balance_row` per row would be a
+    query storm.
+
+    Returns {customer_id: (opening_signed, [(date, signed_delta), ...])}
+    with the event list sorted by date. A caller gets the closing balance
+    as of a given date by summing opening_signed plus every delta whose
+    date is <= that date (bisect.insort keeps insertion cheap; callers
+    typically want several dates per customer, so they should accumulate
+    with a running pointer rather than re-summing per lookup)."""
+    from decimal import Decimal
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from sales.models import SalesReceipt, Customer
+
+    ids = list(customer_ids)
+    customers = {c.id: c for c in Customer.objects.filter(id__in=ids)}
+    timelines = {cid: [] for cid in ids}
+    opening = {}
+    for cid in ids:
+        c = customers.get(cid)
+        if c is None:
+            opening[cid] = Decimal("0")
+            continue
+        signed = _si_num(c.opening_balance)
+        if str(c.to_pay_to_receive or "").lower().startswith("pay"):
+            signed = -signed
+        opening[cid] = signed
+
+    def add(qs, field, sign, date_field="date"):
+        for cid, d, v in qs.filter(customer_id__in=ids).values_list(
+                "customer_id", date_field, field):
+            if cid in timelines and d is not None:
+                timelines[cid].append((d, sign * _si_num(v)))
+
+    add(BirdSale.objects.filter(sale_type="customer"), "amount", 1)
+    add(SalesInvoice.objects.filter(is_active=True), "net_amount", 1)
+    add(ChickSale.objects.all(), "final_amount", 1)
+    add(CustomerDebitNote.objects.all(), "amount", 1)
+    add(BirdSaleReceipt.objects.filter(sale_type="customer"), "amount", -1)
+    add(ChickSaleReceipt.objects.all(), "amount", -1)
+    add(SalesReceipt.objects.all(), "amount", -1)
+    add(CustomerCreditNote.objects.all(), "amount", -1)
+
+    for cid in timelines:
+        timelines[cid].sort(key=lambda t: t[0])
+
+    return {cid: (opening[cid], timelines[cid]) for cid in ids}
+
+
+def customer_balance_as_of(timeline, as_of_date):
+    """One closing Debit/Credit dict as of `as_of_date`, from a timeline
+    returned by `customer_balance_timelines`. O(events) per call — fine for
+    a page's worth of rows; a caller summing many dates for the same
+    customer should walk the sorted events once instead of calling this
+    per row."""
+    from decimal import Decimal
+    q2 = Decimal("0.01")
+    opening_signed, events = timeline
+    bal = opening_signed + sum(v for d, v in events if d <= as_of_date)
+    return {
+        "debit": bal.quantize(q2) if bal >= 0 else Decimal("0.00"),
+        "credit": (-bal).quantize(q2) if bal < 0 else Decimal("0.00"),
+    }
+
+
 @login_required(login_url="login")
 def customer_list_report(request):
     """Sales > Reports > Customer List — the customer master as a report.

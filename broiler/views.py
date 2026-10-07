@@ -3717,14 +3717,21 @@ def medicine_entry_group_delete(request):
 # Bird Sale (Broiler > Transactions)
 # ---------------------------------------------------------------------------
 
-def _bird_sale_to_dict(row):
+def _bird_sale_to_dict(row, balance_timeline=None):
     buyer_name = row.customer.name if row.customer_id else (row.farmer.farmer_name if row.farmer_id else "")
+    ledger_balance = None
+    if balance_timeline is not None and row.customer_id:
+        from sales.views import customer_balance_as_of
+        bal = customer_balance_as_of(balance_timeline, row.date)
+        ledger_balance = (str(bal["debit"]), "Dr") if bal["debit"] else (str(bal["credit"]), "Cr")
     return {
         "id": row.id, "sale_no": row.sale_no, "date": row.date.isoformat(), "doc_no": row.doc_no,
         "sale_type": row.sale_type,
         "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
         "farmer": row.farmer_id, "farmer_name": row.farmer.farmer_name if row.farmer_id else "",
         "buyer_name": buyer_name,
+        "ledger_balance": ledger_balance[0] if ledger_balance else None,
+        "ledger_balance_cr_dr": ledger_balance[1] if ledger_balance else None,
         "farm": row.farm_id, "farm_name": row.farm.farm_name,
         "batch": row.batch_id, "batch_name": row.batch.batch_name if row.batch_id else "",
         "birds": row.birds, "net_weight": str(row.net_weight), "avg_weight": str(row.avg_weight),
@@ -3836,7 +3843,13 @@ class BirdSaleAPI(BaseAPIView):
                 qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
                 qs = qs.filter(date__lte=date_from_query(to_date))
-            return JsonResponse([_bird_sale_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+            rows = list(qs.order_by("-date", "-id"))
+
+            from sales.views import customer_balance_timelines
+            timelines = customer_balance_timelines(
+                {r.customer_id for r in rows if r.customer_id})
+            return JsonResponse(
+                [_bird_sale_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
         except BirdSale.DoesNotExist:
             raise Http404("Bird sale not found")
         except Exception as e:
@@ -3922,8 +3935,13 @@ def bird_sale_farm_lookup(request):
 # Bird Sale Receipt (Broiler > Transactions)
 # ---------------------------------------------------------------------------
 
-def _bird_sale_receipt_to_dict(row):
+def _bird_sale_receipt_to_dict(row, balance_timeline=None):
     buyer_name = row.customer.name if row.customer_id else (row.farmer.farmer_name if row.farmer_id else "")
+    ledger_balance = None
+    if balance_timeline is not None and row.customer_id:
+        from sales.views import customer_balance_as_of
+        bal = customer_balance_as_of(balance_timeline, row.date)
+        ledger_balance = (str(bal["debit"]), "Dr") if bal["debit"] else (str(bal["credit"]), "Cr")
     return {
         "id": row.id, "receipt_no": row.receipt_no, "date": row.date.isoformat(),
         "location": row.location_id, "location_name": row.location.name,
@@ -3931,6 +3949,8 @@ def _bird_sale_receipt_to_dict(row):
         "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
         "farmer": row.farmer_id, "farmer_name": row.farmer.farmer_name if row.farmer_id else "",
         "buyer_name": buyer_name,
+        "ledger_balance": ledger_balance[0] if ledger_balance else None,
+        "ledger_balance_cr_dr": ledger_balance[1] if ledger_balance else None,
         "mode": row.mode,
         "receipt_account": row.receipt_account_id,
         "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
@@ -4002,7 +4022,13 @@ class BirdSaleReceiptAPI(BaseAPIView):
                 qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
                 qs = qs.filter(date__lte=date_from_query(to_date))
-            return JsonResponse([_bird_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+            rows = list(qs.order_by("-date", "-id"))
+
+            from sales.views import customer_balance_timelines
+            timelines = customer_balance_timelines(
+                {r.customer_id for r in rows if r.customer_id})
+            return JsonResponse(
+                [_bird_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
         except BirdSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
         except Exception as e:
