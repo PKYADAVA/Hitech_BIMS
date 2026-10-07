@@ -31,7 +31,14 @@
   .k-cr  .k-ico{ background:#e2f7f4; color:#12a3b8; }   .k-cr .k-num{ color:#0e8698; }
   .cb-table { font-size:.73rem; }
   .cb-table th, .cb-table td { white-space:nowrap; vertical-align:middle; padding:.38rem .5rem; }
-  .cb-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .cb-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; }
+  /* Two header rows (rowspan="2" cells above, sub-columns below) have to
+     stick as one block. Sticking each th individually at top:0 pins both
+     rows to the same offset, so the second row's cells float up and cover
+     the bottom half of the tall rowspan cells beside them (Name's header
+     going missing on scroll was this). */
+  .cb-table thead { position:sticky; top:0; z-index:6 !important; }
+  .cb-table thead th { top:auto; }
   .cb-table td.num, .cb-table th.num { text-align:right; }
   .cb-table td.name a { color:#2b62c9; text-decoration:none; font-weight:600; }
   .cb-table td.name a:hover { text-decoration:underline; }
