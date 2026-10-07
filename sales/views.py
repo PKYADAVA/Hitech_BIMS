@@ -32,9 +32,12 @@ states_and_union_territories = STATES_AND_TERRITORIES
 
 @login_required
 def customer(request):
-    return render(request, "customer.html", {
-        "customers": customers_for(request.user, Customer.objects.select_related("customer_group").all())
-    })
+    customers = list(customers_for(
+        request.user, Customer.objects.select_related("customer_group").all()))
+    today = timezone.localdate()
+    for cust in customers:
+        cust.balance = _customer_balance_row(cust, None, None, today)
+    return render(request, "customer.html", {"customers": customers})
 
 
 def _customer_form_context(customer=None):
