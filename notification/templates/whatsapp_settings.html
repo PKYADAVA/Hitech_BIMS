@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Settings - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_master' active_tab='whatsapp_settings' %}
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-gear"></i> WhatsApp Settings</div>
+      <div class="page-header-subtitle">LemIn AI gateway configuration — changes apply immediately, no restart needed</div>
+    </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="fas fa-sliders-h"></i> Configuration</div>
+      <div class="card-body">
+        <form id="wa-settings-form">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="cfg-enabled" {% if row.enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                <label class="form-check-label fw-semibold" for="cfg-enabled">WhatsApp Sending Enabled</label>
+                <div class="form-text">Master switch. Off = every send is refused with "disabled".</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="cfg-mock" {% if row.mock %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                <label class="form-check-label fw-semibold" for="cfg-mock">Mock Mode</label>
+                <div class="form-text">On = simulate sends (logged, no real message, no cost). Off = real gateway.</div>
+              </div>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">LemIn AI API Key</label>
+              <input type="password" class="form-control" id="cfg-api-key" autocomplete="new-password"
+                     placeholder="{% if api_key_in_db %}•••••••• saved here — enter to replace{% elif api_key_effective %}Using .env key — enter to override{% else %}Not configured{% endif %}"
+                     {% if not can_edit %}disabled{% endif %}>
+              <div class="form-text">
+                Never shown once saved. Leave blank to keep the current key.
+                {% if api_key_in_db and can_edit %}<a href="#" id="clear-api-key" class="text-danger">Clear saved key (fall back to .env)</a>{% endif %}
+              </div>
+            </div>
+          </div>
+          {% if can_edit %}
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+          </div>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header"><i class="fas fa-circle-check"></i> Effective Configuration</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-bordered mb-0 ds-grid">
+          <tr><th style="width:45%">WhatsApp Sending</th>
+              <td>{% if effective.enabled %}<span class="badge bg-success">Enabled</span>{% else %}<span class="badge bg-danger">Disabled</span>{% endif %}</td></tr>
+          <tr><th>Mode</th>
+              <td>{% if effective.mock %}<span class="badge bg-info">Mock (simulated)</span>{% else %}<span class="badge bg-warning text-dark">LIVE — real WhatsApp</span>{% endif %}</td></tr>
+          <tr><th>Provider</th><td>{{ effective.provider }}</td></tr>
+          <tr><th>API Base URL</th><td>{{ effective.base_url }}</td></tr>
+          <tr><th>API Key</th>
+              <td>{% if api_key_effective %}<span class="badge bg-success">Configured</span> <span class="small text-muted">({% if api_key_in_db %}from this page{% else %}from .env{% endif %})</span>{% else %}<span class="badge bg-danger">Missing</span>{% endif %}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    {% if can_edit %}
+    <div class="card">
+      <div class="card-header"><i class="fas fa-vial"></i> Send Test Template</div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Mobile Number</label>
+          <input type="text" class="form-control" id="test-mobile" placeholder="With country code, e.g. 919876543210">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Template</label>
+          <select class="form-select" id="test-template">
+            <option value="">Select a template</option>
+            {% for t in templates %}
+            <option value="{{ t.id }}" data-params="{{ t.parameter_map|join:',' }}">{{ t.name }} ({{ t.template_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="row g-2 mb-2" id="test-params"></div>
+        <button type="button" class="btn btn-outline-primary" id="test-send-btn"><i class="fas fa-paper-plane"></i> Send Test</button>
+        <div id="test-result" class="mt-2 d-none">
+          <div class="small fw-semibold mb-1">Result: <span id="test-status"></span></div>
+          <pre class="bg-light border rounded p-2 small mb-0" style="max-height:160px; overflow:auto;" id="test-detail"></pre>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let clearApiKey = false;
+
+  $("#clear-api-key").on("click", async function (e) {
+    e.preventDefault();
+    if (!(await window.bimsConfirm("Clear the API key saved here and fall back to the .env key?"))) return;
+    clearApiKey = true;
+    $("#cfg-api-key").val("").attr("placeholder", "Will be cleared on save");
+    $(this).addClass("fw-bold").text("Key will be cleared when you save");
+  });
+
+  $("#wa-settings-form").on("submit", async function (e) {
+    e.preventDefault();
+    const enabled = $("#cfg-enabled").is(":checked");
+    const mock = $("#cfg-mock").is(":checked");
+    if (enabled && !mock && !(await window.bimsConfirm("LIVE mode: every send will hit the real gateway and may count against your WhatsApp conversation quota. Continue?"))) return;
+    $.ajax({
+      url: "{% url 'whatsapp_settings' %}",
+      type: "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({
+        enabled: enabled,
+        mock: mock,
+        api_key: $("#cfg-api-key").val(),
+        clear_api_key: clearApiKey,
+      }),
+      success: function () {
+        Toastify({ text: "WhatsApp settings saved — active immediately.", backgroundColor: "#28a745", duration: 2500 }).showToast();
+        setTimeout(function () { location.reload(); }, 800);
+      },
+      error: function (xhr) {
+        Toastify({ text: xhr.responseJSON?.error || "Failed to save settings.", backgroundColor: "#dc3545", duration: 3500 }).showToast();
+      },
+    });
+  });
+
+  $("#test-template").on("change", function () {
+    const params = ($(this).find(":selected").data("params") || "").toString().split(",").filter(Boolean);
+    const wrap = $("#test-params").empty();
+    params.forEach(function (name) {
+      wrap.append(`
+        <div class="col-md-6">
+          <label class="form-label small text-capitalize">${name.replace(/_/g, ' ')}</label>
+          <input type="text" class="form-control form-control-sm test-param-input" data-name="${name}" placeholder="${name}">
+        </div>`);
+    });
+  });
+
+  $("#test-send-btn").on("click", function () {
+    const btn = $(this);
+    const mobile = $("#test-mobile").val().trim();
+    const templateId = $("#test-template").val();
+    if (!/^\+?\d{10,15}$/.test(mobile)) {
+      Toastify({ text: "Enter a valid mobile number first.", backgroundColor: "#dc3545", duration: 3000 }).showToast();
+      return;
+    }
+    if (!templateId) {
+      Toastify({ text: "Select a template first.", backgroundColor: "#dc3545", duration: 3000 }).showToast();
+      return;
+    }
+    const parameters = {};
+    $(".test-param-input").each(function () { parameters[$(this).data("name")] = $(this).val(); });
+    btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm"></span> Sending...');
+    $.ajax({
+      url: "{% url 'whatsapp_settings_test' %}",
+      type: "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({ mobile: mobile, template_id: templateId, parameters: parameters }),
+      complete: function (xhr) {
+        btn.prop("disabled", false).html('<i class="fas fa-paper-plane"></i> Send Test');
+        const r = xhr.responseJSON || {};
+        $("#test-result").removeClass("d-none");
+        $("#test-status").html(r.success
+          ? '<span class="badge bg-success text-capitalize">' + (r.status || "sent") + "</span>"
+          : '<span class="badge bg-danger text-capitalize">' + (r.status || "failed") + "</span>");
+        $("#test-detail").text(JSON.stringify(r, null, 2));
+      },
+    });
+  });
+});
+</script>
+{% endblock %}

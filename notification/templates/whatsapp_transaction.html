@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Transaction - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_transaction' active_tab='whatsapp_transaction' %}
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fab fa-whatsapp"></i> WhatsApp Transaction</div>
+      <div class="page-header-subtitle">Send approved WhatsApp templates to customers, suppliers, farmers and staff from ERP documents</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Module</label>
+        <select class="form-select" id="module">
+          <option value="" data-party-type="" data-transaction="" data-module="">All</option>
+          {% for key, label, ptype, txn, mod in doc_sources %}
+          <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}" data-module="{{ mod }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" id="party-label">Customer</label>
+        {% for key, label, rows in party_lists %}
+        <select class="form-select party-select {% if not forloop.first %}d-none{% endif %}"
+                id="party-{{ key }}" data-party-type="{{ key }}">
+          <option value="">-All-</option>
+          {% for id, name in rows %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+        </select>
+        {% endfor %}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Template <span class="text-danger">*</span></label>
+        <select class="form-select" id="template">
+          <option value="">select template</option>
+          {% for t in templates %}<option value="{{ t.id }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
+        <button class="btn btn-outline-info" id="preview-btn"><i class="fas fa-eye"></i> Preview</button>
+        <button class="btn btn-success" id="send-btn"><i class="fab fa-whatsapp"></i> Send WhatsApp</button>
+      </div>
+    </div>
+    <div class="mt-3 d-none" id="progress-wrap">
+      <div class="d-flex justify-content-between small mb-1">
+        <span id="progress-text">Sending...</span>
+        <span id="progress-counts"></span>
+      </div>
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Grid -->
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i> Documents</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="wa-doc-table">
+        <thead>
+          <tr>
+            <th style="width:36px" class="text-center"><input type="checkbox" class="form-check-input" id="select-all"></th>
+            <th class="ds-mid">Date</th>
+            <th>Module</th>
+            <th>Party Type</th>
+            <th>Name</th>
+            <th>Mobile</th>
+            <th>Document No</th>
+            <th class="ds-num">Amount</th>
+            <th>WhatsApp Status</th>
+            <th class="text-center">Preview</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fab fa-whatsapp me-2"></i>WhatsApp Preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:65vh; overflow:auto;" id="preview-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success" id="preview-send-btn"><i class="fab fa-whatsapp"></i> Send</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const ALL_TEMPLATES = {{ templates_json|safe }};
+  const MODULE_LABELS = {
+    {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
+  let table = null;
+  let rows = [];
+
+  const today = localDay();
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  // escapeHtml() provided globally by main.js
+
+  const PARTY_LABELS = {
+    {% for key, label, rows in party_lists %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
+
+  function isAllModules() {
+    return $("#module").val() === "";
+  }
+
+  function partyType() {
+    return $("#module option:selected").data("party-type") || "customer";
+  }
+
+  function partyValue() {
+    if (isAllModules()) return "";
+    return $("#party-" + partyType()).val() || "";
+  }
+
+  // Rebuild the Template <select>'s actual <option> elements for the chosen
+  // module, same reasoning as SMS Transaction: Select2 reads DOM options
+  // fresh each open, so hiding via CSS leaves stale items visible.
+  function refreshTemplateOptions() {
+    const opt = $("#module option:selected");
+    const txn = opt.data("transaction") || "";
+    const mod = opt.data("module") || "";
+    const sel = $("#template");
+    const current = sel.val();
+    const matches = t => (!mod || t.module === mod) && (!txn || !t.transaction || t.transaction === txn);
+    const list = ALL_TEMPLATES.filter(matches);
+
+    sel.empty().append('<option value="">select template</option>');
+    list.forEach(function (t) {
+      sel.append(
+        `<option value="${t.id}" data-transaction="${escapeHtml(t.transaction)}">` +
+        `${escapeHtml(t.name)} (${escapeHtml(t.module_display)})</option>`
+      );
+    });
+    const stillValid = list.some(t => String(t.id) === String(current));
+    sel.val(stillValid ? current : "");
+    if (rows.length) renderRows();
+  }
+
+  $("#module").on("change", function () {
+    const all = isAllModules();
+    const shown = all ? "customer" : partyType();
+    $(".party-select").each(function () {
+      const mine = $(this).data("party-type") === shown;
+      $(this).toggleClass("d-none", !mine).prop("disabled", all && mine);
+      if (!mine || all) $(this).val("");
+    });
+    $("#party-label").text(all ? "Party" : (PARTY_LABELS[shown] || "Party"));
+    refreshTemplateOptions();
+  });
+
+  function selectedTemplate() {
+    const id = $("#template").val();
+    return ALL_TEMPLATES.find(t => String(t.id) === String(id)) || null;
+  }
+
+  // Successful sends of the CURRENTLY selected template for this document.
+  function sentForSelectedTemplate(r) {
+    const sel = $("#template").val();
+    if (!sel) return [];
+    return (r.sent_history || []).filter(h => String(h.template_id) === String(sel));
+  }
+
+  function waStatusCell(r) {
+    const hist = r.sent_history || [];
+    const tip = hist.map(h =>
+      `${h.template_name || "WhatsApp"} → ${h.mobile} on ${h.sent_at}`).join("\n");
+    const mine = sentForSelectedTemplate(r);
+    if (mine.length) {
+      return `<span class="badge bg-success" title="${escapeHtml(tip)}">` +
+             `<i class="fas fa-check me-1"></i>Sent${mine.length > 1 ? " ×" + mine.length : ""}</span>` +
+             `<div class="small text-muted">${escapeHtml(mine[0].sent_at)}</div>`;
+    }
+    if (hist.length) {
+      const label = $("#template").val() ? "Sent (other template)" : "Sent";
+      return `<span class="badge bg-info text-dark" title="${escapeHtml(tip)}">${label}</span>`;
+    }
+    return '<span class="badge bg-secondary">Not Sent</span>';
+  }
+
+  function renderRows() {
+    const checked = new Set(selectedIndexes());
+    if (table) { table.destroy(); }
+    const tbody = $("#wa-doc-table tbody");
+    tbody.empty();
+    rows.forEach(function (r, i) {
+      tbody.append(`<tr>
+        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
+        <td>${fmtDate(r.date)}</td>
+        <td>${escapeHtml(MODULE_LABELS[r.module] || r.module)}</td>
+        <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
+        <td>${escapeHtml(r.party_name)}</td>
+        <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
+        <td>${escapeHtml(r.doc_no)}</td>
+        <td class="text-end">${Number(r.amount).toFixed(2)}</td>
+        <td>${waStatusCell(r)}</td>
+        <td class="text-center"><button class="btn btn-outline-info btn-sm row-preview" data-index="${i}"><i class="fas fa-eye"></i></button></td>
+      </tr>`);
+    });
+    table = $("#wa-doc-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "print"],
+      columnDefs: [{ orderable: false, targets: [0, 9] }],
+      language: { emptyTable: "No documents match the filters" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'whatsapp_transaction_source' %}", {
+      module: $("#module").val(), from_date: $("#from-date").val(),
+      to_date: $("#to-date").val(), party: partyValue(),
+    }, function (resp) {
+      rows = resp.rows || [];
+      renderRows();
+      $("#select-all").prop("checked", false);
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to load documents.");
+    });
+  }
+
+  $("#search-btn").on("click", loadRows);
+
+  $("#template").on("change", function () {
+    if (rows.length) renderRows();
+  });
+  $("#clear-btn").on("click", function () {
+    $("#from-date").val(today); $("#to-date").val(today);
+    $("#party-customer").val(""); $("#party-supplier").val("");
+    $("#template").val("");
+    loadRows();
+  });
+
+  $("#select-all").on("change", function () {
+    $(".row-check:not(:disabled)").prop("checked", this.checked);
+  });
+
+  function selectedIndexes() {
+    return $(".row-check:checked").map(function () { return Number($(this).data("index")); }).get();
+  }
+
+  // WhatsApp templates aren't free text — the approved wording lives in
+  // Meta's system, unknown to the ERP. The preview shows what WILL be sent:
+  // the template name plus each parameter's resolved value, in order.
+  function paramLabel(n) {
+    return "{" + "{" + n + "}" + "}";
+  }
+  function previewCards(indexes) {
+    const t = selectedTemplate();
+    return indexes.map(i => {
+      const r = rows[i];
+      const params = (t?.parameter_map || []).map((name, n) =>
+        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${escapeHtml(r.context[name] ?? "")}</div>`
+      ).join("") || '<div class="text-muted">No parameters.</div>';
+      return `<div class="border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between small text-muted">
+          <span><b>${escapeHtml(r.party_name)}</b> — ${escapeHtml(r.mobile)}</span>
+          <span>${escapeHtml(r.doc_no)}</span>
+        </div>
+        <div class="mt-1 small fw-semibold">Template: <code>${escapeHtml(t?.template_name || "")}</code></div>
+        <div class="mt-1">${params}</div>
+      </div>`;
+    }).join("");
+  }
+
+  function requireSelection() {
+    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return null; }
+    const idx = selectedIndexes();
+    if (!idx.length) { window.showToast('warning', "Select at least one record."); return null; }
+    return idx;
+  }
+
+  $("#preview-btn").on("click", function () {
+    const idx = requireSelection();
+    if (!idx) return;
+    $("#preview-body").html(previewCards(idx));
+    new bootstrap.Modal(document.getElementById("previewModal")).show();
+  });
+
+  $(document).on("click", ".row-preview", async function () {
+    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return; }
+    $("#preview-body").html(previewCards([Number($(this).data("index"))]));
+    new bootstrap.Modal(document.getElementById("previewModal")).show();
+  });
+
+  async function sendOne(r, force) {
+    const resp = await fetch("{% url 'whatsapp_transaction_send' %}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify({ module: r.module, doc_id: r.doc_id,
+                             template_id: $("#template").val(), force: force }),
+    });
+    return { status: resp.status, data: await resp.json() };
+  }
+
+  async function sendSelected() {
+    let idx = requireSelection();
+    if (!idx) return;
+    const already = idx.filter(i => sentForSelectedTemplate(rows[i]).length);
+    if (already.length) {
+      const names = already.slice(0, 5).map(i => rows[i].doc_no).join(", ");
+      if (!(await window.bimsConfirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`))) {
+        idx = idx.filter(i => !sentForSelectedTemplate(rows[i]).length);
+        if (!idx.length) { window.showToast('danger', "Nothing left to send — all selected documents already received this WhatsApp template."); return; }
+      }
+    }
+    $("#send-btn, #preview-send-btn").prop("disabled", true);
+    $("#progress-wrap").removeClass("d-none");
+    let ok = 0, failed = 0, skipped = 0;
+    for (let n = 0; n < idx.length; n++) {
+      const r = rows[idx[n]];
+      $("#progress-text").text(`Sending ${n + 1} of ${idx.length} — ${r.party_name}`);
+      $("#progress-bar").css("width", `${((n + 1) / idx.length) * 100}%`);
+      try {
+        let out = await sendOne(r, false);
+        if (out.status === 409 && out.data.duplicate) {
+          if ((await window.bimsConfirm(`${r.party_name} (${r.doc_no}): ${out.data.error}`))) {
+            out = await sendOne(r, true);
+          } else { skipped++; continue; }
+        }
+        if (out.data.success) { ok++; } else { failed++; }
+      } catch (e) { failed++; }
+      $("#progress-counts").text(`OK ${ok} | Failed ${failed} | Skipped ${skipped}`);
+    }
+    $("#progress-text").text(`Done — sent ${ok}, failed ${failed}, skipped ${skipped}.`);
+    $("#send-btn, #preview-send-btn").prop("disabled", false);
+    loadRows();
+  }
+
+  $("#send-btn").on("click", sendSelected);
+  $("#preview-send-btn").on("click", function () {
+    bootstrap.Modal.getInstance(document.getElementById("previewModal"))?.hide();
+    sendSelected();
+  });
+
+  $("#module").trigger("change");
+  loadRows();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Templates{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='notifications' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_subnav.html' with module='notification_master' active_tab='whatsapp_templates' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fab fa-whatsapp"></i>WhatsApp Templates</div>
+      <div class="page-header-subtitle">Reference an already Meta-approved template and map its placeholders to ERP fields</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#waTemplateFormModal">
+      <i class="fas fa-plus"></i>Add Template
+    </button>{% endif %}
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-table"></i>Template List</span>
+    <div class="d-flex align-items-center gap-2">
+      <label for="wa-module-filter" class="mb-0 small text-white-50 text-nowrap flex-shrink-0">Module</label>
+      <select id="wa-module-filter" class="form-select form-select-sm" style="min-width:160px;">
+        <option value="">All modules</option>
+        {% for value, label in modules %}
+        <option value="{{ label }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="wa-template-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Module</th>
+            <th>Transaction</th>
+            <th>Name</th>
+            <th>Meta Template</th>
+            <th>Parameters</th>
+            <th class="ds-mid">Status</th>
+            <th>Updated</th>
+            <th class="ds-mid text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="wa-template-table-body">
+          <!-- AJAX content will load here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Template Modal -->
+<div class="modal fade" id="waTemplateFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add WhatsApp Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="wa-template-form">
+          {% csrf_token %}
+          {% include '_whatsapp_template_fields.html' %}
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Template Modal Template -->
+<template id="editWaTemplateModalTemplate">
+  <div class="modal fade" id="editWaTemplateModal-{id}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit WhatsApp Template</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="edit-wa-template-form-{id}">
+          <div class="modal-body">
+            <input type="hidden" name="template-id" value="{id}">
+            {% include '_whatsapp_template_fields.html' with key_readonly=True %}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- Send WhatsApp Modal (fields populated per template) -->
+<div class="modal fade" id="sendWaModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header success-header">
+        <h5 class="modal-title"><i class="fab fa-whatsapp me-2"></i>Send WhatsApp Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="send-wa-form">
+          {% csrf_token %}
+          <input type="hidden" name="template-id" value="">
+          <p class="mb-3 text-muted small send-wa-template-name"></p>
+          <div class="mb-3">
+            <label for="send-wa-phone" class="form-label">Phone Number<span class="text-danger">*</span></label>
+            <input type="tel" id="send-wa-phone" name="phone" class="form-control"
+                   placeholder="e.g. 919876543210" required>
+          </div>
+          <div class="row g-3" id="send-wa-fields">
+            <!-- One input per parameter, injected by JS -->
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-paper-plane"></i>Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+  let templateTable;
+  const csrfToken = "{{ csrf_token }}";
+  const MODULE_TRANSACTIONS = {{ module_transactions_json|safe }};
+
+  // Fill the Transaction dropdown with the selected module's sub-transactions.
+  function fillTransactionOptions(form, moduleValue, selected) {
+    const select = form.find(".tpl-transaction-select");
+    if (!select.length) return;
+    select.empty().append('<option value="">— All / Generic —</option>');
+    (MODULE_TRANSACTIONS[moduleValue] || []).forEach(function (opt) {
+      select.append(`<option value="${escapeHtml(opt[0])}">${escapeHtml(opt[1])}</option>`);
+    });
+    select.val(selected || "");
+  }
+  $(document).on("change", ".tpl-module-select", function () {
+    fillTransactionOptions($(this).closest("form"), $(this).val(), "");
+  });
+
+  // showToast() / escapeHtml() provided globally by main.js
+
+  function headerTypeChanged(form) {
+    const show = form.find(".tpl-header-type").val() !== "none";
+    form.find(".tpl-header-media-wrap").toggleClass("d-none", !show);
+  }
+  $(document).on("change", ".tpl-header-type", function () {
+    headerTypeChanged($(this).closest("form"));
+  });
+
+  // Ordered parameter list builder: each row picks a variable, drag order
+  // is just "add in the order you want" (no reordering UI needed for the
+  // small lists these templates carry).
+  function paramRow(form, selected) {
+    const list = form.find(".tpl-param-list");
+    const idx = list.children().length + 1;
+    const row = $(`
+      <div class="input-group input-group-sm mb-1 tpl-param-row">
+        <span class="input-group-text">${paramLabel(idx)}</span>
+        <select class="form-select tpl-param-select"></select>
+        <button type="button" class="btn btn-outline-danger tpl-param-remove" title="Remove"><i class="fas fa-times"></i></button>
+      </div>`);
+    const select = row.find(".tpl-param-select");
+    {% for var, hint in sms_variables.items %}
+    select.append('<option value="{{ var }}" title="{{ hint }}">{{ var }}</option>');
+    {% endfor %}
+    if (selected) select.val(selected);
+    list.append(row);
+    renumberParams(form);
+  }
+  function paramLabel(n) {
+    return "{" + "{" + n + "}" + "}";
+  }
+  function renumberParams(form) {
+    form.find(".tpl-param-row").each(function (i) {
+      $(this).find(".input-group-text").text(paramLabel(i + 1));
+    });
+  }
+  $(document).on("click", ".tpl-param-add", function () {
+    paramRow($(this).closest("form"));
+  });
+  $(document).on("click", ".tpl-param-remove", function () {
+    const form = $(this).closest("form");
+    $(this).closest(".tpl-param-row").remove();
+    renumberParams(form);
+  });
+  function paramMapOf(form) {
+    return form.find(".tpl-param-select").map(function () { return $(this).val(); }).get();
+  }
+
+  function initTable() {
+    templateTable = $('#wa-template-table').DataTable({
+      responsive: true,
+      order: [[1, 'asc'], [0, 'asc']],
+      language: { emptyTable: "No WhatsApp templates found. Click 'Add Template' to register one approved in LemIn AI/Meta." }
+    });
+    $('#wa-module-filter').off('change').on('change', function () {
+      templateTable.column(1).search(this.value).draw();
+    });
+  }
+
+  function loadTemplates() {
+    $.ajax({
+      url: "{% url 'whatsapp_template_list' %}",
+      type: "GET",
+      success: function (rows) {
+        if (templateTable) { templateTable.destroy(); }
+        const body = $("#wa-template-table-body");
+        body.empty();
+        rows.forEach(function (t) {
+          const params = t.parameter_map.length
+            ? t.parameter_map.map(p => `<span class="badge bg-info me-1">${escapeHtml(p)}</span>`).join("")
+            : '<span class="text-muted">none</span>';
+          body.append(`
+            <tr>
+              <td><code>${escapeHtml(t.key)}</code></td>
+              <td>${escapeHtml(t.module_display)}</td>
+              <td>${t.transaction_display
+                    ? escapeHtml(t.transaction_display)
+                    : '<span class="text-muted">All / Generic</span>'}</td>
+              <td>${escapeHtml(t.name)}</td>
+              <td><code>${escapeHtml(t.template_name)}</code> <span class="text-muted small">(${escapeHtml(t.language)})</span></td>
+              <td>${params}</td>
+              <td>${t.is_active
+                    ? '<span class="badge bg-success">Active</span>'
+                    : '<span class="badge bg-secondary">Inactive</span>'}</td>
+              <td>${escapeHtml(t.updated_at)}</td>
+              <td class="text-center">
+                <div class="d-flex gap-1 justify-content-center flex-wrap">
+                  <button class="btn btn-outline-success btn-sm send-template"
+                          data-id="${t.id}" title="Send WhatsApp"><i class="fas fa-paper-plane"></i></button>
+                  {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-template"
+                          data-id="${t.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+                  <button class="btn btn-outline-info btn-sm toggle-template"
+                          data-id="${t.id}" title="${t.is_active ? 'Deactivate' : 'Activate'}">
+                    <i class="fas ${t.is_active ? 'fa-pause' : 'fa-play'}"></i>
+                  </button>
+                  {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-template"
+                          data-id="${t.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+                </div>
+              </td>
+            </tr>`);
+        });
+        initTable();
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load templates: ' + error);
+      }
+    });
+  }
+
+  function formPayload(form) {
+    return {
+      key: form.find('[name="key"]').val(),
+      module: form.find('[name="module"]').val(),
+      transaction: form.find('[name="transaction"]').val(),
+      name: form.find('[name="name"]').val(),
+      template_name: form.find('[name="template_name"]').val(),
+      language: form.find('[name="language"]').val(),
+      header_type: form.find('[name="header_type"]').val(),
+      header_media_url: form.find('[name="header_media_url"]').val(),
+      description: form.find('[name="description"]').val(),
+      category: form.find('[name="category"]').val(),
+      parameter_map: paramMapOf(form),
+    };
+  }
+
+  // Create
+  $("#wa-template-form").on("submit", function (e) {
+    e.preventDefault();
+    const payload = formPayload($(this));
+    $.ajax({
+      url: "{% url 'whatsapp_template_create' %}",
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify(payload),
+      success: function () {
+        $("#waTemplateFormModal").modal("hide");
+        document.getElementById("wa-template-form").reset();
+        $("#wa-template-form .tpl-param-list").empty();
+        $("#wa-template-form .tpl-header-media-wrap").addClass("d-none");
+        loadTemplates();
+        showToast('success', 'Template created successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to create template: ' + error));
+      }
+    });
+  });
+
+  // Open edit modal
+  $(document).on("click", ".edit-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/whatsapp-templates/${id}/`,
+      type: "GET",
+      success: function (t) {
+        $(`#editWaTemplateModal-${id}`).remove();
+        const html = document.getElementById('editWaTemplateModalTemplate').innerHTML.replace(/{id}/g, id);
+        $('body').append(html);
+        const form = $(`#edit-wa-template-form-${id}`);
+        form.find('[name="key"]').val(t.key);
+        form.find('[name="module"]').val(t.module);
+        fillTransactionOptions(form, t.module, t.transaction);
+        form.find('[name="name"]').val(t.name);
+        form.find('[name="template_name"]').val(t.template_name);
+        form.find('[name="language"]').val(t.language);
+        form.find('[name="header_type"]').val(t.header_type);
+        form.find('[name="header_media_url"]').val(t.header_media_url);
+        form.find('[name="description"]').val(t.description);
+        form.find('[name="category"]').val(t.category);
+        form.find(".tpl-param-list").empty();
+        (t.parameter_map || []).forEach(p => paramRow(form, p));
+        headerTypeChanged(form);
+        $(`#editWaTemplateModal-${id}`).modal('show');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load template: ' + error);
+      }
+    });
+  });
+
+  // Update
+  $(document).on("submit", "[id^='edit-wa-template-form-']", function (e) {
+    e.preventDefault();
+    const id = $(this).find('[name="template-id"]').val();
+    const payload = formPayload($(this));
+    $.ajax({
+      url: `/whatsapp-templates/${id}/`,
+      type: "PUT",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify(payload),
+      success: function () {
+        $(`#editWaTemplateModal-${id}`).modal("hide");
+        loadTemplates();
+        showToast('success', 'Template updated successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to update template: ' + error));
+      }
+    });
+  });
+
+  // Toggle active
+  $(document).on("click", ".toggle-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/whatsapp-templates/${id}/toggle-active/`,
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadTemplates(); },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to update status: ' + error));
+      }
+    });
+  });
+
+  // Delete
+  $(document).on("click", ".delete-template", async function () {
+    const id = $(this).data("id");
+    if (!(await window.bimsConfirm("Delete this template reference? Sending with this key will no longer work."))) return;
+    $.ajax({
+      url: `/whatsapp-templates/${id}/delete/`,
+      method: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        loadTemplates();
+        showToast('success', 'Template deleted successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to delete template: ' + error));
+      }
+    });
+  });
+
+  // Open Send modal — build one input per parameter for this template.
+  $(document).on("click", ".send-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/whatsapp-templates/${id}/`,
+      type: "GET",
+      success: function (t) {
+        const form = $("#send-wa-form");
+        form[0].reset();
+        form.find('[name="template-id"]').val(t.id);
+        $(".send-wa-template-name").html(
+          `<i class="fas fa-tag me-1"></i><strong>${escapeHtml(t.name)}</strong> ` +
+          `<code>${escapeHtml(t.key)}</code> → <code>${escapeHtml(t.template_name)}</code>`
+        );
+        const fields = $("#send-wa-fields").empty();
+        if (!t.parameter_map.length) {
+          fields.append('<div class="col-12 text-muted small">This template has no parameters.</div>');
+        }
+        t.parameter_map.forEach(function (name) {
+          fields.append(`
+            <div class="col-md-6">
+              <label class="form-label text-capitalize">${escapeHtml(name.replace(/_/g, ' '))}</label>
+              <input type="text" name="var_${escapeHtml(name)}" class="form-control"
+                     placeholder="${escapeHtml(name)}" required>
+            </div>`);
+        });
+        $("#sendWaModal").modal("show");
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load template: ' + error);
+      }
+    });
+  });
+
+  // Submit Send — calls the service, respects WHATSAPP_ENABLED/WHATSAPP_MOCK.
+  $("#send-wa-form").on("submit", function (e) {
+    e.preventDefault();
+    const id = $(this).find('[name="template-id"]').val();
+    const btn = $(this).find('button[type="submit"]');
+    btn.prop("disabled", true);
+    $.ajax({
+      url: `/whatsapp-templates/${id}/send/`,
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: $(this).serialize(),
+      success: function (res) {
+        $("#sendWaModal").modal("hide");
+        showToast('success', `WhatsApp message ${res.status}` + (res.message_id ? ` (id: ${res.message_id})` : ''));
+      },
+      error: function (xhr) {
+        const res = xhr.responseJSON || {};
+        showToast('danger', res.error || `Send failed (${res.status || 'error'})`);
+      },
+      complete: function () { btn.prop("disabled", false); }
+    });
+  });
+
+  loadTemplates();
+});
+</script>
+{% endblock %}

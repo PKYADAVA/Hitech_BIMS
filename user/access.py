@@ -512,19 +512,22 @@ MODULE_REGISTRY = [
     },
     {
         "nav": "notifications",
-        "label": "SMS Management",
+        "label": "Messaging",
         "sections": [
             {
                 "label": "Master",
                 "tabs": [
                     ("sms_templates", "SMS Templates"),
                     ("sms_settings", "SMS Settings", ("sms_settings_test",)),
+                    ("whatsapp_templates", "WhatsApp Templates"),
+                    ("whatsapp_settings", "WhatsApp Settings", ("whatsapp_settings_test",)),
                 ],
             },
             {
                 "label": "Transactions",
                 "tabs": [
                     ("sms_transaction", "SMS Transaction", ("sms_transaction_source",)),
+                    ("whatsapp_transaction", "WhatsApp Transaction", ("whatsapp_transaction_source",)),
                 ],
             },
             {

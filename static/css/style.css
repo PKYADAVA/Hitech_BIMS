@@ -693,6 +693,17 @@ footer { margin-top: auto; }
   border-color: transparent;
 }
 
+/* Groups a handful of tabs within an otherwise-flat subnav row (e.g. SMS vs
+   WhatsApp under Notifications > Master) — a thin rule, not a label, since no
+   other subnav in the app groups its tabs and this should read as a subtle
+   hint rather than a new pattern everyone else now has to live up to. */
+.module-subnav .subnav-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
 /* ---------- Cards ---------- */
 .card {
   background: var(--surface);

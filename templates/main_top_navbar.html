@@ -985,7 +985,7 @@ layouts open it from the account menu.
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'notifications' %}active{% endif %}"
            href="#" id="notificationsDd" data-bs-toggle="dropdown">
-          <i class="fa-solid fa-bell me-1"></i>SMS Management
+          <i class="fa-solid fa-comments me-1"></i>Messaging
         </a>
         <ul class="dropdown-menu" aria-labelledby="notificationsDd">
 
@@ -996,12 +996,36 @@ layouts open it from the account menu.
               <i class="fas fa-sliders-h"></i>Master
             </a>
             <ul class="dropdown-menu">
-              {% if 'sms_templates' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_templates' %}">
-                <i class="fas fa-comment-sms"></i>SMS Templates
-              </a></li>{% endif %}
-              {% if 'sms_settings' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_settings' %}">
-                <i class="fas fa-gear"></i>SMS Settings
-              </a></li>{% endif %}
+              {% if 'sms_templates' in allowed_tabs or 'sms_settings' in allowed_tabs %}
+              <li class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="#" id="notifMasterSmsDd">
+                  <i class="fas fa-comment-sms"></i>SMS
+                </a>
+                <ul class="dropdown-menu">
+                  {% if 'sms_templates' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_templates' %}">
+                    <i class="fas fa-comment-sms"></i>SMS Templates
+                  </a></li>{% endif %}
+                  {% if 'sms_settings' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_settings' %}">
+                    <i class="fas fa-gear"></i>SMS Settings
+                  </a></li>{% endif %}
+                </ul>
+              </li>
+              {% endif %}
+              {% if 'whatsapp_templates' in allowed_tabs or 'whatsapp_settings' in allowed_tabs %}
+              <li class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="#" id="notifMasterWhatsappDd">
+                  <i class="fab fa-whatsapp"></i>WhatsApp
+                </a>
+                <ul class="dropdown-menu">
+                  {% if 'whatsapp_templates' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_templates' %}">
+                    <i class="fab fa-whatsapp"></i>WhatsApp Templates
+                  </a></li>{% endif %}
+                  {% if 'whatsapp_settings' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_settings' %}">
+                    <i class="fas fa-gear"></i>WhatsApp Settings
+                  </a></li>{% endif %}
+                </ul>
+              </li>
+              {% endif %}
             </ul>
           </li>
           {% endif %}
@@ -1015,6 +1039,9 @@ layouts open it from the account menu.
             <ul class="dropdown-menu">
               {% if 'sms_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_transaction' %}">
                 <i class="fas fa-paper-plane"></i>SMS Transaction
+              </a></li>{% endif %}
+              {% if 'whatsapp_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_transaction' %}">
+                <i class="fab fa-whatsapp"></i>WhatsApp Transaction
               </a></li>{% endif %}
             </ul>
           </li>

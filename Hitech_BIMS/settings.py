@@ -572,6 +572,17 @@ SMS_GATEWAYHUB_DCS = os.getenv("SMS_GATEWAYHUB_DCS", "0")
 SMS_GATEWAYHUB_ENTITY_ID = os.getenv("SMS_GATEWAYHUB_ENTITY_ID", "")
 SMS_GATEWAYHUB_DLT_TEMPLATE_ID = os.getenv("SMS_GATEWAYHUB_DLT_TEMPLATE_ID", "")
 
+# WhatsApp (LemIn AI Business API wrapper, see notification/conf.py). Same
+# opt-in/mock-in-dev convention as SMS above.
+WHATSAPP_ENABLED = env_bool("WHATSAPP_ENABLED", False)
+WHATSAPP_MOCK = env_bool("WHATSAPP_MOCK", DEBUG)
+WHATSAPP_PROVIDER = os.getenv("WHATSAPP_PROVIDER", "leminai")
+WHATSAPP_TIMEOUT = int(os.getenv("WHATSAPP_TIMEOUT", "15"))
+WHATSAPP_MAX_RETRIES = int(os.getenv("WHATSAPP_MAX_RETRIES", "2"))
+WHATSAPP_RETRY_BACKOFF = float(os.getenv("WHATSAPP_RETRY_BACKOFF", "0.5"))
+WHATSAPP_BASE_URL = os.getenv("WHATSAPP_BASE_URL", "https://app.leminai.com")
+WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY", "")
+
 # Employee Tracking configuration.
 # Provider credentials (TrackWick/TrackoLap API keys etc.) are DB-backed
 # master records encrypted at rest (see tracking/crypto.py) and edited from

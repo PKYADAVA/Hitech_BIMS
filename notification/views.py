@@ -637,3 +637,472 @@ def sms_settings_test(request):
         "success": result.success, "status": log.status, "log_id": log.id,
         "error": result.error, "message_id": result.message_id,
     }, status=200 if result.success else 502)
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp templates (standalone manual-send module, mirrors SMS Templates)
+# ---------------------------------------------------------------------------
+
+from .constants import WHATSAPP_HEADER_TYPE_CHOICES
+from .models import WhatsappMessage, WhatsappTemplate
+
+# WhatsappResult.status -> WhatsappMessage.status
+_WHATSAPP_RESULT_STATUS_MAP = {
+    "sent": "sent", "failed": "failed", "invalid": "invalid",
+    "disabled": "disabled", "mocked": "mocked",
+}
+
+
+def _whatsapp_template_to_dict(template: WhatsappTemplate) -> dict:
+    return {
+        "id": template.id,
+        "key": template.key,
+        "module": template.module,
+        "module_display": template.get_module_display(),
+        "transaction": template.transaction,
+        "transaction_display": transaction_label(template.module, template.transaction),
+        "name": template.name,
+        "template_name": template.template_name,
+        "language": template.language,
+        "parameter_map": template.parameter_map or [],
+        "header_type": template.header_type,
+        "header_media_url": template.header_media_url,
+        "description": template.description,
+        "category": template.category,
+        "is_active": template.is_active,
+        "created_by": template.created_by.username if template.created_by else "",
+        "modified_by": template.modified_by.username if template.modified_by else "",
+        "created_at": timezone.localtime(template.created_at).strftime("%Y-%m-%d %H:%M"),
+        "updated_at": timezone.localtime(template.updated_at).strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class WhatsappTemplateManageView(View):
+    """Render the WhatsApp template management page."""
+
+    def get(self, request):
+        from .comm_sources import SMS_VARIABLES
+
+        context = {
+            "modules": SMS_MODULE_CHOICES,
+            "categories": SmsTemplateCategory.CHOICES,
+            "header_types": WHATSAPP_HEADER_TYPE_CHOICES,
+            "sms_variables": SMS_VARIABLES,
+            "module_transactions_json": json.dumps(SMS_MODULE_TRANSACTIONS),
+        }
+        return render(request, "whatsapp_templates.html", context)
+
+
+@method_decorator(login_required, name="dispatch")
+class WhatsappTemplateAPI(View):
+    """JSON CRUD endpoints for WhatsApp templates."""
+
+    def get(self, request, template_id=None) -> JsonResponse:
+        if template_id:
+            template = WhatsappTemplate.objects.filter(id=template_id).first()
+            if not template:
+                return JsonResponse({"error": "Template not found."}, status=404)
+            return JsonResponse(_whatsapp_template_to_dict(template))
+
+        templates = WhatsappTemplate.objects.all()
+        return JsonResponse([_whatsapp_template_to_dict(t) for t in templates], safe=False)
+
+    def post(self, request) -> JsonResponse:
+        """Create a new template."""
+        try:
+            data = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request payload."}, status=400)
+
+        key = (data.get("key") or "").strip()
+        module = (data.get("module") or "").strip()
+        name = (data.get("name") or "").strip()
+        template_name = (data.get("template_name") or "").strip()
+        transaction = (data.get("transaction") or "").strip()
+        error = self._validate(key, module, name, template_name, transaction)
+        if error:
+            return JsonResponse({"error": error}, status=400)
+        if WhatsappTemplate.objects.filter(key=key).exists():
+            return JsonResponse({"error": f"A template with key '{key}' already exists."},
+                                status=400)
+
+        WhatsappTemplate.objects.create(
+            key=key, module=module, transaction=transaction, name=name,
+            template_name=template_name, language=(data.get("language") or "en_US").strip(),
+            parameter_map=data.get("parameter_map") or [],
+            header_type=(data.get("header_type") or "none").strip(),
+            header_media_url=(data.get("header_media_url") or "").strip(),
+            description=(data.get("description") or "").strip(),
+            category=(data.get("category") or "general").strip(),
+            created_by=request.user, modified_by=request.user,
+        )
+        logger.info("WhatsApp template created key=%s by user=%s", key, request.user)
+        return JsonResponse({"message": "Template created."}, status=201)
+
+    def put(self, request, template_id: int) -> JsonResponse:
+        """Update an existing template. The key is immutable (code references it)."""
+        template = WhatsappTemplate.objects.filter(id=template_id).first()
+        if not template:
+            return JsonResponse({"error": "Template not found."}, status=404)
+
+        try:
+            data = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request payload."}, status=400)
+
+        module = (data.get("module") or "").strip()
+        name = (data.get("name") or "").strip()
+        template_name = (data.get("template_name") or "").strip()
+        transaction = (data.get("transaction") or "").strip()
+        error = self._validate(template.key, module, name, template_name, transaction)
+        if error:
+            return JsonResponse({"error": error}, status=400)
+
+        template.module = module
+        template.transaction = transaction
+        template.name = name
+        template.template_name = template_name
+        template.language = (data.get("language") or template.language).strip()
+        template.parameter_map = data.get("parameter_map") or []
+        template.header_type = (data.get("header_type") or "none").strip()
+        template.header_media_url = (data.get("header_media_url") or "").strip()
+        template.description = (data.get("description") or "").strip()
+        template.category = (data.get("category") or template.category).strip()
+        template.modified_by = request.user
+        template.save(update_fields=[
+            "module", "transaction", "name", "template_name", "language", "parameter_map",
+            "header_type", "header_media_url", "description", "category",
+            "modified_by", "updated_at",
+        ])
+        logger.info("WhatsApp template updated key=%s by user=%s", template.key, request.user)
+        return JsonResponse({"message": "Template updated."})
+
+    def delete(self, request, template_id: int) -> JsonResponse:
+        template = WhatsappTemplate.objects.filter(id=template_id).first()
+        if not template:
+            return JsonResponse({"error": "Template not found."}, status=404)
+        key = template.key
+        template.delete()
+        logger.info("WhatsApp template deleted key=%s by user=%s", key, request.user)
+        return JsonResponse({"message": "Template deleted."})
+
+    @staticmethod
+    def _validate(key, module, name, template_name, transaction="") -> str:
+        if not key:
+            return "Key is required."
+        if module not in _VALID_MODULES:
+            return "Select a valid module."
+        if transaction and not transaction_label(module, transaction):
+            return "Select a valid transaction for the chosen module."
+        if not name:
+            return "Name is required."
+        if not template_name:
+            return "Meta template name is required."
+        if not _re.fullmatch(r"[a-z0-9_]+", template_name):
+            return "Template name must be lowercase letters, numbers and underscores only."
+        return ""
+
+
+@login_required
+def toggle_whatsapp_template_active(request, template_id: int) -> JsonResponse:
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    template = WhatsappTemplate.objects.filter(id=template_id).first()
+    if not template:
+        return JsonResponse({"error": "Template not found."}, status=404)
+    template.is_active = not template.is_active
+    template.save(update_fields=["is_active", "updated_at"])
+    return JsonResponse({"message": "Template updated.", "is_active": template.is_active})
+
+
+@login_required
+def send_whatsapp_template(request, template_id: int) -> JsonResponse:
+    """Send this template to a phone number using values supplied in the form.
+
+    Parameter values arrive as ``var_<name>`` fields, one per entry in the
+    template's ``parameter_map``, mirroring ``send_sms_template``.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    template = WhatsappTemplate.objects.filter(id=template_id).first()
+    if not template:
+        return JsonResponse({"error": "Template not found."}, status=404)
+
+    phone = (request.POST.get("phone") or "").strip()
+    if not phone:
+        return JsonResponse({"error": "Phone number is required."}, status=400)
+
+    context = {
+        name: request.POST.get(f"var_{name}", "")
+        for name in (template.parameter_map or [])
+    }
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().send_template(template.key, phone, context)
+    WhatsappMessage.objects.create(
+        mobile=phone, module=template.module, document_no="",
+        template=template, template_name=template.template_name,
+        status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
+        wamid=result.message_id or "",
+        gateway_response=result.provider_response,
+        api_request={"template_key": template.key},
+        error_message=result.error or "",
+        sent_by=request.user, ip_address=_client_ip(request),
+    )
+    return JsonResponse(
+        {
+            "success": result.success,
+            "status": result.status,
+            "message_id": result.message_id,
+            "error": result.error,
+        },
+        status=200 if result.success else 400,
+    )
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Settings master (singleton configuration page)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required, name="dispatch")
+class WhatsappSettingsPageView(View):
+    """View/edit the runtime WhatsApp configuration (WhatsappSettings singleton)."""
+
+    def get(self, request):
+        from .conf import load_whatsapp_config
+        from .models import WhatsappSettings
+
+        row = WhatsappSettings.get_solo()
+        cfg = load_whatsapp_config()
+        return render(request, "whatsapp_settings.html", {
+            "row": row,
+            "api_key_in_db": bool(row.api_key),
+            "api_key_effective": bool(cfg.api_key),
+            "effective": {
+                "enabled": cfg.enabled, "mock": cfg.mock, "provider": cfg.provider,
+                "base_url": cfg.base_url,
+            },
+            "templates": WhatsappTemplate.objects.filter(is_active=True),
+            "can_edit": user_can(request.user, "whatsapp_settings", "edit"),
+        })
+
+    def post(self, request):
+        from .models import WhatsappSettings
+
+        if not user_can(request.user, "whatsapp_settings", "edit"):
+            return JsonResponse({"error": "You do not have permission to change WhatsApp settings."},
+                                status=403)
+        try:
+            data = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+        row = WhatsappSettings.get_solo()
+        row.enabled = bool(data.get("enabled"))
+        row.mock = bool(data.get("mock"))
+        if data.get("clear_api_key"):
+            row.api_key = ""
+        else:
+            new_key = str(data.get("api_key", "")).strip()
+            if new_key:
+                row.api_key = new_key
+        row.modified_by = request.user
+        row.save()
+        logger.info("WhatsApp settings updated by user=%s enabled=%s mock=%s",
+                    request.user.username, row.enabled, row.mock)
+        return JsonResponse({"success": True})
+
+
+@login_required
+def whatsapp_settings_test(request):
+    """Send a test template message with the currently saved configuration and log it."""
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    if not user_can(request.user, "whatsapp_settings", "edit"):
+        return JsonResponse({"error": "You do not have permission to send a test WhatsApp message."},
+                            status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    mobile = str(data.get("mobile", "")).strip()
+    if not _re.fullmatch(r"\+?\d{10,15}", mobile):
+        return JsonResponse({"error": "Enter a valid mobile number (10-15 digits)."}, status=400)
+
+    template_id = data.get("template_id")
+    template = WhatsappTemplate.objects.filter(id=template_id, is_active=True).first()
+    if not template:
+        return JsonResponse({"error": "Select a valid template to test with."}, status=400)
+
+    context = {
+        name: str((data.get("parameters") or {}).get(name, ""))
+        for name in (template.parameter_map or [])
+    }
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().send_template(template.key, mobile, context)
+    log = WhatsappMessage.objects.create(
+        mobile=mobile, module="test", document_no="",
+        template=template, template_name=template.template_name,
+        status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
+        wamid=result.message_id or "",
+        gateway_response=result.provider_response,
+        api_request={"module": "test"},
+        error_message=result.error or "",
+        sent_by=request.user, ip_address=_client_ip(request),
+    )
+    return JsonResponse({
+        "success": result.success, "status": log.status, "log_id": log.id,
+        "error": result.error, "message_id": result.message_id,
+    }, status=200 if result.success else 502)
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Transaction (bulk-send from ERP documents, mirrors SMS Transaction)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required, name="dispatch")
+class WhatsappTransactionPageView(View):
+    def get(self, request):
+        from .comm_sources import PARTY_TYPES, party_choices
+
+        templates_qs = WhatsappTemplate.objects.filter(is_active=True).order_by("name")
+        choices = party_choices(request.user)
+        return render(request, "whatsapp_transaction.html", {
+            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
+                             v.get("module", ""))
+                            for k, v in DOC_SOURCES.items()],
+            "templates": templates_qs,
+            "templates_json": json.dumps([
+                {"id": t.id, "name": t.name, "template_name": t.template_name,
+                 "parameter_map": t.parameter_map or [],
+                 "transaction": t.transaction, "module": t.module,
+                 "module_display": t.get_module_display()}
+                for t in templates_qs
+            ]),
+            "party_lists": [(key, label, choices.get(key, []))
+                            for key, label in PARTY_TYPES.items()],
+        })
+
+
+@login_required
+def whatsapp_transaction_source(request):
+    """Grid rows for the WhatsApp transaction screen, with per-row variable
+    context. Identical shape to ``sms_transaction_source`` — same DOC_SOURCES
+    rows, just stamped with WhatsApp send history instead of SMS."""
+    module = (request.GET.get("module") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip() or None
+    to_date = (request.GET.get("to_date") or "").strip() or None
+    party_id = (request.GET.get("party") or "").strip() or None
+
+    if module:
+        source = DOC_SOURCES.get(module)
+        if not source:
+            return JsonResponse({"error": "Select a valid module."}, status=400)
+        modules = [module]
+        party_type = source["party_type"]
+    else:
+        modules = list(DOC_SOURCES)
+        party_type = None
+        party_id = None
+
+    rows = []
+    for key in modules:
+        for r in DOC_SOURCES[key]["rows"](from_date, to_date, party_id):
+            r["module"] = key
+            rows.append(r)
+    rows.sort(key=lambda r: (r["date"], r["doc_id"]), reverse=True)
+
+    doc_nos = {r["doc_no"] for r in rows}
+    sent_map = {}
+    successful = (WhatsappMessage.objects
+                  .filter(module__in=modules, document_no__in=doc_nos,
+                          status__in=["sent", "delivered", "read", "mocked"])
+                  .order_by("-created_at")
+                  .values("module", "document_no", "template_id", "template_name",
+                          "mobile", "created_at"))
+    for m in successful:
+        sent_map.setdefault((m["module"], m["document_no"]), []).append({
+            "template_id": m["template_id"],
+            "template_name": m["template_name"],
+            "mobile": m["mobile"],
+            "sent_at": timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M"),
+        })
+    for r in rows:
+        r["sent_history"] = sent_map.get((r["module"], r["doc_no"]), [])
+        r["already_sent"] = bool(r["sent_history"])
+    return JsonResponse({"rows": rows, "party_type": party_type})
+
+
+@login_required
+def whatsapp_transaction_send(request):
+    """Send one document's WhatsApp template; called per selected row by the UI.
+
+    Body: {module, doc_id, template_id, force}. ``force`` overrides the
+    recent-duplicate guard after the user confirms. Mirrors ``sms_send``.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_transaction", "add"):
+        return JsonResponse({"error": "You do not have permission to send WhatsApp messages."},
+                            status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request payload."}, status=400)
+
+    source = DOC_SOURCES.get(data.get("module") or "")
+    if not source:
+        return JsonResponse({"error": "Select a valid module."}, status=400)
+    template = WhatsappTemplate.objects.filter(id=data.get("template_id")).first()
+    if not template:
+        return JsonResponse({"error": "Template not found."}, status=400)
+    if not template.is_active:
+        return JsonResponse({"error": f"Template '{template.name}' is inactive."}, status=400)
+
+    row = next((r for r in source["rows"](None, None, None)
+                if str(r["doc_id"]) == str(data.get("doc_id"))), None)
+    if row is None:
+        return JsonResponse({"error": "Document not found."}, status=404)
+    mobile = (row["mobile"] or "").strip().replace(" ", "")
+    if not mobile:
+        return JsonResponse({"error": f"{row['party_name']} has no mobile number."}, status=400)
+    if not _MOBILE_RE.match(mobile):
+        return JsonResponse({"error": f"Invalid mobile number '{mobile}' for {row['party_name']}."}, status=400)
+
+    context = {**common_context(request.user), **row["context"]}
+
+    # Duplicate guard: same mobile + template + document within the last minute.
+    if not data.get("force"):
+        recent = WhatsappMessage.objects.filter(
+            mobile=mobile, template=template, document_no=row["doc_no"],
+            created_at__gte=timezone.now() - timedelta(minutes=1),
+        ).exclude(status__in=["failed", "invalid"]).exists()
+        if recent:
+            return JsonResponse({
+                "duplicate": True,
+                "error": "This WhatsApp message was already sent recently. Do you want to send again?",
+            }, status=409)
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().send_template(template.key, mobile, context)
+    log = WhatsappMessage.objects.create(
+        party_type=row["party_type"], party_id=row["party_id"], party_name=row["party_name"],
+        mobile=mobile, module=data["module"], document_no=row["doc_no"],
+        template=template, template_name=template.template_name,
+        status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
+        wamid=result.message_id or "",
+        gateway_response=result.provider_response,
+        api_request={"module": data["module"], "doc_id": row["doc_id"],
+                     "template": template.key, "context": context},
+        error_message=result.error or "",
+        sent_by=request.user, ip_address=_client_ip(request),
+    )
+    return JsonResponse({
+        "success": result.success, "status": log.status, "log_id": log.id,
+        "error": result.error, "message_id": result.message_id,
+    }, status=200 if result.success else 502)

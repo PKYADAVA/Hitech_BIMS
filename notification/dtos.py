@@ -1,9 +1,9 @@
-"""Structured data returned by the SMS subsystem."""
+"""Structured data returned by the SMS and WhatsApp subsystems."""
 
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .constants import SmsStatus
+from .constants import SmsStatus, WhatsappStatus
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,51 @@ class SmsResult:  # pylint: disable=too-many-instance-attributes
     @classmethod
     def failed(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         cls, recipient, error, status=SmsStatus.FAILED, error_code=None,
+        provider=None, provider_response=None,
+    ):
+        return cls(
+            success=False,
+            status=status,
+            recipient=recipient,
+            error=error,
+            error_code=error_code,
+            provider=provider,
+            provider_response=provider_response,
+        )
+
+
+@dataclass(frozen=True)
+class WhatsappResult:  # pylint: disable=too-many-instance-attributes
+    """Immutable outcome of a WhatsApp template send attempt.
+
+    Mirrors :class:`SmsResult` exactly, so business code that already knows
+    how to read an SMS result reads this the same way. ``message_id`` holds
+    the WhatsApp message ID (WAMID) on success.
+    """
+
+    success: bool
+    status: str
+    recipient: str
+    message_id: Optional[str] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = None
+    provider: Optional[str] = None
+    provider_response: Optional[dict] = field(default=None, repr=False)
+
+    @classmethod
+    def sent(cls, recipient, message_id=None, provider=None, provider_response=None):
+        return cls(
+            success=True,
+            status=WhatsappStatus.SENT,
+            recipient=recipient,
+            message_id=message_id,
+            provider=provider,
+            provider_response=provider_response,
+        )
+
+    @classmethod
+    def failed(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        cls, recipient, error, status=WhatsappStatus.FAILED, error_code=None,
         provider=None, provider_response=None,
     ):
         return cls(

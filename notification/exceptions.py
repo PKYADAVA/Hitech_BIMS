@@ -55,3 +55,55 @@ class SmsPermanentError(SmsProviderError):
             transient=False,
             provider_response=provider_response,
         )
+
+
+class WhatsappError(Exception):
+    """Base class for every WhatsApp-related error."""
+
+
+class WhatsappConfigurationError(WhatsappError):
+    """Raised when required WhatsApp settings are missing or invalid."""
+
+
+class WhatsappValidationError(WhatsappError):
+    """Raised when a phone number, template or parameter fails validation."""
+
+
+class WhatsappProviderError(WhatsappError):
+    """Raised when a provider rejects a request or returns an error.
+
+    Attributes:
+        error_code: Provider-specific error code, when available.
+        transient: Whether the failure may succeed on retry.
+        provider_response: Parsed provider payload, for logging/diagnostics.
+    """
+
+    def __init__(self, message, error_code=None, transient=False, provider_response=None):
+        super().__init__(message)
+        self.error_code = error_code
+        self.transient = transient
+        self.provider_response = provider_response
+
+
+class WhatsappTransientError(WhatsappProviderError):
+    """A provider/network failure that is safe to retry."""
+
+    def __init__(self, message, error_code=None, provider_response=None):
+        super().__init__(
+            message,
+            error_code=error_code,
+            transient=True,
+            provider_response=provider_response,
+        )
+
+
+class WhatsappPermanentError(WhatsappProviderError):
+    """A provider failure that must not be retried (e.g. invalid credentials)."""
+
+    def __init__(self, message, error_code=None, provider_response=None):
+        super().__init__(
+            message,
+            error_code=error_code,
+            transient=False,
+            provider_response=provider_response,
+        )

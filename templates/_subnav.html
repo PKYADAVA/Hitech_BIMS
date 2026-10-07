@@ -157,8 +157,12 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
       {% elif module == 'notification_master' %}
         {% if 'sms_templates' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_templates' %}active{% endif %} activate" href="{% url 'sms_templates' %}"><i class="fas fa-comment-sms me-1"></i>SMS Templates</a></li>{% endif %}
         {% if 'sms_settings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_settings' %}active{% endif %} activate" href="{% url 'sms_settings' %}"><i class="fas fa-gear me-1"></i>SMS Settings</a></li>{% endif %}
+        {% if 'whatsapp_templates' in allowed_tabs or 'whatsapp_settings' in allowed_tabs %}<li class="subnav-divider" aria-hidden="true"></li>{% endif %}
+        {% if 'whatsapp_templates' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'whatsapp_templates' %}active{% endif %} activate" href="{% url 'whatsapp_templates' %}"><i class="fab fa-whatsapp me-1"></i>WhatsApp Templates</a></li>{% endif %}
+        {% if 'whatsapp_settings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'whatsapp_settings' %}active{% endif %} activate" href="{% url 'whatsapp_settings' %}"><i class="fas fa-gear me-1"></i>WhatsApp Settings</a></li>{% endif %}
       {% elif module == 'notification_transaction' %}
         {% if 'sms_transaction' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_transaction' %}active{% endif %} activate" href="{% url 'sms_transaction' %}"><i class="fas fa-paper-plane me-1"></i>SMS Transaction</a></li>{% endif %}
+        {% if 'whatsapp_transaction' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'whatsapp_transaction' %}active{% endif %} activate" href="{% url 'whatsapp_transaction' %}"><i class="fab fa-whatsapp me-1"></i>WhatsApp Transaction</a></li>{% endif %}
       {% elif module == 'notification_report' %}
         {% if 'sms_history' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_history' %}active{% endif %} activate" href="{% url 'sms_history' %}"><i class="fas fa-clock-rotate-left me-1"></i>SMS History</a></li>{% endif %}
       {% elif module == 'environmental_monitoring' %}

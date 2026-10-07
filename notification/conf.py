@@ -91,3 +91,64 @@ def _load_env_config() -> SmsConfig:
         entity_id=getattr(settings, "SMS_GATEWAYHUB_ENTITY_ID", ""),
         dlt_template_id=getattr(settings, "SMS_GATEWAYHUB_DLT_TEMPLATE_ID", ""),
     )
+
+
+@dataclass(frozen=True)
+class WhatsappConfig:
+    """Resolved, validated WhatsApp configuration."""
+
+    enabled: bool
+    mock: bool
+    provider: str
+    timeout: int
+    max_retries: int
+    retry_backoff: float
+    default_country_code: str
+    # LemIn AI credentials/routing.
+    base_url: str
+    api_key: str
+
+
+def load_whatsapp_config() -> WhatsappConfig:
+    """Build a :class:`WhatsappConfig` from Django settings, overlaid with the
+    :class:`~notification.models.WhatsappSettings` master row when one exists.
+
+    Mirrors :func:`load_config`'s env-then-DB-override resolution exactly.
+    """
+
+    config = _load_whatsapp_env_config()
+    row = _load_whatsapp_db_settings()
+    if row is None:
+        return config
+    return replace(
+        config,
+        enabled=row.enabled,
+        mock=row.mock,
+        api_key=row.api_key or config.api_key,
+    )
+
+
+def _load_whatsapp_db_settings():
+    try:
+        from .models import WhatsappSettings  # local import: avoid circulars at load time
+
+        return WhatsappSettings.objects.filter(pk=1).first()
+    except Exception:  # pylint: disable=broad-except
+        return None
+
+
+def _load_whatsapp_env_config() -> WhatsappConfig:
+    from .constants import WhatsappProviderName
+
+    return WhatsappConfig(
+        enabled=bool(getattr(settings, "WHATSAPP_ENABLED", False)),
+        mock=bool(getattr(settings, "WHATSAPP_MOCK", False)),
+        provider=getattr(settings, "WHATSAPP_PROVIDER", WhatsappProviderName.LEMINAI),
+        timeout=int(getattr(settings, "WHATSAPP_TIMEOUT", 15)),
+        max_retries=int(getattr(settings, "WHATSAPP_MAX_RETRIES", 2)),
+        retry_backoff=float(getattr(settings, "WHATSAPP_RETRY_BACKOFF", 0.5)),
+        default_country_code=str(getattr(settings, "SMS_DEFAULT_COUNTRY_CODE", "91")),
+        base_url=getattr(settings, "WHATSAPP_BASE_URL",
+                         "https://app.leminai.com").rstrip("/"),
+        api_key=getattr(settings, "WHATSAPP_API_KEY", ""),
+    )

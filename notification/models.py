@@ -9,7 +9,7 @@ remains the seed and the fallback.
 from django.conf import settings
 from django.db import models
 
-from .constants import SMS_MODULE_CHOICES
+from .constants import SMS_MODULE_CHOICES, WHATSAPP_HEADER_TYPE_CHOICES
 
 
 class SmsTemplate(models.Model):
@@ -212,6 +212,184 @@ class SmsSettings(models.Model):
             "sender_id": getattr(dj, "SMS_GATEWAYHUB_SENDER_ID", ""),
             "entity_id": getattr(dj, "SMS_GATEWAYHUB_ENTITY_ID", ""),
             "default_country_code": str(getattr(dj, "SMS_DEFAULT_COUNTRY_CODE", "91")),
+        })
+        return obj
+
+
+class WhatsappTemplate(models.Model):
+    """A WhatsApp template reference scoped to an application module.
+
+    Unlike :class:`SmsTemplate` this does not store the message text — Meta
+    owns the approved template body once it is created and reviewed (done
+    manually in the LemIn AI dashboard for now; see
+    notification/comm_sources.py docstring for why). This row only records
+    which already-approved ``template_name``/``language`` to send and how
+    its ``{{1}}``, ``{{2}}``... body positions map onto ERP variables.
+    """
+
+    key = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Stable identifier used in code, e.g. 'sales.payment_receipt'.",
+    )
+    module = models.CharField(
+        max_length=30,
+        choices=SMS_MODULE_CHOICES,
+        db_index=True,
+        help_text="Application module this template belongs to.",
+    )
+    transaction = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        help_text="Sub-transaction within the module (see SMS_MODULE_TRANSACTIONS); "
+                  "blank = generic template for the whole module.",
+    )
+    name = models.CharField(max_length=150, help_text="Human-readable template name.")
+    template_name = models.CharField(
+        max_length=512,
+        help_text="The exact, Meta-approved template name (lowercase/digits/underscores), "
+                  "e.g. 'order_confirmation'.",
+    )
+    language = models.CharField(
+        max_length=10, default="en_US",
+        help_text="Template language code, e.g. en_US, en, hi.",
+    )
+    parameter_map = models.JSONField(
+        default=list, blank=True,
+        help_text="Ordered list of ERP variable names, one per {{1}}, {{2}}... "
+                  "body position, e.g. [\"CustomerName\", \"InvoiceNo\", \"Amount\"].",
+    )
+    header_type = models.CharField(
+        max_length=10, choices=WHATSAPP_HEADER_TYPE_CHOICES, default="none",
+        help_text="Media type of the template's header component, if any.",
+    )
+    header_media_url = models.URLField(
+        blank=True,
+        help_text="Publicly accessible URL for an image/video/document header "
+                  "(must match what the template was approved with).",
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="What this template is used for.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive templates cannot be sent.",
+    )
+    category = models.CharField(
+        max_length=30,
+        default="general",
+        db_index=True,
+        help_text="Business category (invoice, dispatch, payment reminder, ...).",
+    )
+    created_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_whatsapp_templates",
+    )
+    modified_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="modified_whatsapp_templates",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("module", "key")
+        verbose_name = "WhatsApp template"
+        verbose_name_plural = "WhatsApp templates"
+
+    def __str__(self):
+        return f"{self.key} ({self.get_module_display()})"
+
+
+class WhatsappMessage(models.Model):
+    """Permanent log of every WhatsApp message the ERP attempts to send.
+
+    One row per attempt (retries create linked rows). Rows are never
+    deleted; mirrors :class:`SmsMessage` exactly.
+    """
+
+    STATUS_CHOICES = [
+        ("queued", "Queued"),
+        ("sent", "Sent"),
+        ("delivered", "Delivered"),
+        ("read", "Read"),
+        ("failed", "Failed"),
+        ("invalid", "Invalid"),
+        ("disabled", "Disabled"),
+        ("mocked", "Mocked"),
+        ("unknown", "Unknown"),
+    ]
+    PARTY_TYPE_CHOICES = [("customer", "Customer"), ("supplier", "Supplier"),
+                          ("farmer", "Farmer"), ("employee", "Employee")]
+
+    party_type = models.CharField(max_length=10, choices=PARTY_TYPE_CHOICES, blank=True)
+    party_id = models.PositiveIntegerField(null=True, blank=True)
+    party_name = models.CharField(max_length=255, blank=True)
+    mobile = models.CharField(max_length=20)
+    module = models.CharField(max_length=30, blank=True, help_text="Document source key, e.g. 'sales'.")
+    document_no = models.CharField(max_length=50, blank=True)
+    template = models.ForeignKey(WhatsappTemplate, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="messages")
+    template_name = models.CharField(max_length=512, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="queued", db_index=True)
+    wamid = models.CharField(max_length=128, blank=True, help_text="WhatsApp message ID.")
+    gateway_response = models.JSONField(null=True, blank=True)
+    api_request = models.JSONField(null=True, blank=True, help_text="Sanitized request context (no secrets).")
+    error_message = models.TextField(blank=True)
+    retry_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="retries")
+    retry_count = models.PositiveIntegerField(default=0)
+    sent_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="whatsapp_messages")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-id",)
+        indexes = [
+            models.Index(fields=["mobile", "created_at"]),
+            models.Index(fields=["module", "document_no"]),
+        ]
+
+    def __str__(self):
+        return f"WhatsApp to {self.mobile} ({self.status})"
+
+
+class WhatsappSettings(models.Model):
+    """Singleton runtime WhatsApp configuration (WhatsApp Settings master).
+
+    Overrides the ``.env``/settings values so operators can manage WhatsApp
+    from the UI without server restarts, mirroring :class:`SmsSettings`.
+    """
+
+    enabled = models.BooleanField(default=False, help_text="Master switch for all WhatsApp sending.")
+    mock = models.BooleanField(default=True, help_text="Mock mode: log sends without hitting the gateway.")
+    api_key = models.CharField(max_length=200, blank=True, help_text="LemIn AI API key (blank = use .env).")
+    modified_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="whatsapp_settings_changes")
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "WhatsApp Settings"
+        verbose_name_plural = "WhatsApp Settings"
+
+    def __str__(self):
+        return "WhatsApp Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        from django.conf import settings as dj
+
+        obj, _created = cls.objects.get_or_create(pk=1, defaults={
+            "enabled": bool(getattr(dj, "WHATSAPP_ENABLED", False)),
+            "mock": bool(getattr(dj, "WHATSAPP_MOCK", False)),
         })
         return obj
 

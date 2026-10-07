@@ -1,19 +1,20 @@
-"""Retry helper for transient SMS failures.
+"""Retry helper for transient SMS/WhatsApp failures.
 
-Only :class:`~notification.exceptions.SmsTransientError` is retried; permanent
-errors (invalid number, bad credentials, malformed request) propagate on the
-first attempt so bad input is never sent repeatedly.
+Only a transient provider error is retried; permanent errors (invalid
+number, bad credentials, malformed request) propagate on the first attempt
+so bad input is never sent repeatedly.
 """
 
 import logging
 import time
 
-from .exceptions import SmsTransientError
+from .exceptions import SmsTransientError, WhatsappTransientError
 
 logger = logging.getLogger("notification.sms")
 
 
-def call_with_retry(func, max_retries, backoff, sleep=time.sleep):
+def call_with_retry(func, max_retries, backoff, sleep=time.sleep,
+                    transient_exception=SmsTransientError):
     """Invoke ``func`` retrying transient failures with exponential backoff.
 
     Args:
@@ -21,12 +22,16 @@ def call_with_retry(func, max_retries, backoff, sleep=time.sleep):
         max_retries: Number of *additional* attempts after the first.
         backoff: Base delay in seconds; attempt ``n`` waits ``backoff * 2**n``.
         sleep: Injectable sleep function (kept out of the way in tests).
+        transient_exception: The exception type that marks a retryable
+            failure — :class:`~notification.exceptions.SmsTransientError` by
+            default, or :class:`~notification.exceptions.WhatsappTransientError`
+            for the WhatsApp channel.
 
     Returns:
         Whatever ``func`` returns on the first successful attempt.
 
     Raises:
-        The last :class:`SmsTransientError` if every attempt fails, or any
+        The last transient error if every attempt fails, or any
         non-transient exception immediately.
     """
 
@@ -35,13 +40,13 @@ def call_with_retry(func, max_retries, backoff, sleep=time.sleep):
     for attempt in range(attempts):
         try:
             return func()
-        except SmsTransientError as exc:
+        except transient_exception as exc:
             last_error = exc
             if attempt + 1 >= attempts:
                 break
             delay = backoff * (2 ** attempt)
             logger.warning(
-                "Transient SMS failure (attempt %d/%d); retrying in %.2fs: %s",
+                "Transient send failure (attempt %d/%d); retrying in %.2fs: %s",
                 attempt + 1, attempts, delay, exc,
             )
             sleep(delay)

@@ -18,6 +18,23 @@ class SmsProviderName:
     MOCK = "mock"
 
 
+class WhatsappStatus:
+    """Outcome states returned to callers via :class:`~notification.dtos.WhatsappResult`."""
+
+    SENT = "sent"
+    FAILED = "failed"
+    INVALID = "invalid"
+    DISABLED = "disabled"
+    MOCKED = "mocked"
+
+
+class WhatsappProviderName:
+    """Identifiers used to select a WhatsApp provider implementation from settings."""
+
+    LEMINAI = "leminai"
+    MOCK = "mock"
+
+
 # Application modules that own SMS templates. Kept here so the template
 # catalogue, admin filters and seeding command share a single source of truth.
 class SmsModule:
@@ -95,6 +112,20 @@ def transaction_label(module, code):
         if value == code:
             return label
     return ""
+
+# Header media a WhatsApp template can carry, per the LemIn AI "Send Template
+# Message" docs. "location" is a template-defined behaviour (coordinates are
+# supplied by the template, not configurable here), so it is not offered as a
+# per-template setting.
+WHATSAPP_HEADER_TYPE_CHOICES = (
+    ("none", "None"),
+    ("image", "Image"),
+    ("video", "Video"),
+    ("document", "Document"),
+)
+
+# LemIn AI (https://app.leminai.com) WhatsApp Business API wrapper contract.
+LEMINAI_SEND_TEMPLATE_ENDPOINT = "/api/v1/messages/template"
 
 # SMSGatewayHub REST contract. Endpoint/success code reflect the provider's
 # published "Send SMS" JSON API; verify against your account documentation

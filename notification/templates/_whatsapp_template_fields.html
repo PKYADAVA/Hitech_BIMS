@@ -1,0 +1,79 @@
+{% comment %}
+Shared field markup for the Add and Edit WhatsApp Template forms. Both
+forms use the exact same `name="..."` attributes — the JS that reads/writes
+them always scopes with `.closest("form")`, so there is no name clash
+between the Add form and however many stamped-out Edit modals are open.
+`key_readonly` is set on the edit variant since the key is immutable once a
+template references it from code.
+{% endcomment %}
+<div class="row g-3">
+  <div class="col-md-6">
+    <label class="form-label">Key<span class="text-danger">*</span></label>
+    <input type="text" name="key" class="form-control"
+           placeholder="e.g. sales.payment_receipt" required
+           {% if key_readonly %}readonly{% endif %}>
+    {% if not key_readonly %}<div class="form-text">Stable identifier used in code. Cannot be changed later.</div>{% endif %}
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Module<span class="text-danger">*</span></label>
+    <select name="module" class="form-select tpl-module-select" required>
+      <option value="" {% if not key_readonly %}selected disabled{% endif %}>Select module</option>
+      {% for value, label in modules %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Transaction</label>
+    <select name="transaction" class="form-select tpl-transaction-select">
+      <option value="">— All / Generic —</option>
+    </select>
+    <div class="form-text">Transactions of the selected module.</div>
+  </div>
+  <div class="col-md-12">
+    <label class="form-label">Name<span class="text-danger">*</span></label>
+    <input type="text" name="name" class="form-control" placeholder="Human-readable name" required>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Meta Template Name<span class="text-danger">*</span></label>
+    <input type="text" name="template_name" class="form-control"
+           placeholder="e.g. order_confirmation" pattern="[a-z0-9_]+" required>
+    <div class="form-text">Lowercase letters, numbers, underscores — must match the approved template exactly.</div>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Language</label>
+    <input type="text" name="language" class="form-control" value="en_US" placeholder="en_US">
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Category</label>
+    <select name="category" class="form-select">
+      {% for value, label in categories %}
+      <option value="{{ value }}" {% if value == 'general' %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Header Type</label>
+    <select name="header_type" class="form-select tpl-header-type">
+      {% for value, label in header_types %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-12 tpl-header-media-wrap d-none">
+    <label class="form-label">Header Media URL</label>
+    <input type="url" name="header_media_url" class="form-control"
+           placeholder="https://example.com/banner.jpg">
+    <div class="form-text">Publicly accessible URL, must match what the template was approved with.</div>
+  </div>
+  <div class="col-md-12">
+    <label class="form-label">Description</label>
+    <input type="text" name="description" class="form-control" placeholder="What this template is used for">
+  </div>
+  <div class="col-md-12">
+    <label class="form-label">Parameters</label>
+    <div class="form-text mb-1">Ordered — the first entry fills {{1}}, the second {{2}}, and so on, matching the approved template's body.</div>
+    <div class="tpl-param-list mb-1"></div>
+    <button type="button" class="btn btn-outline-secondary btn-sm tpl-param-add"><i class="fas fa-plus"></i> Add parameter</button>
+  </div>
+</div>
