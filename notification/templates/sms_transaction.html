@@ -24,6 +24,14 @@
   #sms-doc-table td:nth-child(2), #sms-doc-table td:nth-child(3),
   #sms-doc-table td:nth-child(4), #sms-doc-table td:nth-child(6),
   #sms-doc-table td:nth-child(7), #sms-doc-table td:nth-child(9) { white-space:nowrap; }
+  .sms-txn-toolbar-row2 { display:flex; justify-content:space-between; align-items:center;
+                          flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+  .sms-txn-quick-dates { display:flex; gap:.3rem; flex-wrap:wrap; }
+  .sms-txn-quick-dates .btn { font-size:.75rem; padding:.2rem .55rem; }
+  .sms-txn-quick-dates .btn.active { background:var(--primary,#0d6efd); color:#fff; border-color:var(--primary,#0d6efd); }
+  .sms-txn-active-filters { display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+  .sms-txn-active-filters .badge { font-weight:500; font-size:.75rem; }
+  .sms-txn-active-filters .badge .fa-xmark { cursor:pointer; margin-left:.3rem; }
 </style>
 <div class="sms-txn-page">
 <div class="page-header">
@@ -76,7 +84,7 @@
       <div>
         <label class="form-label">Template <span class="text-danger">*</span></label>
         <select class="form-select" id="template">
-          <option value="">select template</option>
+          <option value="">All</option>
           {% for t in templates %}<option value="{{ t.id }}" data-body="{{ t.body }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
         </select>
       </div>
@@ -86,6 +94,15 @@
         <button class="btn btn-outline-info" id="preview-btn"><i class="fas fa-eye"></i> Preview</button>
         <button class="btn btn-success" id="send-btn"><i class="fas fa-paper-plane"></i> Send SMS</button>
       </div>
+    </div>
+    <div class="sms-txn-toolbar-row2">
+      <div class="sms-txn-quick-dates">
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="today">Today</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="7">7 Days</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="30">30 Days</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="month">This Month</button>
+      </div>
+      <div class="sms-txn-active-filters" id="active-filters"></div>
     </div>
     <div class="mt-3 d-none" id="progress-wrap">
       <div class="d-flex justify-content-between small mb-1">
@@ -154,14 +171,84 @@ $(function () {
   const MODULE_LABELS = {
     {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
   };
+  // Each row only carries its doc_source key (r.module, e.g. "supplier_due") —
+  // not the underlying Django module/transaction a template is scoped to.
+  // Looked up here so a selected Template can filter the grid to rows it can
+  // actually apply to.
+  const SOURCE_SCOPE = {
+    {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": { module: "{{ mod }}", transaction: "{{ txn }}" },{% endfor %}
+  };
   let table = null;
   let rows = [];
 
   const today = localDay();
-  $("#from-date").val(today);
+  const sevenDaysAgo = localDay(new Date(Date.now() - 6 * 86400000));
+  $("#from-date").val(sevenDaysAgo);
   $("#to-date").val(today);
 
   // escapeHtml() provided globally by main.js
+
+  // Quick date-range chips — just fill From/To and re-search, same as
+  // picking the dates by hand. "today"/"7"/"30" are rolling windows ending
+  // today; "month" is the calendar month to date.
+  function applyQuickRange(range) {
+    // jQuery's .data() parses data-range="7"/"30" as numbers, not strings —
+    // compare loosely (==) so both the click handler's numeric read and
+    // markActiveQuickRange()'s own lookup agree on the same branches.
+    const now = new Date();
+    let from;
+    if (range == "today") from = today;
+    else if (range == 7) from = localDay(new Date(Date.now() - 6 * 86400000));
+    else if (range == 30) from = localDay(new Date(Date.now() - 29 * 86400000));
+    else if (range == "month") from = localDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    $("#from-date").val(from);
+    $("#to-date").val(today);
+    markActiveQuickRange();
+    loadRows();
+  }
+  function markActiveQuickRange() {
+    const from = $("#from-date").val(), to = $("#to-date").val();
+    const matches = {
+      today: from === today && to === today,
+      "7": from === sevenDaysAgo && to === today,
+      "30": from === localDay(new Date(Date.now() - 29 * 86400000)) && to === today,
+      month: from === localDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && to === today,
+    };
+    $(".quick-date-btn").each(function () {
+      $(this).toggleClass("active", !!matches[$(this).data("range")]);
+    });
+  }
+  $(".quick-date-btn").on("click", function () { applyQuickRange($(this).data("range")); });
+  $("#from-date, #to-date").on("change", markActiveQuickRange);
+
+  // Active-filter badges: a quick at-a-glance summary of anything narrowing
+  // the grid beyond the default 7-day window, with a one-click way to clear
+  // just that one filter (full reset stays on the Clear button).
+  function renderActiveFilters() {
+    const wrap = $("#active-filters").empty();
+    const chips = [];
+    const modOpt = $("#module option:selected");
+    if ($("#module").val()) chips.push(["module", "Module: " + modOpt.text()]);
+    const pt = $("#party-type-filter option:selected");
+    if ($("#party-type-filter").val()) chips.push(["party-type-filter", "Party Type: " + pt.text()]);
+    if (!isAllModules() && partyValue()) {
+      chips.push(["party", "Party: " + $("#party-" + partyType() + " option:selected").text()]);
+    }
+    const tpl = selectedTemplate();
+    if (tpl) chips.push(["template", "Template: " + tpl.name]);
+    chips.forEach(function (c) {
+      wrap.append(`<span class="badge bg-secondary">${escapeHtml(c[1])}<i class="fas fa-xmark" data-clear="${c[0]}"></i></span>`);
+    });
+  }
+  $(document).on("click", "#active-filters .fa-xmark", function () {
+    const field = $(this).data("clear");
+    if (field === "party") { $("#party-customer").val(""); $("#party-supplier").val(""); }
+    else if (field === "module") { $("#module").val("").trigger("change"); }
+    else { $("#" + field).val(""); }
+    renderActiveFilters();
+    if (field === "module" || field === "party") loadRows();
+    else if (rows.length) renderRows();
+  });
 
   const PARTY_LABELS = {
     {% for key, label, rows in party_lists %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
@@ -196,7 +283,7 @@ $(function () {
     const matches = t => (!mod || t.module === mod) && (!txn || !t.transaction || t.transaction === txn);
     const list = ALL_TEMPLATES.filter(matches);
 
-    sel.empty().append('<option value="">select template</option>');
+    sel.empty().append('<option value="">All</option>');
     list.forEach(function (t) {
       sel.append(
         `<option value="${t.id}" data-body="${escapeHtml(t.body)}" data-transaction="${escapeHtml(t.transaction)}">` +
@@ -221,7 +308,9 @@ $(function () {
     });
     $("#party-label").text(all ? "Party" : (PARTY_LABELS[shown] || "Party"));
     refreshTemplateOptions();
+    loadRows();
   });
+  $(document).on("change", ".party-select", loadRows);
 
   function smsMetrics(text) {
     const isUnicode = /[^\x00-\x7F]/.test(text);
@@ -268,14 +357,40 @@ $(function () {
     return $("#template option:selected").data("body") || "";
   }
 
+  function selectedTemplate() {
+    const id = $("#template").val();
+    return ALL_TEMPLATES.find(t => String(t.id) === String(id)) || null;
+  }
+
+  // With Template="All" there's no one template to resolve a row against —
+  // but most rows do have exactly one template scoped to their own
+  // module/transaction (the same match rule visibleRows() uses), so previews
+  // can still show something useful instead of a blank "Select a template".
+  // A generic template (module set, transaction blank — e.g. "Invoice Info"
+  // covering all of Sales) matches alongside a transaction-specific one on
+  // the same row; the specific one wins rather than that counting as
+  // ambiguous. True ambiguity (two equally-specific matches) or no match at
+  // all still falls back to the placeholder — neither is guessable.
+  function templateForRow(r) {
+    const explicit = selectedTemplate();
+    if (explicit) return explicit;
+    const scope = SOURCE_SCOPE[r.module] || {};
+    const matches = ALL_TEMPLATES.filter(t =>
+      (!t.module || t.module === scope.module) &&
+      (!t.transaction || !scope.transaction || t.transaction === scope.transaction));
+    if (matches.length === 1) return matches[0];
+    const specific = matches.filter(t => t.transaction);
+    return specific.length === 1 ? specific[0] : null;
+  }
+
   function messagePreviewCell(r) {
-    const body = templateBody();
-    if (!body) return '<span class="text-muted small">Select a template</span>';
+    const t = templateForRow(r);
+    if (!t) return '<span class="text-muted small">Select a template</span>';
     // Metrics (char count/parts) are computed from the real plain-text
     // message that would actually be sent — the marked-up HTML version
     // below is display-only and must never be measured as if it were SMS text.
-    const m = smsMetrics(renderMessage(body, r.context));
-    return `<div class="small">${renderMessageMarked(body, r.context)}` +
+    const m = smsMetrics(renderMessage(t.body, r.context));
+    return `<div class="small">${renderMessageMarked(t.body, r.context)}` +
            `<div class="text-muted">${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</div></div>`;
   }
 
@@ -311,12 +426,30 @@ $(function () {
   // source, so this works even with Module=All (where the server-side
   // "party" id filter is disabled since different document sources draw
   // from different party tables).
+  //
+  // A selected Template also narrows the grid to rows it can actually apply
+  // to: a template scoped to broiler/broiler_sale has nothing meaningful to
+  // send for a Payment Due row (no Quantity/Weight/Rate to fill its
+  // placeholders), so showing those rows next to it is just a wall of cross
+  // marks. Same match rule as refreshTemplateOptions() — empty module or
+  // transaction on the template means "generic", matches everything.
   function visibleRows() {
+    let out = rows;
     const pt = $("#party-type-filter").val();
-    return pt ? rows.filter(r => r.party_type === pt) : rows;
+    if (pt) out = out.filter(r => r.party_type === pt);
+    const t = selectedTemplate();
+    if (t) {
+      out = out.filter(function (r) {
+        const scope = SOURCE_SCOPE[r.module] || {};
+        return (!t.module || scope.module === t.module) &&
+               (!t.transaction || !scope.transaction || scope.transaction === t.transaction);
+      });
+    }
+    return out;
   }
 
   function renderRows() {
+    renderActiveFilters();
     const checked = new Set(selectedIndexes());
     if (table) { table.destroy(); }
     const tbody = $("#sms-doc-table tbody");
@@ -338,7 +471,7 @@ $(function () {
     });
     table = $("#sms-doc-table").DataTable({
       responsive: true, order: [[1, "desc"]],
-      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "print"],
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
       columnDefs: [{ orderable: false, targets: [0, 9] }],
       language: { emptyTable: "No documents match the filters" },
     });
@@ -360,8 +493,10 @@ $(function () {
   $("#search-btn").on("click", loadRows);
 
   // Re-evaluate the status column when the template changes: "Sent" is
-  // relative to the template about to be sent.
+  // relative to the template about to be sent. Also re-narrows the grid to
+  // rows the newly selected template's own module/transaction covers.
   $("#template").on("change", function () {
+    $("#select-all").prop("checked", false);
     if (rows.length) renderRows();
   });
   $("#party-type-filter").on("change", function () {
@@ -369,10 +504,10 @@ $(function () {
     if (rows.length) renderRows();
   });
   $("#clear-btn").on("click", function () {
-    $("#from-date").val(today); $("#to-date").val(today);
-    $("#party-customer").val(""); $("#party-supplier").val("");
+    $("#from-date").val(sevenDaysAgo); $("#to-date").val(today);
     $("#template").val(""); $("#party-type-filter").val("");
-    loadRows();
+    markActiveQuickRange();
+    $("#module").val("").trigger("change");
   });
 
   $("#select-all").on("change", function () {
@@ -468,7 +603,7 @@ $(function () {
   });
 
   $("#module").trigger("change");
-  loadRows();
+  markActiveQuickRange();
 });
 </script>
 {% endblock %}
