@@ -2249,7 +2249,6 @@ i.fa-sign-out-alt    { --nav-icon: #dc2626; }
    panel opens, and on resize) — the panel as a whole never scrolls. */
 .bims-mega {
   position: absolute; top: 100%; left: 16px; right: 16px; z-index: 1060;
-  margin-top: 6px;
   overflow: hidden;
   display: grid; grid-template-columns: 230px 1fr; align-items: start;
   background: #ffffff; border: 1px solid var(--border, #e5e7eb);

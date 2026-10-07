@@ -1413,7 +1413,7 @@ document.addEventListener("DOMContentLoaded", function () {
         openLi = li;
         lit(li, true);
         var box = bar.getBoundingClientRect();
-        BimsNavMenu.openPanel(specOf(li), { left: 16, right: 16, top: box.bottom + 6 },
+        BimsNavMenu.openPanel(specOf(li), { left: 16, right: 16, top: box.bottom },
           { onClose: function () { if (openLi) { lit(openLi, false); openLi = null; } } });
       }, true);
       // Hover: the usual cascading menu, while no panel is open.
