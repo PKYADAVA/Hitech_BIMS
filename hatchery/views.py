@@ -743,13 +743,31 @@ class DeliveryChallanAPI(BaseAPIView):
         try:
             if id:
                 return JsonResponse(_delivery_challan_to_dict(get_object_or_404(DeliveryChallan.objects.select_related("customer"), id=id)))
-            challans = DeliveryChallan.objects.select_related("customer").prefetch_related("items", "chick_sales").all()
-            return JsonResponse([{
-                "id": c.id, "challan_no": c.challan_no, "date": c.date.isoformat(),
-                "customer_name": c.customer.name, "vehicle_no": c.vehicle_no,
-                "total_quantity": str(c.total_quantity()), "total_amount": str(c.total_amount()),
-                "converted_bill_no": next((cs.bill_no for cs in c.chick_sales.all()), ""),
-            } for c in challans], safe=False)
+            challans = list(DeliveryChallan.objects.select_related("customer")
+                           .prefetch_related("items", "chick_sales").all())
+
+            from sales.views import customer_balance_timelines, customer_balance_as_of
+            timelines = customer_balance_timelines(
+                {c.customer_id for c in challans if c.customer_id})
+
+            def ledger_balance(c):
+                tl = timelines.get(c.customer_id)
+                if tl is None:
+                    return None, None
+                bal = customer_balance_as_of(tl, c.date)
+                return (str(bal["debit"]), "Dr") if bal["debit"] else (str(bal["credit"]), "Cr")
+
+            rows = []
+            for c in challans:
+                lb, lb_cr_dr = ledger_balance(c)
+                rows.append({
+                    "id": c.id, "challan_no": c.challan_no, "date": c.date.isoformat(),
+                    "customer_name": c.customer.name, "vehicle_no": c.vehicle_no,
+                    "ledger_balance": lb, "ledger_balance_cr_dr": lb_cr_dr,
+                    "total_quantity": str(c.total_quantity()), "total_amount": str(c.total_amount()),
+                    "converted_bill_no": next((cs.bill_no for cs in c.chick_sales.all()), ""),
+                })
+            return JsonResponse(rows, safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
@@ -1524,16 +1542,33 @@ class ChickSaleAPI(BaseAPIView):
                 cs = get_object_or_404(
                     ChickSale.objects.select_related("customer", "warehouse", "delivery_challan"), id=id)
                 return JsonResponse(_chick_sale_to_dict(cs))
-            sales = ChickSale.objects.select_related(
-                "customer", "warehouse", "delivery_challan").prefetch_related("items__item").all()
-            return JsonResponse([{
-                "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
-                "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
-                "customer_name": cs.customer.name, "item_names": cs.item_names(),
-                "total_birds": str(cs.total_birds()), "total_net_qty": str(cs.total_net_qty()),
-                "total_free_qty": str(cs.total_free_qty()), "avg_amount": str(cs.avg_amount),
-                "final_amount": str(cs.final_amount), "warehouse_name": cs.warehouse.name,
-            } for cs in sales], safe=False)
+            sales = list(ChickSale.objects.select_related(
+                "customer", "warehouse", "delivery_challan").prefetch_related("items__item").all())
+
+            from sales.views import customer_balance_timelines, customer_balance_as_of
+            timelines = customer_balance_timelines(
+                {cs.customer_id for cs in sales if cs.customer_id})
+
+            def ledger_balance(cs):
+                tl = timelines.get(cs.customer_id)
+                if tl is None:
+                    return None, None
+                bal = customer_balance_as_of(tl, cs.date)
+                return (str(bal["debit"]), "Dr") if bal["debit"] else (str(bal["credit"]), "Cr")
+
+            rows = []
+            for cs in sales:
+                lb, lb_cr_dr = ledger_balance(cs)
+                rows.append({
+                    "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
+                    "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
+                    "customer_name": cs.customer.name, "item_names": cs.item_names(),
+                    "ledger_balance": lb, "ledger_balance_cr_dr": lb_cr_dr,
+                    "total_birds": str(cs.total_birds()), "total_net_qty": str(cs.total_net_qty()),
+                    "total_free_qty": str(cs.total_free_qty()), "avg_amount": str(cs.avg_amount),
+                    "final_amount": str(cs.final_amount), "warehouse_name": cs.warehouse.name,
+                })
+            return JsonResponse(rows, safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
@@ -1881,11 +1916,18 @@ CHICK_SALE_REPORT_COLUMNS = [
 # Chick Sale Receipt (Hatchery > Transactions) — customer payments against
 # chick sales, mirroring the broiler Bird Sale Receipt (customer-only).
 # ---------------------------------------------------------------------------
-def _chick_sale_receipt_to_dict(row):
+def _chick_sale_receipt_to_dict(row, balance_timeline=None):
+    ledger_balance = None
+    if balance_timeline is not None and row.customer_id:
+        from sales.views import customer_balance_as_of
+        bal = customer_balance_as_of(balance_timeline, row.date)
+        ledger_balance = (str(bal["debit"]), "Dr") if bal["debit"] else (str(bal["credit"]), "Cr")
     return {
         "id": row.id, "receipt_no": row.receipt_no, "date": row.date.isoformat(),
         "location": row.location_id, "location_name": row.location.name if row.location_id else "",
         "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
+        "ledger_balance": ledger_balance[0] if ledger_balance else None,
+        "ledger_balance_cr_dr": ledger_balance[1] if ledger_balance else None,
         "mode": row.mode,
         "receipt_account": row.receipt_account_id,
         "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
@@ -1944,7 +1986,13 @@ class ChickSaleReceiptAPI(BaseAPIView):
                 qs = qs.filter(date__gte=date_from_query(from_date))
             if to_date:
                 qs = qs.filter(date__lte=date_from_query(to_date))
-            return JsonResponse([_chick_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+            rows = list(qs.order_by("-date", "-id"))
+
+            from sales.views import customer_balance_timelines
+            timelines = customer_balance_timelines(
+                {r.customer_id for r in rows if r.customer_id})
+            return JsonResponse(
+                [_chick_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
         except ChickSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
         except Exception as e:

@@ -6,6 +6,11 @@
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale_receipt' %}
 
+<style>
+  .bs-dr { color:#c0392b; font-weight:600; }
+  .bs-cr { color:#0e8698; font-weight:600; }
+</style>
+
 <div class="page-header">
   <div class="page-header-main">
     <div class="page-header-title"><i class="fas fa-receipt"></i> Chick Receipt</div>
@@ -28,6 +33,7 @@
         <label class="form-label">To Date:</label>
         <input type="date" class="form-control" id="to-date">
       </div>
+      {% include "_list_period_filter.html" %}
       <div class="col-md-2">
         <button class="btn btn-primary" id="filter-submit">Submit</button>
       </div>
@@ -92,7 +98,7 @@ $(function () {
       tbody.append(`<tr>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
-        <td>${escapeHtml(row.customer_name)}</td>
+        <td>${escapeHtml(row.customer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
         <td>${escapeHtml(row.mode)}</td>
         <td>${escapeHtml(row.receipt_account_name)}</td>
         <td>${Number(row.amount).toFixed(2)}</td>
