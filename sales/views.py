@@ -34,9 +34,9 @@ states_and_union_territories = STATES_AND_TERRITORIES
 def customer(request):
     customers = list(customers_for(
         request.user, Customer.objects.select_related("customer_group").all()))
-    today = timezone.localdate()
+    balances = _customer_closing_balances(customers)
     for cust in customers:
-        cust.balance = _customer_balance_row(cust, None, None, today)
+        cust.balance = balances[cust.id]
     return render(request, "customer.html", {"customers": customers})
 
 
@@ -1092,6 +1092,55 @@ def _customer_balance_row(cust, fd, td, ref_date):
         "available": available.quantize(q2) if available > 0 else Decimal("0.00"),
         "gap": max(gap, 0),
         "has_activity": bool(opening or amount or receipt or closing),
+    }
+
+
+def _customer_closing_balances(customers):
+    """Today's closing Debit/Credit for every customer in `customers`, in a
+    fixed number of queries instead of `_customer_balance_row`'s per-customer
+    loop (~8 queries each). Used by the Customer List, which always wants the
+    full to-date balance (no date window, no quantity/weight/gap) — the
+    Customer Balance report still goes through `_customer_balance_row`
+    because it supports a from/to window those aggregates don't compute.
+
+    Returns {customer_id: {"debit": Decimal, "credit": Decimal}}."""
+    from decimal import Decimal
+    from django.db.models import Sum
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from sales.models import SalesReceipt
+
+    q2 = Decimal("0.01")
+    ids = [c.id for c in customers]
+    closing = {
+        c.id: (-_si_num(c.opening_balance) if str(c.to_pay_to_receive or "").lower().startswith("pay")
+               else _si_num(c.opening_balance))
+        for c in customers
+    }
+
+    def add(qs, field, customer_field="customer_id", sign=1):
+        rows = qs.filter(**{f"{customer_field}__in": ids}).values(customer_field) \
+                 .annotate(total=Sum(field))
+        for r in rows:
+            cid = r[customer_field]
+            if cid in closing:
+                closing[cid] += sign * _si_num(r["total"])
+
+    add(BirdSale.objects.filter(sale_type="customer"), "amount")
+    add(SalesInvoice.objects.filter(is_active=True), "net_amount")
+    add(ChickSale.objects.all(), "final_amount")
+    add(CustomerDebitNote.objects.all(), "amount")
+    add(BirdSaleReceipt.objects.filter(sale_type="customer"), "amount", sign=-1)
+    add(ChickSaleReceipt.objects.all(), "amount", sign=-1)
+    add(SalesReceipt.objects.all(), "amount", sign=-1)
+    add(CustomerCreditNote.objects.all(), "amount", sign=-1)
+
+    return {
+        cid: {
+            "debit": bal.quantize(q2) if bal >= 0 else Decimal("0.00"),
+            "credit": (-bal).quantize(q2) if bal < 0 else Decimal("0.00"),
+        }
+        for cid, bal in closing.items()
     }
 
 

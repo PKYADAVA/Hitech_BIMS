@@ -5,6 +5,9 @@
 <style>
   #customer-table .cr { color:#0e8698; font-weight:600; }
   #customer-table .dr { color:#c0392b; font-weight:600; }
+  #customer-table { font-size: 0.85rem; }
+  #customer-table th, #customer-table td { padding: 0.35rem 0.5rem; vertical-align: middle; }
+  #customer-table .btn-sm { padding: 0.15rem 0.4rem; font-size: 0.75rem; }
 </style>
 {% endblock %}
 
@@ -67,7 +70,7 @@ Manage Customers
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-bordered mb-0 ds-grid" id="customer-table">
+            <table class="table table-sm table-hover table-bordered mb-0 ds-grid" id="customer-table">
                 <thead>
                     <tr>
                         <th>Code</th>
