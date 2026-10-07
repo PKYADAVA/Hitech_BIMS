@@ -142,13 +142,19 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
     """Money received against a chick sale — the hatchery counterpart of
     Bird Receipt. "Receipt" here is the payment, not the chicks; the chicks
     leaving is the Chick Sale row itself."""
+    from sales.views import customer_balance_timelines, customer_balance_as_of
+
     qs = ChickSaleReceipt.objects.select_related("customer")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    receipts = list(qs.order_by("-date", "-id"))
+    timelines = customer_balance_timelines({r.customer_id for r in receipts})
+
     rows = []
-    for r in qs.order_by("-date", "-id"):
+    for r in receipts:
         amount = r.amount or 0
+        due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
@@ -160,6 +166,8 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
                 "InvoiceDate": r.date.strftime("%d-%m-%Y"),
                 "Amount": f"{amount:,.2f}", "PaidAmount": f"{amount:,.2f}",
                 "PaymentMode": r.mode or "",
+                "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
+                "TotalDues": f"{due:,.2f}",
             },
         ))
     return rows
@@ -321,6 +329,7 @@ def _bird_receipt_rows(from_date, to_date, party_id):
     are a stock movement and appear under Stock Transfer.
     """
     from broiler.models import BirdSaleReceipt
+    from sales.views import customer_balance_timelines, customer_balance_as_of
 
     qs = (BirdSaleReceipt.objects
           .filter(sale_type="customer", customer__isnull=False)
@@ -328,9 +337,13 @@ def _bird_receipt_rows(from_date, to_date, party_id):
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    receipts = list(qs.order_by("-date", "-id"))
+    timelines = customer_balance_timelines({r.customer_id for r in receipts})
+
     rows = []
-    for r in qs.order_by("-date", "-id"):
+    for r in receipts:
         amount = r.amount or 0
+        due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
@@ -342,6 +355,8 @@ def _bird_receipt_rows(from_date, to_date, party_id):
                 "InvoiceDate": r.date.strftime("%d-%m-%Y"),
                 "Amount": f"{amount:,.2f}", "PaidAmount": f"{amount:,.2f}",
                 "PaymentMode": r.mode or "",
+                "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
+                "TotalDues": f"{due:,.2f}",
             },
         ))
     return rows
@@ -414,14 +429,19 @@ def _sales_invoice_rows(from_date, to_date, party_id):
 
 def _sales_receipt_rows(from_date, to_date, party_id):
     from sales.models import SalesReceipt
+    from sales.views import customer_balance_timelines, customer_balance_as_of
 
     qs = SalesReceipt.objects.select_related("customer")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    receipts = list(qs.order_by("-date", "-id"))
+    timelines = customer_balance_timelines({r.customer_id for r in receipts})
+
     rows = []
-    for r in qs.order_by("-date", "-id"):
+    for r in receipts:
         amount = r.amount or 0
+        due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
@@ -433,6 +453,8 @@ def _sales_receipt_rows(from_date, to_date, party_id):
                 "InvoiceDate": r.date.strftime("%d-%m-%Y"),
                 "Amount": f"{amount:,.2f}", "PaidAmount": f"{amount:,.2f}",
                 "PaymentMode": r.mode or "",
+                "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
+                "TotalDues": f"{due:,.2f}",
             },
         ))
     return rows
@@ -742,7 +764,8 @@ DOC_SOURCES = {
                       "model": ChickSaleReceipt, "rows": _chick_sale_receipt_rows,
                       "module": "hatchery", "transaction": "chick_receipt",
                       "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
-                                    "PaidAmount", "ReceiptNo", "PaymentMode")},
+                                    "PaidAmount", "ReceiptNo", "PaymentMode",
+                                    "Outstanding", "Balance", "TotalDues")},
     "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
                  "module": "hatchery", "transaction": "delivery_challan",
@@ -775,7 +798,8 @@ DOC_SOURCES = {
                      "model": None, "rows": _bird_receipt_rows,
                      "module": "broiler", "transaction": "bird_receipt",
                      "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
-                                   "PaidAmount", "ReceiptNo", "PaymentMode")},
+                                   "PaidAmount", "ReceiptNo", "PaymentMode",
+                                   "Outstanding", "Balance", "TotalDues")},
     "broiler_batch": {"label": "Broiler Batch", "party_type": "farmer",
                       "model": None, "rows": _broiler_batch_rows,
                       "module": "broiler", "transaction": "broiler_batch",
@@ -791,7 +815,8 @@ DOC_SOURCES = {
                       "model": None, "rows": _sales_receipt_rows,
                       "module": "sales", "transaction": "payment_receipt",
                       "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
-                                    "PaidAmount", "ReceiptNo", "PaymentMode")},
+                                    "PaidAmount", "ReceiptNo", "PaymentMode",
+                                    "Outstanding", "Balance", "TotalDues")},
     "customer_due": {"label": "Payment Due Reminder", "party_type": "customer",
                      "model": None, "rows": _customer_due_rows,
                      "module": "sales", "transaction": "payment_reminder",
