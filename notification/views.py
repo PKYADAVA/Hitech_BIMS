@@ -243,35 +243,6 @@ _RESULT_STATUS_MAP = {
 
 
 @method_decorator(login_required, name="dispatch")
-class SmsTransactionPageView(View):
-    def get(self, request):
-        from account.models import CompanyProfile
-
-        from .comm_sources import PARTY_TYPES, party_choices
-
-        templates_qs = SmsTemplate.objects.filter(is_active=True).order_by("name")
-        # One party list per type rather than the two the page was built with:
-        # a farmer takes delivery of chicks and feed, and a member of staff is
-        # paid, and neither is a customer or a supplier.
-        choices = party_choices(request.user)
-        return render(request, "sms_transaction.html", {
-            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
-                             v.get("module", ""))
-                            for k, v in DOC_SOURCES.items()],
-            "templates": templates_qs,
-            "templates_json": json.dumps([
-                {"id": t.id, "name": t.name, "body": t.body,
-                 "transaction": t.transaction, "module": t.module,
-                 "module_display": t.get_module_display()}
-                for t in templates_qs
-            ]),
-            "party_lists": [(key, label, choices.get(key, []))
-                            for key, label in PARTY_TYPES.items()],
-            "company_name": CompanyProfile.get_solo().name,
-        })
-
-
-@method_decorator(login_required, name="dispatch")
 class SmsHistoryPageView(View):
     def get(self, request):
         return render(request, "sms_history.html", {
@@ -981,30 +952,6 @@ def whatsapp_settings_test(request):
 # WhatsApp Transaction (bulk-send from ERP documents, mirrors SMS Transaction)
 # ---------------------------------------------------------------------------
 
-@method_decorator(login_required, name="dispatch")
-class WhatsappTransactionPageView(View):
-    def get(self, request):
-        from .comm_sources import PARTY_TYPES, party_choices
-
-        templates_qs = WhatsappTemplate.objects.filter(is_active=True).order_by("name")
-        choices = party_choices(request.user)
-        return render(request, "whatsapp_transaction.html", {
-            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
-                             v.get("module", ""))
-                            for k, v in DOC_SOURCES.items()],
-            "templates": templates_qs,
-            "templates_json": json.dumps([
-                {"id": t.id, "name": t.name, "template_name": t.template_name,
-                 "parameter_map": t.parameter_map or [],
-                 "transaction": t.transaction, "module": t.module,
-                 "module_display": t.get_module_display()}
-                for t in templates_qs
-            ]),
-            "party_lists": [(key, label, choices.get(key, []))
-                            for key, label in PARTY_TYPES.items()],
-        })
-
-
 @login_required
 def whatsapp_transaction_source(request):
     """Grid rows for the WhatsApp transaction screen, with per-row variable
@@ -1123,3 +1070,166 @@ def whatsapp_transaction_send(request):
         "success": result.success, "status": log.status, "log_id": log.id,
         "error": result.error, "message_id": result.message_id,
     }, status=200 if result.success else 502)
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp History (mirrors SMS History — see sms_history/_message_to_dict)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required, name="dispatch")
+class WhatsappHistoryPageView(View):
+    def get(self, request):
+        return render(request, "whatsapp_history.html", {
+            "doc_sources": [(k, v["label"]) for k, v in DOC_SOURCES.items()],
+            "templates": WhatsappTemplate.objects.order_by("name"),
+            "statuses": WhatsappMessage.STATUS_CHOICES,
+        })
+
+
+def _whatsapp_message_to_dict(m):
+    return {
+        "id": m.id, "created_at": timezone.localtime(m.created_at).strftime("%Y-%m-%d %H:%M"),
+        "party_type": m.party_type, "party_name": m.party_name, "mobile": m.mobile,
+        "module": m.module, "module_label": DOC_SOURCES.get(m.module, {}).get("label", m.module),
+        "document_no": m.document_no, "template_name": m.template_name,
+        "status": m.status, "wamid": m.wamid,
+        "gateway_response": m.gateway_response, "error_message": m.error_message,
+        "retry_count": m.retry_count, "retry_of": m.retry_of_id,
+        "sent_by": m.sent_by.username if m.sent_by else "",
+        "can_retry": m.status in ("failed", "invalid", "unknown"),
+    }
+
+
+@login_required
+def whatsapp_history(request):
+    """Filterable history list plus today's dashboard stats — mirrors sms_history."""
+    qs = WhatsappMessage.objects.select_related("sent_by", "template")
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    if from_date:
+        qs = qs.filter(created_at__date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(created_at__date__lte=date_from_query(to_date))
+    for field, param in (("module", "module"), ("status", "status"),
+                         ("template_id", "template"), ("mobile__icontains", "mobile")):
+        value = (request.GET.get(param) or "").strip()
+        if value:
+            qs = qs.filter(**{field: value})
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(Q(party_name__icontains=q) | Q(document_no__icontains=q) |
+                       Q(wamid__icontains=q))
+
+    today = timezone.localdate()
+    today_qs = WhatsappMessage.objects.filter(created_at__date=today)
+    total_today = today_qs.count()
+    ok_today = today_qs.filter(status__in=["sent", "delivered", "read", "mocked"]).count()
+    failed_today = today_qs.filter(status__in=["failed", "invalid"]).count()
+    pending_today = today_qs.filter(status__in=["queued", "unknown"]).count()
+    month_total = WhatsappMessage.objects.filter(
+        created_at__year=today.year, created_at__month=today.month).count()
+
+    return JsonResponse({
+        "rows": [_whatsapp_message_to_dict(m) for m in qs[:500]],
+        "stats": {
+            "today": total_today, "delivered": ok_today, "failed": failed_today,
+            "pending": pending_today,
+            "success_rate": round(ok_today / total_today * 100, 1) if total_today else 0,
+            "month": month_total,
+        },
+    })
+
+
+@login_required
+def whatsapp_history_retry(request, message_id):
+    """Re-send a failed WhatsApp message with the same template and context,
+    keeping an audit trail. Mirrors sms_retry — context is replayed from the
+    original send's own api_request, since (unlike SMS) there's no stored
+    free-text message to resend verbatim."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_history", "edit"):
+        return JsonResponse({"error": "You do not have permission to retry WhatsApp messages."}, status=403)
+    original = WhatsappMessage.objects.filter(id=message_id).first()
+    if not original:
+        return JsonResponse({"error": "WhatsApp record not found."}, status=404)
+    if not original.template:
+        return JsonResponse({"error": "Original template no longer exists."}, status=400)
+
+    context = (original.api_request or {}).get("context") or {}
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().send_template(original.template.key, original.mobile, context)
+    log = WhatsappMessage.objects.create(
+        party_type=original.party_type, party_id=original.party_id,
+        party_name=original.party_name, mobile=original.mobile,
+        module=original.module, document_no=original.document_no,
+        template=original.template, template_name=original.template_name,
+        status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
+        wamid=result.message_id or "",
+        gateway_response=result.provider_response,
+        api_request=original.api_request,
+        error_message=result.error or "",
+        retry_of=original, retry_count=original.retry_count + 1,
+        sent_by=request.user, ip_address=_client_ip(request),
+    )
+    original.retry_count += 1
+    original.save(update_fields=["retry_count"])
+    return JsonResponse({
+        "success": result.success, "status": log.status, "log_id": log.id,
+        "error": result.error,
+    }, status=200 if result.success else 502)
+
+
+@method_decorator(login_required, name="dispatch")
+class NotificationTransactionPageView(View):
+    """Merged SMS + WhatsApp Transaction screen -- one filter bar and grid,
+    a channel toggle swaps which templates/Send endpoint are in play.
+
+    Gated by its own "notification_transaction" tab (view access to reach
+    the page at all), but sending on each channel still goes through that
+    channel's own ``sms_transaction``/``whatsapp_transaction`` "add"
+    permission inside ``sms_send``/``whatsapp_transaction_send`` -- this
+    view only decides which channel toggle(s) the page shows, via
+    ``can_sms``/``can_whatsapp`` in the template context.
+    """
+
+    def get(self, request):
+        from account.models import CompanyProfile
+
+        from .comm_sources import PARTY_TYPES, party_choices
+
+        can_sms = user_can(request.user, "sms_transaction", "view")
+        can_whatsapp = user_can(request.user, "whatsapp_transaction", "view")
+
+        sms_templates = (SmsTemplate.objects.filter(is_active=True).order_by("name")
+                          if can_sms else SmsTemplate.objects.none())
+        wa_templates = (WhatsappTemplate.objects.filter(is_active=True).order_by("name")
+                         if can_whatsapp else WhatsappTemplate.objects.none())
+        choices = party_choices(request.user)
+
+        return render(request, "notification_transaction.html", {
+            "can_sms": can_sms,
+            "can_whatsapp": can_whatsapp,
+            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
+                             v.get("module", ""))
+                            for k, v in DOC_SOURCES.items()],
+            "party_lists": [(key, label, choices.get(key, []))
+                            for key, label in PARTY_TYPES.items()],
+            "sms_templates_json": json.dumps([
+                {"id": t.id, "name": t.name, "body": t.body,
+                 "transaction": t.transaction, "module": t.module,
+                 "module_display": t.get_module_display()}
+                for t in sms_templates
+            ]),
+            "whatsapp_templates_json": json.dumps([
+                {"id": t.id, "name": t.name, "template_name": t.template_name,
+                 "parameter_map": t.parameter_map or [],
+                 "transaction": t.transaction, "module": t.module,
+                 "module_display": t.get_module_display()}
+                for t in wa_templates
+            ]),
+            "company_name": CompanyProfile.get_solo().name,
+        })

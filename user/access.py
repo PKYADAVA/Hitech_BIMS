@@ -528,12 +528,14 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("sms_transaction", "SMS Transaction", ("sms_transaction_source",)),
                     ("whatsapp_transaction", "WhatsApp Transaction", ("whatsapp_transaction_source",)),
+                    ("notification_transaction", "Transaction Messaging"),
                 ],
             },
             {
                 "label": "Reports",
                 "tabs": [
                     ("sms_history", "SMS History"),
+                    ("whatsapp_history", "WhatsApp History"),
                 ],
             },
         ],

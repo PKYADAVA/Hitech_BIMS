@@ -3,15 +3,15 @@
 from django.urls import path
 
 from .views import (
+    NotificationTransactionPageView,
     SmsTemplateAPI,
     SmsTemplateManageView,
-    SmsTransactionPageView,
     SmsHistoryPageView,
     SmsSettingsPageView,
+    WhatsappHistoryPageView,
     WhatsappSettingsPageView,
     WhatsappTemplateAPI,
     WhatsappTemplateManageView,
-    WhatsappTransactionPageView,
     check_whatsapp_contact,
     sms_settings_test,
     send_sms_template,
@@ -22,6 +22,8 @@ from .views import (
     sms_transaction_source,
     toggle_sms_template_active,
     toggle_whatsapp_template_active,
+    whatsapp_history,
+    whatsapp_history_retry,
     whatsapp_settings_test,
     whatsapp_transaction_source,
     whatsapp_transaction_send,
@@ -40,7 +42,6 @@ urlpatterns = [
     path("sms-templates/<int:template_id>/send/", send_sms_template,
          name="sms_template_send"),
 
-    path("sms-transaction/", SmsTransactionPageView.as_view(), name="sms_transaction"),
     path("sms-transaction/source/", sms_transaction_source, name="sms_transaction_source"),
     path("sms-transaction/send/", sms_send, name="sms_transaction_send"),
     path("sms-history/", SmsHistoryPageView.as_view(), name="sms_history"),
@@ -66,7 +67,12 @@ urlpatterns = [
     path("whatsapp-settings/", WhatsappSettingsPageView.as_view(), name="whatsapp_settings"),
     path("whatsapp-settings/test/", whatsapp_settings_test, name="whatsapp_settings_test"),
 
-    path("whatsapp-transaction/", WhatsappTransactionPageView.as_view(), name="whatsapp_transaction"),
     path("whatsapp-transaction/source/", whatsapp_transaction_source, name="whatsapp_transaction_source"),
     path("whatsapp-transaction/send/", whatsapp_transaction_send, name="whatsapp_transaction_send"),
+    path("whatsapp-history/", WhatsappHistoryPageView.as_view(), name="whatsapp_history"),
+    path("whatsapp-history/list/", whatsapp_history, name="whatsapp_history_api"),
+    path("whatsapp-history/<int:message_id>/retry/", whatsapp_history_retry, name="whatsapp_history_retry"),
+
+    path("notification-transaction/", NotificationTransactionPageView.as_view(),
+         name="notification_transaction"),
 ]

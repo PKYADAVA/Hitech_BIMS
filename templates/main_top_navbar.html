@@ -1037,11 +1037,8 @@ layouts open it from the account menu.
               <i class="fas fa-exchange-alt"></i>Transactions
             </a>
             <ul class="dropdown-menu">
-              {% if 'sms_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_transaction' %}">
-                <i class="fas fa-paper-plane"></i>SMS Transaction
-              </a></li>{% endif %}
-              {% if 'whatsapp_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_transaction' %}">
-                <i class="fab fa-whatsapp"></i>WhatsApp Transaction
+              {% if 'notification_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'notification_transaction' %}">
+                <i class="fas fa-comments"></i>Transaction Messaging
               </a></li>{% endif %}
             </ul>
           </li>
@@ -1056,6 +1053,9 @@ layouts open it from the account menu.
             <ul class="dropdown-menu">
               {% if 'sms_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_history' %}" target="_blank" rel="noopener">
                 <i class="fas fa-clock-rotate-left"></i>SMS History
+              </a></li>{% endif %}
+              {% if 'whatsapp_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_history' %}" target="_blank" rel="noopener">
+                <i class="fab fa-whatsapp"></i>WhatsApp History
               </a></li>{% endif %}
             </ul>
           </li>

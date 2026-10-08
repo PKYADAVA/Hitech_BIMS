@@ -1,0 +1,722 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction Messaging - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_transaction' active_tab='notification_transaction' %}
+<style>
+  .ntx-page .page-header { margin-bottom:.6rem; }
+  .ntx-page .page-header-title { font-size:1.15rem; }
+  .ntx-page .page-header-subtitle { font-size:.8rem; }
+  .ntx-page .card { margin-bottom:.6rem !important; }
+  .ntx-page .card-body { padding:.65rem .75rem; }
+  .ntx-page .card-header { padding:.45rem .75rem; font-size:.9rem; }
+
+  /* Channel switch */
+  .ntx-channel-switch { display:inline-flex; background:var(--bg-subtle,#f1f3f5); border:1px solid var(--border-strong,#dde3ea);
+                        border-radius:999px; padding:4px; gap:4px; margin-bottom:.75rem; }
+  .ntx-channel-btn { display:flex; align-items:center; gap:.4rem; border:none; background:transparent;
+                     color:var(--text-muted,#65727e); font-weight:600; font-size:.85rem;
+                     padding:.45rem 1.1rem; border-radius:999px; cursor:pointer; }
+  .ntx-channel-btn.active[data-channel="sms"] { background:#2f6fed; color:#fff; }
+  .ntx-channel-btn.active[data-channel="whatsapp"] { background:#1fa855; color:#fff; }
+  .ntx-channel-btn .count { font-size:.72rem; font-weight:700; background:rgba(0,0,0,.08);
+                            padding:1px 7px; border-radius:999px; }
+  .ntx-channel-btn.active .count { background:rgba(255,255,255,.25); }
+
+  /* Party Name is disabled whenever Module="All" (a single party can't filter
+     across every party table at once) — Select2's own disabled state looks
+     too close to normal, so this makes it unmistakable. */
+  .party-select:disabled + .select2-container .select2-selection {
+    background:var(--bg-subtle,#eef0f2) !important; cursor:not-allowed !important;
+  }
+  .party-select:disabled + .select2-container { cursor:not-allowed; }
+  /* Positioned out of flow so its own height never pushes this field's row
+     taller than its siblings — the filter grid aligns every field to a
+     shared baseline (align-items:end), and an in-flow hint would break that
+     for Party Name alone. */
+  #party-name-hint { position:absolute; top:100%; left:0; right:0; margin-top:.2rem;
+                     font-size:.72rem; line-height:1.2; color:var(--text-muted,#65727e); }
+
+  .ntx-filter-grid { display:flex; flex-wrap:nowrap; gap:.4rem; align-items:end; }
+  .ntx-filter-grid > div { flex:1 1 0; min-width:0; position:relative; }
+  .ntx-filter-grid .txn-actions { flex:0 0 auto; display:flex; gap:.3rem; flex-wrap:nowrap; }
+  .ntx-filter-grid .txn-actions .btn { white-space:nowrap; padding:.3rem .55rem; font-size:.82rem; }
+  .ntx-filter-grid .form-label { font-size:.75rem; margin-bottom:.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ntx-filter-grid .form-control, .ntx-filter-grid .form-select { font-size:.82rem; padding:.3rem .5rem; }
+  @media (max-width:1100px) { .ntx-filter-grid { flex-wrap:wrap; }
+                              .ntx-filter-grid > div { flex:1 1 180px; } }
+  #ntx-doc-table { font-size:.82rem; }
+  #ntx-doc-table th, #ntx-doc-table td { padding:.4rem .5rem; }
+  #ntx-doc-table td:nth-child(2), #ntx-doc-table td:nth-child(3),
+  #ntx-doc-table td:nth-child(4), #ntx-doc-table td:nth-child(6),
+  #ntx-doc-table td:nth-child(7), #ntx-doc-table td:nth-child(9) { white-space:nowrap; }
+  .ntx-toolbar-row2 { display:flex; justify-content:space-between; align-items:center;
+                     flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+  .ntx-quick-dates { display:flex; gap:.3rem; flex-wrap:wrap; }
+  .ntx-quick-dates .btn { font-size:.75rem; padding:.2rem .55rem; }
+  .ntx-quick-dates .btn.active { background:var(--primary,#0d6efd); color:#fff; border-color:var(--primary,#0d6efd); }
+  .ntx-active-filters { display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+  .ntx-active-filters .badge { font-weight:500; font-size:.75rem; }
+  .ntx-active-filters .badge .fa-xmark { cursor:pointer; margin-left:.3rem; }
+
+  /* Sent Via column: one compact row per document, both channels at once */
+  .ntx-chan-status { display:flex; align-items:center; gap:.4rem; }
+  .ntx-chip-sm { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px;
+                border-radius:6px; font-size:.63rem; font-weight:800; color:#9aa5b1;
+                background:var(--bg-subtle,#e9ecef); flex:0 0 auto; }
+  .ntx-chip-sm.sent-sms { background:#2f6fed; color:#fff; }
+  .ntx-chip-sm.sent-wa { background:#1fa855; color:#fff; }
+  .ntx-chan-text { font-size:.78rem; color:var(--text-muted,#65727e); }
+</style>
+<div class="ntx-page">
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-comments"></i> Transaction Messaging</div>
+      <div class="page-header-subtitle">Send templated SMS and WhatsApp messages to customers, suppliers, farmers and staff from ERP documents</div>
+    </div>
+</div>
+
+<div class="ntx-channel-switch" id="channel-switch">
+  {% if can_sms %}
+  <button type="button" class="ntx-channel-btn" data-channel="sms"><i class="fas fa-paper-plane"></i> SMS</button>
+  {% endif %}
+  {% if can_whatsapp %}
+  <button type="button" class="ntx-channel-btn" data-channel="whatsapp"><i class="fab fa-whatsapp"></i> WhatsApp</button>
+  {% endif %}
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="ntx-filter-grid">
+      <div>
+        <label class="form-label">From Date</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div>
+        <label class="form-label">To Date</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div>
+        <label class="form-label">Module</label>
+        <select class="form-select" id="module">
+          <option value="" data-party-type="" data-transaction="" data-module="">All</option>
+          {% for key, label, ptype, txn, mod in doc_sources %}
+          <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}" data-module="{{ mod }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Party Type</label>
+        <select class="form-select" id="party-type-filter">
+          <option value="">All</option>
+          {% for key, label, rows in party_lists %}
+          <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" id="party-label">Party Name</label>
+        {% for key, label, rows in party_lists %}
+        <select class="form-select party-select {% if not forloop.first %}d-none{% endif %}"
+                id="party-{{ key }}" data-party-type="{{ key }}">
+          <option value="">-All-</option>
+          {% for id, name in rows %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+        </select>
+        {% endfor %}
+        <div id="party-name-hint" class="d-none">Pick a Module to filter by a specific party</div>
+      </div>
+      <div>
+        <label class="form-label">Template <span class="text-danger">*</span></label>
+        <select class="form-select" id="template">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="txn-actions">
+        <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
+        <button class="btn btn-outline-info" id="preview-btn"><i class="fas fa-eye"></i> Preview</button>
+        <button class="btn btn-success" id="send-btn"><i class="fas fa-paper-plane"></i> Send</button>
+      </div>
+    </div>
+    <div class="ntx-toolbar-row2">
+      <div class="ntx-quick-dates">
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="today">Today</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="7">7 Days</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="30">30 Days</button>
+        <button type="button" class="btn btn-outline-secondary quick-date-btn" data-range="month">This Month</button>
+      </div>
+      <div class="ntx-active-filters" id="active-filters"></div>
+    </div>
+    <div class="mt-3 d-none" id="progress-wrap">
+      <div class="d-flex justify-content-between small mb-1">
+        <span id="progress-text">Sending...</span>
+        <span id="progress-counts"></span>
+      </div>
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Grid -->
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i> Documents</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="ntx-doc-table">
+        <thead>
+          <tr>
+            <th style="width:36px" class="text-center"><input type="checkbox" class="form-check-input" id="select-all"></th>
+            <th class="ds-mid">Date</th>
+            <th>Module</th>
+            <th>Party Type</th>
+            <th>Name</th>
+            <th>Mobile</th>
+            <th>Document No</th>
+            <th class="ds-num">Amount</th>
+            <th>Sent Via</th>
+            <th>Message Preview</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:65vh; overflow:auto;" id="preview-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success" id="preview-send-btn"><i class="fas fa-paper-plane"></i> Send</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const COMPANY_NAME = "{{ company_name|escapejs }}";
+  const USER_NAME = "{{ request.user.username|escapejs }}";
+  const CAN_SMS = {{ can_sms|yesno:"true,false" }};
+  const CAN_WHATSAPP = {{ can_whatsapp|yesno:"true,false" }};
+  const SMS_TEMPLATES = {{ sms_templates_json|safe }};
+  const WHATSAPP_TEMPLATES = {{ whatsapp_templates_json|safe }};
+  const MODULE_LABELS = {
+    {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
+  // Each row only carries its doc_source key (r.module, e.g. "supplier_due") —
+  // not the underlying Django module/transaction a template is scoped to.
+  const SOURCE_SCOPE = {
+    {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": { module: "{{ mod }}", transaction: "{{ txn }}" },{% endfor %}
+  };
+  const PARTY_LABELS = {
+    {% for key, label, rows in party_lists %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
+
+  const CHANNEL_URLS = {
+    sms: { source: "{% url 'sms_transaction_source' %}", send: "{% url 'sms_transaction_send' %}" },
+    whatsapp: { source: "{% url 'whatsapp_transaction_source' %}", send: "{% url 'whatsapp_transaction_send' %}" },
+  };
+
+  let channel = CAN_SMS ? "sms" : "whatsapp";
+  let table = null;
+  let rows = [];
+
+  const today = localDay();
+  const sevenDaysAgo = localDay(new Date(Date.now() - 6 * 86400000));
+  $("#from-date").val(sevenDaysAgo);
+  $("#to-date").val(today);
+
+  // escapeHtml() provided globally by main.js
+
+  function currentTemplates() {
+    return channel === "sms" ? SMS_TEMPLATES : WHATSAPP_TEMPLATES;
+  }
+
+  // ---- Channel switch ----------------------------------------------------
+  function setChannel(next) {
+    const prevScope = selectedTemplate() &&
+      `${selectedTemplate().module}/${selectedTemplate().transaction}`;
+    channel = next;
+    $(".ntx-channel-btn").removeClass("active").filter(`[data-channel="${channel}"]`).addClass("active");
+    $("#send-btn").html(channel === "sms"
+      ? '<i class="fas fa-paper-plane"></i> Send SMS'
+      : '<i class="fab fa-whatsapp"></i> Send WhatsApp');
+    refreshTemplateOptions(prevScope);
+    loadRows();
+  }
+  $("#channel-switch").on("click", ".ntx-channel-btn", function () {
+    setChannel($(this).data("channel"));
+  });
+
+  function isAllModules() {
+    return $("#module").val() === "";
+  }
+
+  function partyType() {
+    return $("#module option:selected").data("party-type") || "customer";
+  }
+
+  function partyValue() {
+    if (isAllModules()) return "";
+    return $("#party-" + partyType()).val() || "";
+  }
+
+  // Rebuild the Template <select> for the current channel + chosen module.
+  // ``preferScope`` ("module/transaction") carries the previously selected
+  // template's scope across a channel switch, so picking "Broiler Sale" on
+  // SMS and switching to WhatsApp lands on the equivalently-scoped WhatsApp
+  // template instead of silently resetting to "All".
+  function refreshTemplateOptions(preferScope) {
+    const opt = $("#module option:selected");
+    const txn = opt.data("transaction") || "";
+    const mod = opt.data("module") || "";
+    const sel = $("#template");
+    const current = sel.val();
+    const list = currentTemplates().filter(t =>
+      (!mod || t.module === mod) && (!txn || !t.transaction || t.transaction === txn));
+
+    sel.empty().append('<option value="">All</option>');
+    list.forEach(function (t) {
+      sel.append(`<option value="${t.id}" data-transaction="${escapeHtml(t.transaction)}">` +
+        `${escapeHtml(t.name)} (${escapeHtml(t.module_display)})</option>`);
+    });
+
+    if (preferScope) {
+      const equivalent = list.find(t => `${t.module}/${t.transaction}` === preferScope);
+      sel.val(equivalent ? String(equivalent.id) : "");
+    } else {
+      const stillValid = list.some(t => String(t.id) === String(current));
+      sel.val(stillValid ? current : "");
+    }
+    if (rows.length) renderRows();
+  }
+
+  // Shows/hides and enables/disables the right party-type <select> for the
+  // current Module, and the "pick a Module" hint when none is chosen. Split
+  // out from the #module change handler so it can also run once at page
+  // load (setChannel() already does the initial template refresh + fetch,
+  // so re-running those here would just double the first network call).
+  function syncPartySelects() {
+    const all = isAllModules();
+    const shown = all ? "customer" : partyType();
+    $(".party-select").each(function () {
+      const mine = $(this).data("party-type") === shown;
+      $(this).toggleClass("d-none", !mine).prop("disabled", all && mine);
+      if (!mine || all) $(this).val("");
+      // Select2 renders its own overlay from the native <select>'s state but
+      // doesn't re-check "disabled" on a plain .prop() call — only on this
+      // event — so without it the dropdown stays clickable-looking even
+      // though the underlying select (and any actual selection) is locked.
+      if ($(this).hasClass("select2-hidden-accessible")) $(this).trigger("change.select2");
+    });
+    $("#party-label").text(all ? "Party Name" : (PARTY_LABELS[shown] || "Party Name"));
+    $("#party-name-hint").toggleClass("d-none", !all);
+  }
+
+  $("#module").on("change", function () {
+    syncPartySelects();
+    refreshTemplateOptions();
+    loadRows();
+  });
+  $(document).on("change", ".party-select", loadRows);
+
+  function selectedTemplate() {
+    const id = $("#template").val();
+    return currentTemplates().find(t => String(t.id) === String(id)) || null;
+  }
+
+  // With Template="All" there's no one template to resolve a row against —
+  // but most rows do have exactly one template, on the active channel,
+  // scoped to their own module/transaction, so previews can still show
+  // something useful instead of a blank "Select a template". A generic
+  // template (module set, transaction blank) matches alongside a
+  // transaction-specific one on the same row; the specific one wins rather
+  // than that counting as ambiguous.
+  function templateForRow(r) {
+    const explicit = selectedTemplate();
+    if (explicit) return explicit;
+    const scope = SOURCE_SCOPE[r.module] || {};
+    const matches = currentTemplates().filter(t =>
+      (!t.module || t.module === scope.module) &&
+      (!t.transaction || !scope.transaction || t.transaction === scope.transaction));
+    if (matches.length === 1) return matches[0];
+    const specific = matches.filter(t => t.transaction);
+    return specific.length === 1 ? specific[0] : null;
+  }
+
+  // ---- SMS-specific rendering --------------------------------------------
+  function smsMetrics(text) {
+    const isUnicode = /[^\x00-\x7F]/.test(text);
+    const len = text.length;
+    const single = isUnicode ? 70 : 160, multi = isUnicode ? 67 : 153;
+    const parts = len === 0 ? 1 : (len <= single ? 1 : Math.ceil(len / multi));
+    return { len: len, parts: parts, unicode: isUnicode };
+  }
+  function renderMessage(body, ctx) {
+    const now = new Date();
+    const full = Object.assign({
+      CompanyName: COMPANY_NAME, UserName: USER_NAME,
+      CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
+      CurrentTime: now.toTimeString().slice(0, 5),
+    }, ctx);
+    return body.replace(/\{(\w+)\}/g, (m, name) => (name in full ? full[name] : m));
+  }
+  function renderMessageMarked(body, ctx) {
+    const now = new Date();
+    const full = Object.assign({
+      CompanyName: COMPANY_NAME, UserName: USER_NAME,
+      CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
+      CurrentTime: now.toTimeString().slice(0, 5),
+    }, ctx);
+    return escapeHtml(body).replace(/\{(\w+)\}/g, function (m, name) {
+      const value = full[name];
+      const missing = value === undefined || value === null || value === "";
+      if (missing) {
+        return '<span class="text-danger" title="No value for this placeholder on this row">' +
+               '<i class="fas fa-xmark"></i></span>';
+      }
+      return escapeHtml(String(value));
+    });
+  }
+
+  // ---- WhatsApp-specific rendering ---------------------------------------
+  function paramLabel(n) { return "{" + "{" + n + "}" + "}"; }
+  function paramValueHtml(value) {
+    const missing = value === undefined || value === null || value === "";
+    return missing
+      ? '<span class="text-danger" title="No value for this parameter on this row"><i class="fas fa-xmark"></i></span>'
+      : escapeHtml(value);
+  }
+
+  function messagePreviewCell(r) {
+    const t = templateForRow(r);
+    if (!t) return '<span class="text-muted small">Select a template</span>';
+    if (channel === "sms") {
+      const m = smsMetrics(renderMessage(t.body, r.context));
+      return `<div class="small">${renderMessageMarked(t.body, r.context)}` +
+             `<div class="text-muted">${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</div></div>`;
+    }
+    if (!t.parameter_map.length) {
+      return `<div class="small"><code>${escapeHtml(t.template_name)}</code><br><span class="text-muted">No parameters.</span></div>`;
+    }
+    const params = t.parameter_map.map((name, n) =>
+      `<div>${paramLabel(n + 1)} <span class="text-muted">${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
+    ).join("");
+    return `<div class="small"><code>${escapeHtml(t.template_name)}</code>${params}</div>`;
+  }
+
+  // ---- Sent Via: both channels' status at once, independent of toggle ----
+  // Each row carries only the currently-loaded channel's own sent_history
+  // (server-side, per r.module/r.doc_no), so the "other" channel's status
+  // isn't known without a second fetch. Keeping this to one fetch per
+  // channel switch (matching the single-channel pages' own network cost)
+  // means the inactive channel's chip reads as a neutral "not shown here"
+  // rather than a wrong "not sent" — resolved for real once that channel is
+  // toggled into view.
+  function sentForSelectedTemplate(r) {
+    const sel = $("#template").val();
+    if (!sel) return [];
+    return (r.sent_history || []).filter(h => String(h.template_id) === String(sel));
+  }
+
+  function chanStatusCell(r) {
+    const hist = r.sent_history || [];
+    const mine = sentForSelectedTemplate(r);
+    const sentThisChannel = mine.length ? mine : (hist.length ? hist : null);
+    const chanClass = channel === "sms" ? "sent-sms" : "sent-wa";
+    const chanLabel = channel === "sms" ? "SMS" : "WhatsApp";
+    const otherLabel = channel === "sms" ? "WhatsApp" : "SMS";
+
+    const activeChip = sentThisChannel
+      ? `<span class="ntx-chip-sm ${chanClass}" title="${chanLabel} sent ${escapeHtml(sentThisChannel[0].sent_at)}${sentThisChannel[0].template_name ? ' via ' + escapeHtml(sentThisChannel[0].template_name) : ''}">${channel === "sms" ? "S" : "W"}</span>`
+      : `<span class="ntx-chip-sm" title="Not sent via ${chanLabel}">${channel === "sms" ? "S" : "W"}</span>`;
+    const otherChip = `<span class="ntx-chip-sm" title="Switch to ${otherLabel} to see its status">${channel === "sms" ? "W" : "S"}</span>`;
+
+    let text;
+    if (mine.length) text = `${chanLabel} sent <span class="text-muted">${escapeHtml(mine[0].sent_at)}</span>`;
+    else if (hist.length) text = `${chanLabel}: sent (other template)`;
+    else text = "Not sent";
+
+    return `<div class="ntx-chan-status">${activeChip}${otherChip}<span class="ntx-chan-text">${text}</span></div>`;
+  }
+
+  // ---- Grid filtering / render --------------------------------------------
+  function visibleRows() {
+    let out = rows;
+    const pt = $("#party-type-filter").val();
+    if (pt) out = out.filter(r => r.party_type === pt);
+    const t = selectedTemplate();
+    if (t) {
+      out = out.filter(function (r) {
+        const scope = SOURCE_SCOPE[r.module] || {};
+        return (!t.module || scope.module === t.module) &&
+               (!t.transaction || !scope.transaction || scope.transaction === t.transaction);
+      });
+    }
+    return out;
+  }
+
+  function renderActiveFilters() {
+    const wrap = $("#active-filters").empty();
+    const chips = [];
+    const modOpt = $("#module option:selected");
+    if ($("#module").val()) chips.push(["module", "Module: " + modOpt.text()]);
+    const pt = $("#party-type-filter option:selected");
+    if ($("#party-type-filter").val()) chips.push(["party-type-filter", "Party Type: " + pt.text()]);
+    if (!isAllModules() && partyValue()) {
+      chips.push(["party", "Party: " + $("#party-" + partyType() + " option:selected").text()]);
+    }
+    const tpl = selectedTemplate();
+    if (tpl) chips.push(["template", "Template: " + tpl.name]);
+    chips.forEach(function (c) {
+      wrap.append(`<span class="badge bg-secondary">${escapeHtml(c[1])}<i class="fas fa-xmark" data-clear="${c[0]}"></i></span>`);
+    });
+  }
+  $(document).on("click", "#active-filters .fa-xmark", function () {
+    const field = $(this).data("clear");
+    if (field === "party") { $("#party-customer").val(""); $("#party-supplier").val(""); }
+    else if (field === "module") { $("#module").val("").trigger("change"); }
+    else { $("#" + field).val(""); }
+    renderActiveFilters();
+    if (field === "module" || field === "party") loadRows();
+    else if (rows.length) renderRows();
+  });
+
+  function selectedIndexes() {
+    return $(".row-check:checked").map(function () { return Number($(this).data("index")); }).get();
+  }
+
+  function renderRows() {
+    renderActiveFilters();
+    const checked = new Set(selectedIndexes());
+    if (table) { table.destroy(); }
+    const tbody = $("#ntx-doc-table tbody");
+    tbody.empty();
+    visibleRows().forEach(function (r) {
+      const i = rows.indexOf(r);
+      tbody.append(`<tr>
+        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
+        <td>${fmtDate(r.date)}</td>
+        <td>${escapeHtml(MODULE_LABELS[r.module] || r.module)}</td>
+        <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
+        <td>${escapeHtml(r.party_name)}</td>
+        <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
+        <td>${escapeHtml(r.doc_no)}</td>
+        <td class="text-end">${Number(r.amount).toFixed(2)}</td>
+        <td>${chanStatusCell(r)}</td>
+        <td>${messagePreviewCell(r)}</td>
+      </tr>`);
+    });
+    table = $("#ntx-doc-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Blfrtip",
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+      columnDefs: [{ orderable: false, targets: [0, 9] }],
+      language: { emptyTable: "No documents match the filters" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON(CHANNEL_URLS[channel].source, {
+      module: $("#module").val(), from_date: $("#from-date").val(),
+      to_date: $("#to-date").val(), party: partyValue(),
+    }, function (resp) {
+      rows = resp.rows || [];
+      renderRows();
+      $("#select-all").prop("checked", false);
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to load documents.");
+    });
+  }
+
+  $("#search-btn").on("click", loadRows);
+
+  $("#template").on("change", function () {
+    $("#select-all").prop("checked", false);
+    if (rows.length) renderRows();
+  });
+  $("#party-type-filter").on("change", function () {
+    $("#select-all").prop("checked", false);
+    if (rows.length) renderRows();
+  });
+
+  // ---- Quick date ranges ---------------------------------------------------
+  function applyQuickRange(range) {
+    const now = new Date();
+    let from;
+    if (range == "today") from = today;
+    else if (range == 7) from = localDay(new Date(Date.now() - 6 * 86400000));
+    else if (range == 30) from = localDay(new Date(Date.now() - 29 * 86400000));
+    else if (range == "month") from = localDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    $("#from-date").val(from);
+    $("#to-date").val(today);
+    markActiveQuickRange();
+    loadRows();
+  }
+  function markActiveQuickRange() {
+    const from = $("#from-date").val(), to = $("#to-date").val();
+    const matches = {
+      today: from === today && to === today,
+      "7": from === sevenDaysAgo && to === today,
+      "30": from === localDay(new Date(Date.now() - 29 * 86400000)) && to === today,
+      month: from === localDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && to === today,
+    };
+    $(".quick-date-btn").each(function () {
+      $(this).toggleClass("active", !!matches[$(this).data("range")]);
+    });
+  }
+  $(".quick-date-btn").on("click", function () { applyQuickRange($(this).data("range")); });
+  $("#from-date, #to-date").on("change", markActiveQuickRange);
+
+  $("#clear-btn").on("click", function () {
+    $("#from-date").val(sevenDaysAgo); $("#to-date").val(today);
+    $("#template").val(""); $("#party-type-filter").val("");
+    markActiveQuickRange();
+    $("#module").val("").trigger("change");
+  });
+
+  $("#select-all").on("change", function () {
+    $(".row-check:not(:disabled)").prop("checked", this.checked);
+  });
+
+  function requireSelection() {
+    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return null; }
+    const idx = selectedIndexes();
+    if (!idx.length) { window.showToast('warning', "Select at least one record."); return null; }
+    return idx;
+  }
+
+  function previewCards(indexes) {
+    const t = selectedTemplate();
+    if (channel === "sms") {
+      return indexes.map(i => {
+        const r = rows[i];
+        const m = smsMetrics(renderMessage(t.body, r.context));
+        return `<div class="border rounded p-2 mb-2">
+          <div class="d-flex justify-content-between small text-muted">
+            <span><b>${escapeHtml(r.party_name)}</b> — ${escapeHtml(r.mobile)}</span>
+            <span>${escapeHtml(r.doc_no)} | ${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</span>
+          </div>
+          <div class="mt-1">${renderMessageMarked(t.body, r.context)}</div>
+        </div>`;
+      }).join("");
+    }
+    return indexes.map(i => {
+      const r = rows[i];
+      const params = (t?.parameter_map || []).map((name, n) =>
+        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
+      ).join("") || '<div class="text-muted">No parameters.</div>';
+      return `<div class="border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between small text-muted">
+          <span><b>${escapeHtml(r.party_name)}</b> — ${escapeHtml(r.mobile)}</span>
+          <span>${escapeHtml(r.doc_no)}</span>
+        </div>
+        <div class="mt-1 small fw-semibold">Template: <code>${escapeHtml(t?.template_name || "")}</code></div>
+        <div class="mt-1">${params}</div>
+      </div>`;
+    }).join("");
+  }
+
+  $("#preview-btn").on("click", function () {
+    const idx = requireSelection();
+    if (!idx) return;
+    $("#preview-body").html(previewCards(idx));
+    new bootstrap.Modal(document.getElementById("previewModal")).show();
+  });
+
+  async function sendOne(r, force) {
+    const resp = await fetch(CHANNEL_URLS[channel].send, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify({ module: r.module, doc_id: r.doc_id,
+                             template_id: $("#template").val(), force: force }),
+    });
+    return { status: resp.status, data: await resp.json() };
+  }
+
+  // Advisory-only, WhatsApp only — LemIn AI has no real "has WhatsApp" check,
+  // only "have we seen this number before".
+  async function checkContacts(idx) {
+    if (channel !== "whatsapp") return [];
+    const checks = await Promise.all(idx.map(async i => {
+      const phone = (rows[i].mobile || "").trim();
+      if (!phone) return null;
+      try {
+        const resp = await fetch("{% url 'whatsapp_contact_check' %}?phone=" + encodeURIComponent(phone));
+        const data = await resp.json();
+        return data.known;
+      } catch (e) { return null; }
+    }));
+    return idx.filter((_, n) => checks[n] === false);
+  }
+
+  async function sendSelected() {
+    let idx = requireSelection();
+    if (!idx) return;
+    const channelLabel = channel === "sms" ? "SMS" : "WhatsApp";
+    const already = idx.filter(i => sentForSelectedTemplate(rows[i]).length);
+    if (already.length) {
+      const names = already.slice(0, 5).map(i => rows[i].doc_no).join(", ");
+      if (!(await window.bimsConfirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`))) {
+        idx = idx.filter(i => !sentForSelectedTemplate(rows[i]).length);
+        if (!idx.length) { window.showToast('danger', `Nothing left to send — all selected documents already received this ${channelLabel}.`); return; }
+      }
+    }
+    const unknown = await checkContacts(idx);
+    if (unknown.length) {
+      const names = unknown.slice(0, 5).map(i => rows[i].party_name).join(", ");
+      if (!(await window.bimsConfirm(`${unknown.length} of the selected number(s) have no prior record with the WhatsApp provider (${names}${unknown.length > 5 ? ", …" : ""}). This isn't a guarantee they lack WhatsApp — just unverified.\n\nOK = send anyway.\nCancel = go back and review your selection.`))) {
+        return;
+      }
+    }
+    $("#send-btn, #preview-send-btn").prop("disabled", true);
+    $("#progress-wrap").removeClass("d-none");
+    let ok = 0, failed = 0, skipped = 0;
+    for (let n = 0; n < idx.length; n++) {
+      const r = rows[idx[n]];
+      $("#progress-text").text(`Sending ${n + 1} of ${idx.length} — ${r.party_name}`);
+      $("#progress-bar").css("width", `${((n + 1) / idx.length) * 100}%`);
+      try {
+        let out = await sendOne(r, false);
+        if (out.status === 409 && out.data.duplicate) {
+          if ((await window.bimsConfirm(`${r.party_name} (${r.doc_no}): ${out.data.error}`))) {
+            out = await sendOne(r, true);
+          } else { skipped++; continue; }
+        }
+        if (out.data.success) { ok++; } else { failed++; }
+      } catch (e) { failed++; }
+      $("#progress-counts").text(`OK ${ok} | Failed ${failed} | Skipped ${skipped}`);
+    }
+    $("#progress-text").text(`Done — sent ${ok}, failed ${failed}, skipped ${skipped}.`);
+    $("#send-btn, #preview-send-btn").prop("disabled", false);
+    loadRows();
+  }
+
+  $("#send-btn").on("click", sendSelected);
+  $("#preview-send-btn").on("click", function () {
+    bootstrap.Modal.getInstance(document.getElementById("previewModal"))?.hide();
+    sendSelected();
+  });
+
+  syncPartySelects();
+  setChannel(channel);
+  markActiveQuickRange();
+});
+</script>
+{% endblock %}

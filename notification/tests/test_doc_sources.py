@@ -242,12 +242,12 @@ class TransactionPageTests(TestCase):
         self.client.force_login(self.user)
 
     def test_the_module_dropdown_offers_every_source(self):
-        html = self.client.get(reverse("sms_transaction")).content.decode()
+        html = self.client.get(reverse("notification_transaction")).content.decode()
         for src in DOC_SOURCES.values():
             self.assertIn(src["label"], html)
 
     def test_the_page_carries_a_dropdown_for_every_party_type(self):
-        html = self.client.get(reverse("sms_transaction")).content.decode()
+        html = self.client.get(reverse("notification_transaction")).content.decode()
         for key in PARTY_TYPES:
             self.assertIn(f'id="party-{key}"', html)
 
