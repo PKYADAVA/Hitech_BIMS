@@ -342,6 +342,9 @@ $(document).ready(function () {
             title="${node.is_group ? 'Add sub-account' : 'Convert to group and add sub-account'}"><i class="fas fa-plus"></i></button>`;
         const delBtn = node.system_role
             ? '' : `<button class="btn btn-outline-danger btn-sm coa-delete" data-id="${node.id}" title="Delete"><i class="fas fa-trash"></i></button>`;
+        const toggleBtn = `<button class="btn btn-outline-secondary btn-sm coa-toggle-status" data-id="${node.id}"
+            title="${node.status === 'Inactive' ? 'Mark Active' : 'Mark Inactive'}">
+            <i class="fas ${node.status === 'Inactive' ? 'fa-toggle-off' : 'fa-toggle-on'}"></i></button>`;
         const typeInfo = [ancestorPath(node), node.account_type, node.account_group]
             .filter(Boolean).join(' · ');
         return `
@@ -356,6 +359,7 @@ $(document).ready(function () {
                 <span class="text-muted small me-2 coa-context" title="${escapeHtml(nodeContext(node))}">${escapeHtml(typeInfo)}</span>
                 ${addBtn}
                 ${node.is_postable ? `<a class="btn btn-outline-info btn-sm" href="/reports/ledger/?account=${node.id}" target="_blank" rel="noopener" title="View ledger (opens in new tab)"><i class="fas fa-book-open"></i></a>` : ''}
+                ${toggleBtn}
                 <button class="btn btn-outline-warning btn-sm coa-edit" data-id="${node.id}" title="Edit"><i class="fas fa-pen"></i></button>
                 ${delBtn}
               </span>
@@ -456,6 +460,23 @@ $(document).ready(function () {
         });
     });
     $(document).on('click', '.coa-edit', function () { openForm({ id: $(this).data('id') }); });
+
+    $(document).on('click', '.coa-toggle-status', function () {
+        const id = $(this).data('id');
+        const node = nodeIndex[id];
+        const newStatus = node.status === 'Inactive' ? 'Active' : 'Inactive';
+        $.ajax({
+            url: API.detail(id), method: 'PUT',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({ status: newStatus }),
+            success: function (updated) {
+                nodeIndex[id] = Object.assign(node, updated);
+                loadTree();
+                showToast('success', `${node.code} marked ${newStatus}.`);
+            },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Status change failed.'),
+        });
+    });
 
     $('#coa-form').on('submit', function (event) {
         event.preventDefault();
