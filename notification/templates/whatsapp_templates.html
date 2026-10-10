@@ -150,6 +150,8 @@ $(document).ready(function () {
   let templateTable;
   const csrfToken = "{{ csrf_token }}";
   const MODULE_TRANSACTIONS = {{ module_transactions_json|safe }};
+  const TRANSACTION_VARIABLES = {{ transaction_variables_json|safe }};
+  const GENERIC_VARIABLES = {{ generic_variables_json|safe }};
 
   // Fill the Transaction dropdown with the selected module's sub-transactions.
   function fillTransactionOptions(form, moduleValue, selected) {
@@ -160,10 +162,54 @@ $(document).ready(function () {
       select.append(`<option value="${escapeHtml(opt[0])}">${escapeHtml(opt[1])}</option>`);
     });
     select.val(selected || "");
+    rebuildParamOptions(form);
   }
   $(document).on("change", ".tpl-module-select", function () {
     fillTransactionOptions($(this).closest("form"), $(this).val(), "");
   });
+  $(document).on("change", ".tpl-transaction-select", function () {
+    rebuildParamOptions($(this).closest("form"));
+  });
+
+  // Variables the selected transaction fills; null = no source registered,
+  // so there is no fillable/non-fillable split to draw — same rule the SMS
+  // editor's own picker uses (see updateVariablePicker there).
+  function allowedVars(form) {
+    const txn = form.find(".tpl-transaction-select").val() || "";
+    const list = TRANSACTION_VARIABLES[txn];
+    if (!list) return null;
+    return new Set(list.concat(GENERIC_VARIABLES));
+  }
+
+  // Every registered variable stays choosable for every parameter — a
+  // template often carries a fact no document source fills yet. Grouped
+  // under two <optgroup>s so the ones this transaction actually fills are
+  // found first, instead of hunting through all 23 flat.
+  function appendVariableOptions(select, allowed) {
+    const fillable = $('<optgroup label="Fillable for this transaction"></optgroup>');
+    const other = $('<optgroup label="Other variables"></optgroup>');
+    {% for var, hint in sms_variables.items %}
+    (function () {
+      const opt = $('<option value="{{ var }}" title="{{ hint }}">{{ var }}</option>');
+      ((!allowed || allowed.has("{{ var }}")) ? fillable : other).append(opt);
+    })();
+    {% endfor %}
+    if (fillable.children().length) select.append(fillable);
+    if (other.children().length) select.append(other);
+  }
+
+  // Re-draw every parameter row's option list for the form's current
+  // transaction, keeping whatever each row already has selected.
+  function rebuildParamOptions(form) {
+    const allowed = allowedVars(form);
+    form.find(".tpl-param-select").each(function () {
+      const select = $(this);
+      const current = select.val();
+      select.empty();
+      appendVariableOptions(select, allowed);
+      if (current) select.val(current);
+    });
+  }
 
   // showToast() / escapeHtml() provided globally by main.js
 
@@ -188,9 +234,7 @@ $(document).ready(function () {
         <button type="button" class="btn btn-outline-danger btn-sm tpl-param-remove" title="Remove"><i class="fas fa-times"></i></button>
       </div>`);
     const select = row.find(".tpl-param-select");
-    {% for var, hint in sms_variables.items %}
-    select.append('<option value="{{ var }}" title="{{ hint }}">{{ var }}</option>');
-    {% endfor %}
+    appendVariableOptions(select, allowedVars(form));
     if (selected) select.val(selected);
     list.append(row);
     renumberParams(form);

@@ -653,7 +653,8 @@ class WhatsappTemplateManageView(View):
     """Render the WhatsApp template management page."""
 
     def get(self, request):
-        from .comm_sources import SMS_VARIABLES
+        from .comm_sources import (SMS_VARIABLES, TRANSACTION_VARIABLES,
+                                   GENERIC_VARIABLE_KEYS)
 
         context = {
             "modules": SMS_MODULE_CHOICES,
@@ -661,6 +662,8 @@ class WhatsappTemplateManageView(View):
             "header_types": WHATSAPP_HEADER_TYPE_CHOICES,
             "sms_variables": SMS_VARIABLES,
             "module_transactions_json": json.dumps(SMS_MODULE_TRANSACTIONS),
+            "transaction_variables_json": json.dumps(TRANSACTION_VARIABLES),
+            "generic_variables_json": json.dumps(GENERIC_VARIABLE_KEYS),
         }
         return render(request, "whatsapp_templates.html", context)
 

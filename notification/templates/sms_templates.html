@@ -137,12 +137,14 @@
                 Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
               </div>
               <div class="mt-2">
-                <div class="small fw-semibold mb-1">Insert variable:</div>
-                <div class="d-flex flex-wrap gap-1 mb-2">
+                <div class="small fw-semibold mb-1 var-group-label">Fillable for this transaction:</div>
+                <div class="d-flex flex-wrap gap-1 mb-1 var-group-fillable">
                   {% for var, hint in sms_variables.items %}
                   <button type="button" class="btn btn-outline-secondary btn-sm py-0 insert-variable" data-var="{{ var }}" title="{{ hint }}">{{ var }}</button>
                   {% endfor %}
                 </div>
+                <div class="small fw-semibold mb-1 var-group-label d-none">Other variables:</div>
+                <div class="d-flex flex-wrap gap-1 mb-2 var-group-other"></div>
                 <div class="small text-muted sms-meta">0 characters | 160 remaining | 1 SMS part | GSM</div>
                 <div class="border rounded bg-light p-2 mt-1 small sms-preview text-muted">Live preview appears here...</div>
               </div>
@@ -228,12 +230,14 @@
                   Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
                 </div>
               <div class="mt-2">
-                <div class="small fw-semibold mb-1">Insert variable:</div>
-                <div class="d-flex flex-wrap gap-1 mb-2">
+                <div class="small fw-semibold mb-1 var-group-label">Fillable for this transaction:</div>
+                <div class="d-flex flex-wrap gap-1 mb-1 var-group-fillable">
                   {% for var, hint in sms_variables.items %}
                   <button type="button" class="btn btn-outline-secondary btn-sm py-0 insert-variable" data-var="{{ var }}" title="{{ hint }}">{{ var }}</button>
                   {% endfor %}
                 </div>
+                <div class="small fw-semibold mb-1 var-group-label d-none">Other variables:</div>
+                <div class="d-flex flex-wrap gap-1 mb-2 var-group-other"></div>
                 <div class="small text-muted sms-meta">0 characters | 160 remaining | 1 SMS part | GSM</div>
                 <div class="border rounded bg-light p-2 mt-1 small sms-preview text-muted">Live preview appears here...</div>
               </div>
@@ -317,28 +321,29 @@ $(document).ready(function () {
   }
 
   // Every registered variable stays insertable for every transaction (DLT
-  // templates get adjusted as needed). The ones the selected transaction
-  // auto-fills are highlighted and listed first; the rest follow muted.
+  // templates get adjusted as needed) — split into two labeled groups so
+  // the ones this transaction auto-fills are easy to find, and the rest are
+  // still there (and still insertable) for a fact no source fills yet.
   function updateVariablePicker(form) {
     const allowed = allowedVars(form);
     const buttons = form.find(".insert-variable");
     if (!buttons.length) return;
-    const wrap = buttons.first().parent();
-    const sorted = buttons.get().sort(function (a, b) {
-      const rank = el => (!allowed || allowed.has(String($(el).data("var")))) ? 0 : 1;
-      return rank(a) - rank(b);
-    });
-    sorted.forEach(function (el) {
-      const btn = $(el);
+    const fillableWrap = form.find(".var-group-fillable");
+    const otherWrap = form.find(".var-group-other");
+    buttons.each(function () {
+      const btn = $(this);
       if (btn.data("hint") === undefined) btn.data("hint", btn.attr("title") || "");
       const ok = !allowed || allowed.has(String(btn.data("var")));
       btn.toggleClass("btn-outline-primary fw-semibold", ok)
          .toggleClass("btn-outline-secondary", !ok)
-         .css("opacity", ok ? "" : ".55")
          .attr("title", ok ? btn.data("hint")
                            : btn.data("hint") + " — not auto-filled by this transaction");
-      wrap.append(btn);
+      (ok ? fillableWrap : otherWrap).append(btn);
     });
+    // "Other variables" only earns its own label once the split is real —
+    // with nothing registered for the transaction, everything is fillable
+    // and a second, empty heading would just be noise.
+    form.find(".var-group-label").eq(1).toggleClass("d-none", otherWrap.children().length === 0);
     form.find(".tpl-body-input").trigger("input");
   }
 

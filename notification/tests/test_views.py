@@ -24,6 +24,15 @@ class SmsTemplateViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
+    def test_page_carries_the_fillable_variable_split(self):
+        """The picker's "Fillable for this transaction" / "Other variables"
+        grouping needs both of these on the page -- losing either silently
+        falls back to "everything fillable", which is what prompted this
+        test (see WhatsappTemplateViewTests' matching case)."""
+        response = self.client.get(reverse("sms_templates"))
+        self.assertIn(b"TRANSACTION_VARIABLES", response.content)
+        self.assertIn(b"GENERIC_VARIABLES", response.content)
+
     def test_list_returns_json(self):
         SmsTemplate.objects.create(key="user.otp", module="user", name="OTP", body="{otp}")
         response = self.client.get(reverse("sms_template_list"))
@@ -101,3 +110,27 @@ class SmsTemplateViewTests(TestCase):
         tpl = SmsTemplate.objects.create(key="user.otp", module="user", name="OTP", body="{otp}")
         response = self.client.get(reverse("sms_template_send", args=[tpl.id]))
         self.assertEqual(response.status_code, 400)
+
+
+class WhatsappTemplateViewTests(TestCase):
+    """The WhatsApp page used to carry only `sms_variables` -- every
+    parameter dropdown offered the full 23 names flat, with no way to tell
+    which ones the chosen transaction can actually fill. Mirrors the SMS
+    page's own context now, so its "Fillable for this transaction" /
+    "Other variables" split can be drawn the same way."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("mgr2", password="pw12345!")
+        self.client.force_login(self.user)
+
+    def test_page_carries_the_fillable_variable_split(self):
+        response = self.client.get(reverse("whatsapp_templates"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"TRANSACTION_VARIABLES", response.content)
+        self.assertIn(b"GENERIC_VARIABLES", response.content)
+
+    def test_page_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("whatsapp_templates"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
