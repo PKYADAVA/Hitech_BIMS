@@ -56,79 +56,6 @@
   </div>
 </div>
 
-<!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <form id="edit-form">
-        <div class="modal-header">
-          <h5 class="modal-title">Edit Day Record</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="edit-id">
-          {% comment %}
-            The farm is not editable here — it is the register's grouping key —
-            but the balance the Kgs are weighed against belongs to it, so the
-            dialog carries it.
-          {% endcomment %}
-          <input type="hidden" id="edit-farm">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Date</label>
-              <input type="date" class="form-control" id="edit-date" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Mortality</label>
-              <input type="number" min="0" step="1" class="form-control" id="edit-mortality" value="0">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Culls</label>
-              <input type="number" min="0" step="1" class="form-control" id="edit-culls" value="0">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Feed 1</label>
-              <select class="form-select" id="edit-feed-1">
-                <option value="">select</option>
-                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
-              </select>
-              <div class="small mt-1 stock-note" id="edit-stock-1"></div>
-            </div>
-            <div class="col-md-2">
-              <label class="form-label">Kgs</label>
-              <input type="number" min="0" step=".01" class="form-control" id="edit-kgs-1" value="0">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Feed 2</label>
-              <select class="form-select" id="edit-feed-2">
-                <option value="">select</option>
-                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
-              </select>
-              <div class="small mt-1 stock-note" id="edit-stock-2"></div>
-            </div>
-            <div class="col-md-2">
-              <label class="form-label">Kgs</label>
-              <input type="number" min="0" step=".01" class="form-control" id="edit-kgs-2" value="0">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Avg. Wt. (Gms)</label>
-              <input type="number" min="0" step=".01" class="form-control" id="edit-avg-wt" value="0">
-            </div>
-            <div class="col-md-8">
-              <label class="form-label">Remarks</label>
-              <input type="text" class="form-control" id="edit-remarks">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
 <!-- Confirm Delete Modal -->
 <div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -173,7 +100,6 @@
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
-  const CAN_EDIT = {% if page_perms.edit %}true{% else %}false{% endif %};
   let pendingDeleteId = null;
 
   const today = localDay();
@@ -223,8 +149,8 @@ $(function () {
         <td>${feedQty.toFixed(2)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
-            {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
-            {% if not page_perms.edit %}<button type="button" class="btn btn-outline-info btn-sm edit-button" data-id="${r.id}" title="Request modification"><i class="fas fa-pen-to-square"></i></button>{% endif %}
+            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/daily-entry/single/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/daily-entry/single/${r.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             ${deleteBtn}
           </div>
         </td>
@@ -370,141 +296,6 @@ $(function () {
         $("#groupDeleteConfirmationModal").modal("hide");
         alert(xhr.responseJSON?.error || "Failed to delete batch.");
       },
-    });
-  });
-
-  /**
-   * The farm's balance of each feed being edited, as the entry pages show it.
-   *
-   * A correction made here goes through the same rule as a new entry — the
-   * model refuses a row that feeds more than the farm holds — but the dialog
-   * used to say nothing until the save came back refused. Asking for the
-   * balance with this row's own id leaves this row's Kgs out of it, the same
-   * allowance the model makes, so an unchanged entry is not called short
-   * against a balance its own consumption had already been taken out of.
-   *
-   * Both slots are weighed together when they carry the same feed: that is one
-   * pile at the farm, and checking them apart let a row feed it twice.
-   */
-  // What the farm holds of each feed on this row's date, this row's own Kgs
-  // left out. Filled by the lookups and only ever added to: the shortfall is
-  // worked out from it on demand, so a lookup in flight cannot leave Save
-  // reading an empty answer at the moment it is pressed.
-  const editBalance = {};
-
-  /** Feeds this row would take more of than the farm holds - read fresh from
-   *  the fields, so it is right whenever it is asked. */
-  function editShortfalls() {
-    const wanted = {};
-    [1, 2].forEach(n => {
-      const item = $(`#edit-feed-${n}`).val();
-      const kg = Number($(`#edit-kgs-${n}`).val()) || 0;
-      // Both slots against one pile when they carry the same feed, as the
-      // model weighs them.
-      if (item && kg > 0) wanted[item] = (wanted[item] || 0) + kg;
-    });
-    const out = [];
-    Object.keys(wanted).forEach(item => {
-      const bal = editBalance[item];
-      // Not looked up yet: no claim either way, and the server still checks.
-      if (bal === undefined || wanted[item] <= bal) return;
-      out.push(`${$(`#edit-feed-1 option[value="${item}"]`).text()} is short by `
-               + `${(wanted[item] - bal).toFixed(2)} kg`);
-    });
-    return out;
-  }
-
-  function refreshEditStock() {
-    const farm = $("#edit-farm").val();
-    const date = $("#edit-date").val();
-    const id = $("#edit-id").val();
-    const slots = [1, 2].map(n => ({
-      n,
-      item: $(`#edit-feed-${n}`).val(),
-      kg: Number($(`#edit-kgs-${n}`).val()) || 0,
-      note: $(`#edit-stock-${n}`),
-    }));
-    slots.forEach(s => { if (!s.item) s.note.html(""); });
-    const items = [...new Set(slots.filter(s => s.item).map(s => s.item))];
-    if (!farm || !date || !items.length) return;
-
-    Promise.all(items.map(item =>
-      $.getJSON("{% url 'daily_entry_stock_lookup' %}",
-                { farm: farm, item: item, date: date, entry: id })
-        .then(d => { editBalance[item] = Number(d.stock) || 0; })
-    )).then(() => {
-      const wanted = {};
-      slots.forEach(s => { if (s.item) wanted[s.item] = (wanted[s.item] || 0) + s.kg; });
-      slots.forEach(s => {
-        if (!s.item) return;
-        const left = editBalance[s.item] - wanted[s.item];
-        s.note.html(left < 0
-          ? `<span class="text-danger fw-semibold">&#9888; short by ${Math.abs(left).toFixed(2)} kg</span>`
-          : `<span class="text-muted">Balance ${editBalance[s.item].toFixed(2)} kg &middot; left ${left.toFixed(2)} kg</span>`);
-      });
-    });
-  }
-
-  $("#edit-feed-1, #edit-feed-2, #edit-kgs-1, #edit-kgs-2, #edit-date")
-    .on("change input", refreshEditStock);
-
-  $(document).on("click", ".edit-button", function () {
-    const id = $(this).data("id");
-    $.getJSON(`/daily_entry_api/${id}/`, function (r) {
-      $("#edit-id").val(r.id);
-      $("#edit-farm").val(r.farm);
-      $("#edit-date").val(r.date);
-      $("#edit-mortality").val(r.mortality);
-      $("#edit-culls").val(r.culls);
-      $("#edit-feed-1").val(r.feed_1 || "");
-      $("#edit-kgs-1").val(r.feed_1_qty);
-      $("#edit-feed-2").val(r.feed_2 || "");
-      $("#edit-kgs-2").val(r.feed_2_qty);
-      $("#edit-avg-wt").val(r.avg_weight_gms);
-      $("#edit-remarks").val(r.remarks);
-      $("#edit-stock-1").html(""); $("#edit-stock-2").html("");
-      $("#editModal").modal("show");
-      refreshEditStock();
-    }).fail(function () {
-      alert("Failed to load entry.");
-    });
-  });
-
-  $("#edit-form").on("submit", function (e) {
-    e.preventDefault();
-    const short = editShortfalls();
-    if (short.length) {
-      alert("Not enough feed in stock:\n\n" + short.join("\n")
-            + "\n\nBook the delivery first, or reduce the quantity.");
-      return;
-    }
-    const id = $("#edit-id").val();
-    const payload = {
-      date: $("#edit-date").val(),
-      mortality: $("#edit-mortality").val(),
-      culls: $("#edit-culls").val(),
-      feed_1: $("#edit-feed-1").val(),
-      feed_1_qty: $("#edit-kgs-1").val(),
-      feed_2: $("#edit-feed-2").val(),
-      feed_2_qty: $("#edit-kgs-2").val(),
-      avg_weight_gms: $("#edit-avg-wt").val(),
-      remarks: $("#edit-remarks").val(),
-    };
-    if (!CAN_EDIT) {
-      $("#editModal").modal("hide");
-      return submitChangeRequest("daily_entry_single", id, payload, window.location.href);
-    }
-    $.ajax({
-      url: `/daily_entry_api/${id}/`,
-      type: "PUT",
-      contentType: "application/json",
-      headers: { "X-CSRFToken": csrfToken },
-      data: JSON.stringify(payload),
-      success: function () {
-        $("#editModal").modal("hide");
-        loadRows();
-      },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to update entry."); },
     });
   });
 

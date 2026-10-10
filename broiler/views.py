@@ -2724,7 +2724,7 @@ class SingleBatchDailyEntryListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class SingleBatchDailyEntryFormTemplateView(View):
-    def get(self, request):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         return render(request, "daily_entry_single_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
@@ -2732,12 +2732,18 @@ class SingleBatchDailyEntryFormTemplateView(View):
             # page, and the whole master offered Day Old Chicks among them.
             "items": feed_items().filter(is_active=True),
             "today": timezone.localdate().isoformat(),
+            # The register's Edit action loads this same page (in a modal
+            # iframe) in edit mode for one saved row. request_mode mirrors the
+            # hatchery add-forms: a user without edit rights gets the same
+            # page but Save submits a change request instead of the real PUT.
+            "edit_id": id or "",
+            "request_mode": request_mode,
         })
 
 
 @method_decorator(login_required, name="dispatch")
 class DailyEntryFormTemplateView(View):
-    def get(self, request):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         return render(request, "daily_entry_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
@@ -2745,6 +2751,12 @@ class DailyEntryFormTemplateView(View):
             # page, and the whole master offered Day Old Chicks among them.
             "items": feed_items().filter(is_active=True),
             "today": timezone.localdate().isoformat(),
+            # The register's Edit action loads this same page (in a modal
+            # iframe) in edit mode for one saved row. request_mode mirrors the
+            # hatchery add-forms: a user without edit rights gets the same
+            # page but Save submits a change request instead of the real PUT.
+            "edit_id": id or "",
+            "request_mode": request_mode,
         })
 
 

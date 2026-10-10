@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Add Day Record — BIMS{% endblock %}
+{% block title %}{% if edit_id %}Edit Day Record{% else %}Add Day Record{% endif %} — BIMS{% endblock %}
 
 {% block nav %}
   {% include 'main_top_navbar.html' with active_tab='broiler' %}
@@ -105,7 +106,7 @@
 {% include '_broiler_transaction_subnavbar.html' with active_tab='daily_entry' %}
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-calendar-day"></i> Add Day Record</div>
+  <div class="page-header-title"><i class="fas fa-calendar-day"></i> {% if edit_id %}Edit{% else %}Add{% endif %} Day Record</div>
   <div class="page-header-right"><a href="{% url 'daily_entry_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
 </div>
 
@@ -174,7 +175,7 @@
   </div>
 
   <div class="dr-actions d-flex gap-2 mb-4 justify-content-center">
-    <button class="btn btn-primary" type="submit"><i class="fas fa-check me-1"></i>Submit</button>
+    <button class="btn btn-primary" type="submit"><i class="fas fa-check me-1"></i>{% if edit_id %}Save{% else %}Submit{% endif %}</button>
     <a href="{% url 'daily_entry_list' %}" class="btn btn-outline-danger"><i class="fas fa-xmark me-1"></i>Cancel</a>
   </div>
 </form>
@@ -182,7 +183,10 @@
 
 {% block js %}
 {% include 'broiler/_feed_plan_panel.html' %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
+const EDIT_ID = {{ edit_id|default:"null" }};
+const REQUEST_MODE = {{ request_mode|yesno:"true,false" }};
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const feedOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 // Farms assigned to each supervisor (BroilerFarm.supervisor) — picking a
@@ -301,8 +305,8 @@ function row() {
 function refreshRowAddButtons() {
   const rows = entryRows();
   rows.forEach((tr, i) => {
-    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
-    tr.querySelector('.remove').disabled = rows.length === 1;
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', EDIT_ID || i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = EDIT_ID || rows.length === 1;
   });
   updateSummary();
 }
@@ -346,7 +350,11 @@ async function recomputeStockPreview() {
       const key = `${farmId}:${itemId}`;
       if (!(key in running)) {
         if (!(key in openingCache)) {
-          const resp = await fetch(`{% url 'daily_entry_stock_lookup' %}?farm=${farmId}&item=${itemId}&date=${dateVal}`);
+          // entry=EDIT_ID excludes this row's own saved Kgs from the balance
+          // it is being weighed against — otherwise an unchanged edit would
+          // look short by its own already-counted consumption.
+          const entryQ = EDIT_ID ? `&entry=${EDIT_ID}` : '';
+          const resp = await fetch(`{% url 'daily_entry_stock_lookup' %}?farm=${farmId}&item=${itemId}&date=${dateVal}${entryQ}`);
           const data = await resp.json();
           if (myToken !== stockPreviewToken) return; // a newer recompute superseded this one
           openingCache[key] = Number(data.stock) || 0;
@@ -999,7 +1007,7 @@ get('row-table').addEventListener('click', e => {
 get('daily-entry-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const supervisor = value('supervisor');
-  if (!supervisor) { alert('Select a Supervisor.'); return; }
+  if (!EDIT_ID && !supervisor) { alert('Select a Supervisor.'); return; }
   const rows = entryRows().map(tr => ({
     farm: tr.querySelector('.farm').value,
     batch: tr.querySelector('.batch').value,
@@ -1032,10 +1040,28 @@ get('daily-entry-form').addEventListener('submit', function (e) {
   }
   // A farm with two open flocks leaves this blank on purpose — saving anyway
   // is what used to file the entry against whichever batch sorted first.
-  if (rows.some(r => !r.batch)) {
+  if (!EDIT_ID && rows.some(r => !r.batch)) {
     alert('Select a Batch on every row.');
     return;
   }
+
+  if (EDIT_ID) {
+    if (REQUEST_MODE) {
+      submitChangeRequest('daily_entry', EDIT_ID, rows[0], "{% url 'daily_entry_list' %}");
+      return;
+    }
+    // One saved row, in place — not the multi-row create endpoint.
+    fetch(`/daily_entry_api/${EDIT_ID}/`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+      body: JSON.stringify(rows[0]),
+    }).then(async r => {
+      if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+      window.location.href = "{% url 'daily_entry_list' %}";
+    }).catch(err => alert(err.message));
+    return;
+  }
+
   fetch("{% url 'daily_entry_api_list' %}", {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
@@ -1063,8 +1089,74 @@ get('supervisor').addEventListener('change', function () {
   updateFeedFeedback();
 });
 
-// Preselected supervisor (e.g. only one) — narrow the list up front.
-if (value('supervisor')) { currentFarmOptions = farmOptionsFor(value('supervisor')); }
-row();
+// Editing one saved entry (opened from the register's Edit action): load it,
+// lock Supervisor/Farm to its own values, and build exactly one row from its
+// saved figures. Batch stays locked too unless the farm currently has more
+// than one open flock — then it is a real choice, since that is the normal
+// reason to be editing a batch assignment at all.
+if (EDIT_ID) {
+  fetch(`/daily_entry_api/${EDIT_ID}/`).then(r => r.json()).then(entry => {
+    // Editing one saved row never touches Supervisor — the field only ever
+    // narrowed the Farm dropdown while adding, and the saved row's Farm is
+    // already fixed — so it is hidden rather than shown unfillable. Hiding
+    // alone left it "required" but invisible, which blocks native form
+    // submission outright (an unfocusable invalid control) — disabling it
+    // too is what actually excuses it from that check.
+    get('supervisor').disabled = true;
+    get('supervisor').closest('div').style.display = 'none';
+
+    const tr = row();
+    const farmSel = tr.querySelector('.farm'), batchSel = tr.querySelector('.batch');
+    farmSel.innerHTML = `<option value="${entry.farm}">${escapeHtml(entry.farm_name)}</option>`;
+    farmSel.value = String(entry.farm);
+    if (window.jQuery) jQuery(farmSel).trigger('change.select2').prop('disabled', true);
+    else farmSel.disabled = true;
+
+    tr.querySelector('.date').value = entry.date;
+    tr.querySelector('.age').value = entry.age_days;
+    tr.querySelector('.mortality').value = entry.mortality;
+    tr.querySelector('.culls').value = entry.culls;
+    tr.querySelector('.feed-1').value = entry.feed_1 || '';
+    tr.querySelector('.kgs-1').value = entry.feed_1_qty;
+    tr.querySelector('.feed-2').value = entry.feed_2 || '';
+    tr.querySelector('.kgs-2').value = entry.feed_2_qty;
+    tr.querySelector('.avg-wt').value = entry.avg_weight_gms;
+    tr.querySelector('.remarks').value = entry.remarks || '';
+    if (window.jQuery) {
+      jQuery(tr.querySelector('.feed-1')).trigger('change.select2');
+      jQuery(tr.querySelector('.feed-2')).trigger('change.select2');
+    }
+
+    // Batch: if the farm has more than one open flock right now, this saved
+    // row could genuinely belong to any of them (the usual reason to edit a
+    // batch at all), so it stays a real choice rather than being locked. One
+    // open batch, or none, leaves nothing to decide, and a batch that has
+    // since closed needs to be offered too — the open-batch lookup alone
+    // would never include it.
+    fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${entry.farm}`).then(r => r.json()).then(data => {
+      const openBatches = data.batches || [];
+      const savedIsOpen = entry.batch && openBatches.some(b => b.id === entry.batch);
+      if (openBatches.length > 1) {
+        const list = savedIsOpen || !entry.batch ? openBatches
+          : openBatches.concat([{ id: entry.batch, name: `${entry.batch_name} (closed)`, placed_on: null }]);
+        fillBatchSelect(batchSel, list);
+        if (entry.batch) batchSel.value = String(entry.batch);
+        if (window.jQuery) jQuery(batchSel).trigger('change.select2');
+      } else {
+        const batchLabel = entry.batch ? (entry.is_active ? entry.batch_name : `${entry.batch_name} (closed)`) : 'no batch';
+        batchSel.innerHTML = `<option value="${entry.batch || ''}">${escapeHtml(batchLabel)}</option>`;
+        batchSel.value = entry.batch ? String(entry.batch) : '';
+        if (window.jQuery) jQuery(batchSel).trigger('change.select2').prop('disabled', true);
+        else batchSel.disabled = true;
+      }
+      recomputeStockPreview();
+    });
+    updateFeedFeedback();
+  });
+} else {
+  // Preselected supervisor (e.g. only one) — narrow the list up front.
+  if (value('supervisor')) { currentFarmOptions = farmOptionsFor(value('supervisor')); }
+  row();
+}
 </script>
 {% endblock %}

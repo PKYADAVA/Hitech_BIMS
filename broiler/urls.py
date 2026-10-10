@@ -99,6 +99,9 @@ urlpatterns = [
 
     path('daily-entry/', views.DailyEntryListTemplateView.as_view(), name='daily_entry_list'),
     path('daily-entry/add/', views.DailyEntryFormTemplateView.as_view(), name='daily_entry_add'),
+    path('daily-entry/<int:id>/edit/', views.DailyEntryFormTemplateView.as_view(), name='daily_entry_edit'),
+    path('daily-entry/<int:id>/request-edit/', views.DailyEntryFormTemplateView.as_view(),
+         {'request_mode': True}, name='daily_entry_request_change'),
     path('daily_entry_api/', views.DailyEntryAPI.as_view(), name='daily_entry_api_list'),
     path('daily_entry_api/group-delete/', views.daily_entry_group_delete, name='daily_entry_group_delete'),
     path('daily_entry_api/<int:id>/', views.DailyEntryAPI.as_view(), name='daily_entry_api'),
@@ -107,6 +110,10 @@ urlpatterns = [
 
     path('daily-entry/single/', views.SingleBatchDailyEntryListTemplateView.as_view(), name='daily_entry_single_list'),
     path('daily-entry/single/add/', views.SingleBatchDailyEntryFormTemplateView.as_view(), name='daily_entry_single_add'),
+    path('daily-entry/single/<int:id>/edit/', views.SingleBatchDailyEntryFormTemplateView.as_view(),
+         name='daily_entry_single_edit'),
+    path('daily-entry/single/<int:id>/request-edit/', views.SingleBatchDailyEntryFormTemplateView.as_view(),
+         {'request_mode': True}, name='daily_entry_single_request_change'),
 
     path('medicine-entry/', views.MedicineEntryListTemplateView.as_view(), name='medicine_entry_list'),
     path('medicine-entry/add/', views.MedicineEntryFormTemplateView.as_view(), name='medicine_entry_add'),
