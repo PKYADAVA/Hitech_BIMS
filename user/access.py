@@ -105,7 +105,7 @@ MODULE_REGISTRY = [
             {
                 "label": "Farmer GC & Payment",
                 "tabs": [
-                    ("gc_settlement", "Farmer Growing Charges", ("gc_settlement_list",)),
+                    ("gc_settlement", "Farmer Rearing Charges", ("gc_settlement_list",)),
                     ("farmer_gc_payment", "GC Payment",
                      ("farmer_gc_payment_api", "farmer_gc_payment_add",
                       "farmer_gc_payment_edit", "farmer_gc_payment_delete",
