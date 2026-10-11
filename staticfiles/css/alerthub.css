@@ -1582,3 +1582,36 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   #ahWidget .ah-sevstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #ahWidget .ah-signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* ---- clearing a notification ------------------------------------------
+   The cross sits over the row rather than inside it: the row is an anchor,
+   and a button inside one still navigates on some browsers. */
+.ah-item-wrap { position: relative; }
+.ah-item-wrap .ah-item { padding-right: 2rem; }
+.ah-item-x {
+  position: absolute;
+  top: .45rem;
+  right: .45rem;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .72rem;
+  line-height: 1;
+  opacity: .55;
+}
+.ah-item-x:hover { background: var(--danger-subtle); color: var(--danger-text); opacity: 1; }
+.ah-item-x:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; opacity: 1; }
+/* On a touch screen there is no hover to reveal it, so it is always visible. */
+@media (hover: none) { .ah-item-x { opacity: .8; } }
+.ah-item-wrap.going { opacity: .45; pointer-events: none; }
+
+.ah-head-actions { display: inline-flex; align-items: center; gap: .75rem; }
