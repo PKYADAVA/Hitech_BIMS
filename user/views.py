@@ -1388,6 +1388,80 @@ def user_analytics(request):
     return render(request, "user_analytics.html")
 
 
+@login_required
+def user_attendance(request):
+    return render(request, "user_attendance.html", {
+        "users": User.objects.filter(is_active=True).order_by("username"),
+    })
+
+
+@login_required
+def user_attendance_data(request):
+    """One row per user per day: first login, last logout (if any) and the
+    span between them — built from alerts.AuditLog's login/logout events
+    rather than a separate tracking table, since that audit trail already
+    records every one with who and when.
+
+    A day with logins but no logout (closing the tab rather than signing
+    out, the common case) still gets a row — just with no logout time or
+    duration, not dropped. Grouped in Python rather than a DB-side
+    date-trunc: the row count here is small enough that it's not worth
+    tying the query to one database's date functions.
+    """
+    from alerts.models import AuditLog
+
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    user_id = (request.GET.get("user") or "").strip()
+
+    today = localtime().date()
+    if not from_date:
+        from_date = (today - datetime.timedelta(days=6)).isoformat()
+    if not to_date:
+        to_date = today.isoformat()
+
+    qs = (AuditLog.objects
+          .filter(event_type__in=("login", "logout"),
+                  created_at__date__gte=from_date, created_at__date__lte=to_date,
+                  performed_by_id__isnull=False)
+          .select_related("performed_by")
+          .order_by("performed_by_id", "created_at"))
+    if user_id:
+        qs = qs.filter(performed_by_id=user_id)
+
+    # (user_id, local_date) -> {"first_login": dt, "last_logout": dt, "user": User}
+    buckets = {}
+    for row in qs:
+        local_dt = localtime(row.created_at)
+        key = (row.performed_by_id, local_dt.date())
+        bucket = buckets.setdefault(key, {
+            "user": row.performed_by, "date": local_dt.date(),
+            "first_login": None, "last_logout": None,
+        })
+        if row.event_type == "login":
+            if bucket["first_login"] is None or local_dt < bucket["first_login"]:
+                bucket["first_login"] = local_dt
+        else:
+            if bucket["last_logout"] is None or local_dt > bucket["last_logout"]:
+                bucket["last_logout"] = local_dt
+
+    def duration_str(first, last):
+        if not (first and last and last > first):
+            return ""
+        total_minutes = int((last - first).total_seconds() // 60)
+        return f"{total_minutes // 60}h {total_minutes % 60}m"
+
+    rows = sorted(buckets.values(), key=lambda b: (b["date"], b["user"].username), reverse=True)
+    return JsonResponse([{
+        "user_id": b["user"].id,
+        "username": b["user"].username,
+        "date": b["date"].isoformat(),
+        "first_login": b["first_login"].strftime("%H:%M") if b["first_login"] else "",
+        "last_logout": b["last_logout"].strftime("%H:%M") if b["last_logout"] else "",
+        "duration": duration_str(b["first_login"], b["last_logout"]),
+    } for b in rows], safe=False)
+
+
 def user_analytics_data(request):
     """Return analytics data as JSON for jQuery AJAX"""
 

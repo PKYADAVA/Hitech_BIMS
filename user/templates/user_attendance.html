@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block nav %}
+    {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block content %}
+    {% include '_user_management_subnavbar.html' with active_tab='user_attendance' %}
+
+    <div class="page-header">
+        <div class="page-header-main">
+            <div class="page-header-title"><i class="fas fa-calendar-check"></i> User Attendance</div>
+            <div class="page-header-subtitle">First login and last logout per user per day, from the sign-in audit trail</div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label">From Date:</label>
+                    <input type="date" class="form-control" id="from-date">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To Date:</label>
+                    <input type="date" class="form-control" id="to-date">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">User:</label>
+                    <select class="form-select" id="f-user">
+                        <option value="">All Users</option>
+                        {% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary" id="filter-submit">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered mb-0 ds-grid" id="attendance-table" style="width:100%">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="ds-mid">Date</th>
+                            <th>User</th>
+                            <th class="ds-mid">First Login</th>
+                            <th class="ds-mid">Last Logout</th>
+                            <th class="ds-mid">Active Time</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  let table = null;
+
+  // Last 7 days by default, as on the other registers — a page opened fresh
+  // shows the recent week rather than every login ever recorded.
+  $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
+  $("#to-date").val(localDay());
+
+  function fmtDate(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    return `${d}-${m}-${y}`;
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'user_attendance_data' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      user: $("#f-user").val() || "",
+    }, function (rows) {
+      if (table) { table.destroy(); }
+      const tbody = $("#attendance-table tbody").empty();
+      rows.forEach(r => tbody.append(`<tr>
+        <td>${fmtDate(r.date)}</td>
+        <td>${escapeHtml(r.username)}</td>
+        <td>${escapeHtml(r.first_login) || "-"}</td>
+        <td>${escapeHtml(r.last_logout) || "-"}</td>
+        <td>${escapeHtml(r.duration) || "-"}</td>
+      </tr>`));
+      table = $("#attendance-table").DataTable({
+        responsive: true, order: [[0, "desc"]],
+        dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+        language: { emptyTable: "No login activity in this period." },
+      });
+    }).fail(function () {
+      window.showToast("danger", "Failed to load attendance.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+  loadRows();
+});
+</script>
+{% endblock %}
