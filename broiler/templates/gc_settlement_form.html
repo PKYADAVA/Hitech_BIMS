@@ -36,6 +36,24 @@
   /* Dropdown text centred in its box, as on the other list filter bars. */
   .gcs-filters .select2-container--bootstrap-5 .select2-selection--single { padding-top:0; padding-bottom:0; }
   .gcs-filters .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left:0; }
+  /* Physical entry copies as thumbnails in their own column (as Bird Sale and
+     Daily Entry show their own evidence photos); the strip opens the full set. */
+  .gcs-thumbs { position:relative; display:inline-flex; padding:0; border:0;
+               background:none; vertical-align:middle; cursor:zoom-in; }
+  .gcs-thumbs img, .gcs-thumbs .gcs-thumb-pdf { width:28px; height:28px; object-fit:cover; border-radius:4px;
+                   border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .gcs-thumbs .gcs-thumb-pdf { display:inline-flex; align-items:center; justify-content:center; color:#c0392b; }
+  .gcs-thumbs:hover img, .gcs-thumbs:hover .gcs-thumb-pdf { border-color:var(--bs-primary, #2563eb); }
+  /* The count rides on the thumbnail's own corner — "+N" the way a photo
+     app badges a stack — rather than a second box the same size beside it. */
+  .gcs-thumbs .gcs-more { position:absolute; bottom:-5px; right:-5px; min-width:15px; height:15px;
+                        padding:0 3px; border-radius:999px; display:inline-flex; align-items:center;
+                        justify-content:center; font-size:.6rem; line-height:1; font-weight:700;
+                        color:#fff; background:#2563eb; border:1.5px solid #fff; }
+  .gcs-add-attach { width:28px; height:28px; border-radius:4px; display:inline-flex;
+                    align-items:center; justify-content:center; border:1px dashed var(--bs-border-color, #dee2e6);
+                    background:none; color:#64748b; }
+  .gcs-add-attach:hover { border-color:var(--bs-primary, #2563eb); color:#2563eb; }
 </style>
 
 <!-- ============================ LIST VIEW ============================ -->
@@ -60,12 +78,45 @@
         <thead><tr>
           <th class="c-fit m-short">GC Closed Date</th><th class="c-fit m-short">Transaction No.</th><th class="c-fit m-short">GC Date</th>
           <th class="c-fit m-mid">Farm</th><th class="c-fit m-mid">Batch</th><th class="c-fit m-short">Start Date</th><th class="c-fit m-short">Liquidation Date</th>
-          <th class="c-num m-num ds-num text-end">GC Amount</th><th class="c-fit m-short">Grade</th><th class="c-fit m-short ds-mid text-center">Action</th>
+          <th class="c-num m-num ds-num text-end">GC Amount</th><th class="c-fit m-short">Grade</th>
+          <th class="c-fit m-short text-center">Attachments</th>
+          <th class="c-fit m-short ds-mid text-center">Action</th>
         </tr></thead>
         <tbody id="gcs-table-body"></tbody>
       </table>
     </div>
   </div></div>
+</div>
+
+<!-- Physical entry copies: scans/photos of the farmer's paper register,
+     filed against the settlement they were closed under. -->
+<div class="modal fade" id="gcsAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-paperclip text-primary me-1"></i> Physical Entry Copies
+          <span class="text-muted small" id="gcs-attach-title"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="gcs-attach-list" class="mb-3"></div>
+        {% if page_perms.edit %}
+        <form id="gcs-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
+          <div class="flex-grow-1">
+            <label class="form-label small">Add file(s)</label>
+            <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required>
+            <div class="form-text">Photos or PDF scans of the farmer's physical entries — more can always be added.</div>
+          </div>
+          <div>
+            <label class="form-label small">Caption (optional)</label>
+            <input type="text" name="caption" class="form-control form-control-sm" style="width:12rem">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ============================ FORM VIEW ============================ -->
@@ -278,6 +329,29 @@ $(function () {
 // Month / Year fill From and To through the shared wiring
 // in main.js; see the data-period-* attributes on #flt-year.
 
+// Physical entry copies, as Bird Sale and Daily Entry show their own
+// evidence photos: a thumbnail strip in its own column rather than a count
+// buried in Action, so what is actually filed is visible without a click.
+const attachmentsById = {};
+function attachCell(s) {
+  attachmentsById[s.id] = s.attachments || [];
+  const files = s.attachments || [];
+  const addBtn = `{% if page_perms.edit %}<button type="button" class="gcs-add-attach gcs-attach" data-id="${s.id}" title="Add physical entry copy"><i class="fas fa-plus"></i></button>{% endif %}`;
+  if (!files.length) return addBtn || '<span class="text-muted">—</span>';
+  // One thumbnail stands for the set — the file list a click away already
+  // shows every one — with the count as a number badge when there is more
+  // than one, rather than a row of thumbnails competing for a narrow column.
+  const first = files[0];
+  const thumb = /\.pdf($|\?)/i.test(first.name)
+    ? `<span class="gcs-thumb-pdf" title="${escapeHtml(first.caption || first.name)}"><i class="fas fa-file-pdf"></i></span>`
+    : `<img src="${escapeHtml(first.url)}" alt="${escapeHtml(first.caption || first.name)}" title="${escapeHtml(first.caption || first.name)}" loading="lazy">`;
+  return `<button type="button" class="gcs-thumbs gcs-attach" data-id="${s.id}"
+            title="View ${files.length} physical entry cop${files.length > 1 ? "ies" : "y"}">`
+    + thumb
+    + (files.length > 1 ? `<span class="gcs-more">+${files.length - 1}</span>` : "")
+    + `</button>` + addBtn;
+}
+
 function loadList() {
   const params = $.param({
     from_date: document.getElementById('flt-from').value,
@@ -298,16 +372,21 @@ function loadList() {
         <td>${fmtDate(s.liquidation_date)}</td>
         <td class="text-end">${escapeHtml(s.gc_amount)}</td>
         <td>${escapeHtml(s.grade)}</td>
+        <td class="text-center">${attachCell(s)}</td>
         <td><div class="d-flex gap-1 justify-content-center flex-nowrap">
           {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm gcs-edit" data-id="${s.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="/gc_settlement/${s.id}/print/" target="_blank" title="Print report"><i class="fas fa-print"></i></a>
+          {% if page_perms.edit %}<button class="btn btn-outline-${s.batch_locked ? 'secondary' : 'success'} btn-sm gcs-toggle-lock"
+              data-id="${s.id}" data-action="${s.batch_locked ? 'unlock' : 'lock'}"
+              title="${s.batch_locked ? 'Unlock — reopen this batch for Daily Entry edits' : 'Lock — recalculate and close this batch again'}">
+            <i class="fas fa-${s.batch_locked ? 'lock' : 'lock-open'}"></i></button>{% endif %}
           {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm gcs-del" data-id="${s.id}" title="Delete (reopens batch)"><i class="fas fa-trash"></i></button>{% endif %}
         </div></td>
       </tr>`));
     gcsTable = $('#gcs-table').DataTable({
       responsive: true, order: [[0, 'desc']],
       dom: 'Bfrtip', buttons: ['copy','csv','excel','pdf','print','colvis'],
-      columnDefs: [{ orderable: false, targets: [-1] }],
+      columnDefs: [{ orderable: false, targets: [-1, -2] }],
       language: { emptyTable: 'No settlements yet — click ADD to create one.' },
     });
   });
@@ -392,6 +471,71 @@ $(document).on('click', '.gcs-del', function () {
   const id = $(this).data('id');
   $.ajax({ url: `/gc_settlement/${id}/delete/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
     success: loadList, error: xhr => alert(xhr.responseJSON?.error || 'Delete failed') });
+});
+$(document).on('click', '.gcs-toggle-lock', function () {
+  const id = $(this).data('id');
+  const action = $(this).data('action');
+  const msg = action === 'unlock'
+    ? 'Unlock this batch? Its Daily Entry rows become editable again until it is locked.'
+    : 'Lock this batch again? Its figures will be recalculated from the current Daily Entry rows first.';
+  if (!confirm(msg)) return;
+  $.ajax({
+    url: `/gc_settlement/${id}/toggle-lock/`, method: 'POST',
+    headers: { 'X-CSRFToken': csrfToken }, data: { action: action },
+    success: function (d) { window.showToast('success', d.message); loadList(); },
+    error: xhr => alert(xhr.responseJSON?.error || 'Could not change the lock.'),
+  });
+});
+
+let attachSettlementId = null;
+function loadAttachments(id) {
+  $.getJSON(`/gc_settlement/${id}/attachments/`, function (files) {
+    const list = $('#gcs-attach-list');
+    if (!files.length) { list.html('<div class="text-muted small">No physical entry copies filed yet.</div>'); return; }
+    list.html(`<div class="list-group">${files.map(f => `
+      <div class="list-group-item d-flex align-items-center justify-content-between gap-2">
+        <a href="${f.url}" target="_blank" rel="noopener" class="text-truncate">
+          <i class="fas ${/\.pdf($|\?)/i.test(f.name) ? 'fa-file-pdf' : 'fa-file-image'} me-1"></i>${escapeHtml(f.name)}
+          ${f.caption ? `<span class="text-muted small ms-1">— ${escapeHtml(f.caption)}</span>` : ''}
+        </a>
+        <span class="text-muted small text-nowrap">${escapeHtml(f.uploaded_by)} · ${escapeHtml(f.uploaded_at)}
+          {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2 gcs-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+        </span>
+      </div>`).join('')}</div>`);
+  });
+}
+$(document).on('click', '.gcs-attach', function () {
+  attachSettlementId = $(this).data('id');
+  $('#gcs-attach-title').text('— ' + $(this).closest('tr').find('td').eq(1).text());
+  $('#gcs-attach-form')[0]?.reset();
+  loadAttachments(attachSettlementId);
+  new bootstrap.Modal(document.getElementById('gcsAttachModal')).show();
+});
+$('#gcs-attach-form').on('submit', function (e) {
+  e.preventDefault();
+  if (!attachSettlementId) return;
+  const btn = $(this).find('button[type=submit]').prop('disabled', true);
+  fetch(`/gc_settlement/${attachSettlementId}/attachments/`, {
+    method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: new FormData(this),
+  }).then(async r => {
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || 'Upload failed.');
+    window.showToast('success', body.message);
+    this.reset();
+    loadAttachments(attachSettlementId);
+    loadList();
+  }).catch(err => window.showToast('danger', err.message))
+    .finally(() => btn.prop('disabled', false));
+});
+$(document).on('click', '.gcs-attach-del', function () {
+  if (!attachSettlementId || !confirm('Delete this file?')) return;
+  const attachmentId = $(this).data('attachment');
+  $.ajax({
+    url: `/gc_settlement/${attachSettlementId}/attachments/?attachment=${attachmentId}`,
+    method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
+    success: function () { loadAttachments(attachSettlementId); loadList(); },
+    error: xhr => alert(xhr.responseJSON?.error || 'Delete failed'),
+  });
 });
 $(document).on('click', '.gcs-edit', function () {
   $.getJSON(`/gc_settlement/${$(this).data('id')}/`, function (d) {

@@ -1794,6 +1794,30 @@ class BirdSaleReceipt(models.Model):
         return total_sold - total_received
 
 
+class BirdSaleReceiptAttachment(models.Model):
+    """Payment proof filed against a Bird Sale Receipt — a bank transfer
+    slip, a UPI screenshot, a signed cheque counterfoil, whatever the mode
+    produced. Image or PDF; several per receipt, same as the Growing
+    Charges settlement scans."""
+
+    receipt = models.ForeignKey(BirdSaleReceipt, on_delete=models.CASCADE,
+                                related_name="attachments")
+    file = models.FileField(upload_to="bird_sale_receipt/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='bird_sale_receipt_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bird Sale Receipt Attachment")
+        verbose_name_plural = _("Bird Sale Receipt Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.receipt.receipt_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class GrowingChargeScheme(models.Model):
     """
     Rearing / Growing Charge scheme master, modelled field-for-field on the
@@ -2175,6 +2199,30 @@ class GrowingChargeSettlement(models.Model):
                 label="settlement code")
         super().save(*args, **kwargs)
 
+
+class GCSettlementAttachment(models.Model):
+    """A scan/photo of the farmer's physical register, attached to the
+    settlement it was closed against — several per settlement, since a
+    farmer's paper entries can run to more than one page. Image or PDF; no
+    other restriction, so whatever the office actually has to hand (a phone
+    photo or a scanned PDF) can be filed without converting it first."""
+
+    settlement = models.ForeignKey(GrowingChargeSettlement, on_delete=models.CASCADE,
+                                   related_name="attachments")
+    file = models.FileField(upload_to="gc_settlement/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='gc_settlement_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("GC Settlement Attachment")
+        verbose_name_plural = _("GC Settlement Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.settlement.settlement_code} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class GCSettlementRecalculation(models.Model):

@@ -132,6 +132,7 @@ urlpatterns = [
     path('bird_sale_api/', views.BirdSaleAPI.as_view(), name='bird_sale_api_list'),
     path('bird_sale_api/<int:id>/', views.BirdSaleAPI.as_view(), name='bird_sale_api'),
     path('bird-sale/farm-lookup/', views.bird_sale_farm_lookup, name='bird_sale_farm_lookup'),
+    path('bird-sale/<int:id>/photos/', views.bird_sale_photos, name='bird_sale_photos'),
 
     path('bird-sale-receipt/', views.BirdSaleReceiptListTemplateView.as_view(), name='bird_sale_receipt_list'),
     path('bird-sale-receipt/add/', views.BirdSaleReceiptFormTemplateView.as_view(), name='bird_sale_receipt_add'),
@@ -141,6 +142,7 @@ urlpatterns = [
     path('bird_sale_receipt_api/', views.BirdSaleReceiptAPI.as_view(), name='bird_sale_receipt_api_list'),
     path('bird_sale_receipt_api/<int:id>/', views.BirdSaleReceiptAPI.as_view(), name='bird_sale_receipt_api'),
     path('bird-sale-receipt/balance-lookup/', views.bird_sale_receipt_balance_lookup, name='bird_sale_receipt_balance_lookup'),
+    path('bird-sale-receipt/<int:id>/attachments/', views.bird_sale_receipt_attachments, name='bird_sale_receipt_attachments'),
 
     path('broiler-report/', views.broiler_batch_report, name='broiler_batch_report'),
     path('production-pl-report/', views.production_pl_report,
@@ -272,6 +274,10 @@ urlpatterns = [
     path('gc_settlement/<int:id>/delete/', views.GCSettlementAPI.as_view(), name='gc_settlement_delete'),
     path('gc_settlement/<int:id>/recalculate/', views.gc_settlement_recalculate,
          name='gc_settlement_recalculate'),
+    path('gc_settlement/<int:id>/toggle-lock/', views.gc_settlement_toggle_lock,
+         name='gc_settlement_toggle_lock'),
+    path('gc_settlement/<int:id>/attachments/', views.gc_settlement_attachments,
+         name='gc_settlement_attachments'),
     path('gc_settlement/<int:id>/print/', views.gc_settlement_print, name='gc_settlement_print'),
 
     path('farm-location-capture/', views.farm_location_capture_list, name='farm_location_capture_list'),

@@ -9,6 +9,22 @@
 <style>
   .bs-dr { color:#c0392b; font-weight:600; }
   .bs-cr { color:#0e8698; font-weight:600; }
+  /* Payment proof as a thumbnail in its own column, as Growing Charges shows
+     its physical-entry scans; the strip opens the full list/upload modal. */
+  .bsr-thumbs { position:relative; display:inline-flex; padding:0; border:0;
+               background:none; vertical-align:middle; cursor:zoom-in; }
+  .bsr-thumbs img, .bsr-thumbs .bsr-thumb-pdf { width:28px; height:28px; object-fit:cover; border-radius:4px;
+                   border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .bsr-thumbs .bsr-thumb-pdf { display:inline-flex; align-items:center; justify-content:center; color:#c0392b; }
+  .bsr-thumbs:hover img, .bsr-thumbs:hover .bsr-thumb-pdf { border-color:var(--bs-primary, #2563eb); }
+  .bsr-thumbs .bsr-more { position:absolute; bottom:-5px; right:-5px; min-width:15px; height:15px;
+                        padding:0 3px; border-radius:999px; display:inline-flex; align-items:center;
+                        justify-content:center; font-size:.6rem; line-height:1; font-weight:700;
+                        color:#fff; background:#2563eb; border:1.5px solid #fff; }
+  .bsr-add-attach { width:28px; height:28px; border-radius:4px; display:inline-flex;
+                    align-items:center; justify-content:center; border:1px dashed var(--bs-border-color, #dee2e6);
+                    background:none; color:#64748b; }
+  .bsr-add-attach:hover { border-color:var(--bs-primary, #2563eb); color:#2563eb; }
 </style>
 
 <div class="page-header">
@@ -49,7 +65,9 @@
         <thead class="table-dark">
           <tr>
             <th class="ds-mid">Date</th><th>Trnum</th><th>Location</th><th>Customer</th><th>Mode</th>
-            <th>Method</th><th>Reference</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th>
+            <th>Method</th><th>Reference</th><th class="ds-num">Amount</th>
+            <th class="ds-mid text-center">Attachments</th>
+            <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -68,6 +86,36 @@
       </div>
       <div class="modal-body">
         <table class="table table-sm table-borderless mb-0 ds-grid" id="view-receipt-body"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Payment proof: scans/photos of the receipt's own paperwork. -->
+<div class="modal fade" id="bsrAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-paperclip text-primary me-1"></i> Payment Proof
+          <span class="text-muted small" id="bsr-attach-title"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="bsr-attach-list" class="mb-3"></div>
+        {% if page_perms.edit %}
+        <form id="bsr-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
+          <div class="flex-grow-1">
+            <label class="form-label small">Add file(s)</label>
+            <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required>
+            <div class="form-text">Bank slip, UPI screenshot or scanned cheque — more can always be added.</div>
+          </div>
+          <div>
+            <label class="form-label small">Caption (optional)</label>
+            <input type="text" name="caption" class="form-control form-control-sm" style="width:12rem">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
+        </form>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -102,6 +150,74 @@ $(function () {
   let pendingDeleteId = null;
   let currentRows = [];
 
+  // Payment proof, as Growing Charges shows its own physical-entry scans: one
+  // thumbnail standing for the set, with the count as a small corner badge.
+  function attachCell(row) {
+    const files = row.attachments || [];
+    const addBtn = `{% if page_perms.edit %}<button type="button" class="bsr-add-attach bsr-attach" data-id="${row.id}" title="Add payment proof"><i class="fas fa-plus"></i></button>{% endif %}`;
+    if (!files.length) return addBtn || '<span class="text-muted">—</span>';
+    const first = files[0];
+    const thumb = /\.pdf($|\?)/i.test(first.name)
+      ? `<span class="bsr-thumb-pdf" title="${escapeHtml(first.caption || first.name)}"><i class="fas fa-file-pdf"></i></span>`
+      : `<img src="${escapeHtml(first.url)}" alt="${escapeHtml(first.caption || first.name)}" title="${escapeHtml(first.caption || first.name)}" loading="lazy">`;
+    return `<button type="button" class="bsr-thumbs bsr-attach" data-id="${row.id}"
+              title="View ${files.length} payment proof file${files.length > 1 ? "s" : ""}">`
+      + thumb
+      + (files.length > 1 ? `<span class="bsr-more">+${files.length - 1}</span>` : "")
+      + `</button>` + addBtn;
+  }
+
+  let attachReceiptId = null;
+  function loadAttachments(id) {
+    $.getJSON(`/bird-sale-receipt/${id}/attachments/`, function (files) {
+      const list = $("#bsr-attach-list");
+      if (!files.length) { list.html('<div class="text-muted small">No payment proof filed yet.</div>'); return; }
+      list.html(`<div class="list-group">${files.map(f => `
+        <div class="list-group-item d-flex align-items-center justify-content-between gap-2">
+          <a href="${f.url}" target="_blank" rel="noopener" class="text-truncate">
+            <i class="fas ${/\.pdf($|\?)/i.test(f.name) ? "fa-file-pdf" : "fa-file-image"} me-1"></i>${escapeHtml(f.name)}
+            ${f.caption ? `<span class="text-muted small ms-1">— ${escapeHtml(f.caption)}</span>` : ""}
+          </a>
+          <span class="text-muted small text-nowrap">${escapeHtml(f.uploaded_by)} · ${escapeHtml(f.uploaded_at)}
+            {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2 bsr-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </span>
+        </div>`).join("")}</div>`);
+    });
+  }
+  $(document).on("click", ".bsr-attach", function () {
+    attachReceiptId = $(this).data("id");
+    $("#bsr-attach-title").text("— " + $(this).closest("tr").find("td").eq(1).text());
+    $("#bsr-attach-form")[0]?.reset();
+    loadAttachments(attachReceiptId);
+    new bootstrap.Modal(document.getElementById("bsrAttachModal")).show();
+  });
+  $("#bsr-attach-form").on("submit", function (e) {
+    e.preventDefault();
+    if (!attachReceiptId) return;
+    const btn = $(this).find("button[type=submit]").prop("disabled", true);
+    fetch(`/bird-sale-receipt/${attachReceiptId}/attachments/`, {
+      method: "POST", headers: { "X-CSRFToken": csrfToken }, body: new FormData(this),
+    }).then(async r => {
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || "Upload failed.");
+      window.showToast("success", body.message);
+      this.reset();
+      loadAttachments(attachReceiptId);
+      loadRows();
+    }).catch(err => window.showToast("danger", err.message))
+      .finally(() => btn.prop("disabled", false));
+  });
+  $(document).on("click", ".bsr-attach-del", function () {
+    if (!attachReceiptId || !confirm("Delete this file?")) return;
+    const attachmentId = $(this).data("attachment");
+    $.ajax({
+      url: `/bird-sale-receipt/${attachReceiptId}/attachments/?attachment=${attachmentId}`,
+      method: "DELETE", headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadAttachments(attachReceiptId); loadRows(); },
+      error: xhr => alert(xhr.responseJSON?.error || "Delete failed"),
+    });
+  });
+
   const today = localDay();
   // Last 7 days by default, not just today — a register opened fresh should
   // show something to work from, not one narrow day.
@@ -125,6 +241,7 @@ $(function () {
         <td>${escapeHtml(row.receipt_account_name)}</td>
         <td>${escapeHtml(row.reference_no)}</td>
         <td>${Number(row.amount).toFixed(2)}</td>
+        <td class="text-center">${attachCell(row)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             <button type="button" class="btn btn-outline-secondary btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>
@@ -139,7 +256,7 @@ $(function () {
     table = $("#receipt-table").DataTable({
       responsive: true, order: [[0, "desc"]],
       dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      columnDefs: [{ orderable: false, targets: [-1] }],
+      columnDefs: [{ orderable: false, targets: [-1, -2] }],
       language: { emptyTable: "No data available in table" },
     });
   }

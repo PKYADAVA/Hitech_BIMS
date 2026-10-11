@@ -15,7 +15,7 @@ from django.views import View
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.http import Http404, JsonResponse
-from django.db.models import F, Max, Min, Prefetch, Q, Sum
+from django.db.models import Count, F, Max, Min, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
 from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
@@ -23,11 +23,11 @@ from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
 from .models import (
-    BirdSale, BirdSalePhoto, BirdSaleReceipt, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
+    BirdSale, BirdSalePhoto, BirdSaleReceipt, BirdSaleReceiptAttachment, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
     BroilerFarmShed, BroilerLine, DailyEntry, DailyEntryPhoto, Farmer, FarmerGroup,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
-    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
+    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, GCSettlementAttachment, MedicineVaccineEntry,
     Region, Supervisor, FeedPhaseMaster, FeedPhaseLine, BirdCategory,
     FarmLocationCapture, FarmCaptureFile, FarmerFarmSetupRequest, FarmerFarmSetupRequestShed,
     FarmerFarmSetupRequestPhoto,
@@ -3829,8 +3829,10 @@ def _apply_bird_sale(instance, data):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleListTemplateView(View):
     def get(self, request):
-        return render(request, "bird_sale_list.html",
-                      _place_filter_options(request.user))
+        return render(request, "bird_sale_list.html", {
+            **_place_filter_options(request.user),
+            "photo_kinds": BirdSalePhoto.KIND_CHOICES,
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -3963,6 +3965,53 @@ def bird_sale_farm_lookup(request):
     })
 
 
+@login_required
+def bird_sale_photos(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?photo=<id>) evidence
+    photos on a Bird Sale from the web — the same BirdSalePhoto set the
+    field app fills, for a lifting whose slip reaches the office before the
+    app does. Same per-kind cap the mobile upload enforces, so the two
+    paths can't jointly exceed it."""
+    from user.access import user_can
+
+    sale = get_object_or_404(_scope_rows(request.user, BirdSale.objects.all()), id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": p.id, "url": p.image.url, "kind": p.kind,
+            "label": p.get_kind_display(),
+        } for p in sale.photos.all()], safe=False)
+
+    if not user_can(request.user, "bird_sale_list", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+
+    if request.method == "POST":
+        kind = request.POST.get("kind") or BirdSalePhoto.KIND_OTHER
+        if kind not in dict(BirdSalePhoto.KIND_CHOICES):
+            return JsonResponse({"error": "Invalid photo type."}, status=400)
+        uploads = request.FILES.getlist("photos")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one photo."}, status=400)
+        existing = sale.photos.filter(kind=kind).count()
+        if existing + len(uploads) > BirdSalePhoto.MAX_PER_KIND:
+            return JsonResponse({
+                "error": f"This sale already has {existing} {dict(BirdSalePhoto.KIND_CHOICES)[kind]} "
+                         f"photo(s) — {BirdSalePhoto.MAX_PER_KIND} is the limit.",
+            }, status=400)
+        created = [BirdSalePhoto.objects.create(sale=sale, kind=kind, image=upload)
+                   for upload in uploads]
+        return JsonResponse({"message": "%d photo(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        photo_id = request.GET.get("photo")
+        photo = get_object_or_404(sale.photos, id=photo_id)
+        photo.image.delete(save=False)
+        photo.delete()
+        return JsonResponse({"message": "Photo deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 # ---------------------------------------------------------------------------
 # Bird Sale Receipt (Broiler > Transactions)
 # ---------------------------------------------------------------------------
@@ -3988,6 +4037,9 @@ def _bird_sale_receipt_to_dict(row, balance_timeline=None):
         "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
                                  if row.receipt_account_id else ""),
         "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -4046,7 +4098,9 @@ class BirdSaleReceiptAPI(BaseAPIView):
                     "customer", "farmer", "location", "receipt_account").get(id=id)
                 return JsonResponse(_bird_sale_receipt_to_dict(row))
 
-            qs = BirdSaleReceipt.objects.select_related("customer", "farmer", "location", "receipt_account")
+            qs = (BirdSaleReceipt.objects
+                  .select_related("customer", "farmer", "location", "receipt_account")
+                  .prefetch_related("attachments"))
             qs = _apply_place_filters(request, qs, warehouse="location")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
@@ -4140,6 +4194,46 @@ def bird_sale_receipt_balance_lookup(request):
     else:
         balance = BirdSaleReceipt.balance_due(location_id, sale_type, customer_id, farmer_id, exclude_id=exclude_id)
     return JsonResponse({"balance": str(balance)})
+
+
+@login_required
+def bird_sale_receipt_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) payment
+    proof filed against a Bird Sale Receipt — a bank slip, a UPI screenshot,
+    a signed counterfoil. Image or PDF, several per receipt."""
+    from user.access import user_can
+
+    receipt = get_object_or_404(BirdSaleReceipt, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in receipt.attachments.select_related("uploaded_by")], safe=False)
+
+    if not user_can(request.user, "bird_sale_receipt_list", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+
+    if request.method == "POST":
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [BirdSaleReceiptAttachment.objects.create(
+            receipt=receipt, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(receipt.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 @login_required
@@ -9580,7 +9674,10 @@ class GCSettlementAPI(View):
         # Scoped first: "All Branches" means every branch this user may see,
         # not every branch there is.
         rows = (_scoped_settlements(request.user)
-                .select_related("batch__broiler_farm", "farm", "scheme").order_by("-gc_date", "-id"))
+                .select_related("batch__broiler_farm", "farm", "scheme")
+                .prefetch_related("attachments")
+                .annotate(attachment_count=Count("attachments"))
+                .order_by("-gc_date", "-id"))
         rows = _apply_place_filters(request, rows, branch="farm__branch")
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
@@ -9600,6 +9697,18 @@ class GCSettlementAPI(View):
             "liquidation_date": fmt(s.liquidation_date),
             "gc_amount": str(s.farmer_payable),
             "grade": s.grade or "-",
+            # Read from the batch, not assumed True: Unlock (Growing Charges
+            # page) reopens it without touching this settlement row, so a
+            # settlement can exist against a batch that is not, right now,
+            # actually closed.
+            "batch_locked": bool(s.batch.end_date),
+            "attachment_count": s.attachment_count,
+            # Full list, not just the count: the row's own thumbnail strip
+            # (see Bird Sale/Daily Entry's photo columns) renders straight
+            # from this, no second request per row to open it.
+            "attachments": [{"id": a.id, "url": a.file.url,
+                            "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                           for a in s.attachments.all()],
         } for s in rows], safe=False)
 
     @transaction.atomic
@@ -9810,6 +9919,106 @@ def gc_settlement_recalculate(request, id):
                              "changes": {}, "up_to_date": True})
     return JsonResponse({"message": "%d figure(s) corrected." % len(result["changes"]),
                          "changes": result["changes"], "up_to_date": False})
+
+
+@login_required
+def gc_settlement_toggle_lock(request, id):
+    """Unlock: reopens the batch (same effect on BroilerBatch as deleting the
+    settlement) without deleting the settlement record itself, so its Daily
+    Entry rows can be corrected. Lock: re-derives the settlement's figures
+    from those corrected records (gc_recalc.recalculate) and closes the
+    batch again — unlocking and relocking with no edit made in between is a
+    no-op on the figures, only the batch's open/closed state moves.
+
+    Gated on this page's own edit right, not a separate one: a settlement
+    already requires it to create or delete, and this sits between those two
+    in how much it changes.
+    """
+    from user.access import user_can
+
+    from broiler.services import gc_recalc
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    if not user_can(request.user, "gc_settlement", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+
+    settlement = get_object_or_404(
+        _scoped_settlements(request.user).select_related("batch"), id=id)
+    batch = settlement.batch
+
+    # end_date is the authoritative "closed" signal everywhere else reads
+    # (DailyEntry.is_batch_active) — is_closed/closed_on are set alongside it
+    # so the two never disagree about whether the batch is open. A batch
+    # currently closed offers "unlock"; an open one offers "lock".
+    current_action = "unlock" if batch.end_date else "lock"
+    requested_action = request.POST.get("action") or current_action
+    if requested_action != current_action:
+        # The button sends what it is asking for; a stale page re-reading a
+        # batch someone else just toggled must not do the opposite of what
+        # was clicked.
+        return JsonResponse(
+            {"error": "This batch's lock state changed — reload and try again."}, status=409)
+    action = current_action
+
+    with transaction.atomic():
+        if action == "unlock":
+            batch.is_closed = False
+            batch.closed_on = None
+            batch.end_date = None
+            batch.save(update_fields=["is_closed", "closed_on", "end_date"])
+            message = "Batch unlocked — its Daily Entry rows can now be edited."
+        else:
+            gc_recalc.recalculate(settlement, user=request.user, include_date=True,
+                                  note="Re-closed via Lock on the Growing Charges page.")
+            batch.is_closed = True
+            batch.closed_on = settlement.gc_date
+            batch.end_date = settlement.gc_date
+            batch.save(update_fields=["is_closed", "closed_on", "end_date"])
+            message = "Batch locked — figures recalculated and the batch closed again."
+    cache.delete("broiler_batch_list")
+    return JsonResponse({"message": message, "action": action, "is_closed": batch.is_closed})
+
+
+@login_required
+def gc_settlement_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) the
+    physical-register scans filed against one settlement. Multiple files per
+    upload, image or PDF — whatever the office has to hand for that farmer's
+    paper entries."""
+    from user.access import user_can
+
+    settlement = get_object_or_404(_scoped_settlements(request.user), id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in settlement.attachments.select_related("uploaded_by")], safe=False)
+
+    if not user_can(request.user, "gc_settlement", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+
+    if request.method == "POST":
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [GCSettlementAttachment.objects.create(
+            settlement=settlement, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(settlement.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 @login_required
