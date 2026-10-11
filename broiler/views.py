@@ -2725,6 +2725,11 @@ class SingleBatchDailyEntryListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class SingleBatchDailyEntryFormTemplateView(View):
     def get(self, request, id: Optional[int] = None, request_mode: bool = False):
+        if id:
+            entry = DailyEntry.objects.filter(id=id).select_related("batch").first()
+            if entry and not entry.is_batch_active:
+                messages.error(request, "This entry's batch is closed and cannot be edited.")
+                return redirect("daily_entry_single_list")
         return render(request, "daily_entry_single_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
@@ -2744,6 +2749,11 @@ class SingleBatchDailyEntryFormTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class DailyEntryFormTemplateView(View):
     def get(self, request, id: Optional[int] = None, request_mode: bool = False):
+        if id:
+            entry = DailyEntry.objects.filter(id=id).select_related("batch").first()
+            if entry and not entry.is_batch_active:
+                messages.error(request, "This entry's batch is closed and cannot be edited.")
+                return redirect("daily_entry_list")
         return render(request, "daily_entry_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
@@ -2844,6 +2854,13 @@ class DailyEntryAPI(BaseAPIView):
     def put(self, request, id: int) -> JsonResponse:
         try:
             instance = DailyEntry.objects.get(id=id)
+            # A settlement finalizes the batch's figures — an entry filed
+            # against it afterwards would silently drift from what was paid
+            # out for. Frozen the moment the batch closes, not just hidden
+            # behind a permission.
+            if not instance.is_batch_active:
+                return JsonResponse(
+                    {"error": "This entry's batch is closed and cannot be edited."}, status=400)
             old_feed_ids = {instance.feed_1_id, instance.feed_2_id}
             data = json.loads(request.body)
             if data.get("supervisor"):
@@ -2871,6 +2888,9 @@ class DailyEntryAPI(BaseAPIView):
     def delete(self, request, id: int) -> JsonResponse:
         try:
             instance = DailyEntry.objects.get(id=id)
+            if not instance.is_batch_active:
+                return JsonResponse(
+                    {"error": "This entry's batch is closed and cannot be deleted."}, status=400)
             # Deleting a middle entry would leave every later row's stored
             # stock chained off a balance that no longer exists — restrict
             # deletion to the most recent entry in the batch (or, for entries

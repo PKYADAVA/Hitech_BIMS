@@ -141,6 +141,15 @@ $(function () {
       const deleteBtn = canDelete
         ? `{% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}{% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${r.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}`
         : `{% if page_perms.delete %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Only the newest entry can be deleted"><i class="fas fa-trash"></i></button>{% endif %}{% if not page_perms.delete %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Only the newest entry can be deleted"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}`;
+      // A settlement finalizes the batch's figures — once closed, every one
+      // of its entries is frozen, not just the one tied to the settlement.
+      // Edit/Delete (and the request variants) are replaced outright rather
+      // than merely disabled, so the lock reads as a reason, not a bug.
+      const actionsHtml = r.is_active
+        ? `{% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/daily-entry/single/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+           {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/daily-entry/single/${r.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
+           ${deleteBtn}`
+        : `<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Batch closed — this entry is locked"><i class="fas fa-lock"></i></button>`;
       return `<tr>
         <td>${fmtDate(r.date)}</td>
         <td>${escapeHtml(r.entry_no)}</td>
@@ -149,9 +158,7 @@ $(function () {
         <td>${feedQty.toFixed(2)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
-            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/daily-entry/single/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
-            {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/daily-entry/single/${r.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
-            ${deleteBtn}
+            ${actionsHtml}
           </div>
         </td>
       </tr>`;
