@@ -92,11 +92,12 @@
 <div class="modal fade" id="uploadEvidenceModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-upload me-1"></i>Add Evidence Photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      {% if page_perms.add %}
       <form id="upload-evidence-form">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-upload me-1"></i>Add Evidence Photo</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Photo type</label>
@@ -115,6 +116,9 @@
           <button type="submit" class="btn btn-sm btn-primary">Upload</button>
         </div>
       </form>
+      {% else %}
+      <div class="modal-body text-muted small">You don't have permission to add evidence photos.</div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -185,16 +189,34 @@ $(function () {
     return bits.length ? bits.join("") : '<span class="text-muted">—</span>';
   }
 
+  let evidenceSaleId = null;
   $(document).on("click", ".evidence-button", function () {
-    const shots = photosById[$(this).data("id")] || [];
+    evidenceSaleId = $(this).data("id");
+    const shots = photosById[evidenceSaleId] || [];
     $("#evidence-body").html(shots.map(p => `
       <div class="col-6 col-md-4 mb-3 text-center">
         <a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">
           <img src="${escapeHtml(p.url)}" class="img-fluid rounded border" alt="${escapeHtml(p.label)}">
         </a>
-        <div class="small text-muted mt-1">${escapeHtml(p.label)}</div>
+        <div class="small text-muted mt-1">${escapeHtml(p.label)}
+          {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 evidence-photo-del" data-photo="${p.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+        </div>
       </div>`).join(""));
     $("#evidenceModal").modal("show");
+  });
+  $(document).on("click", ".evidence-photo-del", function () {
+    if (!evidenceSaleId || !confirm("Delete this photo?")) return;
+    const photoId = $(this).data("photo");
+    $.ajax({
+      url: `/bird-sale/${evidenceSaleId}/photos/?photo=${photoId}`,
+      method: "DELETE", headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        bootstrap.Modal.getInstance(document.getElementById("evidenceModal")).hide();
+        window.showToast("success", "Photo deleted.");
+        loadRows();
+      },
+      error: xhr => alert(xhr.responseJSON?.error || "Delete failed"),
+    });
   });
 
   function renderRows(rows) {
@@ -219,7 +241,7 @@ $(function () {
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
-            {% if page_perms.edit %}<button type="button" class="btn btn-outline-secondary btn-sm upload-evidence-button" data-id="${row.id}" title="Add evidence photo"><i class="fas fa-upload"></i></button>{% endif %}
+            <button type="button" class="btn btn-outline-secondary btn-sm upload-evidence-button" data-id="${row.id}" title="Add evidence photo"><i class="fas fa-upload"></i></button>
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>

@@ -102,7 +102,7 @@
       </div>
       <div class="modal-body">
         <div id="bsr-attach-list" class="mb-3"></div>
-        {% if page_perms.edit %}
+        {% if page_perms.add %}
         <form id="bsr-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
           <div class="flex-grow-1">
             <label class="form-label small">Add file(s)</label>
@@ -154,7 +154,7 @@ $(function () {
   // thumbnail standing for the set, with the count as a small corner badge.
   function attachCell(row) {
     const files = row.attachments || [];
-    const addBtn = `{% if page_perms.edit %}<button type="button" class="bsr-add-attach bsr-attach" data-id="${row.id}" title="Add payment proof"><i class="fas fa-plus"></i></button>{% endif %}`;
+    const addBtn = `<button type="button" class="bsr-add-attach bsr-attach" data-id="${row.id}" title="Payment proof"><i class="fas fa-plus"></i></button>`;
     if (!files.length) return addBtn || '<span class="text-muted">—</span>';
     const first = files[0];
     const thumb = /\.pdf($|\?)/i.test(first.name)

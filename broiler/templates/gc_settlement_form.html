@@ -100,7 +100,7 @@
       </div>
       <div class="modal-body">
         <div id="gcs-attach-list" class="mb-3"></div>
-        {% if page_perms.edit %}
+        {% if page_perms.add %}
         <form id="gcs-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
           <div class="flex-grow-1">
             <label class="form-label small">Add file(s)</label>
@@ -336,7 +336,7 @@ const attachmentsById = {};
 function attachCell(s) {
   attachmentsById[s.id] = s.attachments || [];
   const files = s.attachments || [];
-  const addBtn = `{% if page_perms.edit %}<button type="button" class="gcs-add-attach gcs-attach" data-id="${s.id}" title="Add physical entry copy"><i class="fas fa-plus"></i></button>{% endif %}`;
+  const addBtn = `<button type="button" class="gcs-add-attach gcs-attach" data-id="${s.id}" title="Physical entry copies"><i class="fas fa-plus"></i></button>`;
   if (!files.length) return addBtn || '<span class="text-muted">—</span>';
   // One thumbnail stands for the set — the file list a click away already
   // shows every one — with the count as a number badge when there is more

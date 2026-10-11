@@ -3783,7 +3783,7 @@ def _bird_sale_to_dict(row, balance_timeline=None):
         "lift_latitude": row.lift_latitude, "lift_longitude": row.lift_longitude,
         "lift_place": row.lift_place,
         "photos": [
-            {"kind": p.kind, "label": p.get_kind_display(), "url": p.image.url}
+            {"id": p.id, "kind": p.kind, "label": p.get_kind_display(), "url": p.image.url}
             for p in row.photos.all() if p.image
         ],
     }
@@ -3982,10 +3982,9 @@ def bird_sale_photos(request, id):
             "label": p.get_kind_display(),
         } for p in sale.photos.all()], safe=False)
 
-    if not user_can(request.user, "bird_sale_list", "edit"):
-        return JsonResponse({"error": "Not permitted."}, status=403)
-
     if request.method == "POST":
+        if not user_can(request.user, "bird_sale_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         kind = request.POST.get("kind") or BirdSalePhoto.KIND_OTHER
         if kind not in dict(BirdSalePhoto.KIND_CHOICES):
             return JsonResponse({"error": "Invalid photo type."}, status=400)
@@ -4003,6 +4002,8 @@ def bird_sale_photos(request, id):
         return JsonResponse({"message": "%d photo(s) uploaded." % len(created)}, status=201)
 
     if request.method == "DELETE":
+        if not user_can(request.user, "bird_sale_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         photo_id = request.GET.get("photo")
         photo = get_object_or_404(sale.photos, id=photo_id)
         photo.image.delete(save=False)
@@ -4213,10 +4214,9 @@ def bird_sale_receipt_attachments(request, id):
             "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
         } for a in receipt.attachments.select_related("uploaded_by")], safe=False)
 
-    if not user_can(request.user, "bird_sale_receipt_list", "edit"):
-        return JsonResponse({"error": "Not permitted."}, status=403)
-
     if request.method == "POST":
+        if not user_can(request.user, "bird_sale_receipt_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         uploads = request.FILES.getlist("files")
         if not uploads:
             return JsonResponse({"error": "Choose at least one file."}, status=400)
@@ -4227,6 +4227,8 @@ def bird_sale_receipt_attachments(request, id):
         return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
 
     if request.method == "DELETE":
+        if not user_can(request.user, "bird_sale_receipt_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         attachment_id = request.GET.get("attachment")
         attachment = get_object_or_404(receipt.attachments, id=attachment_id)
         attachment.file.delete(save=False)
@@ -9998,10 +10000,9 @@ def gc_settlement_attachments(request, id):
             "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
         } for a in settlement.attachments.select_related("uploaded_by")], safe=False)
 
-    if not user_can(request.user, "gc_settlement", "edit"):
-        return JsonResponse({"error": "Not permitted."}, status=403)
-
     if request.method == "POST":
+        if not user_can(request.user, "gc_settlement", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         uploads = request.FILES.getlist("files")
         if not uploads:
             return JsonResponse({"error": "Choose at least one file."}, status=400)
@@ -10012,6 +10013,8 @@ def gc_settlement_attachments(request, id):
         return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
 
     if request.method == "DELETE":
+        if not user_can(request.user, "gc_settlement", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
         attachment_id = request.GET.get("attachment")
         attachment = get_object_or_404(settlement.attachments, id=attachment_id)
         attachment.file.delete(save=False)
