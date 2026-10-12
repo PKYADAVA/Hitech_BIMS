@@ -912,6 +912,11 @@ _ACTION_URL_OVERRIDES = {
     "self_attendance_check_out": ("self_attendance", "view"),
     "self_attendance_timesheet_csv": ("self_attendance", "view"),
     "daily_attendance_delete": ("daily_attendance", "delete"),
+    # Submits the Mark Attendance grid — gated on that page's edit right,
+    # not daily_attendance's view. Unmapped, this fell through to
+    # URLNAME_TO_TAB (mark_attendance -> view), so anyone who could merely
+    # see the page could also write attendance for every employee on it.
+    "save_attendance": ("mark_attendance", "edit"),
     "team_attendance_delete": ("team_attendance", "delete"),
     # Keep both / Undo on Duplicate Entries hide or restore a group for
     # everybody, so they are edits of that page rather than views of it.
