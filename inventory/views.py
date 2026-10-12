@@ -41,6 +41,7 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from .item_families import filter_by_item_family
 from .models import (
     ItemCategory, Item, ItemPriceList, Mapping, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
@@ -1414,6 +1415,93 @@ class StockTransferPreviewView(View):
         return render(request, "stock_transfer_ui_preview.html")
 
 
+@login_required
+@xframe_options_sameorigin
+def stock_transfer_transaction_history(request, pk):
+    """Transaction History Report — every alerts.AuditLog entry for one
+    StockTransfer, printed in the same letterhead as the app's other reports.
+
+    Reuses the audit trail every model already writes to (see
+    alerts.signals), rather than adding separate change-tracking: the data
+    this report needs has existed since the row was first created.
+    """
+    from alerts.models import AuditLog
+
+    transfer = get_object_or_404(StockTransfer, pk=pk)
+    logs = AuditLog.objects.filter(
+        model_name="inventory.StockTransfer", object_id=str(pk)
+    ).order_by("created_at")
+
+    ACTION_LABELS = {
+        "create": "Entry Added", "update": "Edit", "delete": "Deleted",
+        "bulk_create": "Entry Added", "bulk_update": "Edit", "bulk_delete": "Deleted",
+        "soft_delete": "Deleted",
+    }
+    # Report column -> the field name(s) that back it, so an edit row can
+    # highlight only the values that actually changed rather than painting
+    # the whole row red for a one-field correction.
+    COLUMN_FIELDS = {
+        "date": ("date",),
+        "mortality": ("transit_mortality", "mortality"),
+        "culls": ("culls",),
+        "quantity": ("quantity",),
+        "rate": ("rate",),
+        "amount": ("quantity", "rate"),
+    }
+    logs = list(logs)
+    # A handful of older rows were never given a real `create` audit entry
+    # (seeded before this model was wired into the audit signal, or by a
+    # script) — their first logged event is an `update`. That earliest log
+    # is still the first *known* state of the record, so it is always shown
+    # as "Entry Added" rather than the report having nothing to say about
+    # how the transaction came to exist.
+    first_log_id = logs[0].pk if logs else None
+
+    rows = []
+    sl_no = 0
+    for log in logs:
+        changed = {
+            column for column, fields in COLUMN_FIELDS.items()
+            if any(f in log.changed_fields for f in fields)
+        }
+        is_origin = log.action == "create" or log.pk == first_log_id
+        # A save that only touched fields this report doesn't show (stock
+        # balance, the DC number, remarks, ...) isn't a transaction edit as
+        # far as this report is concerned — skip it rather than list an
+        # "Edit" row where nothing visible actually changed. The origin row
+        # always shows: it is the transaction existing, not a revision of it.
+        if not is_origin and not changed:
+            continue
+
+        snapshot = log.after or log.before
+        quantity = Decimal(str(snapshot.get("quantity") or transfer.quantity or 0))
+        rate = Decimal(str(snapshot.get("rate") or transfer.rate or 0))
+        sl_no += 1
+        rows.append({
+            "sl_no": sl_no,
+            "log": log,
+            "activity_type": "Entry Added" if is_origin else ACTION_LABELS.get(log.action, log.get_action_display()),
+            "is_origin": is_origin,
+            "date": snapshot.get("date") or transfer.date,
+            "mortality": snapshot.get("transit_mortality") or snapshot.get("mortality") or 0,
+            "culls": snapshot.get("culls") or 0,
+            "quantity": quantity,
+            "rate": rate,
+            "amount": quantity * rate,
+            "changed": changed,
+        })
+
+    from_loc = _location_dict(transfer.from_location_type, transfer.from_warehouse, transfer.from_farm)
+    to_loc = _location_dict(transfer.to_location_type, transfer.to_warehouse, transfer.to_farm)
+
+    return render(request, "stock_transfer_transaction_history.html", {
+        "transfer": transfer,
+        "from_location_name": from_loc["name"],
+        "to_location_name": to_loc["name"],
+        "rows": rows,
+    })
+
+
 @method_decorator(login_required, name="dispatch")
 class StockTransferAPI(View):
 
@@ -1477,7 +1565,33 @@ class StockTransferAPI(View):
         # Placement tab.
         if item_family:
             qs = filter_by_item_family(qs, item_family)
-        return JsonResponse([_stock_transfer_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        rows = list(qs.order_by("-date", "-id"))
+        # One batched query for "how many times has this transfer been
+        # edited" rather than a query per row — the Transaction History icon
+        # reads the count to flag rows with heavier edit history differently
+        # from a once-touched one.
+        from collections import Counter
+
+        from alerts.models import AuditLog
+
+        # Same "did a field the report shows actually change" rule as
+        # stock_transfer_transaction_history — a save that only touched the
+        # stock balance or a remark shouldn't turn this icon amber/red.
+        displayed_fields = {"date", "transit_mortality", "mortality", "culls", "quantity", "rate"}
+        edit_counts = Counter(
+            object_id for object_id, changed_fields in AuditLog.objects.filter(
+                model_name="inventory.StockTransfer",
+                object_id__in=[str(r.id) for r in rows],
+                action="update",
+            ).values_list("object_id", "changed_fields")
+            if displayed_fields & set(changed_fields)
+        )
+        dicts = []
+        for r in rows:
+            d = _stock_transfer_to_dict(r)
+            d["edit_count"] = edit_counts.get(str(r.id), 0)
+            dicts.append(d)
+        return JsonResponse(dicts, safe=False)
 
     @transaction.atomic
     def post(self, request):

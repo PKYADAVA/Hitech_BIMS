@@ -405,6 +405,20 @@
 <input type="file" id="px-files" class="d-none" multiple
        accept="application/pdf,image/jpeg,image/png">
 
+<div class="modal fade" id="txnHistoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content" style="height:85vh;">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0">Transaction History</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="txnHistoryFrame" src="" style="width:100%; height:100%; border:0;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
 {{ masters|json_script:"px-masters" }}
 
 <script>
@@ -421,11 +435,33 @@ $(function () {
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const none = () => '<span class="px-none">—</span>';
 
+  $(document).on("click", ".txn-history-link", function (e) {
+    e.preventDefault();
+    $("#txnHistoryFrame").attr("src", txnHistoryUrlFor($(this).data("id")));
+    new bootstrap.Modal(document.getElementById("txnHistoryModal")).show();
+  });
+  $("#txnHistoryModal").on("hidden.bs.modal", function () {
+    $("#txnHistoryFrame").attr("src", "");
+  });
+
   function fmtDate(iso) {
     if (!iso) { return ""; }
     const d = new Date(iso + "T00:00:00");
     if (isNaN(d)) { return iso; }
     return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function txnHistoryUrlFor(id) {
+    return "{% url 'petty_expense_transaction_history' 0 %}".replace('/0/', '/' + id + '/');
+  }
+
+  // Edit count, not just edited-or-not: 0 or 1 reads as the normal course of
+  // a correction, >1 and up to 3 is enough revisiting to flag, and beyond
+  // that is worth a harder look.
+  function txnHistoryColorClass(editCount) {
+    if (editCount > 3) return 'text-danger';
+    if (editCount > 1) return 'text-warning';
+    return 'text-success';
   }
 
   // ---- the pickers, filled from masters the ERP already keeps -------------
@@ -616,7 +652,11 @@ $(function () {
       const unit = r.batch || r.shed;
       const place = [r.farm, unit].filter(Boolean).join(" · ");
       body.append('<tr>'
-        + '<td><span class="px-no">' + escapeHtml(r.expense_no) + '</span></td>'
+        + '<td><span class="px-no">' + escapeHtml(r.expense_no) + '</span> '
+        + '<a href="#" class="txn-history-link ' + txnHistoryColorClass(r.edit_count)
+        + '" data-id="' + r.id + '" title="Transaction History'
+        + (r.edit_count ? ' (edited ' + r.edit_count + 'x)' : '') + '">'
+        + '<i class="fas fa-user-clock"></i></a></td>'
         + '<td data-order="' + r.date + '">' + fmtDate(r.date) + '</td>'
         // Sorted on the number, read as the name: a column of "September"
         // that sorts alphabetically is worse than no column.

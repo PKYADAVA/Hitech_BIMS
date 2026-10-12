@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from account.models import (AccountType, BankCashMaster, ChartOfAccount,
@@ -370,11 +371,30 @@ def petty_expense_rows(request):
                        | Q(narration__icontains=term) | Q(reference__icontains=term)
                        | Q(items__description__icontains=term)).distinct()
 
+    expenses = list(qs[:500])
+    # One batched query for "how many times has this expense been edited in
+    # a way the Transaction History report shows" rather than a query per
+    # row — the report icon reads the count to color itself.
+    from collections import Counter
+
+    from alerts.models import AuditLog
+
+    displayed_fields = {"expense_date", "paid_to_name", "subtotal", "other_charges", "net_amount"}
+    edit_counts = Counter(
+        object_id for object_id, changed_fields in AuditLog.objects.filter(
+            model_name="account.PettyExpense",
+            object_id__in=[str(e.pk) for e in expenses],
+            action="update",
+        ).values_list("object_id", "changed_fields")
+        if displayed_fields & set(changed_fields)
+    )
+
     rows = []
-    for expense in qs[:500]:
+    for expense in expenses:
         items = list(expense.items.all())
         rows.append({
             "id": expense.pk,
+            "edit_count": edit_counts.get(str(expense.pk), 0),
             "expense_no": expense.expense_no,
             "date": expense.expense_date.isoformat(),
             "branch": expense.branch.branch_name,
@@ -515,6 +535,13 @@ def petty_expense_save(request, id=None):
     # that is not, and the server is where that has to be refused.
     if not branches_for(request.user).filter(pk=expense.branch_id).exists():
         return JsonResponse({"error": "That branch is not one of yours."}, status=403)
+    # Both are required, non-nullable FKs — without this, a blank picker
+    # reaches expense.save() as a raw NOT NULL violation from Postgres
+    # instead of a message that says what to fix.
+    if not expense.payment_mode_id:
+        return JsonResponse({"error": "Choose the payment mode."}, status=400)
+    if not expense.paid_from_id:
+        return JsonResponse({"error": "Choose where this was paid from."}, status=400)
     expense.save()
     _write_items(expense, data.get("items") or [])
     expense.recalculate()
@@ -681,6 +708,76 @@ def petty_expense_detail(request, id):
             "cancelled_at": expense.cancelled_at.isoformat() if expense.cancelled_at else "",
             "cancel_reason": expense.cancel_reason,
         },
+    })
+
+
+@login_required
+@xframe_options_sameorigin
+def petty_expense_transaction_history(request, id):
+    """Transaction History Report — every alerts.AuditLog entry for one
+    PettyExpense, same report shape as inventory's stock transfer version.
+
+    Reuses the audit trail every model already writes to (see
+    alerts.signals) rather than adding separate change-tracking.
+    """
+    from alerts.models import AuditLog
+
+    expense = get_object_or_404(PettyExpense, pk=id)
+    logs = list(AuditLog.objects.filter(
+        model_name="account.PettyExpense", object_id=str(id)
+    ).order_by("created_at"))
+
+    ACTION_LABELS = {
+        "create": "Entry Added", "update": "Edit", "delete": "Deleted",
+        "bulk_create": "Entry Added", "bulk_update": "Edit", "bulk_delete": "Deleted",
+        "soft_delete": "Deleted",
+    }
+    # Report column -> the field name(s) that back it, so an edit row can
+    # highlight only the values that actually changed.
+    COLUMN_FIELDS = {
+        "date": ("expense_date",),
+        "paid_to": ("paid_to_name",),
+        "subtotal": ("subtotal",),
+        "other_charges": ("other_charges",),
+        "net_amount": ("net_amount",),
+    }
+    # A handful of older rows may have no real `create` audit entry (seeded
+    # before this model was wired into the audit signal) — the earliest
+    # logged event is still the first *known* state, shown as Entry Added
+    # rather than the report having nothing to say about how it came to be.
+    first_log_id = logs[0].pk if logs else None
+
+    rows = []
+    sl_no = 0
+    for log in logs:
+        changed = {
+            column for column, fields in COLUMN_FIELDS.items()
+            if any(f in log.changed_fields for f in fields)
+        }
+        is_origin = log.action == "create" or log.pk == first_log_id
+        # A save that only touched a field this report doesn't show isn't a
+        # transaction edit as far as this report is concerned.
+        if not is_origin and not changed:
+            continue
+
+        snapshot = log.after or log.before
+        sl_no += 1
+        rows.append({
+            "sl_no": sl_no,
+            "log": log,
+            "activity_type": "Entry Added" if is_origin else ACTION_LABELS.get(log.action, log.get_action_display()),
+            "is_origin": is_origin,
+            "date": snapshot.get("expense_date") or expense.expense_date,
+            "paid_to": snapshot.get("paid_to_name") or expense.paid_to_name,
+            "subtotal": snapshot.get("subtotal") or expense.subtotal,
+            "other_charges": snapshot.get("other_charges") or expense.other_charges,
+            "net_amount": snapshot.get("net_amount") or expense.net_amount,
+            "changed": changed,
+        })
+
+    return render(request, "petty_expense_transaction_history.html", {
+        "expense": expense,
+        "rows": rows,
     })
 
 

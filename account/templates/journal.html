@@ -409,6 +409,20 @@
   </div>
 </div>
 
+<div class="modal fade" id="txnHistoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content" style="height:85vh;">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0">Transaction History</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="txnHistoryFrame" src="" style="width:100%; height:100%; border:0;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 $(document).ready(function () {
     const csrfToken = "{{ csrf_token }}";
@@ -419,6 +433,15 @@ $(document).ready(function () {
 
     // showToast() provided globally by main.js
     // escapeHtml() provided globally by main.js
+
+    $(document).on("click", ".txn-history-link", function (e) {
+        e.preventDefault();
+        $("#txnHistoryFrame").attr("src", txnHistoryUrlFor($(this).data("id")));
+        new bootstrap.Modal(document.getElementById("txnHistoryModal")).show();
+    });
+    $("#txnHistoryModal").on("hidden.bs.modal", function () {
+        $("#txnHistoryFrame").attr("src", "");
+    });
     const statusBadge = (s) => ({
         Draft: '<span class="badge bg-secondary">Draft</span>',
         Posted: '<span class="badge bg-success">Posted</span>',
@@ -665,6 +688,19 @@ $(document).ready(function () {
             { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function txnHistoryUrlFor(id) {
+        return "{% url 'voucher_transaction_history' 0 %}".replace('/0/', '/' + id + '/');
+    }
+
+    // Edit count, not just edited-or-not: 0 or 1 reads as the normal course
+    // of a correction, >1 and up to 3 is enough revisiting to flag, and
+    // beyond that is worth a harder look.
+    function txnHistoryColorClass(editCount) {
+        if (editCount > 3) return 'text-danger';
+        if (editCount > 1) return 'text-warning';
+        return 'text-success';
+    }
+
     function kpiCard(key, icon, bg, fg, label, value, note) {
         return '<button type="button" class="jv-kpi' + (kpi === key ? ' is-on' : '')
             + '" data-kpi="' + key + '">'
@@ -732,16 +768,28 @@ $(document).ready(function () {
                 + ' data-id="' + v.id + '" title="Delete draft"><i class="fas fa-trash"></i></button>';
         }
         if (v.status === 'Posted' && !v.system_generated) {
-            acts += '<button class="btn btn-outline-warning btn-sm revise-voucher"'
-                + ' data-id="' + v.id + '" title="Revise (cancel &amp; re-enter corrected copy)">'
-                + '<i class="fas fa-pen"></i></button>'
+            // Edit here saves in place in one step (account.services.journal
+            // .repost_voucher) — same voucher number, no separate reason
+            // prompt or reopened blank copy, matching Petty Expense's Save &
+            // Repost. Cancel is still offered beside it: the gentler ending
+            // for something that should stay on the record but come off the
+            // books. Delete is the harder one: it removes the voucher and
+            // its lines entirely, same as Petty Expense's Delete.
+            acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
+                + ' data-id="' + v.id + '" title="Edit and repost"><i class="fas fa-pen"></i></button>'
                 + '<button class="btn btn-outline-danger btn-sm cancel-voucher"'
-                + ' data-id="' + v.id + '" title="Cancel"><i class="fas fa-ban"></i></button>';
+                + ' data-id="' + v.id + '" title="Cancel"><i class="fas fa-ban"></i></button>'
+                + '<button class="btn btn-outline-danger btn-sm delete-voucher"'
+                + ' data-id="' + v.id + '" data-no="' + escapeHtml(v.voucher_no || '')
+                + '" data-status="Posted" title="Delete"><i class="fas fa-trash"></i></button>';
         }
         return '<tr>'
             + '<td><span class="jv-no">' + escapeHtml(v.voucher_no) + '</span>'
             + (v.system_generated ? ' <span class="badge bg-info text-dark">Auto</span>' : '')
-            + '</td>'
+            + ' <a href="#" class="txn-history-link ' + txnHistoryColorClass(v.edit_count)
+            + '" data-id="' + v.id + '" title="Transaction History'
+            + (v.edit_count ? ' (edited ' + v.edit_count + 'x)' : '') + '">'
+            + '<i class="fas fa-user-clock"></i></a></td>'
             // Sorted on the date it holds, read as the date people write.
             + '<td data-order="' + v.date + '">' + fmtDate(v.date) + '</td>'
             + '<td>' + escapeHtml(v.voucher_type) + '</td>'
@@ -1105,28 +1153,6 @@ $(document).ready(function () {
         $.get(`/api/vouchers/${$(this).data('id')}/`, (v) => openVoucherForm(v));
     });
 
-    // Revise a posted voucher: cancel it (audit trail intact), then open a
-    // pre-filled copy to correct and re-post under a new voucher number.
-    $(document).on('click', '.revise-voucher', function () {
-        const id = $(this).data('id');
-        const reason = prompt('Revising cancels this voucher (kept in the books with your reason) ' +
-                              'and opens a corrected copy to re-post.\n\nReason for revision:');
-        if (reason === null) return;
-        $.get(`/api/vouchers/${id}/`, function (voucher) {
-            $.ajax({
-                url: `/api/vouchers/${id}/cancel/`, method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
-                data: JSON.stringify({ reason: reason || 'Revised' }),
-                success: function () {
-                    refresh();
-                    showToast('success', `${voucher.voucher_no} cancelled — correct the copy and Save & Post.`);
-                    openVoucherForm(voucher, true);
-                },
-                error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Could not cancel the voucher.'),
-            });
-        });
-    });
-
     // ---- documents on the voucher ---------------------------------------
     // Two kinds on one shelf: files picked here and not yet sent, and
     // documents already on the voucher. Removing the first is local;
@@ -1221,17 +1247,22 @@ $(document).ready(function () {
             headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
             data: JSON.stringify(payload),
             success: function (voucher) {
-                if (id && post) {
+                // Editing a Posted voucher corrects it in place on the
+                // server (account.services.journal.repost_voucher) and
+                // comes back still Posted — a second /post/ call here would
+                // be posting an already-posted voucher. Only a draft being
+                // saved-and-posted still needs it.
+                if (id && post && voucher.status !== 'Posted') {
                     $.ajax({ url: `/api/vouchers/${id}/post/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
                         success: function () { finishSave(true); },
                         error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Posting failed.') });
                 } else {
-                    finishSave(post);
+                    finishSave(voucher.status === 'Posted');
                 }
                 function finishSave(posted) {
                     // After the save: a new voucher has nothing to attach
                     // documents to until it exists.
-                    jvSendFiles(id || voucher.id, function () {
+                    jvSendFiles(voucher.id, function () {
                         $('#voucherFormModal').modal('hide');
                         refresh();
                         showToast('success', posted ? 'Voucher posted.' : 'Draft saved.');
@@ -1277,8 +1308,9 @@ $(document).ready(function () {
             const actions = [];
             if (v.status === 'Draft') actions.push(`<button class="btn btn-success post-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-check"></i> Post</button>`);
             if (v.status === 'Posted' && !v.system_generated) {
-                actions.push(`<button class="btn btn-warning revise-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-pen"></i> Revise</button>`);
-                actions.push(`<button class="btn btn-outline-danger cancel-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-ban"></i> Cancel Voucher</button>`);
+                actions.push(`<button class="btn btn-warning edit-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-pen"></i> Edit</button>`);
+                actions.push(`<button class="btn btn-outline-danger cancel-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-ban"></i> Cancel</button>`);
+                actions.push(`<button class="btn btn-outline-danger delete-voucher" data-id="${v.id}" data-no="${escapeHtml(v.voucher_no || '')}" data-status="Posted" data-bs-dismiss="modal"><i class="fas fa-trash"></i> Delete</button>`);
             }
             $('#voucher-view-actions').html(actions.join(' ') || '<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>');
             $('#voucherViewModal').modal('show');
@@ -1306,9 +1338,14 @@ $(document).ready(function () {
 
     $(document).on('click', '.delete-voucher', async function () {
         const id = $(this).data('id');
-        if (!(await window.bimsConfirm('Delete this draft voucher?'))) return;
+        const isPosted = $(this).data('status') === 'Posted';
+        const msg = isPosted
+            ? 'Delete ' + ($(this).data('no') || 'this voucher') + '? Its lines come off the ledger and the '
+              + 'trial balance entirely — the number stays spent, the same trade Petty Expense’s Delete makes.'
+            : 'Delete this draft voucher?';
+        if (!(await window.bimsConfirm(msg))) return;
         $.ajax({ url: `/api/vouchers/${id}/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
-            success: function () { refresh(); showToast('success', 'Draft deleted.'); },
+            success: function () { refresh(); showToast('success', isPosted ? 'Voucher deleted.' : 'Draft deleted.'); },
             error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Delete failed.') });
     });
 

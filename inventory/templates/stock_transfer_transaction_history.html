@@ -1,0 +1,113 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transaction History — {{ transfer.trnum }}</title>
+<style>
+  @page { size: A4 landscape; margin: 9mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #1f2937; font-size: 11.5px; background: #fff; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 10px; }
+  .toolbar { text-align: right; margin-bottom: 8px; }
+  .toolbar button { font-size: 12px; padding: 6px 14px; border: 0; border-radius: 6px; cursor: pointer; }
+  .btn-print { background: #2d6cdf; color: #fff; }
+  .btn-close { background: #e5e7eb; color: #111; }
+  .hdr { display: flex; align-items: center; background: #9fc3d9; border: 1px solid #7fa9c2; }
+  .hdr .logo { padding: 10px 16px; background: #fff; }
+  .hdr .logo img { height: 56px; display: block; }
+  .hdr .co { flex: 1; text-align: center; padding: 8px 10px; }
+  .hdr .co .name { color: #c0392b; font-weight: 800; font-size: 16px; }
+  .hdr .co .addr { font-weight: 700; font-size: 11px; color: #1f2937; }
+  .hdr .co .title { font-weight: 800; font-size: 17px; margin-top: 4px; color: #1f2937; }
+  table.th-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .th-table th, .th-table td { border: 1px solid #c7ccd4; padding: 4px 6px; font-size: 10.5px; }
+  .th-table th { background: #2d6cdf; color: #fff; font-weight: 700; text-align: center; }
+  .th-table td { text-align: center; white-space: nowrap; }
+  .th-table td.particulars { white-space: normal; text-align: left; }
+  tr.act-create td.act { color: #1a7f37; font-weight: 700; }
+  tr.act-update td.act { color: #c0392b; font-weight: 700; }
+  tr.act-delete td.act { color: #b02a2a; font-weight: 700; }
+  td.changed { color: #c0392b; font-weight: 700; }
+  .foot { display: flex; justify-content: space-between; border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 6px; font-size: 9px; color: #6b7280; }
+  @media print { .no-print { display: none !important; } .wrap { max-width: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar no-print">
+    <button class="btn-print" onclick="window.print()">🖨 Print</button>
+    <button class="btn-close" id="txnHistoryCloseBtn" onclick="window.close()">Close</button>
+  </div>
+  <script>
+    // Opened inside the list page's modal iframe as often as in its own
+    // tab — window.close() silently does nothing for the iframe case (a
+    // script can't close a frame, only a window it opened), so the button
+    // is hidden there; the modal's own close (X / backdrop) is what's used.
+    if (window.self !== window.top) {
+      document.getElementById('txnHistoryCloseBtn').style.display = 'none';
+    }
+  </script>
+
+  <div class="hdr">
+    <div class="logo"><img src="{% static 'images/hitech-logo.png' %}" alt="Hi Tech"></div>
+    <div class="co">
+      <div class="name">{{ company.name|default:"Hi Tech Farms" }}</div>
+      <div class="addr">{{ company.address|default:"-" }}{% if company.state %}, {{ company.state }}{% endif %}{% if company.country %} {{ company.country }}{% endif %}</div>
+      {% if company.gstin %}<div class="addr">GSTIN : {{ company.gstin }}</div>{% endif %}
+      {% if company.mobile %}<div class="addr">Cont : {{ company.mobile }}</div>{% endif %}
+      <div class="title">Transaction History Report</div>
+    </div>
+  </div>
+
+  <table class="th-table">
+    <thead>
+      <tr>
+        <th>Sl.No.</th>
+        <th>Transaction Date</th>
+        <th>Transaction No.</th>
+        <th>Particulars</th>
+        <th>Mortality</th>
+        <th>Culls</th>
+        <th>Item</th>
+        <th>Quantity</th>
+        <th>Rate</th>
+        <th>Amount</th>
+        <th>Activity Type</th>
+        <th>Date &amp; Time</th>
+        <th>User</th>
+        <th>From Warehouse</th>
+        <th>To Warehouse</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="{% if r.is_origin %}act-create{% else %}act-{{ r.log.action }}{% endif %}">
+        <td>{{ r.sl_no }}</td>
+        <td{% if 'date' in r.changed %} class="changed"{% endif %}>{{ r.date|date:"d.m.Y" }}</td>
+        <td>{{ transfer.trnum }}</td>
+        <td class="particulars">{{ transfer.source_name|default:"-" }}</td>
+        <td{% if 'mortality' in r.changed %} class="changed"{% endif %}>{{ r.mortality }}</td>
+        <td{% if 'culls' in r.changed %} class="changed"{% endif %}>{{ r.culls }}</td>
+        <td>{{ transfer.item.description|default:"-" }}</td>
+        <td{% if 'quantity' in r.changed %} class="changed"{% endif %}>{{ r.quantity }}</td>
+        <td{% if 'rate' in r.changed %} class="changed"{% endif %}>{{ r.rate }}</td>
+        <td{% if 'amount' in r.changed %} class="changed"{% endif %}>{{ r.amount|floatformat:2 }}</td>
+        <td class="act">{{ r.activity_type }}</td>
+        <td>{{ r.log.created_at|date:"d.m.Y H:i" }}{{ r.log.created_at|date:"A" }}</td>
+        <td>{{ r.log.actor_label|default:"-" }}</td>
+        <td>{{ from_location_name|default:"-" }}</td>
+        <td>{{ to_location_name|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="15" style="text-align:center; color:#6b7280; padding:16px;">No activity recorded for this transaction.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="foot">
+    <span>Printed on {% now "d-m-Y H:i" %}</span>
+    <span>Hi Tech BIMS</span>
+  </div>
+</div>
+</body>
+</html>

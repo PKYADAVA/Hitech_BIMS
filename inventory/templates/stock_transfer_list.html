@@ -213,6 +213,20 @@
   </div>
 </div>
 
+<div class="modal fade" id="txnHistoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content" style="height:85vh;">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0">Transaction History</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="txnHistoryFrame" src="" style="width:100%; height:100%; border:0;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block js %}
 <script src="{% static 'js/change_requests.js' %}"></script>
@@ -221,6 +235,15 @@ $(function () {
   const csrfToken = "{{ csrf_token }}";
   let table = null;
   let pendingDeleteId = null;
+
+  $(document).on("click", ".txn-history-link", function (e) {
+    e.preventDefault();
+    $("#txnHistoryFrame").attr("src", txnHistoryUrlFor($(this).data("id")));
+    new bootstrap.Modal(document.getElementById("txnHistoryModal")).show();
+  });
+  $("#txnHistoryModal").on("hidden.bs.modal", function () {
+    $("#txnHistoryFrame").attr("src", "");
+  });
 
   const today = localDay();
   // Last 7 days by default, not just today — a register opened fresh should
@@ -241,6 +264,19 @@ $(function () {
     return { type, id };
   }
 
+  function txnHistoryUrlFor(id) {
+    return "{% url 'stock_transfer_transaction_history' 0 %}".replace('/0/', '/' + id + '/');
+  }
+
+  // Edit count, not just edited-or-not: 0 or 1 reads as the normal course of
+  // a correction, >1 and up to 3 is enough revisiting to flag, and beyond
+  // that is worth a harder look.
+  function txnHistoryColorClass(editCount) {
+    if (editCount > 3) return 'text-danger';
+    if (editCount > 1) return 'text-warning';
+    return 'text-success';
+  }
+
   function renderRows(rows) {
     if (table) { table.destroy(); }
     const tbody = $("#transfer-table tbody");
@@ -248,7 +284,7 @@ $(function () {
     rows.forEach(function (row) {
       tbody.append(`<tr>
         <td class="ds-mid">${fmtDate(row.date)}</td>
-        <td>${escapeHtml(row.trnum)}</td>
+        <td>${escapeHtml(row.trnum)} <a href="#" class="txn-history-link ${txnHistoryColorClass(row.edit_count)}" data-id="${row.id}" title="Transaction History${row.edit_count ? ' (edited ' + row.edit_count + 'x)' : ''}"><i class="fas fa-user-clock"></i></a></td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.from_location_name)}</td>
         <td>${escapeHtml(row.item_code)}</td>

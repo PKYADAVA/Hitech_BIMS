@@ -60,6 +60,7 @@ urlpatterns = [
     path('stock-transfer/preview/', views.StockTransferPreviewView.as_view(), name='stock_transfer_preview'),
     path('stock_transfer_api/', views.StockTransferAPI.as_view(), name='stock_transfer_api_list'),
     path('stock_transfer_api/<int:id>/', views.StockTransferAPI.as_view(), name='stock_transfer_api'),
+    path('stock_transfer/<int:pk>/transaction-history/', views.stock_transfer_transaction_history, name='stock_transfer_transaction_history'),
     path('stock-transfer/item-lookup/', views.stock_transfer_item_lookup, name='stock_transfer_item_lookup'),
     path('stock-transfer/stock-lookup/', views.stock_transfer_stock_lookup, name='stock_transfer_stock_lookup'),
     path('stock-transfer/farm-batches/', views.stock_transfer_farm_batches, name='stock_transfer_farm_batches'),

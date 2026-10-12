@@ -16,19 +16,21 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from account.api_views import _audit, _company, _get_account, _parse_body, MAX_PAGE_SIZE
-from account.models import Voucher
+from account.models import FinancialYear, Voucher
 from account.services import journal
 
 
-def _serialize_voucher(voucher, with_lines=False):
+def _serialize_voucher(voucher, with_lines=False, edit_count=0):
     data = {
         "id": voucher.id,
+        "edit_count": edit_count,
         "voucher_no": voucher.voucher_no or f"DRAFT-{voucher.id}",
         "voucher_type": voucher.voucher_type,
         "date": voucher.date.strftime("%Y-%m-%d"),
@@ -138,10 +140,28 @@ class VoucherListCreateAPI(View):
         except ValueError:
             return JsonResponse({"error": "Invalid pagination parameters."}, status=400)
         offset = (page - 1) * page_size
+        vouchers = list(qs[offset:offset + page_size])
+        # One batched query for "how many times has this voucher been edited
+        # in a way the Transaction History report shows" rather than a query
+        # per row — the report icon reads the count to color itself.
+        from collections import Counter
+
+        from alerts.models import AuditLog
+
+        displayed_fields = {"date", "narration", "reference", "total_debit", "total_credit"}
+        edit_counts = Counter(
+            object_id for object_id, changed_fields in AuditLog.objects.filter(
+                model_name="account.Voucher",
+                object_id__in=[str(v.pk) for v in vouchers],
+                action__in=("update", "status_change"),
+            ).values_list("object_id", "changed_fields")
+            if displayed_fields & set(changed_fields)
+        )
         return JsonResponse({
             "count": qs.count(),
             "page": page,
-            "results": [_serialize_voucher(v) for v in qs[offset:offset + page_size]],
+            "results": [_serialize_voucher(v, edit_count=edit_counts.get(str(v.pk), 0))
+                       for v in vouchers],
         })
 
     def post(self, request):
@@ -182,17 +202,35 @@ class VoucherDetailAPI(View):
         company = _company(request)
         voucher = _get_voucher(company, id)
         try:
-            journal.update_draft(
-                voucher,
-                date=data.get("date", voucher.date),
-                lines_data=data.get("lines", []),
-                user=request.user,
-                narration=data.get("narration"),
-                reference=data.get("reference"),
-                sector=data["sector"] if "sector" in data else Ellipsis,
-                auto_narration=data.get("auto_narration"),
-                narration_source=data.get("narration_source"),
-            )
+            if voucher.status == "Posted":
+                # One click, matching what Petty Expense's Save & Repost
+                # does for a user: edit a posted entry and save it. The
+                # voucher row, its id and its number never change — see
+                # journal.repost_voucher's docstring for why it is not the
+                # same mechanism as petty_expense.repost.
+                voucher = journal.repost_voucher(
+                    voucher,
+                    date=data.get("date", voucher.date),
+                    lines_data=data.get("lines", []),
+                    user=request.user,
+                    narration=data.get("narration"),
+                    reference=data.get("reference"),
+                    sector=data["sector"] if "sector" in data else Ellipsis,
+                    auto_narration=data.get("auto_narration"),
+                    narration_source=data.get("narration_source"),
+                )
+            else:
+                journal.update_draft(
+                    voucher,
+                    date=data.get("date", voucher.date),
+                    lines_data=data.get("lines", []),
+                    user=request.user,
+                    narration=data.get("narration"),
+                    reference=data.get("reference"),
+                    sector=data["sector"] if "sector" in data else Ellipsis,
+                    auto_narration=data.get("auto_narration"),
+                    narration_source=data.get("narration_source"),
+                )
         except ValidationError as exc:
             return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
         return JsonResponse(_serialize_voucher(voucher, with_lines=True))
@@ -200,10 +238,23 @@ class VoucherDetailAPI(View):
     def delete(self, request, id):
         company = _company(request)
         voucher = _get_voucher(company, id)
-        if voucher.status != "Draft":
-            return JsonResponse({"error": "Only draft vouchers can be deleted; cancel posted vouchers instead."}, status=400)
+        if voucher.status == "Cancelled":
+            return JsonResponse({"error": "A cancelled voucher is already off the books."}, status=400)
+        if voucher.status == "Posted":
+            # Same trade Petty Expense's Delete makes on its own voucher: the
+            # lines come off the ledger entirely rather than staying (as
+            # Cancel leaves them) for the audit trail. A system-generated
+            # voucher is owned by whatever module posted it (Petty Expense,
+            # a sale, ...) — it is deleted from there, not from this list.
+            if voucher.system_generated:
+                return JsonResponse(
+                    {"error": "This voucher was posted automatically by another module; delete it from there."},
+                    status=400)
+            if FinancialYear.objects.get(pk=voucher.financial_year_id).state == "Locked":
+                return JsonResponse({"error": "The financial year is locked; the voucher cannot be deleted."}, status=400)
+        was_posted = voucher.status == "Posted"
         voucher.delete()
-        return JsonResponse({"message": "Draft voucher deleted."})
+        return JsonResponse({"message": "Voucher deleted." if was_posted else "Draft voucher deleted."})
 
 
 @method_decorator(login_required, name="dispatch")
@@ -412,3 +463,77 @@ class BalanceSheetAPI(View):
             "total_liabilities_and_equity": str(report["total_liabilities_and_equity"]),
             "balanced": report["balanced"],
         })
+
+
+@login_required
+@xframe_options_sameorigin
+def voucher_transaction_history(request, id):
+    """Transaction History Report — every alerts.AuditLog entry for one
+    Voucher, same report shape as inventory's and account's other versions.
+
+    Reuses the audit trail every model already writes to (see
+    alerts.signals) rather than adding separate change-tracking. Vouchers
+    also log a ``status_change`` action (Draft -> Posted -> Cancelled),
+    which gets the same "Edit" treatment here as a plain update.
+    """
+    from alerts.models import AuditLog
+
+    company = _company(request)
+    voucher = get_object_or_404(Voucher, pk=id, company=company)
+    logs = list(AuditLog.objects.filter(
+        model_name="account.Voucher", object_id=str(id)
+    ).order_by("created_at"))
+
+    ACTION_LABELS = {
+        "create": "Entry Added", "update": "Edit", "status_change": "Edit",
+        "delete": "Deleted", "bulk_create": "Entry Added", "bulk_update": "Edit",
+        "bulk_delete": "Deleted", "soft_delete": "Deleted",
+    }
+    # Report column -> the field name(s) that back it, so an edit row can
+    # highlight only the values that actually changed.
+    COLUMN_FIELDS = {
+        "date": ("date",),
+        "narration": ("narration",),
+        "reference": ("reference",),
+        "total_debit": ("total_debit",),
+        "total_credit": ("total_credit",),
+    }
+    # A handful of older rows may have no real `create` audit entry (seeded
+    # before this model was wired into the audit signal) — the earliest
+    # logged event is still the first *known* state, shown as Entry Added
+    # rather than the report having nothing to say about how it came to be.
+    first_log_id = logs[0].pk if logs else None
+
+    rows = []
+    sl_no = 0
+    for log in logs:
+        changed = {
+            column for column, fields in COLUMN_FIELDS.items()
+            if any(f in log.changed_fields for f in fields)
+        }
+        is_origin = log.action == "create" or log.pk == first_log_id
+        # A save that only touched a field this report doesn't show (status,
+        # posted_by, ...) isn't a transaction edit as far as this report is
+        # concerned.
+        if not is_origin and not changed:
+            continue
+
+        snapshot = log.after or log.before
+        sl_no += 1
+        rows.append({
+            "sl_no": sl_no,
+            "log": log,
+            "activity_type": "Entry Added" if is_origin else ACTION_LABELS.get(log.action, log.get_action_display()),
+            "is_origin": is_origin,
+            "date": snapshot.get("date") or voucher.date,
+            "narration": snapshot.get("narration") or voucher.narration,
+            "reference": snapshot.get("reference") or voucher.reference,
+            "total_debit": snapshot.get("total_debit") or voucher.total_debit,
+            "total_credit": snapshot.get("total_credit") or voucher.total_credit,
+            "changed": changed,
+        })
+
+    return render(request, "voucher_transaction_history.html", {
+        "voucher": voucher,
+        "rows": rows,
+    })
