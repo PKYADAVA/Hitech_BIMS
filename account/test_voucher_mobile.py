@@ -194,13 +194,24 @@ class VoucherMobileTests(EngineTestCase, APITestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(Voucher.objects.filter(pk=draft.pk).exists())
 
-    def test_a_posted_voucher_cannot_be_deleted(self):
-        """The rule the web states in its own words, reaching the phone as a
-        refusal rather than as a button that half works."""
+    def test_a_posted_voucher_can_be_deleted(self):
+        """The rule the web states in its own words, reaching the phone the
+        same way: a non-system posted voucher can be deleted outright (its
+        lines come off the ledger entirely), same trade Petty Expense's own
+        Delete makes — see account.services.journal.repost_voucher's
+        docstring for why Edit no longer needs this as a fallback."""
         voucher = self.make()
         response = self.client.delete(f"/api/v1/account/vouchers/{voucher.pk}/full")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(Voucher.objects.filter(pk=voucher.pk).exists())
+
+    def test_a_system_generated_posted_voucher_cannot_be_deleted_here(self):
+        """Owned by whatever module posted it -- delete it from there."""
+        voucher = self.make()
+        voucher.system_generated = True
+        voucher.save(update_fields=["system_generated"])
+        response = self.client.delete(f"/api/v1/account/vouchers/{voucher.pk}/full")
         self.assertEqual(response.status_code, 400)
-        self.assertIn("cancel posted vouchers", str(response.json()).lower())
         self.assertTrue(Voucher.objects.filter(pk=voucher.pk).exists())
 
     # -- who may ----------------------------------------------------------

@@ -18,7 +18,8 @@ from django.db import transaction
 from django.db.models import DecimalField, F, Sum
 from django.utils import timezone
 
-from account.models import AccountingControlSettings, ChartOfAccount, FinancialYear, OrganizationCentre, Voucher, VoucherLine
+from account.models import (AccountingControlSettings, ChartOfAccount, FinancialYear,
+                            OrganizationCentre, Voucher, VoucherLine)
 
 VOUCHER_PREFIX = {
     'Journal': 'JV',
@@ -225,6 +226,57 @@ def update_draft(voucher, date, lines_data, user=None, narration=None, reference
     date = parse_date(date)
     fy = resolve_financial_year(date)
     cleaned = validate_lines(voucher.company, lines_data)
+    voucher.financial_year = fy
+    voucher.date = date
+    if narration is not None:
+        voucher.narration = narration
+    if reference is not None:
+        voucher.reference = reference
+    if sector is not Ellipsis:
+        voucher.sector = _resolve_sector(sector)
+    voucher.total_debit = sum(l['debit'] for l in cleaned)
+    voucher.total_credit = sum(l['credit'] for l in cleaned)
+    _apply_narration_fields(voucher, user, auto_narration, narration_source)
+    voucher.save()
+    _write_lines(voucher, cleaned)
+    return voucher
+
+
+@transaction.atomic
+def repost_voucher(voucher, date, lines_data, user=None, narration=None, reference=None,
+                   sector=Ellipsis, auto_narration=None, narration_source=None):
+    """Correct a posted voucher's lines and header in place, in one step.
+
+    A real exception to "posted vouchers are immutable" (the module
+    docstring above) — made deliberately, and narrowly: the row, its id and
+    its voucher_no never change, only the lines and the header fields a
+    draft edit already touches (update_draft, just above). What stays off
+    limits is the posting machinery itself: voucher_no, status, posted_by
+    and posted_at are untouched, so this can never be mistaken for a second
+    posting event, and the one audit trail (alerts.AuditLog on this row)
+    carries the whole correction rather than a delete-row plus a create-row
+    pair that would read as two different transactions.
+
+    An earlier version of this deleted the voucher and reposted a new one,
+    matching account.services.petty_expense.repost — but that only keeps the
+    same number when the edited voucher happens to already be the last one
+    issued; otherwise next_voucher_no hands out a new, higher number, which
+    is not what "edit in place" is supposed to mean. This avoids that by
+    never freeing the number in the first place.
+    """
+    if voucher.status != 'Posted':
+        raise ValidationError("Only a posted voucher can be reposted; edit a draft directly.")
+    if FinancialYear.objects.get(pk=voucher.financial_year_id).state == 'Locked':
+        raise ValidationError("The financial year is locked; the voucher cannot be edited.")
+
+    date = parse_date(date)
+    fy = resolve_financial_year(date)
+    if fy.state != 'Open':
+        raise ValidationError(f"Financial year {fy_label(fy)} is {fy.state.lower()}; the voucher cannot be moved there.")
+    if not (fy.start_date <= date <= fy.end_date):
+        raise ValidationError("Voucher date falls outside its financial year.")
+    cleaned = validate_lines(voucher.company, lines_data)
+
     voucher.financial_year = fy
     voucher.date = date
     if narration is not None:

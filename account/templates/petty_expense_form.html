@@ -1169,7 +1169,16 @@ $(function () {
       headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
       body: JSON.stringify(payload(post)),
     });
-    const out = await r.json();
+    // An unexpected server error (500) sends Django's HTML error page, not
+    // JSON — parsing that as JSON is what used to throw past this function
+    // and leave the save button looking like it had done nothing.
+    let out;
+    try {
+      out = await r.json();
+    } catch {
+      window.showToast("danger", "The server could not save that. Press Save to try again.");
+      return;
+    }
     if (!r.ok) {
       // The draft is kept where the server kept it, so a refused post is a
       // correction rather than a re-entry.
