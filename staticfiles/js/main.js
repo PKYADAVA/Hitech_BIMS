@@ -1150,3 +1150,221 @@ window.loadOptions = function (select, url, data, options) {
     }, 0);
   });
 })();
+
+// ---------------------------------------------------------------------------
+// Navbar check in/out.
+//
+// hr/templates/self_attendance.html has the full page with the same camera
+// capture flow; this is that same action reachable from every page, for the
+// two things most people open the page for — punching in and out — without
+// a trip to My Attendance. Reading its own status, so it is correct from the
+// very first click even if the page was left open since before midnight.
+// ---------------------------------------------------------------------------
+(function () {
+  const wrap = document.getElementById('navAttendanceWrap');
+  if (!wrap) return;
+
+  // CSRF_COOKIE_HTTPONLY is on (settings.py), so the csrftoken cookie is
+  // deliberately unreadable from script — same reason the page's own
+  // {{ csrf_token }} is read from a data attribute rather than the cookie.
+  function getCsrfToken() {
+    return wrap.dataset.csrf || '';
+  }
+
+  const checkInBtn = document.getElementById('navCheckInBtn');
+  const checkOutBtn = document.getElementById('navCheckOutBtn');
+  const statusEl = document.getElementById('navAttendanceStatus');
+  const modalEl = document.getElementById('navCameraModal');
+  const video = document.getElementById('navCameraVideo');
+  const canvas = document.getElementById('navCameraCanvas');
+  const preview = document.getElementById('navCameraPreview');
+  const captureBtn = document.getElementById('navCameraCapture');
+  const retakeBtn = document.getElementById('navCameraRetake');
+  const useBtn = document.getElementById('navCameraUse');
+  const title = document.getElementById('navCameraTitle');
+  const fallback = document.getElementById('navCameraFallback');
+
+  let checkedIn = wrap.dataset.checkedIn === '1';
+  let checkedOut = wrap.dataset.checkedOut === '1';
+  const blocked = wrap.dataset.blocked === '1';
+  let cameraStream = null;
+  let capturedBlob = null;
+  let eventType = null;
+  let streamWatchdog = null;
+
+  // Check In disables once used (or once a prior day is left open), Check
+  // Out disables until checked in (or once used) — both are plain booleans
+  // that match server state exactly, so this runs on every load.
+  function applyButtons() {
+    checkInBtn.disabled = checkedIn || blocked;
+    checkOutBtn.disabled = !checkedIn || checkedOut;
+  }
+  applyButtons();
+
+  // The status badge is left exactly as the server rendered it on page
+  // load -- Present/Half Day/Late In only becomes knowable once the day is
+  // closed out (hr.views._self_attendance_row), and re-deriving the simpler
+  // "Checked Out" here on every load was overwriting that correct label with
+  // a wrong one. This only ever runs after a client-side check-in, where
+  // "Checked In" is the whole story and there is nothing left to get wrong.
+  function applyCheckedInStatus() {
+    statusEl.classList.remove('na-checked-in', 'na-blocked');
+    statusEl.classList.add('na-checked-in');
+    statusEl.textContent = 'Checked In';
+  }
+
+  function withLocation(onOk) {
+    if (!navigator.geolocation) {
+      window.showToast('danger', 'Location is not available in this browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => onOk(pos.coords.latitude, pos.coords.longitude),
+      () => window.showToast('danger', 'Could not read your location. Allow location access and try again.'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  function submitPunch(photoBlob) {
+    // eventType is cleared by the hidden.bs.modal handler right after this
+    // call, before the fetch below resolves — capture it now rather than
+    // read the shared variable from inside the async callback, which is
+    // what had a check-in land as "Checked Out" (it always resolved to the
+    // check_out branch, since eventType was already null by then).
+    const punchType = eventType;
+    const url = punchType === 'check_in' ? wrap.dataset.checkinUrl : wrap.dataset.checkoutUrl;
+    withLocation((lat, lng) => {
+      const fd = new FormData();
+      fd.append('latitude', lat);
+      fd.append('longitude', lng);
+      if (photoBlob) fd.append('photo', photoBlob, 'selfie.jpg');
+      fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, body: fd })
+        .then(async r => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body.error || 'Failed.');
+          window.showToast('success', body.message);
+          if (punchType === 'check_out') {
+            // Present / Half Day / Late In can only be told apart once the
+            // day is complete, and that comparison against the shift lives
+            // server-side (hr.views._self_attendance_row) — a reload is what
+            // lets the real label replace the generic "Checked Out" rather
+            // than this script re-deriving the same rule a second time.
+            setTimeout(() => window.location.reload(), 600);
+            return;
+          }
+          checkedIn = true;
+          applyButtons();
+          applyCheckedInStatus();
+        })
+        .catch(err => {
+          window.showToast('danger', err.message);
+          applyButtons();
+        });
+    });
+  }
+
+  function stopCamera() {
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+    if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
+  }
+
+  function resetCameraModal() {
+    video.style.display = ''; preview.style.display = 'none'; fallback.classList.add('d-none');
+    capturedBlob = null;
+    captureBtn.classList.remove('d-none'); captureBtn.disabled = true;
+    retakeBtn.classList.add('d-none');
+    useBtn.classList.add('d-none');
+  }
+
+  // A granted permission does not guarantee real frames — a virtual/blocked
+  // device can open a stream that never produces a picture, which is the
+  // black square a dead camera shows. Capture stays disabled until the video
+  // actually reports a size, and a 6s watchdog gives up and offers Skip
+  // Photo rather than leave a frozen preview with no way forward.
+  function showCameraFallback() {
+    video.style.display = 'none';
+    fallback.classList.remove('d-none');
+    captureBtn.classList.add('d-none');
+  }
+
+  video.addEventListener('loadeddata', function () {
+    if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
+    captureBtn.disabled = false;
+  });
+
+  function openCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      submitPunch(null);
+      return;
+    }
+    resetCameraModal();
+    title.textContent = eventType === 'check_in' ? 'Checking in — take a quick selfie' : 'Checking out — take a quick selfie';
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      .then(stream => {
+        cameraStream = stream;
+        video.srcObject = stream;
+        streamWatchdog = setTimeout(() => {
+          if (!video.videoWidth) showCameraFallback();
+        }, 6000);
+      })
+      .catch(showCameraFallback);
+  }
+
+  captureBtn.addEventListener('click', function () {
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    preview.src = canvas.toDataURL('image/jpeg', 0.85);
+    video.style.display = 'none'; preview.style.display = '';
+    captureBtn.classList.add('d-none');
+    retakeBtn.classList.remove('d-none');
+    useBtn.classList.remove('d-none');
+    canvas.toBlob(blob => { capturedBlob = blob; }, 'image/jpeg', 0.85);
+  });
+
+  retakeBtn.addEventListener('click', function () {
+    preview.style.display = 'none'; video.style.display = '';
+    capturedBlob = null;
+    retakeBtn.classList.add('d-none');
+    useBtn.classList.add('d-none');
+    captureBtn.classList.remove('d-none');
+  });
+
+  // Only Skip Photo and Use Photo mean "go ahead and punch" — the X button
+  // and Escape/backdrop both close the same Bootstrap modal with no way to
+  // tell them apart from hidden.bs.modal alone, so each exit says which kind
+  // it was instead of the handler assuming every close is a confirm.
+  let shouldSubmit = false;
+  document.getElementById('navCameraSkip').addEventListener('click', function () { shouldSubmit = true; });
+  useBtn.addEventListener('click', function () { shouldSubmit = true; });
+  document.getElementById('navCameraClose').addEventListener('click', function () { shouldSubmit = false; });
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    stopCamera();
+    if (shouldSubmit && eventType) {
+      submitPunch(capturedBlob);
+    } else if (eventType) {
+      applyButtons();
+    }
+    shouldSubmit = false;
+    eventType = null; capturedBlob = null;
+  });
+
+  checkInBtn.addEventListener('click', function () {
+    if (blocked) { window.location.href = wrap.dataset.pageUrl; return; }
+    eventType = 'check_in';
+    checkInBtn.disabled = true;
+    openCamera();
+  });
+
+  checkOutBtn.addEventListener('click', function () {
+    eventType = 'check_out';
+    checkOutBtn.disabled = true;
+    openCamera();
+  });
+
+  statusEl.addEventListener('click', function () {
+    window.location.href = wrap.dataset.pageUrl;
+  });
+})();

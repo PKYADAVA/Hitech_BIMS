@@ -122,6 +122,7 @@ PHONE_SCREENS = [
     ("inventory-uom", "unit_of_measurement"),
     ("inventory-warehouses", "warehouse"),
     ("inventory-stock-transfers", "stock_transfer_list"),
+    ("inventory-transfer-charges", "transfer_charge_list"),
     ("inventory-medicine-transfers", "medicine_transfer_list"),
     ("inventory-adjustments", "inventory_adjustment_list"),
     ("inventory-stock-issues", "stock_issue_list"),

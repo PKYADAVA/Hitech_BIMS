@@ -375,6 +375,132 @@ footer { margin-top: auto; }
   .bims-navbar .nav-power-btn:hover { transform: none; }
 }
 
+/* Check in, check out and today's status, as three separate pieces rather
+   than one pill that changes meaning — each button disables itself once
+   it's not the valid next action, so what's clickable always says what will
+   happen. `.btn` in the selector and `min-height`/`!important` on padding
+   answer the same three global button rules the account pill and sign-out
+   button work around (see the account-pill comment below) -- without them
+   this comes out taller than its 34px neighbours and pushes the row wide. */
+.bims-navbar .nav-attendance-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bims-navbar .nav-attendance-btn.btn {
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border-radius: var(--radius-full);
+  padding: 0 12px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  min-height: 0;
+  font-size: .78rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.bims-navbar .nav-attendance-btn:hover:not(:disabled),
+.bims-navbar .nav-attendance-btn:focus-visible:not(:disabled) {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.bims-navbar .nav-attendance-btn:disabled {
+  opacity: .4;
+  cursor: default;
+}
+.bims-navbar .nav-attendance-btn i { font-size: .76rem; }
+
+.bims-navbar .nav-attendance-status {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.75);
+  font-size: .78rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bims-navbar .nav-attendance-status.na-checked-in {
+  background: rgba(26,127,55,0.35);
+  border-color: rgba(26,127,55,0.55);
+  color: #fff;
+}
+.bims-navbar .nav-attendance-status.na-checked-out {
+  background: rgba(138,109,0,0.3);
+  border-color: rgba(138,109,0,0.5);
+  color: #fff;
+}
+.bims-navbar .nav-attendance-status.na-blocked {
+  background: rgba(176,42,42,0.32);
+  border-color: rgba(176,42,42,0.55);
+  color: #fff;
+}
+.bims-navbar .nav-attendance-status.na-halfday {
+  background: rgba(107,63,160,0.32);
+  border-color: rgba(107,63,160,0.5);
+  color: #fff;
+}
+.bims-navbar .nav-attendance-status.na-late {
+  background: rgba(161,92,7,0.32);
+  border-color: rgba(161,92,7,0.5);
+  color: #fff;
+}
+/* The labels stay down to the mobile collapse -- this is one of the few
+   things on the bar someone actually reads, not a glyph they memorize, and
+   it is the smallest thing on the bar already. Below that, only the status
+   badge (one word, already compact) survives; both buttons go icon-only. */
+@media (max-width: 480px) {
+  .bims-navbar .nav-attendance-btn .nav-attendance-label { display: none; }
+  .bims-navbar .nav-attendance-btn.btn { padding: 0 9px !important; }
+}
+
+/* Selfie-capture modal for check in/out — shared by the My Attendance page
+   and the navbar's quick-punch widget (hr/templates/self_attendance.html,
+   templates/_ds_topbar.html, templates/main_top_navbar.html). Global rather
+   than page-scoped: the navbar include reaches every page, not just the one
+   this class was first written for, and the video/canvas/preview need a
+   shared max size so the modal never grows past the dialog that holds it. */
+.sa-camera-modal .modal-body { text-align: center; }
+.sa-camera-modal .modal-dialog { max-width: 400px; }
+.sa-camera-modal video,
+.sa-camera-modal canvas,
+.sa-camera-modal img {
+  width: 100%;
+  max-width: 360px;
+  max-height: 60vh;
+  border-radius: .5rem;
+  background: #000;
+  object-fit: cover;
+}
+.sa-camera-modal .sa-camera-fallback {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 4 / 3;
+  margin: 0 auto;
+  border-radius: .5rem;
+  background: #f1f3f5;
+  color: #6b7280;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  font-size: .85rem;
+  text-align: center;
+  padding: 1rem;
+}
+
 /* The account pill: a menu handle and the person's initials, nothing else.
    No dropdown caret — the bars already say it opens something, and a caret
    beside them is the same word twice. */

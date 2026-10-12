@@ -710,6 +710,59 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 }
 .ds-topbar .ds-power-btn { width: 34px; height: 34px; font-size: .95rem; }
 
+/* Check in, check out and today's status, as three separate pieces, drawn
+   for a white ground — same colour language as the top navbar's dark-ground
+   version (style.css), just with light surfaces instead of translucent
+   white-on-navy. */
+.ds-topbar .nav-attendance-group {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.ds-topbar .ds-attendance-btn.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; min-height: 0;
+  padding: 0 12px !important; border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px; background: #fff; box-shadow: none;
+  color: var(--text-secondary, #475569);
+  font-size: .78rem; font-weight: 600; line-height: 1; white-space: nowrap;
+}
+.ds-topbar .ds-attendance-btn.btn:hover:not(:disabled),
+.ds-topbar .ds-attendance-btn.btn:focus-visible:not(:disabled) {
+  background: var(--surface-hover, #f8fafc); border-color: #cbd5e1;
+}
+.ds-topbar .ds-attendance-btn.btn:disabled {
+  opacity: .45; cursor: default;
+}
+.ds-topbar .ds-attendance-btn i { font-size: .76rem; }
+
+.ds-topbar .ds-attendance-status {
+  display: inline-flex; align-items: center;
+  height: 34px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--border, #e5e7eb);
+  background: var(--surface-hover, #f8fafc);
+  color: var(--text-secondary, #475569);
+  font-size: .78rem; font-weight: 600; line-height: 1; white-space: nowrap;
+  cursor: pointer;
+}
+.ds-topbar .ds-attendance-status.na-checked-in {
+  background: #e8f8ec; border-color: #bfe7c9; color: #1a7f37;
+}
+.ds-topbar .ds-attendance-status.na-checked-out {
+  background: #fef3cd; border-color: #f1dd9c; color: #8a6d00;
+}
+.ds-topbar .ds-attendance-status.na-blocked {
+  background: #fbe3e3; border-color: #f0bcbc; color: #b02a2a;
+}
+.ds-topbar .ds-attendance-status.na-halfday {
+  background: #ece6fa; border-color: #d9cdf0; color: #6b3fa0;
+}
+.ds-topbar .ds-attendance-status.na-late {
+  background: #fde8d2; border-color: #f3d2a3; color: #a15c07;
+}
+@media (max-width: 480px) {
+  .ds-topbar .ds-attendance-btn .nav-attendance-label { display: none; }
+  .ds-topbar .ds-attendance-btn.btn { padding: 0 9px !important; }
+}
+
 /* Account handle: the menu bars and the person's initials, the pill the top
    navbar carries, drawn for a white ground. No caret -- the bars already say
    it opens something, and a caret beside them is the same word twice. The

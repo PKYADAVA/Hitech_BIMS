@@ -1354,6 +1354,335 @@ def _attendance_kpis(rows):
     }
 
 
+def _is_half_day(r, employee):
+    """Checked in and out, but for less than half the shift — or less than
+    4 hours when the employee has no shift assigned to measure against."""
+    if not (r.check_in_at and r.check_out_at):
+        return False
+    worked_minutes = (r.check_out_at - r.check_in_at).total_seconds() / 60
+    shift = getattr(employee, "shift", None)
+    if shift and shift.start_time and shift.end_time:
+        shift_minutes = ((shift.end_time.hour * 60 + shift.end_time.minute)
+                          - (shift.start_time.hour * 60 + shift.start_time.minute))
+        if shift_minutes <= 0:
+            shift_minutes += 24 * 60
+        threshold = shift_minutes / 2
+    else:
+        threshold = 4 * 60
+    return worked_minutes < threshold
+
+
+def _pending_reason(r):
+    """Why a record is sitting in Pending Approval, for the employee to see
+    rather than guess at a bare badge."""
+    if r.status != "pending":
+        return ""
+    if r.rejection_reason:
+        return r.rejection_reason
+    reasons = []
+    if r.check_in_inside_fence is False:
+        reasons.append("check-in was outside the office area")
+    if r.check_out_inside_fence is False:
+        reasons.append("check-out was outside the office area")
+    if r.is_late:
+        reasons.append("late check-in")
+    if r.is_early_exit:
+        reasons.append("early check-out")
+    return "; ".join(reasons).capitalize() if reasons else "Awaiting review"
+
+
+def _self_attendance_row(r, today, employee=None):
+    """One log-table row's display fields, derived rather than stored — the
+    same reasoning as UserAttendance.status: a stored label would drift from
+    the times/flags it is supposed to summarize."""
+    if r.check_in_at and r.check_out_at:
+        delta = r.check_out_at - r.check_in_at
+        minutes = max(int(delta.total_seconds() // 60), 0)
+        hours_display = f"{minutes // 60:02d}h {minutes % 60:02d}m"
+    elif r.check_in_at:
+        delta = timezone.now() - r.check_in_at
+        minutes = max(int(delta.total_seconds() // 60), 0)
+        hours_display = f"{minutes // 60:02d}h {minutes % 60:02d}m"
+    else:
+        hours_display = "-"
+
+    if not r.check_in_at:
+        status, status_css = "Absent", "sa-status-out"
+    elif not r.check_out_at:
+        status, status_css = "On Duty", "sa-status-in"
+    elif employee is not None and _is_half_day(r, employee):
+        status, status_css = "Half Day", "sa-status-halfday"
+    elif r.is_late:
+        status, status_css = "Late In", "sa-status-late"
+    else:
+        status, status_css = "Present", "sa-status-in"
+
+    return {
+        "date_display": "Today" if r.date == today else r.date.strftime("%b %d, %Y"),
+        "check_in_display": timezone.localtime(r.check_in_at).strftime("%I:%M %p") if r.check_in_at else "-",
+        "check_out_display": ("In Progress" if r.check_in_at and not r.check_out_at
+                              else timezone.localtime(r.check_out_at).strftime("%I:%M %p") if r.check_out_at else "-"),
+        "hours_display": hours_display,
+        "status": status, "status_css": status_css,
+        "approval_pending": r.status == "pending",
+        "pending_reason": _pending_reason(r),
+    }
+
+
+@login_required
+def self_attendance(request):
+    """HR > Attendance > My Attendance — the logged-in user's own Check In /
+    Check Out, GPS-verified the same way a provider push is (geofence,
+    late/early, auto-approve) via tracking.services.attendance_service —
+    this just supplies the GPS event directly from the browser instead of
+    a vendor webhook, so there is one attendance pipeline, not two."""
+    from tracking.models import EmployeeGpsAttendance
+
+    employee = getattr(request.user, "employee", None)
+    if employee is None:
+        return render(request, "self_attendance.html", {"no_employee": True})
+
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    week_start = today - timedelta(days=6)
+    todays_record = EmployeeGpsAttendance.objects.filter(employee=employee, date=today).first()
+    # Surfaced so Check In can be disabled with a reason rather than just
+    # bouncing the request — see the matching refusal in _self_attendance_punch.
+    open_prior_day = (EmployeeGpsAttendance.objects
+                      .filter(employee=employee, check_in_at__isnull=False,
+                              check_out_at__isnull=True)
+                      .exclude(date=today)
+                      .order_by("-date")
+                      .first())
+    month_records = list(EmployeeGpsAttendance.objects.filter(
+        employee=employee, date__gte=month_start, date__lte=today))
+    week_records = (EmployeeGpsAttendance.objects.filter(
+        employee=employee, date__gte=week_start, date__lte=today)
+        .order_by("-date"))
+
+    # Working days so far this month, weekends aside — the denominator the
+    # attendance-rate bar is read against. A calendar day with no record at
+    # all (not even a pending one) only counts against the rate once it is
+    # in the past; today not yet checked in isn't "missed" until it ends.
+    working_days_so_far = sum(1 for d in range(1, today.day + 1)
+                              if (month_start.replace(day=d)).weekday() < 6)
+    half_day_days = sum(1 for r in month_records if _is_half_day(r, employee))
+    present_days = sum(1 for r in month_records
+                       if r.check_in_at and not r.is_late and not _is_half_day(r, employee))
+    late_days = sum(1 for r in month_records if r.check_in_at and r.is_late)
+    checked_in_days = {r.date for r in month_records if r.check_in_at}
+    absent_days = sum(1 for d in range(1, today.day) if (month_start.replace(day=d)).weekday() < 6
+                      and month_start.replace(day=d) not in checked_in_days)
+    attendance_rate = round((present_days + late_days) * 100.0 / working_days_so_far, 1) \
+        if working_days_so_far else 0
+
+    hour = timezone.localtime().hour
+    greeting_part = "Morning" if hour < 12 else "Afternoon" if hour < 17 else "Evening"
+
+    from account.models import CompanyProfile
+
+    todays_status = _self_attendance_row(todays_record, today, employee) if todays_record else None
+
+    return render(request, "self_attendance.html", {
+        "employee": employee,
+        "todays_record": todays_record,
+        "todays_status": todays_status,
+        "present_days": present_days + late_days,
+        "late_days": late_days,
+        "half_day_days": half_day_days,
+        "absent_days": absent_days,
+        "total_days_so_far": today.day,
+        "working_days_so_far": working_days_so_far,
+        "attendance_rate": attendance_rate,
+        "week_log": [_self_attendance_row(r, today, employee) for r in week_records],
+        "todays_pending_reason": _pending_reason(todays_record) if todays_record else "",
+        "open_prior_day": open_prior_day,
+        "today": today,
+        "greeting_part": greeting_part,
+        "company_name": CompanyProfile.get_solo().name,
+    })
+
+
+@login_required
+def team_attendance(request):
+    """HR > Attendance > Team Attendance — today's status for everyone
+    sharing the viewer's branch_name. Employee has no manager/reports-to
+    link (report_to is free text), so branch is the only reliable grouping
+    available without a schema change; access itself is still gated by the
+    team_attendance tab permission, same as any other tab."""
+    from tracking.models import EmployeeGpsAttendance
+
+    employee = getattr(request.user, "employee", None)
+    if employee is None or not employee.branch_name:
+        return render(request, "team_attendance.html", {"no_branch": True})
+
+    today = timezone.localdate()
+    teammates = list(Employee.objects.filter(
+        branch_name=employee.branch_name, relieve=False
+    ).select_related("designation", "shift").order_by("full_name"))
+    records = {
+        r.employee_id: r for r in EmployeeGpsAttendance.objects.filter(
+            employee__in=teammates, date=today)
+    }
+
+    rows = []
+    for emp in teammates:
+        r = records.get(emp.pk)
+        row = _self_attendance_row(r, today, emp) if r else {
+            "check_in_display": "-", "check_out_display": "-", "hours_display": "-",
+            "status": "Absent", "status_css": "sa-status-out",
+            "approval_pending": False, "pending_reason": "",
+        }
+        rows.append({
+            "employee": emp,
+            "is_me": emp.pk == employee.pk,
+            "record_id": r.pk if r else None,
+            **row,
+        })
+
+    return render(request, "team_attendance.html", {
+        "branch_name": employee.branch_name,
+        "today": today,
+        "rows": rows,
+    })
+
+
+@login_required
+def team_attendance_delete(request, pk):
+    """Remove one tracking.EmployeeGpsAttendance row — the GPS source record,
+    not the mirrored hr.Attendance row (if any already exists, it is
+    untouched; see daily_attendance_delete for that side)."""
+    from tracking.models import EmployeeGpsAttendance
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    record = get_object_or_404(EmployeeGpsAttendance, pk=pk)
+    record.delete()
+    return JsonResponse({"success": True, "message": "Attendance record deleted."})
+
+
+@login_required
+def self_attendance_timesheet_csv(request):
+    """Download the same week's log as a CSV — the sheet behind the Download
+    Timesheet link, not a separate report."""
+    import csv
+
+    from django.http import HttpResponse
+
+    from tracking.models import EmployeeGpsAttendance
+
+    employee = getattr(request.user, "employee", None)
+    if employee is None:
+        return JsonResponse({"error": "No linked Employee record."}, status=400)
+
+    today = timezone.localdate()
+    week_start = today - timedelta(days=6)
+    rows = (EmployeeGpsAttendance.objects.filter(
+        employee=employee, date__gte=week_start, date__lte=today)
+        .order_by("-date"))
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="timesheet_{today.isoformat()}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Date", "In Time", "Out Time", "Total Hours", "Status"])
+    for r in rows:
+        row = _self_attendance_row(r, today, employee)
+        writer.writerow([r.date.isoformat(), row["check_in_display"], row["check_out_display"],
+                         row["hours_display"], row["status"]])
+    return response
+
+
+def _save_punch_photo(employee, event_type, photo_file):
+    """Selfie captured at check-in/out, stored the same way employee_images/
+    and trip photos are -- through default storage, so dev and the DO Spaces
+    backend both just work. Returns an absolute URL for AttendanceEvent."""
+    from django.core.files.storage import default_storage
+
+    ext = (photo_file.name.rsplit(".", 1)[-1] if "." in photo_file.name else "jpg").lower()
+    path = default_storage.save(
+        f"self_attendance_photos/{employee.pk}/{event_type}_{timezone.now():%Y%m%d%H%M%S}.{ext}",
+        photo_file,
+    )
+    return default_storage.url(path)
+
+
+def _self_attendance_punch(request, event_type):
+    from decimal import Decimal, InvalidOperation
+
+    from tracking.dtos import AttendanceEvent
+    from tracking.services.attendance_service import AttendanceIntegrationService
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+
+    employee = getattr(request.user, "employee", None)
+    if employee is None:
+        return JsonResponse({"error": "Your account has no linked Employee record."}, status=400)
+
+    latitude, longitude = request.POST.get("latitude"), request.POST.get("longitude")
+    if not latitude or not longitude:
+        return JsonResponse({"error": "Location is required."}, status=400)
+    try:
+        latitude, longitude = Decimal(latitude), Decimal(longitude)
+    except InvalidOperation:
+        return JsonResponse({"error": "Invalid location."}, status=400)
+
+    today = timezone.localdate()
+    from tracking.models import EmployeeGpsAttendance
+    existing = EmployeeGpsAttendance.objects.filter(employee=employee, date=today).first()
+    if event_type == "check_in":
+        if existing and existing.check_in_at:
+            return JsonResponse({"error": "Already checked in today."}, status=400)
+        # A day with no checkout is left exactly as it happened rather than
+        # silently carried forward or auto-closed — HR fixes it (the GPS
+        # Attendance admin lets check_out_at be edited), and until then the
+        # next day's check-in is refused rather than let a second open day
+        # pile up on top of the first.
+        open_prior = (EmployeeGpsAttendance.objects
+                      .filter(employee=employee, check_in_at__isnull=False,
+                              check_out_at__isnull=True)
+                      .exclude(date=today)
+                      .order_by("-date")
+                      .first())
+        if open_prior:
+            return JsonResponse({
+                "error": f"You never checked out on {open_prior.date.strftime('%b %d')}. "
+                         f"Contact HR to fix that day before checking in again.",
+            }, status=400)
+    if event_type == "check_out":
+        if not existing or not existing.check_in_at:
+            return JsonResponse({"error": "Check in first."}, status=400)
+        if existing.check_out_at:
+            return JsonResponse({"error": "Already checked out today."}, status=400)
+
+    photo_url = ""
+    photo_file = request.FILES.get("photo")
+    if photo_file:
+        photo_url = request.build_absolute_uri(_save_punch_photo(employee, event_type, photo_file))
+
+    event = AttendanceEvent(
+        external_employee_id=str(employee.pk), event=event_type,
+        occurred_at=timezone.now(), latitude=latitude, longitude=longitude,
+        photo_url=photo_url,
+    )
+    record = AttendanceIntegrationService().apply_event(employee, None, event)
+    when = record.check_in_at if event_type == "check_in" else record.check_out_at
+    return JsonResponse({
+        "message": "Checked in." if event_type == "check_in" else "Checked out.",
+        "time": timezone.localtime(when).strftime("%I:%M %p") if when else "",
+    })
+
+
+@login_required
+def self_attendance_check_in(request):
+    return _self_attendance_punch(request, "check_in")
+
+
+@login_required
+def self_attendance_check_out(request):
+    return _self_attendance_punch(request, "check_out")
+
+
 @login_required
 def daily_attendance(request):
     """HR > Attendance > Daily Attendance — dashboard for a date."""
@@ -1362,6 +1691,19 @@ def daily_attendance(request):
         "rows": rows, "filters": filters, "kpi": _attendance_kpis(rows),
         "on_date": on_date, **options,
     })
+
+
+@login_required
+def daily_attendance_delete(request, pk):
+    """Remove one hr.Attendance row — the final record payroll/reports read.
+    Does not touch the GPS source row (tracking.EmployeeGpsAttendance), which
+    is its own, separately deletable record; the two tables are a one-way
+    mirror, never kept in sync on delete."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    attendance = get_object_or_404(Attendance, pk=pk)
+    attendance.delete()
+    return JsonResponse({"success": True, "message": "Attendance record deleted."})
 
 
 @login_required

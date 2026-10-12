@@ -421,6 +421,10 @@ MODULE_REGISTRY = [
             {
                 "label": "Attendance",
                 "tabs": [
+                    ("self_attendance", "My Attendance", (
+                        "self_attendance_check_in", "self_attendance_check_out",
+                    )),
+                    ("team_attendance", "Team Attendance"),
                     ("daily_attendance", "Daily Attendance", ("save_attendance",)),
                     ("mark_attendance", "Mark Attendance"),
                     ("leave_employee", "Leave Placed", (
@@ -617,6 +621,12 @@ PUBLIC_URL_NAMES = {
     # Cascade pickers shared by forms across several modules, so they belong to
     # no single tab. They return scoped data instead — see the broiler views.
     "get_branches_by_region", "get_lines_by_branch", "get_supervisors",
+    # The Transaction History report, opened from a list page's icon — meant
+    # to be visible to anyone logged in regardless of whether their group can
+    # see that page itself, since it is a read-only audit trail, not a
+    # module privilege.
+    "stock_transfer_transaction_history", "petty_expense_transaction_history",
+    "voucher_transaction_history",
 }
 
 # All tab codes (url-names) that participate in the matrix.
@@ -896,6 +906,13 @@ _ACTION_URL_OVERRIDES = {
     "farmers_bulk_status": ("branch_farm", "edit"),
     "farms_bulk_supervisor": ("branch_farm", "edit"),
     "farmer_duplicate_check": ("branch_farm", "view"),
+    # Check in/out are what having the page at all is for — gated the same
+    # as opening it, not as a separate edit right.
+    "self_attendance_check_in": ("self_attendance", "view"),
+    "self_attendance_check_out": ("self_attendance", "view"),
+    "self_attendance_timesheet_csv": ("self_attendance", "view"),
+    "daily_attendance_delete": ("daily_attendance", "delete"),
+    "team_attendance_delete": ("team_attendance", "delete"),
     # Keep both / Undo on Duplicate Entries hide or restore a group for
     # everybody, so they are edits of that page rather than views of it.
     "duplicate_dismiss": ("duplicate_analyser", "edit"),

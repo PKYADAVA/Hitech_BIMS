@@ -24,8 +24,15 @@ from hr.views import (
     EmployeeGroupAPI,
     leave_calendar_holidays,
     daily_attendance,
+    daily_attendance_delete,
     mark_attendance,
     save_attendance,
+    self_attendance,
+    self_attendance_check_in,
+    self_attendance_check_out,
+    self_attendance_timesheet_csv,
+    team_attendance,
+    team_attendance_delete,
     supervisor_trip_report,
 )
 
@@ -72,7 +79,14 @@ urlpatterns = [
     path("employee_group/<int:id>/delete/", EmployeeGroupAPI.as_view(), name="employee_group_delete"),
 
     # Attendance workflow
+    path("self-attendance/", self_attendance, name="self_attendance"),
+    path("self-attendance/check-in/", self_attendance_check_in, name="self_attendance_check_in"),
+    path("self-attendance/check-out/", self_attendance_check_out, name="self_attendance_check_out"),
+    path("self-attendance/timesheet.csv", self_attendance_timesheet_csv, name="self_attendance_timesheet_csv"),
+    path("team-attendance/", team_attendance, name="team_attendance"),
+    path("team-attendance/<int:pk>/delete/", team_attendance_delete, name="team_attendance_delete"),
     path("daily-attendance/", daily_attendance, name="daily_attendance"),
+    path("daily-attendance/<int:pk>/delete/", daily_attendance_delete, name="daily_attendance_delete"),
     path("mark-attendance/", mark_attendance, name="mark_attendance"),
     path("save-attendance/", save_attendance, name="save_attendance"),
     path('supervisor-trip-report/', supervisor_trip_report,

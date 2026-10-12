@@ -38,6 +38,44 @@ layouts open it from the account menu.
     {% endcomment %}
     <div class="nav-search ms-auto d-none d-xl-flex me-3">{% include "_global_search.html" %}</div>
 
+    {% comment %}
+    Check in/out status + action, right on the bar — the same reasoning as
+    the sign-out button: reaching My Attendance for something done twice a
+    day was two clicks for a one-click action. Only rendered for users with
+    a linked Employee record (nav_attendance context processor), since most
+    web-only accounts have nothing to check in against.
+    {% endcomment %}
+    {% if nav_attendance is not None or request.user.employee %}
+    <div class="ms-xl-1 mt-3 mt-xl-0 mb-3 mb-xl-0 nav-attendance-group" id="navAttendanceWrap"
+         data-csrf="{{ csrf_token }}"
+         data-checkin-url="{% url 'self_attendance_check_in' %}"
+         data-checkout-url="{% url 'self_attendance_check_out' %}"
+         data-page-url="{% url 'self_attendance' %}"
+         data-checked-in="{% if nav_attendance.check_in_at %}1{% else %}0{% endif %}"
+         data-checked-out="{% if nav_attendance.check_out_at %}1{% else %}0{% endif %}"
+         data-blocked="{% if nav_open_prior_day and not nav_attendance.check_in_at %}1{% else %}0{% endif %}">
+      <button type="button" class="nav-attendance-btn nav-checkin-btn btn" id="navCheckInBtn"
+              {% if nav_attendance.check_in_at or nav_open_prior_day and not nav_attendance.check_in_at %}disabled{% endif %}
+              title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR first{% elif nav_attendance.check_in_at %}Already checked in{% else %}Tap to check in{% endif %}">
+        <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
+        <span class="nav-attendance-label">Check In</span>
+      </button>
+      <button type="button" class="nav-attendance-btn nav-checkout-btn btn" id="navCheckOutBtn"
+              {% if not nav_attendance.check_in_at or nav_attendance.check_out_at %}disabled{% endif %}
+              title="{% if nav_attendance.check_out_at %}Already checked out{% elif not nav_attendance.check_in_at %}Check in first{% else %}Tap to check out{% endif %}">
+        <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
+        <span class="nav-attendance-label">Check Out</span>
+      </button>
+      <span class="nav-attendance-status{% if nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
+            title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
+        {% if nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
+        {% elif nav_attendance.check_out_at %}{{ nav_status.status }}
+        {% elif nav_attendance.check_in_at %}Checked In
+        {% else %}Not Checked In{% endif %}
+      </span>
+    </div>
+    {% endif %}
+
     <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
     {% include "_alerthub_bell.html" %}
 
@@ -879,6 +917,12 @@ layouts open it from the account menu.
               <i class="fas fa-calendar-check"></i>Attendance
             </a>
             <ul class="dropdown-menu">
+              {% if 'self_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'self_attendance' %}">
+                <i class="fas fa-user-clock"></i>My Attendance
+              </a></li>{% endif %}
+              {% if 'team_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'team_attendance' %}">
+                <i class="fas fa-user-group"></i>Team Attendance
+              </a></li>{% endif %}
               {% if 'daily_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'daily_attendance' %}">
                 <i class="fas fa-calendar-check"></i>Daily Attendance
               </a></li>{% endif %}
@@ -1105,6 +1149,38 @@ layouts open it from the account menu.
 {% endif %}
 
 {% if request.user.is_authenticated %}
+{% if nav_attendance is not None or request.user.employee %}
+<!-- Check in/out selfie modal, outside the layout branch above for the same
+     reason as sign-out below: a modal nested inside the navbar's own
+     stacking context sits under its own backdrop and nothing inside it is
+     clickable, however high its z-index. -->
+<div class="modal fade sa-camera-modal" id="navCameraModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="navCameraTitle">Take a quick selfie</h6>
+        <button type="button" class="btn-close" id="navCameraClose" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <video id="navCameraVideo" autoplay playsinline muted></video>
+        <canvas id="navCameraCanvas" style="display:none;"></canvas>
+        <img id="navCameraPreview" style="display:none;">
+        <div id="navCameraFallback" class="sa-camera-fallback d-none">
+          <i class="fas fa-video-slash fa-lg"></i>
+          <span>Camera isn't available. You can still check in — just skip the photo.</span>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" id="navCameraSkip" data-bs-dismiss="modal">Skip Photo</button>
+        <button type="button" class="btn btn-success" id="navCameraCapture"><i class="fas fa-camera me-1"></i>Capture</button>
+        <button type="button" class="btn btn-outline-secondary d-none" id="navCameraRetake">Retake</button>
+        <button type="button" class="btn btn-success d-none" id="navCameraUse" data-bs-dismiss="modal">Use Photo</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Sign out, asked rather than assumed. Sits outside the layout branch above,
      like the profile modal, because both layouts open it from the same button. -->
 <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-hidden="true">

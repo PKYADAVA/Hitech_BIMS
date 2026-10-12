@@ -75,6 +75,7 @@ FA_TO_MCI = {
     "fa-tractor": "tractor",
     "fa-truck": "truck",
     "fa-truck-loading": "truck-delivery",
+    "fa-truck-ramp-box": "truck-fast",
     "fa-university": "bank",
     "fa-user": "account",
     "fa-user-check": "account-check",

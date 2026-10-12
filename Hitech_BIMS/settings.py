@@ -163,6 +163,9 @@ TEMPLATES = [
                 # `alert_prefs` so the navbar bell knows about sound/desktop
                 # popups before the session's first alert arrives.
                 "alerthub.context_processors.alert_preferences",
+                # `nav_attendance` so the navbar check in/out badge has
+                # today's status on the very first page of the session.
+                "hr.context_processors.self_attendance_status",
             ],
         },
     },

@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Team Attendance{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hr' %}{% endblock %}
+
+{% block content %}
+{% include '_hr_attendance_subnavbar.html' with active_tab='team_attendance' %}
+
+<style>
+  .sa-status-badge { padding:.25rem .7rem; border-radius:1rem; font-size:.75rem; font-weight:700; }
+  .sa-status-in { background:#d9f2df; color:#1a7f37; }
+  .sa-status-out { background:#fef3cd; color:#8a6d00; }
+  .sa-status-late { background:#fde8d2; color:#a15c07; }
+  .sa-status-halfday { background:#ece6fa; color:#6b3fa0; }
+  .sa-status-pending { background:#e6dff2; color:#6b3fa0; cursor:help; }
+  .sa-in-progress { color:#9aa3b2; font-style:italic; }
+  .ta-me { background:#f3faf2; }
+</style>
+
+<div class="page-header">
+    <div class="page-header-main">
+        <div class="page-header-title"><i class="fas fa-user-group"></i> Team Attendance</div>
+        <div class="page-header-subtitle">Today's status for everyone at your branch</div>
+    </div>
+</div>
+
+{% if no_branch %}
+<div class="alert alert-warning">Your Employee record has no branch set, so there is no team to show. Contact HR if this is unexpected.</div>
+{% else %}
+
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="fas fa-calendar-day me-1"></i>{{ branch_name }} &middot; {{ today|date:"l, d F Y" }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid">
+        <thead class="table-dark">
+          <tr><th class="ds-mid">Employee</th><th class="ds-mid">Designation</th><th class="ds-mid">In Time</th><th class="ds-mid">Out Time</th><th class="ds-mid">Total Hours</th><th class="ds-mid">Status</th>{% if page_perms.delete %}<th class="ds-mid">Action</th>{% endif %}</tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr{% if r.is_me %} class="ta-me"{% endif %}>
+            <td class="fw-semibold">{{ r.employee.full_name }}{% if r.is_me %} <span class="text-muted">(You)</span>{% endif %}</td>
+            <td>{{ r.employee.designation.title|default:"-" }}</td>
+            <td>{{ r.check_in_display }}</td>
+            <td{% if r.check_out_display == "In Progress" %} class="sa-in-progress"{% endif %}>{{ r.check_out_display }}</td>
+            <td>{{ r.hours_display }}</td>
+            <td>
+              <span class="sa-status-badge {{ r.status_css }}">{{ r.status }}</span>
+              {% if r.approval_pending %}<span class="sa-status-badge sa-status-pending ms-1" title="{{ r.pending_reason }}">Pending</span>{% endif %}
+            </td>
+            {% if page_perms.delete %}
+            <td>{% if r.record_id %}<button type="button" class="btn btn-outline-danger btn-sm ta-delete-btn" data-id="{{ r.record_id }}" title="Delete attendance record"><i class="fas fa-trash"></i></button>{% endif %}</td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center text-muted p-3">No teammates found for this branch.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+
+  $(document).on("click", ".ta-delete-btn", async function () {
+    const id = $(this).data("id");
+    if (!(await window.bimsConfirm(
+      "Delete this GPS attendance record? If it has already been approved and mirrored into HR's Attendance, that record stays and is removed separately from Daily Attendance.",
+      { title: "Delete attendance record", confirmText: "Delete" }
+    ))) return;
+    fetch(`/team-attendance/${id}/delete/`, { method: "POST", headers: { "X-CSRFToken": csrfToken } })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || "Failed.");
+        window.showToast("success", body.message);
+        setTimeout(() => window.location.reload(), 600);
+      })
+      .catch(err => window.showToast("danger", err.message));
+  });
+});
+</script>
+{% endblock %}
