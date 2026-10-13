@@ -623,6 +623,15 @@ _WHATSAPP_RESULT_STATUS_MAP = {
     "disabled": "disabled", "mocked": "mocked",
 }
 
+# GET /api/v1/messages/{id} status string -> WhatsappMessage.STATUS_CHOICES.
+# Per the docs: "Possible statuses: sent, delivered, read, failed." Maps
+# 1:1 since those four already match our own choices; an unrecognized
+# string (provider adds a new state) falls back to "unknown" rather than
+# raising, so a status-poll refresh is never the thing that breaks the page.
+_WHATSAPP_POLL_STATUS_MAP = {
+    "sent": "sent", "delivered": "delivered", "read": "read", "failed": "failed",
+}
+
 
 def _whatsapp_template_to_dict(template: WhatsappTemplate) -> dict:
     return {
@@ -836,6 +845,7 @@ def send_whatsapp_template(request, template_id: int) -> JsonResponse:
         template=template, template_name=template.template_name,
         status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
         wamid=result.message_id or "",
+        provider_message_id=result.provider_message_id or "",
         gateway_response=result.provider_response,
         api_request={"template_key": template.key},
         error_message=result.error or "",
@@ -940,6 +950,7 @@ def whatsapp_settings_test(request):
         template=template, template_name=template.template_name,
         status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
         wamid=result.message_id or "",
+        provider_message_id=result.provider_message_id or "",
         gateway_response=result.provider_response,
         api_request={"module": "test"},
         error_message=result.error or "",
@@ -1063,6 +1074,7 @@ def whatsapp_transaction_send(request):
         template=template, template_name=template.template_name,
         status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
         wamid=result.message_id or "",
+        provider_message_id=result.provider_message_id or "",
         gateway_response=result.provider_response,
         api_request={"module": data["module"], "doc_id": row["doc_id"],
                      "template": template.key, "context": context},
@@ -1089,6 +1101,11 @@ class WhatsappHistoryPageView(View):
         })
 
 
+#: Statuses that can still change — worth offering a Refresh for. A message
+#: already "read" or "failed" has nowhere further to go.
+_WHATSAPP_REFRESHABLE_STATUSES = frozenset({"queued", "sent", "delivered", "unknown"})
+
+
 def _whatsapp_message_to_dict(m):
     return {
         "id": m.id, "created_at": timezone.localtime(m.created_at).strftime("%Y-%m-%d %H:%M"),
@@ -1096,10 +1113,12 @@ def _whatsapp_message_to_dict(m):
         "module": m.module, "module_label": DOC_SOURCES.get(m.module, {}).get("label", m.module),
         "document_no": m.document_no, "template_name": m.template_name,
         "status": m.status, "wamid": m.wamid,
+        "has_provider_id": bool(m.provider_message_id),
         "gateway_response": m.gateway_response, "error_message": m.error_message,
         "retry_count": m.retry_count, "retry_of": m.retry_of_id,
         "sent_by": m.sent_by.username if m.sent_by else "",
         "can_retry": m.status in ("failed", "invalid", "unknown"),
+        "can_refresh": bool(m.provider_message_id) and m.status in _WHATSAPP_REFRESHABLE_STATUSES,
     }
 
 
@@ -1145,6 +1164,270 @@ def whatsapp_history(request):
 
 
 @login_required
+def whatsapp_history_refresh_status(request, message_id):
+    """Poll LemIn AI for a message's current delivery status and update the
+    stored row in place — view-only, so it uses the same "view" permission
+    as the history page itself rather than "edit" (nothing about the send
+    is being changed, only how accurately its outcome is recorded)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_history", "view"):
+        return JsonResponse({"error": "You do not have permission to view WhatsApp history."}, status=403)
+    message = WhatsappMessage.objects.filter(id=message_id).first()
+    if not message:
+        return JsonResponse({"error": "WhatsApp record not found."}, status=404)
+    if not message.provider_message_id:
+        return JsonResponse({"error": "This message has no stored provider id to check — "
+                                       "only messages sent after status polling was added can be refreshed."},
+                            status=400)
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().check_status(message.provider_message_id)
+    if result is None:
+        return JsonResponse({"error": "Could not reach the WhatsApp provider to check status. Try again shortly."},
+                            status=502)
+    raw_status, raw_response = result
+    mapped = _WHATSAPP_POLL_STATUS_MAP.get(raw_status, "unknown")
+    message.status = mapped
+    if raw_response is not None:
+        message.gateway_response = raw_response
+    message.save(update_fields=["status", "gateway_response"])
+    return JsonResponse({"success": True, "status": mapped, "raw_status": raw_status})
+
+
+#: One click shouldn't fire an unbounded burst of gateway calls — cap a
+#: bulk refresh to the most recent N still-pending messages. A user with
+#: more than this many pending can run it again for the next batch.
+_WHATSAPP_BULK_REFRESH_LIMIT = 50
+
+
+@login_required
+def whatsapp_history_bulk_refresh_status(request):
+    """Refresh every still-pending message (within the current filters) in
+    one click, instead of one row at a time. Same "view" permission as the
+    single-row refresh — this only re-checks outcomes, it sends nothing."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_history", "view"):
+        return JsonResponse({"error": "You do not have permission to view WhatsApp history."}, status=403)
+
+    qs = WhatsappMessage.objects.filter(
+        status__in=_WHATSAPP_REFRESHABLE_STATUSES,
+    ).exclude(provider_message_id="")
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    if from_date:
+        qs = qs.filter(created_at__date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(created_at__date__lte=date_from_query(to_date))
+    for field, param in (("module", "module"), ("template_id", "template"),
+                         ("mobile__icontains", "mobile")):
+        value = (request.GET.get(param) or "").strip()
+        if value:
+            qs = qs.filter(**{field: value})
+
+    messages = list(qs.order_by("-created_at")[:_WHATSAPP_BULK_REFRESH_LIMIT])
+    from .services.whatsapp_service import get_whatsapp_service
+
+    service = get_whatsapp_service()
+    updated, unchanged, failed = 0, 0, 0
+    for message in messages:
+        result = service.check_status(message.provider_message_id)
+        if result is None:
+            failed += 1
+            continue
+        raw_status, raw_response = result
+        mapped = _WHATSAPP_POLL_STATUS_MAP.get(raw_status, "unknown")
+        if mapped == message.status:
+            unchanged += 1
+            continue
+        message.status = mapped
+        if raw_response is not None:
+            message.gateway_response = raw_response
+        message.save(update_fields=["status", "gateway_response"])
+        updated += 1
+
+    return JsonResponse({
+        "success": True, "checked": len(messages), "updated": updated,
+        "unchanged": unchanged, "failed": failed,
+        "more_pending": qs.count() > len(messages),
+    })
+
+
+def _whatsapp_message_preview(raw):
+    """Best-effort one-line summary of a GET /api/v1/messages entry's
+    ``payload``, whose shape varies by ``type``. Falls back to the type
+    name itself for a shape this hasn't seen, rather than erroring —
+    LemIn AI can add message types without this list growing to match."""
+    payload = raw.get("payload") or {}
+    kind = payload.get("type") or raw.get("type") or "unknown"
+    if kind == "text":
+        return payload.get("text", {}).get("body", "")
+    if kind == "template":
+        # The docs' own request/response examples don't show it, but a real
+        # conversation entry carries a server-rendered "_display.body" with
+        # the actual message text (placeholders already filled with the
+        # parameters that were sent) — show that instead of just the
+        # template's name, which told the reader nothing about what the
+        # customer actually received.
+        tmpl = payload.get("template", {})
+        display_body = (payload.get("_display") or {}).get("body")
+        if display_body:
+            return display_body
+        return f"Template: {tmpl.get('name', '')}"
+    if kind in ("image", "video", "audio", "document"):
+        media = payload.get(kind, {})
+        caption = media.get("caption")
+        return f"[{kind}]" + (f" {caption}" if caption else "")
+    if kind == "interactive":
+        return payload.get("interactive", {}).get("body", {}).get("text", "") or "[interactive message]"
+    return f"[{kind}]"
+
+
+def _whatsapp_message_media_id(raw):
+    """The WhatsApp media id on an image/video/audio/document entry, for
+    the "Download" action — or ``None`` for a message that carries no
+    media (text, template, interactive)."""
+    payload = raw.get("payload") or {}
+    kind = payload.get("type") or raw.get("type") or ""
+    if kind not in ("image", "video", "audio", "document"):
+        return None
+    return (payload.get(kind) or {}).get("id")
+
+
+@login_required
+def whatsapp_conversation(request):
+    """Fetch the message thread with one phone number, for the "View
+    Conversation" action on WhatsApp History rows. Read-only, so it uses the
+    same "view" permission as the history page itself."""
+    if not user_can(request.user, "whatsapp_history", "view"):
+        return JsonResponse({"error": "You do not have permission to view WhatsApp history."}, status=403)
+    phone = (request.GET.get("phone") or "").strip()
+    if not phone:
+        return JsonResponse({"error": "A phone number is required."}, status=400)
+    page = (request.GET.get("page") or "1").strip()
+    try:
+        page = max(1, int(page))
+    except ValueError:
+        page = 1
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().get_conversation(phone, per_page=50, page=page, order="asc")
+    if result is None:
+        return JsonResponse({"error": "Could not reach the WhatsApp provider to load this conversation. "
+                                       "Try again shortly."}, status=502)
+    raw_messages, meta = result
+    messages = [{
+        "id": m.get("id"),
+        "direction": m.get("direction"),
+        "type": m.get("type"),
+        "status": m.get("status"),
+        "preview": _whatsapp_message_preview(m),
+        "media_id": _whatsapp_message_media_id(m),
+        "created_at": m.get("created_at"),
+    } for m in raw_messages]
+    return JsonResponse({"messages": messages, "meta": meta})
+
+
+@login_required
+def whatsapp_send_service_message(request):
+    """Send a free-text reply from the Conversation modal — only valid
+    within the contact's 24-hour service window (the provider itself
+    enforces this; see WhatsappService.send_text). Gated on the same
+    "add" permission as sending a template, since this is also a genuine
+    outbound send, not a read."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_transaction", "add"):
+        return JsonResponse({"error": "You do not have permission to send WhatsApp messages."}, status=403)
+    phone = (request.POST.get("phone") or "").strip()
+    body = (request.POST.get("body") or "").strip()
+    if not phone:
+        return JsonResponse({"error": "Phone number is required."}, status=400)
+    if not body:
+        return JsonResponse({"error": "Message text is required."}, status=400)
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    result = get_whatsapp_service().send_text(phone, body)
+    log = WhatsappMessage.objects.create(
+        mobile=phone, message=body,
+        status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
+        wamid=result.message_id or "",
+        provider_message_id=result.provider_message_id or "",
+        gateway_response=result.provider_response,
+        api_request={"type": "service_message"},
+        error_message=result.error or "",
+        sent_by=request.user, ip_address=_client_ip(request),
+    )
+    return JsonResponse({
+        "success": result.success, "status": log.status, "log_id": log.id,
+        "error": result.error, "message_id": result.message_id,
+    }, status=200 if result.success else 502)
+
+
+#: party_type -> the LemIn AI group name a synced contact is filed under.
+#: Plain names — LemIn AI creates any group it hasn't seen before, no IDs.
+_WHATSAPP_SYNC_GROUP_BY_PARTY_TYPE = {
+    "customer": "Customers", "supplier": "Suppliers",
+    "farmer": "Farmers", "employee": "Employees",
+}
+
+
+@login_required
+def whatsapp_sync_contact(request):
+    """Create (or restore) a LemIn AI contact for one ERP party — manual,
+    per-row action, not a bulk sync. Grouped by party_type and tagged with
+    a party_type custom field so the LemIn AI dashboard's own contact list
+    stays legible about where a contact came from. Gated on the same "add"
+    permission as sending, since this writes a real contact into the
+    connected LemIn AI account, not a local-only record."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    if not user_can(request.user, "whatsapp_transaction", "add"):
+        return JsonResponse({"error": "You do not have permission to sync WhatsApp contacts."}, status=403)
+    name = (request.POST.get("name") or "").strip()
+    phone = (request.POST.get("phone") or "").strip()
+    party_type = (request.POST.get("party_type") or "").strip()
+    if not name or not phone:
+        return JsonResponse({"error": "Name and phone number are required."}, status=400)
+
+    custom_fields = [{"key": "party_type", "value": party_type}] if party_type else []
+    group = _WHATSAPP_SYNC_GROUP_BY_PARTY_TYPE.get(party_type)
+    groups = [group] if group else []
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    success, data = get_whatsapp_service().create_contact(
+        name, phone, custom_fields=custom_fields, groups=groups)
+    if not success:
+        return JsonResponse({"error": data}, status=502)
+    return JsonResponse({"success": True, "contact": data})
+
+
+@login_required
+def whatsapp_media_link(request):
+    """Fetch a temporary download URL for one inbound media message, for
+    the Conversation modal's "Download" action. Read-only, so it uses the
+    same "view" permission as the history page itself."""
+    if not user_can(request.user, "whatsapp_history", "view"):
+        return JsonResponse({"error": "You do not have permission to view WhatsApp history."}, status=403)
+    media_id = (request.GET.get("media_id") or "").strip()
+    if not media_id:
+        return JsonResponse({"error": "A media id is required."}, status=400)
+
+    from .services.whatsapp_service import get_whatsapp_service
+
+    link = get_whatsapp_service().get_media_link(media_id)
+    if link is None:
+        return JsonResponse({"error": "Could not reach the WhatsApp provider to fetch this file. "
+                                       "Try again shortly."}, status=502)
+    return JsonResponse({"success": True, **link})
+
+
+@login_required
 def whatsapp_history_retry(request, message_id):
     """Re-send a failed WhatsApp message with the same template and context,
     keeping an audit trail. Mirrors sms_retry — context is replayed from the
@@ -1172,6 +1455,7 @@ def whatsapp_history_retry(request, message_id):
         template=original.template, template_name=original.template_name,
         status=_WHATSAPP_RESULT_STATUS_MAP.get(result.status, "unknown"),
         wamid=result.message_id or "",
+        provider_message_id=result.provider_message_id or "",
         gateway_response=result.provider_response,
         api_request=original.api_request,
         error_message=result.error or "",

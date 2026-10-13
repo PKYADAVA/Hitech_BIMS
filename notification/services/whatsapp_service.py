@@ -94,6 +94,81 @@ class WhatsappService:
                            mask_phone(phone_number))
             return None
 
+    def check_status(self, provider_message_id):
+        """Best-effort delivery-status refresh for a previously sent message.
+
+        Returns ``(status, raw_response)`` on a clean answer, or ``None``
+        when the check is inconclusive (no id, provider doesn't support it,
+        network failure) — callers must treat ``None`` as "couldn't refresh
+        right now", never surface it as a status change.
+        """
+        if not provider_message_id:
+            return None
+        try:
+            return self._provider.get_status(provider_message_id)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp status check raised unexpectedly id=%s", provider_message_id)
+            return None
+
+    def get_conversation(self, phone_number, per_page=50, page=1, order="asc"):
+        """Best-effort fetch of the message thread with ``phone_number``.
+
+        Returns ``(messages, meta)`` on a clean answer, or ``None`` when the
+        call is inconclusive (bad number, provider doesn't support it,
+        network failure) — callers must treat ``None`` as "couldn't load the
+        conversation right now", never as "no messages exist".
+        """
+        try:
+            recipient = normalize_phone(phone_number, self._config.default_country_code)
+        except SmsValidationError:
+            return None
+        try:
+            return self._provider.get_conversation(recipient, per_page=per_page, page=page, order=order)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp conversation fetch raised unexpectedly recipient=%s",
+                           mask_phone(phone_number))
+            return None
+
+    def create_contact(self, name, phone_number, custom_fields=None, groups=None):
+        """Create a LemIn AI contact for ``phone_number``.
+
+        Returns ``(success, data_or_error)`` — never raises, since syncing a
+        contact is an auxiliary action that must not break the page that
+        triggered it. A bad phone number is reported through the same
+        shape as a provider-side failure, for one error path on the caller
+        side instead of two.
+        """
+        try:
+            recipient = normalize_phone(phone_number, self._config.default_country_code)
+        except SmsValidationError as exc:
+            return False, str(exc)
+        try:
+            return self._provider.create_contact(name, recipient, custom_fields=custom_fields, groups=groups)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp create-contact raised unexpectedly recipient=%s",
+                           mask_phone(phone_number))
+            return False, "Unexpected error creating the contact."
+
+    def get_groups(self):
+        """Best-effort fetch of this account's contact groups, or ``None``
+        when the call is inconclusive."""
+        try:
+            return self._provider.get_groups()
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp get-groups raised unexpectedly")
+            return None
+
+    def get_media_link(self, media_id):
+        """Best-effort fetch of a temporary download URL for ``media_id``,
+        or ``None`` when the call is inconclusive."""
+        if not media_id:
+            return None
+        try:
+            return self._provider.get_media_link(media_id)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("WhatsApp get-media-link raised unexpectedly media_id=%s", media_id)
+            return None
+
     def send_template(self, template_key, phone_number, context=None) -> WhatsappResult:
         """Resolve a :class:`~notification.models.WhatsappTemplate` by key
         against ``context`` and send it.
@@ -142,12 +217,50 @@ class WhatsappService:
                 provider=self._provider.name,
             )
 
-        return self._dispatch(recipient, template_name, language, components)
+        return self._dispatch(
+            recipient,
+            lambda: self._provider.send_template(recipient, template_name, language, components),
+        )
 
-    def _dispatch(self, recipient, template_name, language, components) -> WhatsappResult:
+    def send_text(self, phone_number, body) -> WhatsappResult:
+        """Send a free-form (session) text message — only valid within the
+        contact's 24-hour service window; use :meth:`send_template` to
+        (re)start a conversation outside it. Mirrors :meth:`send_template`'s
+        validation/disabled handling exactly.
+        """
+        if not self._config.enabled:
+            logger.info("WhatsApp disabled; skipping send to recipient=%s", mask_phone(phone_number))
+            return WhatsappResult.failed(
+                recipient=str(phone_number or ""),
+                error="WhatsApp sending is disabled.",
+                status=WhatsappStatus.DISABLED,
+                provider=self._provider.name,
+            )
+        try:
+            recipient = normalize_phone(phone_number, self._config.default_country_code)
+        except SmsValidationError as exc:
+            logger.warning(
+                "WhatsApp validation failed recipient=%s reason=%s",
+                mask_phone(phone_number), exc,
+            )
+            return WhatsappResult.failed(
+                recipient=str(phone_number or ""),
+                error=str(exc),
+                status=WhatsappStatus.INVALID,
+                provider=self._provider.name,
+            )
+        body = (body or "").strip()
+        if not body:
+            return WhatsappResult.failed(
+                recipient=recipient, error="Message text cannot be empty.",
+                status=WhatsappStatus.INVALID, provider=self._provider.name,
+            )
+        return self._dispatch(recipient, lambda: self._provider.send_text(recipient, body))
+
+    def _dispatch(self, recipient, send_call) -> WhatsappResult:
         try:
             return call_with_retry(
-                lambda: self._provider.send_template(recipient, template_name, language, components),
+                send_call,
                 max_retries=self._config.max_retries,
                 backoff=self._config.retry_backoff,
                 transient_exception=WhatsappTransientError,

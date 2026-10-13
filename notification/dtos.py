@@ -57,25 +57,30 @@ class WhatsappResult:  # pylint: disable=too-many-instance-attributes
 
     Mirrors :class:`SmsResult` exactly, so business code that already knows
     how to read an SMS result reads this the same way. ``message_id`` holds
-    the WhatsApp message ID (WAMID) on success.
+    the WhatsApp message ID (WAMID) on success. ``provider_message_id`` holds
+    LemIn AI's own numeric id for the send — a different value, needed only
+    for the GET /api/v1/messages/{id} status-check call.
     """
 
     success: bool
     status: str
     recipient: str
     message_id: Optional[str] = None
+    provider_message_id: Optional[str] = None
     error: Optional[str] = None
     error_code: Optional[str] = None
     provider: Optional[str] = None
     provider_response: Optional[dict] = field(default=None, repr=False)
 
     @classmethod
-    def sent(cls, recipient, message_id=None, provider=None, provider_response=None):
+    def sent(cls, recipient, message_id=None, provider_message_id=None,
+            provider=None, provider_response=None):
         return cls(
             success=True,
             status=WhatsappStatus.SENT,
             recipient=recipient,
             message_id=message_id,
+            provider_message_id=provider_message_id,
             provider=provider,
             provider_response=provider_response,
         )

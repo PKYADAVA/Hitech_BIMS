@@ -127,6 +127,17 @@ WHATSAPP_HEADER_TYPE_CHOICES = (
 # LemIn AI (https://app.leminai.com) WhatsApp Business API wrapper contract.
 LEMINAI_SEND_TEMPLATE_ENDPOINT = "/api/v1/messages/template"
 LEMINAI_CONTACT_LOOKUP_ENDPOINT = "/api/v1/contacts/lookup"
+# {id} is LemIn's own numeric message_id (from the send response), not the WAMID.
+LEMINAI_MESSAGE_STATUS_ENDPOINT = "/api/v1/messages/{id}"
+# Full conversation thread with one contact, identified by phone (query param).
+LEMINAI_CONVERSATION_ENDPOINT = "/api/v1/messages"
+# Free-form (session) message — only within the contact's 24h service window.
+LEMINAI_SEND_SERVICE_MESSAGE_ENDPOINT = "/api/v1/messages/service"
+LEMINAI_CREATE_CONTACT_ENDPOINT = "/api/v1/contacts"
+LEMINAI_GROUPS_ENDPOINT = "/api/v1/groups"
+# {mediaId} is the WhatsApp media id from an inbound message's payload
+# (image/video/audio/document). Returns a 30-day signed download URL.
+LEMINAI_MEDIA_LINK_ENDPOINT = "/api/v1/media/whatsapp/{mediaId}/link"
 
 # SMSGatewayHub REST contract. Endpoint/success code reflect the provider's
 # published "Send SMS" JSON API; verify against your account documentation

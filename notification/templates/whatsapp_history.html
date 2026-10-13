@@ -62,10 +62,13 @@
         <label class="form-label">Search</label>
         <input type="text" class="form-control" id="q" placeholder="Party / document / WAMID">
       </div>
-      <div class="col-md-3 d-flex gap-2">
+      <div class="col-md-3 d-flex gap-2 flex-wrap">
         <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
         <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
         <button class="btn btn-outline-secondary" id="refresh-btn"><i class="fas fa-rotate"></i> Refresh</button>
+        <button class="btn btn-outline-primary" id="bulk-refresh-status-btn" title="Check delivery status for every pending message in the current filters">
+          <i class="fas fa-satellite-dish"></i> Refresh Pending Status
+        </button>
       </div>
     </div>
   </div>
@@ -114,6 +117,36 @@
   </div>
 </div>
 
+<!-- Conversation modal -->
+<div class="modal fade" id="conversationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fab fa-whatsapp me-2"></i>Conversation — <span id="conversation-mobile"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:50vh; overflow:auto;" id="conversation-body">
+        <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+      </div>
+      <div class="px-3 pb-2">
+        <div class="input-group">
+          <input type="text" class="form-control" id="conversation-reply-text"
+                 placeholder="Type a reply — only works if this contact messaged in the last 24 hours...">
+          <button class="btn btn-success" id="conversation-reply-send" type="button">
+            <i class="fas fa-paper-plane"></i> Send
+          </button>
+        </div>
+        <div class="form-text" id="conversation-reply-hint">
+          Free text only works within 24 hours of the customer's last message — otherwise use a Template from Transaction Messaging.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 {% block js %}
 <script>
@@ -155,7 +188,14 @@ $(function () {
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             <button class="btn btn-outline-info btn-sm view-whatsapp" data-id="${m.id}" title="View"><i class="fas fa-eye"></i></button>
+            ${m.mobile ? `<button class="btn btn-outline-success btn-sm view-conversation" data-mobile="${escapeHtml(m.mobile)}" title="View conversation with this number"><i class="fab fa-whatsapp"></i></button>` : ""}
+            ${m.can_refresh
+              ? `<button class="btn btn-outline-primary btn-sm refresh-status" data-id="${m.id}" title="Check latest delivery status"><i class="fas fa-satellite-dish"></i></button>`
+              : `<button class="btn btn-outline-secondary btn-sm" disabled title="${m.has_provider_id ? 'Status is final, nothing further to check' : 'Sent before status checking was added — not available for this message'}"><i class="fas fa-satellite-dish"></i></button>`}
             ${m.can_retry ? `<button class="btn btn-outline-warning btn-sm retry-whatsapp" data-id="${m.id}" title="Retry"><i class="fas fa-rotate-right"></i></button>` : ""}
+            ${m.party_name && m.mobile
+              ? `<button class="btn btn-outline-dark btn-sm sync-contact" data-mobile="${escapeHtml(m.mobile)}" data-name="${escapeHtml(m.party_name)}" data-party-type="${escapeHtml(m.party_type)}" title="Sync this party to WhatsApp (LemIn AI) contacts"><i class="fas fa-address-book"></i></button>`
+              : ""}
           </div>
         </td>
       </tr>`);
@@ -206,12 +246,144 @@ $(function () {
         <tr><th>Template</th><td>${escapeHtml(m.template_name) || "-"}</td></tr>
         <tr><th class="ds-mid">Status</th><td>${statusBadge(m.status)} ${m.error_message ? `<div class="small text-danger mt-1">${escapeHtml(m.error_message)}</div>` : ""}</td></tr>
         <tr><th>WhatsApp Message ID</th><td>${escapeHtml(m.wamid) || "-"}</td></tr>
+        <tr><th>Status Check</th><td>${m.can_refresh ? '<span class="text-success">Available</span>' : (m.has_provider_id ? '<span class="text-muted">Status is final</span>' : '<span class="text-muted">Not available (sent before this feature)</span>')}</td></tr>
         <tr><th>Retry Count</th><td>${m.retry_count}${m.retry_of ? ` (retry of #${m.retry_of})` : ""}</td></tr>
         <tr><th>Sent By</th><td>${escapeHtml(m.sent_by)}</td></tr>
       </table>
       <h6>Gateway Response</h6>
       <pre class="bg-light border rounded p-2 small" style="max-height:200px; overflow:auto;">${escapeHtml(gw)}</pre>`);
     new bootstrap.Modal(document.getElementById("viewWhatsappModal")).show();
+  });
+
+  const DIRECTION_ICON = {
+    inbound: '<i class="fas fa-arrow-left text-success" title="Received"></i>',
+    outbound: '<i class="fas fa-arrow-right text-primary" title="Sent"></i>',
+  };
+
+  function renderConversation(messages) {
+    if (!messages.length) {
+      return '<div class="text-center text-muted py-4">No messages yet with this number.</div>';
+    }
+    return messages.map(function (m) {
+      const align = m.direction === "inbound" ? "" : "text-end";
+      const bubbleClass = m.direction === "inbound" ? "bg-light" : "bg-primary bg-opacity-10";
+      const download = m.media_id
+        ? `<div class="mt-1"><button class="btn btn-outline-secondary btn-sm download-media" data-media-id="${escapeHtml(m.media_id)}"><i class="fas fa-download"></i> Download</button></div>`
+        : "";
+      return `<div class="mb-2 ${align}">
+        <div class="d-inline-block ${bubbleClass} rounded p-2" style="max-width:80%;">
+          <div class="small text-muted">${DIRECTION_ICON[m.direction] || ""} ${escapeHtml(m.created_at || "")} &middot; ${statusBadge(m.status || "unknown")}</div>
+          <div>${escapeHtml(m.preview || "")}</div>
+          ${download}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  let conversationPhone = null;
+
+  function loadConversation(mobile) {
+    $("#conversation-body").html('<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</div>');
+    $.getJSON("{% url 'whatsapp_conversation' %}", { phone: mobile }, function (resp) {
+      $("#conversation-body").html(renderConversation(resp.messages || []));
+      $("#conversation-body").scrollTop($("#conversation-body")[0].scrollHeight);
+    }).fail(function (xhr) {
+      $("#conversation-body").html(
+        `<div class="text-center text-danger py-4">${escapeHtml(xhr.responseJSON?.error || "Could not load this conversation.")}</div>`
+      );
+    });
+  }
+
+  $(document).on("click", ".view-conversation", function () {
+    conversationPhone = $(this).data("mobile");
+    $("#conversation-mobile").text(conversationPhone);
+    $("#conversation-reply-text").val("");
+    new bootstrap.Modal(document.getElementById("conversationModal")).show();
+    loadConversation(conversationPhone);
+  });
+
+  // Sends a free-text reply — only valid inside the contact's 24h window;
+  // the provider itself rejects it outside that window, so the error from
+  // a failed attempt is the authoritative "can't reply right now" signal
+  // rather than something pre-computed here.
+  $("#conversation-reply-send").on("click", function () {
+    const body = $("#conversation-reply-text").val().trim();
+    if (!body) return;
+    if (!conversationPhone) return;
+    const btn = $(this);
+    btn.prop("disabled", true);
+    $.ajax({
+      url: "{% url 'whatsapp_send_service_message' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: { phone: conversationPhone, body: body },
+      success: function () {
+        $("#conversation-reply-text").val("");
+        window.showToast('success', "Reply sent.");
+        loadConversation(conversationPhone);
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Could not send reply.");
+      },
+      complete: function () { btn.prop("disabled", false); },
+    });
+  });
+  $("#conversation-reply-text").on("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); $("#conversation-reply-send").trigger("click"); }
+  });
+
+  $(document).on("click", ".refresh-status", function () {
+    const id = $(this).data("id");
+    const btn = $(this);
+    btn.prop("disabled", true).find("i").addClass("fa-spin");
+    $.ajax({
+      url: `/whatsapp-history/${id}/refresh-status/`,
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function (res) {
+        window.showToast('success', `Status: ${res.status}`);
+        loadHistory();
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Could not check status.");
+        btn.prop("disabled", false).find("i").removeClass("fa-spin");
+      },
+    });
+  });
+
+  // Re-checks every still-pending message within the current filters in one
+  // go, capped server-side so one click can't fire an unbounded burst of
+  // gateway calls. Filters (not Search/Mobile text, which are client-only
+  // concerns) are passed through so "pending" matches what's on screen.
+  $("#bulk-refresh-status-btn").on("click", function () {
+    const btn = $(this);
+    btn.prop("disabled", true).find("i").addClass("fa-spin");
+    $.ajax({
+      url: "{% url 'whatsapp_history_bulk_refresh_status' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: {
+        from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+        module: $("#module").val(), template: $("#template").val(),
+        mobile: $("#mobile").val(),
+      },
+      success: function (res) {
+        if (res.checked === 0) {
+          window.showToast('info', "No pending messages to check.");
+        } else {
+          const more = res.more_pending ? " — more pending, run again for the next batch." : "";
+          window.showToast('success',
+            `Checked ${res.checked}: ${res.updated} updated, ${res.unchanged} unchanged, ${res.failed} couldn't be reached.${more}`);
+        }
+        loadHistory();
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Could not refresh pending statuses.");
+      },
+      complete: function () {
+        btn.prop("disabled", false).find("i").removeClass("fa-spin");
+      },
+    });
   });
 
   $(document).on("click", ".retry-whatsapp", async function () {
@@ -224,6 +396,43 @@ $(function () {
       success: function () { loadHistory(); },
       error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Retry failed."); loadHistory(); },
     });
+  });
+
+  $(document).on("click", ".sync-contact", async function () {
+    const btn = $(this);
+    const name = btn.data("name"), mobile = btn.data("mobile"), partyType = btn.data("party-type");
+    if (!(await window.bimsConfirm(`Create "${name}" (${mobile}) as a WhatsApp contact in LemIn AI?`))) return;
+    btn.prop("disabled", true);
+    $.ajax({
+      url: "{% url 'whatsapp_sync_contact' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: { name: name, phone: mobile, party_type: partyType },
+      success: function () {
+        window.showToast('success', `${name} synced to WhatsApp contacts.`);
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Could not sync this contact.");
+      },
+      complete: function () { btn.prop("disabled", false); },
+    });
+  });
+
+  $(document).on("click", ".download-media", function () {
+    const btn = $(this);
+    const mediaId = btn.data("media-id");
+    btn.prop("disabled", true).find("i").addClass("fa-spin");
+    $.getJSON("{% url 'whatsapp_media_link' %}", { media_id: mediaId })
+      .done(function (res) {
+        if (res.download_url) { window.open(res.download_url, "_blank", "noopener"); }
+        else { window.showToast('danger', "No download link in the response."); }
+      })
+      .fail(function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Could not fetch this file.");
+      })
+      .always(function () {
+        btn.prop("disabled", false).find("i").removeClass("fa-spin");
+      });
   });
 
   loadHistory();

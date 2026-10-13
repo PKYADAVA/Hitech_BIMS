@@ -334,8 +334,18 @@ class WhatsappMessage(models.Model):
     template = models.ForeignKey(WhatsappTemplate, on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name="messages")
     template_name = models.CharField(max_length=512, blank=True)
+    message = models.TextField(
+        blank=True,
+        help_text="Free text sent as a service message (24h-window reply). Blank for a "
+                   "template send, whose wording lives in Meta's approved template instead.",
+    )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="queued", db_index=True)
     wamid = models.CharField(max_length=128, blank=True, help_text="WhatsApp message ID.")
+    provider_message_id = models.CharField(
+        max_length=64, blank=True,
+        help_text="LemIn AI's own numeric message id — what GET /api/v1/messages/{id} "
+                   "(status polling) expects, distinct from the WAMID above.",
+    )
     gateway_response = models.JSONField(null=True, blank=True)
     api_request = models.JSONField(null=True, blank=True, help_text="Sanitized request context (no secrets).")
     error_message = models.TextField(blank=True)

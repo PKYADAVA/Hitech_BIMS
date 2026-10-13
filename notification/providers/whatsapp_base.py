@@ -29,6 +29,56 @@ class WhatsappProvider(ABC):
         :class:`~notification.exceptions.WhatsappPermanentError` otherwise.
         """
 
+    def get_status(self, provider_message_id: str):
+        """Return ``(status, raw_response)`` for a previously sent message,
+        or ``None`` if the check cannot be completed (no support, network
+        failure, bad id).
+
+        ``provider_message_id`` is the gateway's own id for the send, not
+        necessarily the WAMID — see the concrete provider for which one it
+        expects. Default: unsupported. Providers that can answer this
+        override it.
+        """
+        return None
+
+    def send_text(self, phone: str, body: str) -> WhatsappResult:
+        """Send a free-form (session) text message to an already-normalised
+        MSISDN. Only valid inside the contact's 24-hour service window —
+        implementations raise :class:`~notification.exceptions.WhatsappPermanentError`
+        (not transient — waiting doesn't fix it) when outside it.
+
+        Default: unsupported (raises). Providers that can send a service
+        message override it.
+        """
+        raise NotImplementedError(f"{self.name} does not support free-text service messages.")
+
+    def get_conversation(self, phone: str, per_page: int = 50, page: int = 1, order: str = "asc"):
+        """Return ``(messages, meta)`` for the thread with ``phone``, or
+        ``None`` if the call cannot be completed.
+
+        Default: unsupported. Providers that can answer this override it.
+        """
+        return None
+
+    def create_contact(self, name: str, phone: str, custom_fields=None, groups=None):
+        """Return ``(success, data_or_error)`` for creating a contact.
+
+        Default: unsupported — returns a failure tuple rather than raising,
+        since contact sync is an auxiliary action. Providers that can
+        create contacts override it.
+        """
+        return False, f"{self.name} does not support contact creation."
+
+    def get_groups(self):
+        """Return the list of contact groups for this account, or ``None``
+        if unsupported/unavailable. Default: unsupported."""
+        return None
+
+    def get_media_link(self, media_id: str):
+        """Return a temporary download URL dict for ``media_id``, or
+        ``None`` if unsupported/unavailable. Default: unsupported."""
+        return None
+
     def lookup_contact(self, phone: str):
         """Return ``True``/``False``/``None`` for whether ``phone`` is a
         known contact on this channel.
