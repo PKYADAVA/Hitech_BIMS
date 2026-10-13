@@ -165,6 +165,26 @@
       </div>
       <div class="modal-body">
         {% if todays_record %}
+        {% if todays_record.check_in_photo_url or todays_record.check_out_photo_url %}
+        <div class="d-flex gap-3 justify-content-center mb-3">
+          {% if todays_record.check_in_photo_url %}
+          <div class="text-center">
+            <a href="{{ todays_record.check_in_photo_url }}" target="_blank" rel="noopener">
+              <img src="{{ todays_record.check_in_photo_url }}" class="sa-wiz-confirm-photo" style="width:84px;height:84px;" alt="Check-in selfie">
+            </a>
+            <div class="small text-muted mt-1">Check In</div>
+          </div>
+          {% endif %}
+          {% if todays_record.check_out_photo_url %}
+          <div class="text-center">
+            <a href="{{ todays_record.check_out_photo_url }}" target="_blank" rel="noopener">
+              <img src="{{ todays_record.check_out_photo_url }}" class="sa-wiz-confirm-photo" style="width:84px;height:84px;" alt="Check-out selfie">
+            </a>
+            <div class="small text-muted mt-1">Check Out</div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
         <div class="sa-wiz-confirm-row"><span class="l">Check In</span><span class="v">{% if todays_record.check_in_at %}{{ todays_record.check_in_at|date:"h:i A" }}{% else %}-{% endif %}</span></div>
         <div class="sa-wiz-confirm-row"><span class="l">Check Out</span><span class="v">{% if todays_record.check_out_at %}{{ todays_record.check_out_at|date:"h:i A" }}{% else %}Pending{% endif %}</span></div>
         <div class="sa-wiz-confirm-row"><span class="l">Attendance Type</span><span class="v">{{ todays_record.get_attendance_type_display }}</span></div>
