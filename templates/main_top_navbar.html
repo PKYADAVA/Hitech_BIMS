@@ -1150,6 +1150,12 @@ layouts open it from the account menu.
 
 {% if request.user.is_authenticated %}
 {% if nav_attendance is not None or request.user.employee %}
+<!-- Leaflet for the location step's map preview below. Not loaded globally
+     in base.html (most pages never draw a map), so it rides along with this
+     include instead — present on every page, same as the widget it serves. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <!-- Check in/out selfie modal, outside the layout branch above for the same
      reason as sign-out below: a modal nested inside the navbar's own
      stacking context sits under its own backdrop and nothing inside it is
@@ -1158,23 +1164,86 @@ layouts open it from the account menu.
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h6 class="modal-title" id="navCameraTitle">Take a quick selfie</h6>
+        <h6 class="modal-title" id="navWizTitle">Check In</h6>
         <button type="button" class="btn-close" id="navCameraClose" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body text-center">
-        <video id="navCameraVideo" autoplay playsinline muted></video>
-        <canvas id="navCameraCanvas" style="display:none;"></canvas>
-        <img id="navCameraPreview" style="display:none;">
-        <div id="navCameraFallback" class="sa-camera-fallback d-none">
-          <i class="fas fa-video-slash fa-lg"></i>
-          <span>Camera isn't available. You can still check in — just skip the photo.</span>
+      <div class="modal-body">
+        <div class="sa-wiz-steps">
+          <div class="sa-wiz-step" data-step="location"><span class="dot">1</span>Location</div>
+          <div class="sa-wiz-sep"></div>
+          <div class="sa-wiz-step" data-step="selfie"><span class="dot">2</span>Selfie</div>
+          <div class="sa-wiz-sep"></div>
+          <div class="sa-wiz-step" data-step="confirm"><span class="dot">3</span>Confirm</div>
+        </div>
+
+        <!-- Step 1: Capture Location -->
+        <div class="sa-wiz-pane" data-pane="location">
+          <div id="navWizMap" class="sa-wiz-map"></div>
+          <div class="sa-wiz-loc-status" id="navWizLocStatus">
+            <span class="spinner-border spinner-border-sm text-success"></span>
+            <span>Getting your GPS location…</span>
+          </div>
+          <div id="navWizLocDetail" class="d-none mt-2">
+            <div class="sa-wiz-loc-row"><span>Address</span><b id="navWizLocAddress">-</b></div>
+            <div class="sa-wiz-loc-row"><span>Coordinates</span><b id="navWizLocCoords">-</b></div>
+            <div class="sa-wiz-loc-row"><span>Accuracy</span><b id="navWizLocAccuracy">-</b></div>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm mt-2 d-none" id="navWizLocRetry">
+            <i class="fas fa-rotate me-1"></i>Retry Location
+          </button>
+        </div>
+
+        <!-- Step 2: Take a Selfie -->
+        <div class="sa-wiz-pane" data-pane="selfie">
+          <div class="sa-wiz-selfie-frame">
+            <video id="navCameraVideo" autoplay playsinline muted></video>
+            <canvas id="navCameraCanvas"></canvas>
+            <img id="navCameraPreview" style="display:none;">
+            <div id="navCameraFallback" class="sa-camera-fallback d-none">
+              <i class="fas fa-video-slash fa-lg"></i>
+              <span>Camera isn't available. You can still check in — just skip the photo.</span>
+            </div>
+          </div>
+          <ul class="sa-wiz-selfie-tips ps-3 mb-0">
+            <li>Look at the camera</li>
+            <li>Keep your face in the frame</li>
+            <li>Good lighting, no sunglasses</li>
+          </ul>
+        </div>
+
+        <!-- Step 3: Confirm -->
+        <div class="sa-wiz-pane" data-pane="confirm">
+          <div class="d-flex gap-3 align-items-start mb-2">
+            <img id="navWizConfirmPhoto" class="sa-wiz-confirm-photo d-none" alt="Selfie">
+            <div class="flex-grow-1">
+              <div class="sa-wiz-confirm-row"><span class="l">Date &amp; Time</span><span class="v" id="navWizConfirmWhen">-</span></div>
+              <div class="sa-wiz-confirm-row"><span class="l">Location</span><span class="v" id="navWizConfirmLoc">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Success -->
+        <div class="sa-wiz-pane" data-pane="success">
+          <div class="sa-wiz-success">
+            <div class="icon"><i class="fas fa-check"></i></div>
+            <h6 class="fw-bold mb-1" id="navWizSuccessTitle">Checked In Successfully!</h6>
+            <div class="text-muted" id="navWizSuccessWhen">-</div>
+            <div class="text-muted small mt-1" id="navWizSuccessLoc"></div>
+          </div>
         </div>
       </div>
-      <div class="modal-footer justify-content-center">
-        <button type="button" class="btn btn-secondary" id="navCameraSkip" data-bs-dismiss="modal">Skip Photo</button>
-        <button type="button" class="btn btn-success" id="navCameraCapture"><i class="fas fa-camera me-1"></i>Capture</button>
-        <button type="button" class="btn btn-outline-secondary d-none" id="navCameraRetake">Retake</button>
-        <button type="button" class="btn btn-success d-none" id="navCameraUse" data-bs-dismiss="modal">Use Photo</button>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-secondary" id="navWizCancel" data-bs-dismiss="modal">Cancel</button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary d-none" id="navWizBack">
+            <i class="fas fa-arrow-left me-1"></i>Back
+          </button>
+          <button type="button" class="btn btn-secondary d-none" id="navCameraSkip">Skip Photo</button>
+          <button type="button" class="btn btn-success d-none" id="navCameraCapture"><i class="fas fa-camera me-1"></i>Capture Photo</button>
+          <button type="button" class="btn btn-success d-none" id="navWizContinue">Continue <i class="fas fa-arrow-right ms-1"></i></button>
+          <button type="button" class="btn btn-success d-none" id="navWizConfirmSubmit">Confirm Check In</button>
+          <button type="button" class="btn btn-success d-none" id="navWizClose" data-bs-dismiss="modal">Close</button>
+        </div>
       </div>
     </div>
   </div>

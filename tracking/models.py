@@ -772,6 +772,22 @@ class EmployeeGpsAttendance(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.CharField(max_length=255, blank=True)
+    ATTENDANCE_TYPE_CHOICES = [
+        ("regular", "Regular"),
+        ("field_duty", "Field Duty"),
+        ("official_visit", "Official Visit"),
+        ("work_from_home", "Work From Home"),
+        ("other", "Other"),
+    ]
+    attendance_type = models.CharField(
+        max_length=20, choices=ATTENDANCE_TYPE_CHOICES, default="regular",
+        help_text="What kind of work day this is — separate from status, which "
+                   "is the result of attendance rules, not a choice the employee makes.",
+    )
+    remarks = models.CharField(
+        max_length=255, blank=True,
+        help_text="Optional note from the employee at check-in or check-out.",
+    )
     attendance = models.ForeignKey(
         "hr.Attendance", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="gps_records",
@@ -868,6 +884,11 @@ class TrackingSettings(models.Model):
     attendance_auto_approve = models.BooleanField(
         default=False,
         help_text="Mirror GPS attendance into HR immediately, without manual approval.",
+    )
+    selfie_required_for_attendance = models.BooleanField(
+        default=False,
+        help_text="Require a selfie on self-service check in/out. When off, Skip Photo "
+                  "completes the punch and the skip is recorded, not silently allowed.",
     )
     modified_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"

@@ -74,10 +74,12 @@ _SETTINGS_FIELDS = (
     "default_geofence_radius_m", "distance_unit", "history_retention_days",
     "alerts_enabled", "sms_alerts_enabled",
     "attendance_sync_enabled", "attendance_auto_approve",
+    "selfie_required_for_attendance",
 )
 #: Settings fields that are booleans (re-asserted after the ""->None pass).
 _SETTINGS_BOOLS = ("enabled", "alerts_enabled", "sms_alerts_enabled",
-                   "attendance_sync_enabled", "attendance_auto_approve")
+                   "attendance_sync_enabled", "attendance_auto_approve",
+                   "selfie_required_for_attendance")
 
 
 # ------------------------------------------------------------------- helpers
@@ -315,6 +317,7 @@ class TrackingSettingsAPI(View):
             "sms_alerts_enabled": settings_row.sms_alerts_enabled,
             "attendance_sync_enabled": settings_row.attendance_sync_enabled,
             "attendance_auto_approve": settings_row.attendance_auto_approve,
+            "selfie_required_for_attendance": settings_row.selfie_required_for_attendance,
         }
 
 

@@ -321,6 +321,17 @@ class Attendance(models.Model):
         choices=[("Manual", "Manual"), ("Biometric", "Biometric"), ("Mobile App", "Mobile App")],
         default="Manual",
     )
+    attendance_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("Regular", "Regular"), ("Field Duty", "Field Duty"),
+            ("Official Visit", "Official Visit"), ("Work From Home", "Work From Home"),
+            ("Other", "Other"),
+        ],
+        default="Regular",
+        help_text="What kind of work day this is — separate from status, which "
+                  "is the result of attendance rules, not a choice the employee makes.",
+    )
     remarks = models.CharField(max_length=255, blank=True, default="")
     created_date = models.DateTimeField(auto_now_add=True, blank=True, null=True)
 

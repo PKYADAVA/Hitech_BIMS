@@ -48,9 +48,9 @@
   .sa-status-row-label { display:block; font-size:.68rem; text-transform:uppercase;
     letter-spacing:.03em; color:#8a93a3; font-weight:700; margin-bottom:.5rem; }
 
-  /* Sizing/layout for the camera modal is global (static/css/style.css,
-     .sa-camera-modal) so the navbar's copy of this same modal matches. */
-  #sa-camera-canvas { display:none; }
+  /* Camera modal sizing/layout and the .sa-wiz-* wizard step styles are
+     global (static/css/style.css) so the navbar's copy of this same modal
+     matches without duplicating the rules here. */
 </style>
 
 <div class="page-header">
@@ -82,6 +82,11 @@
       {% else %}<span class="text-muted">Not Checked In</span>{% endif %}
       {% if todays_record.status == "pending" %}<span class="sa-status-badge sa-status-pending ms-1" title="{{ todays_pending_reason }}">Pending Approval</span>{% endif %}
     </div>
+    {% if todays_record.check_in_at %}
+    <div class="s">
+      In {{ todays_record.check_in_at|date:"d M, h:i A" }}{% if todays_record.check_out_at %} &middot; Out {{ todays_record.check_out_at|date:"d M, h:i A" }}{% endif %}
+    </div>
+    {% endif %}
   </div>
   <div class="sa-kpi">
     <div class="l">Working Hours</div>
@@ -110,15 +115,34 @@
 
 <div class="card mb-3">
   <div class="card-body">
-    <div class="d-flex gap-2 flex-wrap">
-      <button class="btn btn-success" id="sa-checkin-btn" {% if todays_record.check_in_at %}disabled{% endif %}>
-        <i class="fas fa-right-to-bracket me-1"></i>Check In
-      </button>
-      <button class="btn btn-outline-secondary" id="sa-checkout-btn" {% if not todays_record.check_in_at or todays_record.check_out_at %}disabled{% endif %}>
-        <i class="fas fa-right-from-bracket me-1"></i>Check Out
-      </button>
+    <div class="row g-2 align-items-end">
+      <div class="col-auto">
+        <button class="btn btn-success" id="sa-checkin-btn" {% if todays_record.check_in_at %}disabled{% endif %}>
+          <i class="fas fa-right-to-bracket me-1"></i>Check In
+        </button>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-outline-secondary" id="sa-checkout-btn" {% if not todays_record.check_in_at or todays_record.check_out_at %}disabled{% endif %}>
+          <i class="fas fa-right-from-bracket me-1"></i>Check Out
+        </button>
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small text-muted">Attendance Type</label>
+        <select class="form-select form-select-sm" id="sa-attendance-type">
+          {% for value, label in attendance_type_choices %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col">
+        <label class="form-label mb-1 small text-muted">Remarks (Optional)</label>
+        <input type="text" class="form-control form-control-sm" id="sa-remarks" placeholder="e.g. On site, Field visit, Office work" maxlength="255">
+      </div>
+      <div class="col-auto">
+        <a href="#" class="small" data-bs-toggle="modal" data-bs-target="#sa-log-modal"><i class="fas fa-book me-1"></i>View Today's Log</a>
+      </div>
     </div>
-    <div class="form-text mt-2">Location access is required to check in or out. You'll be asked for a quick selfie too.</div>
+    <div class="form-text mt-2">Location access is required to check in or out.{% if selfie_required %} A selfie is required too.{% else %} You'll be asked for a quick selfie too.{% endif %}</div>
 
     <div class="sa-status-row">
       <span class="sa-status-row-label">Status</span>
@@ -132,27 +156,114 @@
   </div>
 </div>
 
+<div class="modal fade" id="sa-log-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Today's Attendance</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if todays_record %}
+        <div class="sa-wiz-confirm-row"><span class="l">Check In</span><span class="v">{% if todays_record.check_in_at %}{{ todays_record.check_in_at|date:"h:i A" }}{% else %}-{% endif %}</span></div>
+        <div class="sa-wiz-confirm-row"><span class="l">Check Out</span><span class="v">{% if todays_record.check_out_at %}{{ todays_record.check_out_at|date:"h:i A" }}{% else %}Pending{% endif %}</span></div>
+        <div class="sa-wiz-confirm-row"><span class="l">Attendance Type</span><span class="v">{{ todays_record.get_attendance_type_display }}</span></div>
+        {% if todays_record.remarks %}<div class="sa-wiz-confirm-row"><span class="l">Remarks</span><span class="v">{{ todays_record.remarks }}</span></div>{% endif %}
+        {% else %}
+        <p class="text-muted mb-0">No attendance recorded for today yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Guided check in/out: Capture Location -> Take a Selfie -> Confirm -> Success -->
 <div class="modal fade sa-camera-modal" id="sa-camera-modal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h6 class="modal-title">Take a quick selfie</h6>
+        <h6 class="modal-title" id="sa-wiz-title">Check In</h6>
         <button type="button" class="btn-close" id="sa-camera-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <video id="sa-camera-video" autoplay playsinline muted></video>
-        <canvas id="sa-camera-canvas"></canvas>
-        <img id="sa-camera-preview" style="display:none;">
-        <div id="sa-camera-fallback" class="sa-camera-fallback d-none">
-          <i class="fas fa-video-slash fa-lg"></i>
-          <span>Camera isn't available. You can still check in — just skip the photo.</span>
+        <div class="sa-wiz-steps">
+          <div class="sa-wiz-step" data-step="location"><span class="dot">1</span>Location</div>
+          <div class="sa-wiz-sep"></div>
+          <div class="sa-wiz-step" data-step="selfie"><span class="dot">2</span>Selfie</div>
+          <div class="sa-wiz-sep"></div>
+          <div class="sa-wiz-step" data-step="confirm"><span class="dot">3</span>Confirm</div>
+        </div>
+
+        <!-- Step 1: Capture Location -->
+        <div class="sa-wiz-pane" data-pane="location">
+          <div id="sa-wiz-map" class="sa-wiz-map"></div>
+          <div class="sa-wiz-loc-status" id="sa-wiz-loc-status">
+            <span class="spinner-border spinner-border-sm text-success"></span>
+            <span>Getting your GPS location…</span>
+          </div>
+          <div id="sa-wiz-loc-detail" class="d-none mt-2">
+            <div class="sa-wiz-loc-row"><span>Address</span><b id="sa-wiz-loc-address">-</b></div>
+            <div class="sa-wiz-loc-row"><span>Coordinates</span><b id="sa-wiz-loc-coords">-</b></div>
+            <div class="sa-wiz-loc-row"><span>Accuracy</span><b id="sa-wiz-loc-accuracy">-</b></div>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm mt-2 d-none" id="sa-wiz-loc-retry">
+            <i class="fas fa-rotate me-1"></i>Retry Location
+          </button>
+        </div>
+
+        <!-- Step 2: Take a Selfie -->
+        <div class="sa-wiz-pane" data-pane="selfie">
+          <div class="sa-wiz-selfie-frame">
+            <video id="sa-camera-video" autoplay playsinline muted></video>
+            <canvas id="sa-camera-canvas"></canvas>
+            <img id="sa-camera-preview" style="display:none;">
+            <div id="sa-camera-fallback" class="sa-camera-fallback d-none">
+              <i class="fas fa-video-slash fa-lg"></i>
+              <span>Camera isn't available.{% if not selfie_required %} You can still check in — just skip the photo.{% endif %}</span>
+            </div>
+          </div>
+          <ul class="sa-wiz-selfie-tips ps-3 mb-0">
+            <li>Look at the camera</li>
+            <li>Keep your face in the frame</li>
+            <li>Good lighting, no sunglasses</li>
+          </ul>
+        </div>
+
+        <!-- Step 3: Confirm -->
+        <div class="sa-wiz-pane" data-pane="confirm">
+          <div class="d-flex gap-3 align-items-start mb-2">
+            <img id="sa-wiz-confirm-photo" class="sa-wiz-confirm-photo d-none" alt="Selfie">
+            <div class="flex-grow-1">
+              <div class="sa-wiz-confirm-row"><span class="l">Date &amp; Time</span><span class="v" id="sa-wiz-confirm-when">-</span></div>
+              <div class="sa-wiz-confirm-row"><span class="l">Location</span><span class="v" id="sa-wiz-confirm-loc">-</span></div>
+              <div class="sa-wiz-confirm-row"><span class="l">Attendance Type</span><span class="v" id="sa-wiz-confirm-type">-</span></div>
+              <div class="sa-wiz-confirm-row"><span class="l">Remarks</span><span class="v" id="sa-wiz-confirm-remarks">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Success -->
+        <div class="sa-wiz-pane" data-pane="success">
+          <div class="sa-wiz-success">
+            <div class="icon"><i class="fas fa-check"></i></div>
+            <h6 class="fw-bold mb-1" id="sa-wiz-success-title">Checked In Successfully!</h6>
+            <div class="text-muted" id="sa-wiz-success-when">-</div>
+            <div class="text-muted small mt-1" id="sa-wiz-success-loc"></div>
+          </div>
         </div>
       </div>
-      <div class="modal-footer justify-content-center">
-        <button type="button" class="btn btn-secondary" id="sa-camera-skip" data-bs-dismiss="modal">Skip Photo</button>
-        <button type="button" class="btn btn-success" id="sa-camera-capture"><i class="fas fa-camera me-1"></i>Capture</button>
-        <button type="button" class="btn btn-outline-secondary d-none" id="sa-camera-retake">Retake</button>
-        <button type="button" class="btn btn-success d-none" id="sa-camera-use" data-bs-dismiss="modal">Use Photo</button>
+      <div class="modal-footer justify-content-between" id="sa-wiz-footer">
+        <button type="button" class="btn btn-secondary" id="sa-wiz-cancel" data-bs-dismiss="modal">Cancel</button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary d-none" id="sa-wiz-back">
+            <i class="fas fa-arrow-left me-1"></i>Back
+          </button>
+          <button type="button" class="btn btn-secondary d-none" id="sa-camera-skip">Skip Photo{% if selfie_required %} (If allowed){% endif %}</button>
+          <button type="button" class="btn btn-success d-none" id="sa-camera-capture"><i class="fas fa-camera me-1"></i>Capture Photo</button>
+          <button type="button" class="btn btn-success d-none" id="sa-wiz-continue">Continue <i class="fas fa-arrow-right ms-1"></i></button>
+          <button type="button" class="btn btn-success d-none" id="sa-wiz-confirm-submit">Confirm Check In</button>
+          <button type="button" class="btn btn-success d-none" id="sa-wiz-close" data-bs-dismiss="modal">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -245,88 +356,170 @@ $(function () {
     }, () => {}, { enableHighAccuracy: true, timeout: 10000 });
   }
 
-  function withLocation(onOk) {
-    if (!navigator.geolocation) {
-      window.showToast("danger", "Location is not available in this browser.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      pos => onOk(pos.coords.latitude, pos.coords.longitude),
-      () => window.showToast("danger", "Could not read your location. Allow location access and try again."),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }
-
-  function submitPunch(url, btn, photoBlob) {
-    btn.prop("disabled", true);
-    withLocation((lat, lng) => {
-      const fd = new FormData();
-      fd.append("latitude", lat);
-      fd.append("longitude", lng);
-      if (photoBlob) fd.append("photo", photoBlob, "selfie.jpg");
-      fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body: fd })
-        .then(async r => {
-          const body = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(body.error || "Failed.");
-          window.showToast("success", body.message);
-          setTimeout(() => window.location.reload(), 600);
-        })
-        .catch(err => { window.showToast("danger", err.message); btn.prop("disabled", false); });
-    });
-  }
-
-  // Selfie capture: open the camera in a modal, let the user confirm the
-  // shot, then hand the blob (or none, if they skip) to the punch they asked for.
-  let pendingPunchUrl = null, pendingPunchBtn = null, cameraStream = null, streamWatchdog = null;
+  // ======================================================================
+  // Guided check in/out wizard: Location -> Selfie -> Confirm -> Success.
+  // One flow drives both buttons; which URL/title/labels apply depends on
+  // which button opened it (isCheckIn below).
+  // ======================================================================
+  const SELFIE_REQUIRED = {% if selfie_required %}true{% else %}false{% endif %};
   const $modal = $("#sa-camera-modal");
   const video = document.getElementById("sa-camera-video");
   const canvas = document.getElementById("sa-camera-canvas");
   const preview = document.getElementById("sa-camera-preview");
   const fallback = document.getElementById("sa-camera-fallback");
 
+  let isCheckIn = true, punchUrl = "", punchBtn = null;
+  let cameraStream = null, streamWatchdog = null, capturedBlob = null;
+  let capturedLat = null, capturedLng = null, capturedAccuracy = null, capturedAddress = "";
+  let wizMap = null, wizMarker = null;
+
+  function fmtNow() {
+    return new Date().toLocaleString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    });
+  }
+
+  function goToStep(step) {
+    $(".sa-wiz-step").removeClass("is-active is-done");
+    $(".sa-wiz-pane").removeClass("is-active");
+    const order = ["location", "selfie", "confirm", "success"];
+    const idx = order.indexOf(step);
+    order.forEach((name, i) => {
+      if (i < idx) $(`.sa-wiz-step[data-step="${name}"]`).addClass("is-done");
+      else if (i === idx) $(`.sa-wiz-step[data-step="${name}"]`).addClass("is-active");
+    });
+    $(`.sa-wiz-pane[data-pane="${step}"]`).addClass("is-active");
+
+    const footerBtns = ["sa-wiz-cancel", "sa-wiz-back", "sa-camera-skip", "sa-camera-capture",
+                        "sa-wiz-continue", "sa-wiz-confirm-submit", "sa-wiz-close"];
+    footerBtns.forEach(id => $("#" + id).addClass("d-none"));
+
+    if (step === "location") {
+      $("#sa-wiz-title").text(isCheckIn ? "Check In" : "Check Out");
+      $("#sa-wiz-cancel").removeClass("d-none");
+      $("#sa-wiz-continue").removeClass("d-none").prop("disabled", true);
+    } else if (step === "selfie") {
+      $("#sa-wiz-title").text("Step 2: Take a Selfie");
+      $("#sa-wiz-back").removeClass("d-none");
+      $("#sa-camera-skip").toggleClass("d-none", SELFIE_REQUIRED && !capturedBlob);
+      $("#sa-camera-capture").removeClass("d-none");
+    } else if (step === "confirm") {
+      $("#sa-wiz-title").text("Step 3: Confirm " + (isCheckIn ? "Check In" : "Check Out"));
+      $("#sa-wiz-back").removeClass("d-none");
+      $("#sa-wiz-confirm-submit").removeClass("d-none").text(isCheckIn ? "Confirm Check In" : "Confirm Check Out");
+      $("#sa-wiz-confirm-when").text(fmtNow());
+      $("#sa-wiz-confirm-loc").text(capturedAddress || (capturedLat != null ? `${capturedLat.toFixed(5)}, ${capturedLng.toFixed(5)}` : "-"));
+      $("#sa-wiz-confirm-type").text($("#sa-attendance-type option:selected").text());
+      $("#sa-wiz-confirm-remarks").text($("#sa-remarks").val().trim() || "-");
+      if (capturedBlob) {
+        $("#sa-wiz-confirm-photo").attr("src", preview.src).removeClass("d-none");
+      } else {
+        $("#sa-wiz-confirm-photo").addClass("d-none");
+      }
+    } else if (step === "success") {
+      $("#sa-wiz-close").removeClass("d-none");
+    }
+  }
+
+  function initWizMap(lat, lng) {
+    if (typeof L === "undefined") return;
+    if (!wizMap) {
+      wizMap = L.map("sa-wiz-map", { zoomControl: false, attributionControl: false }).setView([lat, lng], 16);
+      L.tileLayer(BIMS_MAP.url, {
+        maxZoom: BIMS_MAP.maxZoom, attribution: BIMS_MAP.attribution,
+      }).addTo(wizMap);
+      wizMarker = L.marker([lat, lng]).addTo(wizMap);
+    } else {
+      wizMap.setView([lat, lng], 16);
+      wizMarker.setLatLng([lat, lng]);
+    }
+    setTimeout(() => wizMap.invalidateSize(), 150);
+  }
+
+  function captureLocation() {
+    $("#sa-wiz-loc-status").removeClass("d-none").html(
+      '<span class="spinner-border spinner-border-sm text-success"></span><span>Getting your GPS location…</span>');
+    $("#sa-wiz-loc-detail").addClass("d-none");
+    $("#sa-wiz-loc-retry").addClass("d-none");
+    $("#sa-wiz-continue").prop("disabled", true);
+    if (!navigator.geolocation) {
+      $("#sa-wiz-loc-status").html('<span class="text-danger">Location is not available in this browser.</span>');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        capturedLat = pos.coords.latitude;
+        capturedLng = pos.coords.longitude;
+        capturedAccuracy = pos.coords.accuracy;
+        initWizMap(capturedLat, capturedLng);
+        $("#sa-wiz-loc-coords").text(`${capturedLat.toFixed(5)}, ${capturedLng.toFixed(5)}`);
+        $("#sa-wiz-loc-accuracy").text(Math.round(capturedAccuracy) + " meters");
+        $("#sa-wiz-loc-address").text("Looking up address…");
+        $("#sa-wiz-loc-status").html('<span class="text-success"><i class="fas fa-check-circle me-1"></i>Location captured</span>');
+        $("#sa-wiz-loc-detail").removeClass("d-none");
+        $("#sa-wiz-continue").prop("disabled", false);
+        if (window.reverseGeocode) {
+          window.reverseGeocode(capturedLat.toFixed(6), capturedLng.toFixed(6)).then(place => {
+            capturedAddress = place && place.display ? place.display : "";
+            if (capturedAddress) $("#sa-wiz-loc-address").text(capturedAddress);
+            else $("#sa-wiz-loc-address").text("-");
+          }).catch(() => $("#sa-wiz-loc-address").text("-"));
+        } else {
+          $("#sa-wiz-loc-address").text("-");
+        }
+      },
+      err => {
+        capturedLat = capturedLng = capturedAccuracy = null;
+        const msg = err && err.code === err.PERMISSION_DENIED
+          ? "Location access was denied. Allow it in your browser settings and retry."
+          : "Could not read your location. Check your connection and retry.";
+        $("#sa-wiz-loc-status").html(`<span class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>${msg}</span>`);
+        $("#sa-wiz-loc-retry").removeClass("d-none");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  $("#sa-wiz-loc-retry").on("click", captureLocation);
+
   function stopCamera() {
     if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
     if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
   }
 
-  let capturedBlob = null;
-
-  function resetCameraModal() {
+  function resetCameraPane() {
     video.style.display = ""; preview.style.display = "none"; fallback.classList.add("d-none");
     capturedBlob = null;
-    $("#sa-camera-capture").removeClass("d-none").prop("disabled", false);
-    $("#sa-camera-retake, #sa-camera-use").addClass("d-none");
+    $("#sa-camera-capture").removeClass("d-none").prop("disabled", true);
   }
 
   // A granted permission does not guarantee real frames — a virtual/blocked
   // device can open a stream that never produces a picture, which is the
   // black square a dead camera shows. Capture is disabled until the video
-  // actually reports a size, and a 6s watchdog gives up and offers Skip
-  // Photo rather than leave a frozen preview with no way forward.
+  // actually reports a size, and a 3s watchdog gives up and offers Skip
+  // Photo (when allowed) rather than leave a frozen preview with no way
+  // forward.
   function showCameraFallback() {
+    if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
     video.style.display = "none";
     fallback.classList.remove("d-none");
     $("#sa-camera-capture").addClass("d-none");
   }
 
-  function openCamera(url, btn) {
-    pendingPunchUrl = url; pendingPunchBtn = btn;
-    btn.prop("disabled", true);
+  function openCamera() {
+    resetCameraPane();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      // No camera available in this browser — fall back to a photo-less punch.
-      submitPunch(url, btn, null);
+      showCameraFallback();
       return;
     }
-    resetCameraModal();
-    $("#sa-camera-capture").prop("disabled", true);
-    $modal.modal("show");
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
       .then(stream => {
         cameraStream = stream;
         video.srcObject = stream;
         streamWatchdog = setTimeout(() => {
           if (!video.videoWidth) showCameraFallback();
-        }, 6000);
+        }, 3000);
       })
       .catch(showCameraFallback);
   }
@@ -335,46 +528,83 @@ $(function () {
     if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
     $("#sa-camera-capture").prop("disabled", false);
   });
+  video.addEventListener("error", showCameraFallback);
 
   $("#sa-camera-capture").on("click", function () {
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
     preview.src = canvas.toDataURL("image/jpeg", 0.85);
     video.style.display = "none"; preview.style.display = "";
-    $(this).addClass("d-none");
-    $("#sa-camera-retake, #sa-camera-use").removeClass("d-none");
-    canvas.toBlob(blob => { capturedBlob = blob; }, "image/jpeg", 0.85);
+    canvas.toBlob(blob => {
+      capturedBlob = blob;
+      stopCamera();
+      goToStep("confirm");
+    }, "image/jpeg", 0.85);
   });
 
-  $("#sa-camera-retake").on("click", function () {
-    preview.style.display = "none"; video.style.display = "";
+  $("#sa-camera-skip").on("click", function () {
+    stopCamera();
     capturedBlob = null;
-    $(this).addClass("d-none");
-    $("#sa-camera-use").addClass("d-none");
-    $("#sa-camera-capture").removeClass("d-none");
+    goToStep("confirm");
   });
 
-  // Only Skip Photo and Use Photo mean "go ahead and punch" — the X button
-  // and Escape/backdrop both close the same Bootstrap modal with no way to
-  // tell them apart from hidden.bs.modal alone, so each exit says which kind
-  // it was instead of the handler assuming every close is a confirm.
-  let shouldSubmit = false;
-  $("#sa-camera-skip, #sa-camera-use").on("click", function () { shouldSubmit = true; });
-  $("#sa-camera-close").on("click", function () { shouldSubmit = false; });
+  $("#sa-wiz-continue").on("click", function () {
+    goToStep("selfie");
+    openCamera();
+  });
 
+  $("#sa-wiz-back").on("click", function () {
+    const current = $(".sa-wiz-pane.is-active").data("pane");
+    if (current === "selfie") { stopCamera(); goToStep("location"); }
+    else if (current === "confirm") { goToStep("selfie"); openCamera(); }
+  });
+
+  $("#sa-wiz-confirm-submit").on("click", function () {
+    const $btn = $(this).prop("disabled", true);
+    const fd = new FormData();
+    fd.append("latitude", capturedLat);
+    fd.append("longitude", capturedLng);
+    fd.append("attendance_type", $("#sa-attendance-type").val());
+    fd.append("remarks", $("#sa-remarks").val().trim());
+    if (capturedBlob) fd.append("photo", capturedBlob, "selfie.jpg");
+    fetch(punchUrl, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body: fd })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || "Failed.");
+        const when = [body.date, body.time].filter(Boolean).join(", ");
+        $("#sa-wiz-success-title").text((isCheckIn ? "Checked In" : "Checked Out") + " Successfully!");
+        $("#sa-wiz-success-when").text(when);
+        $("#sa-wiz-success-loc").text(capturedAddress || "");
+        goToStep("success");
+      })
+      .catch(err => {
+        window.showToast("danger", err.message);
+        $btn.prop("disabled", false);
+      });
+  });
+
+  // Close/Cancel both just dismiss via data-bs-dismiss; the modal's own
+  // hidden handler below decides whether a reload is owed (only after a
+  // real success), so no click handler is needed on those buttons.
   $modal.on("hidden.bs.modal", function () {
     stopCamera();
-    if (shouldSubmit && pendingPunchUrl) {
-      submitPunch(pendingPunchUrl, pendingPunchBtn, capturedBlob);
-    } else if (pendingPunchBtn) {
-      pendingPunchBtn.prop("disabled", false);
-    }
-    shouldSubmit = false;
-    pendingPunchUrl = null; pendingPunchBtn = null; capturedBlob = null;
+    const succeeded = $(`.sa-wiz-pane[data-pane="success"]`).hasClass("is-active");
+    if (punchBtn) punchBtn.prop("disabled", false);
+    punchUrl = ""; punchBtn = null; capturedBlob = null;
+    capturedLat = capturedLng = capturedAccuracy = null; capturedAddress = "";
+    if (succeeded) { setTimeout(() => window.location.reload(), 300); }
   });
 
-  $("#sa-checkin-btn").on("click", function () { openCamera("{% url 'self_attendance_check_in' %}", $(this)); });
-  $("#sa-checkout-btn").on("click", function () { openCamera("{% url 'self_attendance_check_out' %}", $(this)); });
+  function openWizard(checkIn, url, btn) {
+    isCheckIn = checkIn; punchUrl = url; punchBtn = btn;
+    btn.prop("disabled", true);
+    goToStep("location");
+    $modal.modal("show");
+    captureLocation();
+  }
+
+  $("#sa-checkin-btn").on("click", function () { openWizard(true, "{% url 'self_attendance_check_in' %}", $(this)); });
+  $("#sa-checkout-btn").on("click", function () { openWizard(false, "{% url 'self_attendance_check_out' %}", $(this)); });
 });
 </script>
 {% endblock %}

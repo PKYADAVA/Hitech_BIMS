@@ -80,6 +80,10 @@ class AttendanceIntegrationService:
         record.check_in_address = event.address
         if event.photo_url:
             record.check_in_photo_url = event.photo_url[:500]
+        if event.attendance_type:
+            record.attendance_type = event.attendance_type
+        if event.remarks:
+            record.remarks = event.remarks
         record.geofence, record.check_in_inside_fence = self._fence_verdict(
             event.latitude, event.longitude
         )
@@ -96,6 +100,11 @@ class AttendanceIntegrationService:
         record.check_out_address = event.address
         if event.photo_url:
             record.check_out_photo_url = event.photo_url[:500]
+        if event.remarks:
+            # Check-out's own remark is appended rather than overwriting the
+            # check-in one -- the two are about different moments of the
+            # same day, and neither should silently erase the other.
+            record.remarks = f"{record.remarks} | {event.remarks}" if record.remarks else event.remarks
         _fence, record.check_out_inside_fence = self._fence_verdict(
             event.latitude, event.longitude
         )
@@ -196,6 +205,13 @@ class AttendanceIntegrationService:
         record.save()
         return record
 
+    # GPS attendance_type slugs -> hr.Attendance's title-case choice values.
+    ATTENDANCE_TYPE_TO_HR = {
+        "regular": "Regular", "field_duty": "Field Duty",
+        "official_visit": "Official Visit", "work_from_home": "Work From Home",
+        "other": "Other",
+    }
+
     @staticmethod
     def mirror_to_hr(record):
         """Write/refresh the hr.Attendance row per the HR-safety rules above."""
@@ -205,12 +221,16 @@ class AttendanceIntegrationService:
         check_out_time = (
             timezone.localtime(record.check_out_at).time() if record.check_out_at else None
         )
+        hr_attendance_type = AttendanceIntegrationService.ATTENDANCE_TYPE_TO_HR.get(
+            record.attendance_type, "Regular")
         attendance, created = Attendance.objects.get_or_create(
             employee=record.employee, date=record.date,
             defaults={
                 "check_in_time": check_in_time,
                 "check_out_time": check_out_time,
                 "status": "Present",
+                "attendance_type": hr_attendance_type,
+                "remarks": record.remarks,
             },
         )
         if not created:
@@ -228,6 +248,12 @@ class AttendanceIntegrationService:
             if attendance.status == "Absent":
                 attendance.status = "Present"
                 update_fields.append("status")
+            if attendance.attendance_type != hr_attendance_type:
+                attendance.attendance_type = hr_attendance_type
+                update_fields.append("attendance_type")
+            if record.remarks and attendance.remarks != record.remarks:
+                attendance.remarks = record.remarks
+                update_fields.append("remarks")
             if update_fields:
                 attendance.save(update_fields=update_fields)
         record.attendance = attendance

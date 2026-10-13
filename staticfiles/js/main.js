@@ -1179,18 +1179,17 @@ window.loadOptions = function (select, url, data, options) {
   const canvas = document.getElementById('navCameraCanvas');
   const preview = document.getElementById('navCameraPreview');
   const captureBtn = document.getElementById('navCameraCapture');
-  const retakeBtn = document.getElementById('navCameraRetake');
-  const useBtn = document.getElementById('navCameraUse');
-  const title = document.getElementById('navCameraTitle');
+  const skipBtn = document.getElementById('navCameraSkip');
   const fallback = document.getElementById('navCameraFallback');
 
   let checkedIn = wrap.dataset.checkedIn === '1';
   let checkedOut = wrap.dataset.checkedOut === '1';
   const blocked = wrap.dataset.blocked === '1';
-  let cameraStream = null;
-  let capturedBlob = null;
-  let eventType = null;
-  let streamWatchdog = null;
+
+  let isCheckIn = true;
+  let cameraStream = null, streamWatchdog = null, capturedBlob = null;
+  let capturedLat = null, capturedLng = null, capturedAccuracy = null, capturedAddress = '';
+  let wizMap = null, wizMarker = null;
 
   // Check In disables once used (or once a prior day is left open), Check
   // Out disables until checked in (or once used) — both are plain booleans
@@ -1213,75 +1212,138 @@ window.loadOptions = function (select, url, data, options) {
     statusEl.textContent = 'Checked In';
   }
 
-  function withLocation(onOk) {
+  function fmtNow() {
+    return new Date().toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+  }
+
+  function qs(id) { return document.getElementById(id); }
+
+  function goToStep(step) {
+    modalEl.querySelectorAll('.sa-wiz-step').forEach(el => el.classList.remove('is-active', 'is-done'));
+    modalEl.querySelectorAll('.sa-wiz-pane').forEach(el => el.classList.remove('is-active'));
+    const order = ['location', 'selfie', 'confirm', 'success'];
+    const idx = order.indexOf(step);
+    order.forEach((name, i) => {
+      const el = modalEl.querySelector(`.sa-wiz-step[data-step="${name}"]`);
+      if (!el) return;
+      if (i < idx) el.classList.add('is-done');
+      else if (i === idx) el.classList.add('is-active');
+    });
+    modalEl.querySelector(`.sa-wiz-pane[data-pane="${step}"]`).classList.add('is-active');
+
+    const footerBtns = ['navWizCancel', 'navWizBack', 'navCameraSkip', 'navCameraCapture',
+                        'navWizContinue', 'navWizConfirmSubmit', 'navWizClose'];
+    footerBtns.forEach(id => qs(id).classList.add('d-none'));
+
+    if (step === 'location') {
+      qs('navWizTitle').textContent = isCheckIn ? 'Check In' : 'Check Out';
+      qs('navWizCancel').classList.remove('d-none');
+      const cont = qs('navWizContinue');
+      cont.classList.remove('d-none'); cont.disabled = true;
+    } else if (step === 'selfie') {
+      qs('navWizTitle').textContent = 'Step 2: Take a Selfie';
+      qs('navWizBack').classList.remove('d-none');
+      skipBtn.classList.remove('d-none');
+      captureBtn.classList.remove('d-none');
+    } else if (step === 'confirm') {
+      qs('navWizTitle').textContent = 'Step 3: Confirm ' + (isCheckIn ? 'Check In' : 'Check Out');
+      qs('navWizBack').classList.remove('d-none');
+      const submitBtn = qs('navWizConfirmSubmit');
+      submitBtn.classList.remove('d-none');
+      submitBtn.textContent = isCheckIn ? 'Confirm Check In' : 'Confirm Check Out';
+      qs('navWizConfirmWhen').textContent = fmtNow();
+      qs('navWizConfirmLoc').textContent = capturedAddress ||
+        (capturedLat != null ? `${capturedLat.toFixed(5)}, ${capturedLng.toFixed(5)}` : '-');
+      const photoEl = qs('navWizConfirmPhoto');
+      if (capturedBlob) { photoEl.src = preview.src; photoEl.classList.remove('d-none'); }
+      else { photoEl.classList.add('d-none'); }
+    } else if (step === 'success') {
+      qs('navWizClose').classList.remove('d-none');
+    }
+  }
+
+  function initWizMap(lat, lng) {
+    if (typeof L === 'undefined') return;
+    if (!wizMap) {
+      wizMap = L.map('navWizMap', { zoomControl: false, attributionControl: false }).setView([lat, lng], 16);
+      L.tileLayer(BIMS_MAP.url, {
+        maxZoom: BIMS_MAP.maxZoom, attribution: BIMS_MAP.attribution,
+      }).addTo(wizMap);
+      wizMarker = L.marker([lat, lng]).addTo(wizMap);
+    } else {
+      wizMap.setView([lat, lng], 16);
+      wizMarker.setLatLng([lat, lng]);
+    }
+    setTimeout(() => wizMap.invalidateSize(), 150);
+  }
+
+  function captureLocation() {
+    const statusEl = qs('navWizLocStatus');
+    statusEl.classList.remove('d-none');
+    statusEl.innerHTML = '<span class="spinner-border spinner-border-sm text-success"></span><span>Getting your GPS location…</span>';
+    qs('navWizLocDetail').classList.add('d-none');
+    qs('navWizLocRetry').classList.add('d-none');
+    qs('navWizContinue').disabled = true;
     if (!navigator.geolocation) {
-      window.showToast('danger', 'Location is not available in this browser.');
+      statusEl.innerHTML = '<span class="text-danger">Location is not available in this browser.</span>';
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      pos => onOk(pos.coords.latitude, pos.coords.longitude),
-      () => window.showToast('danger', 'Could not read your location. Allow location access and try again.'),
+      pos => {
+        capturedLat = pos.coords.latitude;
+        capturedLng = pos.coords.longitude;
+        capturedAccuracy = pos.coords.accuracy;
+        initWizMap(capturedLat, capturedLng);
+        qs('navWizLocCoords').textContent = `${capturedLat.toFixed(5)}, ${capturedLng.toFixed(5)}`;
+        qs('navWizLocAccuracy').textContent = Math.round(capturedAccuracy) + ' meters';
+        qs('navWizLocAddress').textContent = 'Looking up address…';
+        statusEl.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Location captured</span>';
+        qs('navWizLocDetail').classList.remove('d-none');
+        qs('navWizContinue').disabled = false;
+        if (window.reverseGeocode) {
+          window.reverseGeocode(capturedLat.toFixed(6), capturedLng.toFixed(6)).then(place => {
+            capturedAddress = place && place.display ? place.display : '';
+            qs('navWizLocAddress').textContent = capturedAddress || '-';
+          }).catch(() => { qs('navWizLocAddress').textContent = '-'; });
+        } else {
+          qs('navWizLocAddress').textContent = '-';
+        }
+      },
+      err => {
+        capturedLat = capturedLng = capturedAccuracy = null;
+        const msg = err && err.code === err.PERMISSION_DENIED
+          ? 'Location access was denied. Allow it in your browser settings and retry.'
+          : 'Could not read your location. Check your connection and retry.';
+        statusEl.innerHTML = `<span class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>${msg}</span>`;
+        qs('navWizLocRetry').classList.remove('d-none');
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }
 
-  function submitPunch(photoBlob) {
-    // eventType is cleared by the hidden.bs.modal handler right after this
-    // call, before the fetch below resolves — capture it now rather than
-    // read the shared variable from inside the async callback, which is
-    // what had a check-in land as "Checked Out" (it always resolved to the
-    // check_out branch, since eventType was already null by then).
-    const punchType = eventType;
-    const url = punchType === 'check_in' ? wrap.dataset.checkinUrl : wrap.dataset.checkoutUrl;
-    withLocation((lat, lng) => {
-      const fd = new FormData();
-      fd.append('latitude', lat);
-      fd.append('longitude', lng);
-      if (photoBlob) fd.append('photo', photoBlob, 'selfie.jpg');
-      fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, body: fd })
-        .then(async r => {
-          const body = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(body.error || 'Failed.');
-          window.showToast('success', body.message);
-          if (punchType === 'check_out') {
-            // Present / Half Day / Late In can only be told apart once the
-            // day is complete, and that comparison against the shift lives
-            // server-side (hr.views._self_attendance_row) — a reload is what
-            // lets the real label replace the generic "Checked Out" rather
-            // than this script re-deriving the same rule a second time.
-            setTimeout(() => window.location.reload(), 600);
-            return;
-          }
-          checkedIn = true;
-          applyButtons();
-          applyCheckedInStatus();
-        })
-        .catch(err => {
-          window.showToast('danger', err.message);
-          applyButtons();
-        });
-    });
-  }
+  qs('navWizLocRetry').addEventListener('click', captureLocation);
 
   function stopCamera() {
     if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
     if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
   }
 
-  function resetCameraModal() {
+  function resetCameraPane() {
     video.style.display = ''; preview.style.display = 'none'; fallback.classList.add('d-none');
     capturedBlob = null;
     captureBtn.classList.remove('d-none'); captureBtn.disabled = true;
-    retakeBtn.classList.add('d-none');
-    useBtn.classList.add('d-none');
   }
 
   // A granted permission does not guarantee real frames — a virtual/blocked
   // device can open a stream that never produces a picture, which is the
   // black square a dead camera shows. Capture stays disabled until the video
-  // actually reports a size, and a 6s watchdog gives up and offers Skip
+  // actually reports a size, and a 3s watchdog gives up and offers Skip
   // Photo rather than leave a frozen preview with no way forward.
   function showCameraFallback() {
+    if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
     video.style.display = 'none';
     fallback.classList.remove('d-none');
     captureBtn.classList.add('d-none');
@@ -1291,23 +1353,24 @@ window.loadOptions = function (select, url, data, options) {
     if (streamWatchdog) { clearTimeout(streamWatchdog); streamWatchdog = null; }
     captureBtn.disabled = false;
   });
+  // A dead/disconnected device can fire 'error' on the <video> element
+  // directly rather than ever resolving loadeddata — no reason to wait
+  // out the watchdog when the browser has already said so.
+  video.addEventListener('error', showCameraFallback);
 
   function openCamera() {
+    resetCameraPane();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      submitPunch(null);
+      showCameraFallback();
       return;
     }
-    resetCameraModal();
-    title.textContent = eventType === 'check_in' ? 'Checking in — take a quick selfie' : 'Checking out — take a quick selfie';
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       .then(stream => {
         cameraStream = stream;
         video.srcObject = stream;
         streamWatchdog = setTimeout(() => {
           if (!video.videoWidth) showCameraFallback();
-        }, 6000);
+        }, 3000);
       })
       .catch(showCameraFallback);
   }
@@ -1317,51 +1380,89 @@ window.loadOptions = function (select, url, data, options) {
     canvas.getContext('2d').drawImage(video, 0, 0);
     preview.src = canvas.toDataURL('image/jpeg', 0.85);
     video.style.display = 'none'; preview.style.display = '';
-    captureBtn.classList.add('d-none');
-    retakeBtn.classList.remove('d-none');
-    useBtn.classList.remove('d-none');
-    canvas.toBlob(blob => { capturedBlob = blob; }, 'image/jpeg', 0.85);
+    canvas.toBlob(blob => {
+      capturedBlob = blob;
+      stopCamera();
+      goToStep('confirm');
+    }, 'image/jpeg', 0.85);
   });
 
-  retakeBtn.addEventListener('click', function () {
-    preview.style.display = 'none'; video.style.display = '';
+  skipBtn.addEventListener('click', function () {
+    stopCamera();
     capturedBlob = null;
-    retakeBtn.classList.add('d-none');
-    useBtn.classList.add('d-none');
-    captureBtn.classList.remove('d-none');
+    goToStep('confirm');
   });
 
-  // Only Skip Photo and Use Photo mean "go ahead and punch" — the X button
-  // and Escape/backdrop both close the same Bootstrap modal with no way to
-  // tell them apart from hidden.bs.modal alone, so each exit says which kind
-  // it was instead of the handler assuming every close is a confirm.
-  let shouldSubmit = false;
-  document.getElementById('navCameraSkip').addEventListener('click', function () { shouldSubmit = true; });
-  useBtn.addEventListener('click', function () { shouldSubmit = true; });
-  document.getElementById('navCameraClose').addEventListener('click', function () { shouldSubmit = false; });
+  qs('navWizContinue').addEventListener('click', function () {
+    goToStep('selfie');
+    openCamera();
+  });
+
+  qs('navWizBack').addEventListener('click', function () {
+    const current = modalEl.querySelector('.sa-wiz-pane.is-active').dataset.pane;
+    if (current === 'selfie') { stopCamera(); goToStep('location'); }
+    else if (current === 'confirm') { goToStep('selfie'); openCamera(); }
+  });
+
+  qs('navWizConfirmSubmit').addEventListener('click', function () {
+    const btn = qs('navWizConfirmSubmit');
+    btn.disabled = true;
+    const url = isCheckIn ? wrap.dataset.checkinUrl : wrap.dataset.checkoutUrl;
+    const fd = new FormData();
+    fd.append('latitude', capturedLat);
+    fd.append('longitude', capturedLng);
+    if (capturedBlob) fd.append('photo', capturedBlob, 'selfie.jpg');
+    fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, body: fd })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || 'Failed.');
+        const when = [body.date, body.time].filter(Boolean).join(', ');
+        qs('navWizSuccessTitle').textContent = (isCheckIn ? 'Checked In' : 'Checked Out') + ' Successfully!';
+        qs('navWizSuccessWhen').textContent = when;
+        qs('navWizSuccessLoc').textContent = capturedAddress || '';
+        if (isCheckIn) { checkedIn = true; applyCheckedInStatus(); }
+        else { checkedOut = true; }
+        goToStep('success');
+      })
+      .catch(err => {
+        window.showToast('danger', err.message);
+        btn.disabled = false;
+      });
+  });
 
   modalEl.addEventListener('hidden.bs.modal', function () {
     stopCamera();
-    if (shouldSubmit && eventType) {
-      submitPunch(capturedBlob);
-    } else if (eventType) {
-      applyButtons();
+    const succeeded = modalEl.querySelector('.sa-wiz-pane[data-pane="success"]').classList.contains('is-active');
+    applyButtons();
+    capturedBlob = null;
+    capturedLat = capturedLng = capturedAccuracy = null; capturedAddress = '';
+    if (succeeded && !isCheckIn) {
+      // Present / Half Day / Late In can only be told apart once the day is
+      // complete, and that comparison against the shift lives server-side
+      // (hr.views._self_attendance_row) — a reload is what lets the real
+      // label replace the generic status rather than re-deriving the same
+      // rule a second time here.
+      setTimeout(() => window.location.reload(), 300);
     }
-    shouldSubmit = false;
-    eventType = null; capturedBlob = null;
   });
+
+  function openWizard(checkIn) {
+    isCheckIn = checkIn;
+    goToStep('location');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    captureLocation();
+  }
 
   checkInBtn.addEventListener('click', function () {
     if (blocked) { window.location.href = wrap.dataset.pageUrl; return; }
-    eventType = 'check_in';
     checkInBtn.disabled = true;
-    openCamera();
+    openWizard(true);
   });
 
   checkOutBtn.addEventListener('click', function () {
-    eventType = 'check_out';
     checkOutBtn.disabled = true;
-    openCamera();
+    openWizard(false);
   });
 
   statusEl.addEventListener('click', function () {

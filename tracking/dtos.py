@@ -99,6 +99,8 @@ class AttendanceEvent:
     longitude: Optional[Decimal] = None
     address: str = ""
     photo_url: str = ""
+    attendance_type: str = "regular"
+    remarks: str = ""
     raw: Optional[dict] = field(default=None, repr=False)
 
 

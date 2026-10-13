@@ -122,6 +122,13 @@
             <option value="true">Auto-Approve</option>
           </select>
         </div>
+        <div class="col-md-2">
+          <label class="form-label">Selfie on Check In/Out</label>
+          <select class="form-select" name="selfie_required_for_attendance">
+            <option value="false">Optional (Skip Photo allowed)</option>
+            <option value="true">Required</option>
+          </select>
+        </div>
         <div class="col-md-4 d-flex align-items-end justify-content-end">
           {% if page_perms.save or page_perms.edit %}
           <button class="btn btn-primary" id="trk-settings-save"><i class="fas fa-save"></i> Save Settings</button>
@@ -336,10 +343,11 @@
     setSelect(settingsForm, "sms_alerts_enabled", data.sms_alerts_enabled);
     setSelect(settingsForm, "attendance_sync_enabled", data.attendance_sync_enabled);
     setSelect(settingsForm, "attendance_auto_approve", data.attendance_auto_approve);
+    setSelect(settingsForm, "selfie_required_for_attendance", data.selfie_required_for_attendance);
     document.getElementById("trk-google-key-hint").textContent =
       data.has_google_maps_api_key ? "A key is stored — leave blank to keep it." : "";
     ["map_provider","enabled","alerts_enabled","sms_alerts_enabled","distance_unit",
-     "attendance_sync_enabled","attendance_auto_approve"].forEach(name => {
+     "attendance_sync_enabled","attendance_auto_approve","selfie_required_for_attendance"].forEach(name => {
       const el = settingsForm.querySelector('[name="' + name + '"]');
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
@@ -354,7 +362,8 @@
     settingsForm.querySelectorAll("[name]").forEach(input => {
       let value = input.value;
       if (["enabled","alerts_enabled","sms_alerts_enabled",
-           "attendance_sync_enabled","attendance_auto_approve"].includes(input.name)) value = value === "true";
+           "attendance_sync_enabled","attendance_auto_approve",
+           "selfie_required_for_attendance"].includes(input.name)) value = value === "true";
       payload[input.name] = value;
     });
     post(URLS.settings, payload).then(({ ok, data }) => {

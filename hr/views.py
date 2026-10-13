@@ -1483,6 +1483,9 @@ def self_attendance(request):
 
     todays_status = _self_attendance_row(todays_record, today, employee) if todays_record else None
 
+    from tracking.models import EmployeeGpsAttendance as _EGA
+    from tracking.models import TrackingSettings
+
     return render(request, "self_attendance.html", {
         "employee": employee,
         "todays_record": todays_record,
@@ -1500,6 +1503,8 @@ def self_attendance(request):
         "today": today,
         "greeting_part": greeting_part,
         "company_name": CompanyProfile.get_solo().name,
+        "attendance_type_choices": _EGA.ATTENDANCE_TYPE_CHOICES,
+        "selfie_required": TrackingSettings.get_solo().selfie_required_for_attendance,
     })
 
 
@@ -1655,21 +1660,34 @@ def _self_attendance_punch(request, event_type):
         if existing.check_out_at:
             return JsonResponse({"error": "Already checked out today."}, status=400)
 
-    photo_url = ""
+    from tracking.models import TrackingSettings
+
     photo_file = request.FILES.get("photo")
+    if TrackingSettings.get_solo().selfie_required_for_attendance and not photo_file:
+        return JsonResponse({"error": "A selfie is required to check in/out."}, status=400)
+
+    photo_url = ""
     if photo_file:
         photo_url = request.build_absolute_uri(_save_punch_photo(employee, event_type, photo_file))
+
+    attendance_type = (request.POST.get("attendance_type") or "regular").strip()
+    valid_types = {choice[0] for choice in EmployeeGpsAttendance.ATTENDANCE_TYPE_CHOICES}
+    if attendance_type not in valid_types:
+        attendance_type = "regular"
+    remarks = (request.POST.get("remarks") or "").strip()[:255]
 
     event = AttendanceEvent(
         external_employee_id=str(employee.pk), event=event_type,
         occurred_at=timezone.now(), latitude=latitude, longitude=longitude,
-        photo_url=photo_url,
+        photo_url=photo_url, attendance_type=attendance_type, remarks=remarks,
     )
     record = AttendanceIntegrationService().apply_event(employee, None, event)
     when = record.check_in_at if event_type == "check_in" else record.check_out_at
+    when_local = timezone.localtime(when) if when else None
     return JsonResponse({
         "message": "Checked in." if event_type == "check_in" else "Checked out.",
-        "time": timezone.localtime(when).strftime("%I:%M %p") if when else "",
+        "time": when_local.strftime("%I:%M %p") if when_local else "",
+        "date": when_local.strftime("%d %b %Y") if when_local else "",
     })
 
 
