@@ -10,35 +10,41 @@
 {% include '_broiler_report_subnavbar.html' with active_tab='feed_dispatch_stock_report' %}
 
 <style>
-  .cpr-breadcrumb { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
+  /* Tightened throughout: smaller card padding, shorter gaps between
+     sections, smaller KPI/heading type — the page was built with report.css's
+     generous default spacing on every section (KPI row, filter card, chart
+     row, ledger card), which stacked up across five sections before the
+     ledger table itself was ever reached. */
+  .cpr-breadcrumb { font-size: .8rem; color: #6c757d; margin-bottom: .4rem; }
   .cpr-breadcrumb a { color: #0d6efd; text-decoration: none; }
-  .cpr-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+  .cpr-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .5rem; margin-bottom: .6rem; }
   .cpr-header h3 { font-weight: 700; margin-bottom: 0; }
-  .kpi-card { border: 1px solid #edf0f5; border-radius: .75rem; padding: .75rem .9rem; display: flex; gap: .65rem; align-items: center; height: 100%; box-shadow: 0 1px 4px rgba(0,0,0,.05); transition: transform .15s ease, box-shadow .15s ease; }
+  .kpi-card { border: 1px solid #edf0f5; border-radius: .6rem; padding: .5rem .65rem; display: flex; gap: .5rem; align-items: center; height: 100%; box-shadow: 0 1px 4px rgba(0,0,0,.05); transition: transform .15s ease, box-shadow .15s ease; }
   .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,.1); }
   .kpi-col { min-width: 0; }
-  .kpi-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex: 0 0 40px; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+  .kpi-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .85rem; flex: 0 0 32px; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
   .kpi-icon.kpi-blue { background: linear-gradient(135deg, #5b93ff, #2d6cdf); }
   .kpi-icon.kpi-purple { background: linear-gradient(135deg, #b56fd6, #8e44ad); }
   .kpi-icon.kpi-teal { background: linear-gradient(135deg, #17bcbc, #0d8f8f); }
   .kpi-icon.kpi-red { background: linear-gradient(135deg, #e5645a, #c0392b); }
-  .kpi-value { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
-  .kpi-label { font-size: .64rem; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; font-weight: 700; }
-  .kpi-sub { font-size: .68rem; margin-top: .15rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
-  .kpi-trend { font-size: .62rem; font-weight: 700; padding: .04rem .35rem; border-radius: .25rem; }
+  .kpi-value { font-size: 1rem; font-weight: 700; line-height: 1.15; }
+  .kpi-label { font-size: .6rem; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; font-weight: 700; }
+  .kpi-sub { font-size: .64rem; margin-top: .1rem; display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
+  .kpi-trend { font-size: .6rem; font-weight: 700; padding: .03rem .3rem; border-radius: .25rem; }
   .kpi-trend.up { color: #1a7f37; background: #d9f2df; }
   .kpi-trend.down { color: #b02a2a; background: #fbdcdc; }
   .filter-panel-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
   .filter-panel-form { overflow-x: auto; }
   .filter-panel-form .filter-field { flex: 1 1 0; min-width: 90px; }
-  .filter-panel-form .form-label { font-size: .78rem; margin-bottom: .25rem; white-space: nowrap; }
-  .filter-panel-form .form-control, .filter-panel-form .form-select { font-size: .85rem; border-radius: .5rem; }
-  .dt-toolbar-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
-  .section-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: #495057; margin-bottom: .75rem; }
-  .card { border: none; border-radius: .75rem; box-shadow: 0 2px 12px rgba(20,30,60,.06); }
+  .filter-panel-form .form-label { font-size: .74rem; margin-bottom: .15rem; white-space: nowrap; }
+  .filter-panel-form .form-control, .filter-panel-form .form-select { font-size: .8rem; border-radius: .4rem; padding-top: .3rem; padding-bottom: .3rem; }
+  .dt-toolbar-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: .4rem; }
+  .section-title { font-weight: 700; font-size: .76rem; text-transform: uppercase; letter-spacing: .03em; color: #495057; margin-bottom: .4rem; }
+  .card { border: none; border-radius: .6rem; box-shadow: 0 2px 12px rgba(20,30,60,.06); }
+  .card-body { padding: .75rem .9rem; }
   .ledger-table { border-color: #eef0f4; }
-  .ledger-table td { font-size: .76rem; white-space: nowrap; text-align: center; vertical-align: middle; padding: .55rem .5rem; border-color: #eef0f4; }
-  .ledger-table th { font-size: .74rem; white-space: normal; text-align: center !important; vertical-align: middle; word-break: normal; line-height: 1.2; border-color: #e4e7ee; }
+  .ledger-table td { font-size: .74rem; white-space: nowrap; text-align: center; vertical-align: middle; padding: .35rem .4rem; border-color: #eef0f4; }
+  .ledger-table th { font-size: .72rem; white-space: normal; text-align: center !important; vertical-align: middle; word-break: normal; line-height: 1.15; border-color: #e4e7ee; padding: .35rem .4rem; }
   .ledger-table thead th { background: #f7f8fb; }
   .grp-date { background: linear-gradient(180deg, #fff5da, #ffe699) !important; }
   .grp-dispatch { background: linear-gradient(180deg, #fbe0cb, #f8cbad) !important; }
@@ -54,6 +60,25 @@
   .ledger-table td.stock-cell.text-success, .ledger-table td.net-stock.text-success { color: #1a7f37 !important; }
   .ledger-table tr.receipt-row { background: #fff3cd; }
   .ledger-table tr.opening-row { background: #f8d7a3; font-weight: 700; }
+  /* This DataTables build renders .dataTables_length / _info / _paginate as
+     plain sibling <div>s of the wrapper, not inside a Bootstrap .row (the
+     dt-bootstrap5 CSS that would normally lay them out isn't loaded here) —
+     so with dom: 'rtlip' they just stacked with no spacing, "Show 10
+     entries" running straight into "Showing 1 to 10 of 10 entries" below
+     it. Putting length and info on one flex row (search box has its own
+     toolbar above, so only these two need pairing) gives them the same
+     left/right placement DataTables' Bootstrap integration uses elsewhere. */
+  /* One row: Show-entries pinned left, the "Showing X of Y" info text and
+     pagination grouped together on the right — the pagination used to sit
+     alone on its own row below, with a wide empty gap to its left, reading
+     as a disconnected floating control rather than part of the same
+     footer. Grouping info+pagination keeps them visually paired, the way
+     DataTables' own Bootstrap layout places them. */
+  #ledger-table_wrapper { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; row-gap: .4rem; margin-top: .6rem; }
+  #ledger-table_wrapper > .ledger-scroll-x { order: 1; flex: 1 0 100%; }
+  #ledger-table_wrapper > .dataTables_length { order: 2; margin: 0; font-size: .8rem; }
+  #ledger-table_wrapper > .dataTables_info { order: 3; font-size: .8rem; color: #6c757d; margin: 0 .75rem 0 0; }
+  #ledger-table_wrapper > .dataTables_paginate { order: 4; display: flex; }
   /* Opening label spans visually via an absolute span (NOT colspan) — a
      colspan in a DataTables tbody row breaks its column count and aborts
      the toolbar buttons; every body row must have exactly one td per column. */
@@ -62,14 +87,31 @@
   .ledger-table tbody tr:not(.opening-row):hover td { box-shadow: inset 0 0 0 9999px rgba(13,110,253,.07); }
   .ledger-table tfoot td { background: #dbe9f0 !important; font-weight: 700; color: #2d6cdf; }
   .ledger-table td.net-stock { font-weight: 700; }
-  .recent-activity-item { display: flex; justify-content: space-between; align-items: center; padding: .3rem 0; border-bottom: 1px solid #f1f3f5; font-size: .8rem; }
+  .recent-activity-item { display: flex; justify-content: space-between; align-items: center; padding: .2rem 0; border-bottom: 1px solid #f1f3f5; font-size: .76rem; }
   .recent-activity-item:last-child { border-bottom: none; }
   .recent-activity-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: .62rem; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
   .recent-activity-icon.kpi-blue { background: linear-gradient(135deg, #5b93ff, #2d6cdf); }
   .recent-activity-icon.kpi-purple { background: linear-gradient(135deg, #b56fd6, #8e44ad); }
   .recent-activity-icon.kpi-amber { background: linear-gradient(135deg, #f5a934, #e08e0b); }
   .recent-activity-icon.kpi-teal { background: linear-gradient(135deg, #17bcbc, #0d8f8f); }
+  /* .ledger-table-wrap itself stays overflow:hidden (just the rounded-corner
+     border) — the DataTables-generated #ledger-table_wrapper inside it holds
+     the table AND the length/info/pagination footer as siblings, so giving
+     THIS div the horizontal scroll (as .table-responsive used to) dragged
+     the footer and the help text below it into the same scrolling strip as
+     the wide table. Scrolling only the <table> itself keeps the footer and
+     the note below it always visible, never needing a sideways scroll to
+     read them. */
   .ledger-table-wrap { border-radius: .6rem; overflow: hidden; border: 1px solid #eef0f4; }
+  /* DataTables replaces the <table> in place with #ledger-table_wrapper, a
+     flex box holding the table AND the length/info/pagination footer as
+     siblings — so a scrollbar on that wrapper (or on .ledger-table-wrap
+     around it) dragged the footer and the help text below it into the same
+     sideways scroll as the wide table. The init script below inserts its
+     own .ledger-scroll-x div around just the <table> right after DataTables
+     builds its wrapper, so only the table's columns scroll — the footer
+     and the note stay put, always visible with no scroll needed. */
+  .ledger-scroll-x { overflow-x: auto; }
   @media print { .no-print { display: none !important; } }
 </style>
 
@@ -81,7 +123,7 @@
 </div>
 
 <!-- KPI cards -->
-<div class="row row-cols-2 row-cols-md-4 g-2 mb-3 no-print kpi-row">
+<div class="row row-cols-2 row-cols-md-4 g-2 mb-2 no-print kpi-row">
   <div class="kpi-col">
     <div class="kpi-card kpi-blue">
       <div class="kpi-icon kpi-blue"><i class="fas fa-truck-fast"></i></div>
@@ -137,7 +179,7 @@
 </div>
 
 <!-- Filter panel -->
-<div class="card mb-3 no-print">
+<div class="card mb-2 no-print">
   <div class="card-body">
     <div class="filter-panel-header mb-2" id="filter-panel-toggle">
       <h6 class="mb-0">Filter Report</h6>
@@ -187,12 +229,12 @@
 {% if submitted %}
 
 <!-- Stock Summary / Top Feed / Recent Activity / Warehouse Snapshot -->
-<div class="row g-3 mb-3 no-print">
+<div class="row g-2 mb-2 no-print">
   <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
     <div class="card h-100"><div class="card-body py-2 px-3">
-      <div class="section-title mb-1" style="font-size:.85rem;">Stock Summary <small class="text-muted fw-normal">(as of {% if to_date %}{{ to_date }}{% else %}today{% endif %})</small></div>
-      <div style="position:relative; height:120px;"><canvas id="stockSummaryChart"></canvas></div>
-      <div class="d-flex justify-content-around text-center mt-2" style="font-size:.72rem;">
+      <div class="section-title mb-1" style="font-size:.8rem;">Stock Summary <small class="text-muted fw-normal">(as of {% if to_date %}{{ to_date }}{% else %}today{% endif %})</small></div>
+      <div style="position:relative; height:90px;"><canvas id="stockSummaryChart"></canvas></div>
+      <div class="d-flex justify-content-around text-center mt-1" style="font-size:.7rem;">
         <div><span class="d-block fw-bold">{{ kpi.total_received_bags|floatformat:2 }}</span><span class="text-muted">Received</span></div>
         <div><span class="d-block fw-bold">{{ kpi.total_dispatched_bags|floatformat:2 }}</span><span class="text-muted">Dispatched</span></div>
         <div><span class="d-block fw-bold">{{ kpi.net_total_bag_stock|floatformat:2 }}</span><span class="text-muted">Net Stock</span></div>
@@ -201,13 +243,13 @@
   </div>
   <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
     <div class="card h-100"><div class="card-body py-2 px-3">
-      <div class="section-title mb-1" style="font-size:.85rem;">Feed by Net Stock <small class="text-muted fw-normal">(bags)</small></div>
-      <div style="position:relative; height:120px;"><canvas id="topFeedChart"></canvas></div>
+      <div class="section-title mb-1" style="font-size:.8rem;">Feed by Net Stock <small class="text-muted fw-normal">(bags)</small></div>
+      <div style="position:relative; height:90px;"><canvas id="topFeedChart"></canvas></div>
     </div></div>
   </div>
   <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
     <div class="card h-100"><div class="card-body py-2 px-3">
-      <div class="section-title mb-1" style="font-size:.85rem;">Recent Activity <small class="text-muted fw-normal">(Last 7 Days)</small></div>
+      <div class="section-title mb-1" style="font-size:.8rem;">Recent Activity <small class="text-muted fw-normal">(Last 7 Days)</small></div>
       <div class="recent-activity-item">
         <span><span class="recent-activity-icon kpi-blue me-2"><i class="fas fa-truck-fast"></i></span>Feed Dispatched</span>
         <strong>{{ recent_activity.dispatched|floatformat:2 }} bags</strong>
@@ -230,7 +272,7 @@
   {% if all_warehouses %}
   <div class="col-lg-3">
     <div class="card h-100"><div class="card-body py-2 px-3">
-      <div class="section-title mb-1" style="font-size:.85rem;">Warehouse Snapshot</div>
+      <div class="section-title mb-1" style="font-size:.8rem;">Warehouse Snapshot</div>
       <table class="table table-sm mb-0 rpt-table ds-grid" style="font-size:.74rem;">
         <thead><tr><th class="text-start">Branch</th><th class="text-start">Warehouse</th><th class="ds-num text-end">Net Stock (bags)</th></tr></thead>
         <tbody>
@@ -257,9 +299,9 @@
 
 </div>
 
-<div class="card mb-3">
+<div class="card mb-2">
   {% if items_missing_bag_weight %}
-  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 no-print">
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-2 no-print">
     <i class="fas fa-triangle-exclamation mt-1"></i>
     <div>
       <strong>These feed items have no Bag Capacity, so their columns read 0:</strong>
@@ -290,7 +332,6 @@
       <span class="legend-chip grp-stock">Total Stock (bags)</span>
     </div>
     <div class="ledger-table-wrap">
-    <div class="table-responsive">
       <table class="table table-bordered mb-0 ledger-table rpt-table ds-grid" id="ledger-table" style="width:100%">
         <thead>
           <tr>
@@ -382,7 +423,6 @@
         {% endif %}
       </table>
     </div>
-    </div>
     {% if not ledger_rows %}
     <div class="alert alert-light border text-center text-muted my-2 py-2 small">No feed dispatch/receipt transactions found for these filters — only the opening balance is shown above.</div>
     {% endif %}
@@ -466,11 +506,22 @@ $(function () {
   const savedDefaultButtons = $.fn.dataTable.defaults.buttons;
   $.fn.dataTable.defaults.buttons = [];
   const ledgerTable = $('#ledger-table').DataTable({
-    ordering: false, paging: true, pageLength: 10, lengthMenu: [10, 25, 50, 100],
-    dom: 'rtip',   // no built-in search ('f') — the toolbar's #ledger-search box drives it instead
+    ordering: false, paging: true, pageLength: 10,
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+    dom: 'rtlip',   // 'l' = the "Show N entries" length menu; no built-in search ('f') — the toolbar's #ledger-search box drives it instead
     language: { emptyTable: 'No data available in table' },
   });
   $.fn.dataTable.defaults.buttons = savedDefaultButtons;
+
+  // Wrap just the <table> in its own horizontal-scroll div, right after
+  // DataTables builds #ledger-table_wrapper around it — that wrapper also
+  // holds the length/info/pagination footer as siblings of the table, so
+  // scrolling the wrapper itself (or a div around it) dragged the footer
+  // and the help text below it sideways along with the wide table. This
+  // keeps the scroll contained to the table's own columns.
+  $('#ledger-table').wrap('<div class="ledger-scroll-x"></div>');
+
+
 
   // Column Settings (colvis, wired below) lets any of the seven leading
   // columns be hidden. The TOTAL label used to live in one <td colspan="7">
