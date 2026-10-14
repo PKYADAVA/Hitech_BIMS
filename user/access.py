@@ -127,6 +127,7 @@ MODULE_REGISTRY = [
                     ("lifting_report", "Lifting Report"),
                     ("activity_log", "Recent Activity Log", ("activity_log_api",)),
                     ("batch_wise_feed_scheduling_report", "Batch wise Feed Scheduling Report"),
+                    ("broiler_batch_daily_card_report", "Batch Daily Card Report"),
                     ("gc_realization_report", "GC Realization Report",
                      ("gc_realization_medicine_cost_save",)),
                     ("farmer_ledger_report", "Farmer Ledger"),

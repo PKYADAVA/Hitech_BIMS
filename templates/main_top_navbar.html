@@ -328,6 +328,9 @@ layouts open it from the account menu.
               {% if 'broiler_batch_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_batch_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-file-alt"></i>Batch History Report
               </a></li>{% endif %}
+              {% if 'broiler_batch_daily_card_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_batch_daily_card_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-id-card"></i>Batch Daily Card Report
+              </a></li>{% endif %}
               {% if 'production_pl_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'production_pl_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-line"></i>Production Profit &amp; Loss
               </a></li>{% endif %}

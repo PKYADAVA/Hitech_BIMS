@@ -7158,6 +7158,14 @@ def _batch_daily_card_rows(batch):
             last = bucket[-1]
             first = bucket[0]
             rollup = {k: sum((_num(r[k]) for r in bucket), Decimal("0")) for k in sum_keys}
+            # Feed Intake (gm/bird) for the week: the week's own average daily
+            # rate, not a sum (a week doesn't eat 7x its daily intake per
+            # bird) and not just the last day's figure (that's one day, not
+            # the week) — mirrors how Cum Feed is a running total but Feed
+            # Intake is a day-rate, just averaged over the 7 days instead of
+            # read off one of them.
+            std_feed_vals = [r["std_feed_per_bird"] for r in bucket if r["std_feed_per_bird"] is not None]
+            act_feed_vals = [_num(r["act_feed_per_bird"]) for r in bucket if r["act_feed_per_bird"] is not None]
             bags_vals = [r["feed_bags_today"] for r in bucket if r["feed_bags_today"] is not None]
             in_bags_vals = [r["feed_in_out_bags"] for r in bucket if r["feed_in_out_bags"] is not None]
             rollup.update({
@@ -7169,6 +7177,12 @@ def _batch_daily_card_rows(batch):
                 "cum_mort_pct": last["cum_mort_pct"], "livability_pct": last["livability_pct"],
                 "feed_stock": last["feed_stock"],
                 "cum_feed": last["cum_feed"], "age": last["age"],
+                "std_cum_feed_per_bird": last["std_cum_feed_per_bird"],
+                "cum_feed_per_bird": last["cum_feed_per_bird"],
+                "std_feed_per_bird": (_div(sum(std_feed_vals, Decimal("0")), len(std_feed_vals)).quantize(q2)
+                                     if std_feed_vals else None),
+                "act_feed_per_bird": (_div(sum(act_feed_vals, Decimal("0")), len(act_feed_vals)).quantize(q2)
+                                     if act_feed_vals else None),
                 "feed_bags_today": sum(bags_vals, Decimal("0")) if bags_vals else None,
                 "feed_stock_bags": last["feed_stock_bags"],
                 "feed_in_out_bags": sum(in_bags_vals, Decimal("0")) if in_bags_vals else None,
@@ -7486,6 +7500,11 @@ def broiler_batch_daily_card_report(request):
             "amount": sum((s.amount for s in BirdSale.objects.filter(batch=batch)), Decimal("0")),
         }
 
+    if batch and (request.GET.get("export") or "").strip() == "xlsx":
+        return _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
+                                      recon_rows, recon_totals, forecast,
+                                      sales_rows, sales_totals)
+
     return render(request, "broiler_batch_daily_card_report.html", {
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
@@ -7502,6 +7521,202 @@ def broiler_batch_daily_card_report(request):
         "sales_rows": sales_rows, "sales_totals": sales_totals,
         "company": CompanyProfile.get_solo(),
     })
+
+
+def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
+                           recon_rows, recon_totals, forecast,
+                           sales_rows, sales_totals):
+    """Excel twin of the Batch Daily Card Report page — same four blocks, same
+    Std/Actual/auto colour map read off the farm's own workbook (see the
+    report template's <style> block for the hex values), so a downloaded copy
+    looks like the sheet it was built to replace rather than a plain data
+    dump."""
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    FILL_STD = PatternFill("solid", fgColor="FCE4D6")
+    FILL_ACTUAL = PatternFill("solid", fgColor="E4DFEC")
+    FILL_AUTO = PatternFill("solid", fgColor="EDEDED")
+    FILL_DAILY = PatternFill("solid", fgColor="FFF9DB")
+    FILL_OPTIONAL = PatternFill("solid", fgColor="E2EFDA")
+    FILL_TYPE = PatternFill("solid", fgColor="D9F0EE")
+    FILL_WEEK = PatternFill("solid", fgColor="DDEBF7")
+    FILL_HEADER = PatternFill("solid", fgColor="1B3A6B")
+    FILL_TODAY = PatternFill("solid", fgColor="FFF59D")
+    FONT_BLUE = Font(color="0000FF")
+    FONT_HEADER = Font(color="FFFFFF", bold=True)
+    FONT_BOLD = Font(bold=True)
+    FONT_EXCEPTION = Font(color="C0392B", bold=True)
+    THIN = Side(style="thin", color="C7D6E3")
+    BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    CENTER = Alignment(horizontal="center", vertical="center")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Batch Daily Card"
+
+    def header_row(row_idx, labels, start_col=1):
+        for i, label in enumerate(labels, start=start_col):
+            cell = ws.cell(row=row_idx, column=i, value=label)
+            cell.fill, cell.font, cell.alignment, cell.border = FILL_HEADER, FONT_HEADER, CENTER, BORDER
+
+    # Snapshot strip
+    ws.append(["Farm Name", snapshot["farm_name"], "Placement Bird", snapshot["placed_birds"],
+              "Placement Date", snapshot["placement_date"], "Target Day", snapshot["target_day"]])
+    for cell in ws[1]:
+        cell.font = FONT_BOLD
+    ws.append([])
+
+    # Daily register
+    col_labels = (["Date", "Age", "Daily Mort", "Daily %", "Cum Total", "Cum %",
+                  "Closing Birds", "Livability %",
+                  "Feed Intake Std", "Feed Intake Actual", "Cum Feed Std", "Cum Feed Actual",
+                  "Body Wt Std", "Body Wt Actual", "FCR Std", "FCR Actual"]
+                 + [f"Revd {n}" for n in phase_names]
+                 + ["Revd(+)/Trfr(-)", "Feed Type Consumed", "Daily Cons", "Total Cons", "Closing Stock"]
+                 + [f"Closing Stock {n}" for n in phase_names]
+                 + ["Remarks", "Feed Requirement"])
+    header_row(ws.max_row + 1, col_labels)
+    std_cols = {9, 11, 13, 15}
+    actual_cols = {10, 12, 14, 16}
+    daily_fill_cols = {3}
+    optional_fill_cols = {14} | set(range(17, 17 + len(phase_names))) | {17 + len(phase_names)}
+    type_col = 18 + len(phase_names)
+    remarks_col = 22 + 2 * len(phase_names)
+    auto_cols = ({2, 4, 5, 6, 7, 8, 20 + len(phase_names), 21 + len(phase_names)}
+                | set(range(23 + len(phase_names), 23 + 2 * len(phase_names)))
+                | {23 + 2 * len(phase_names)})
+
+    for r in daily_rows:
+        row_idx = ws.max_row + 1
+        if r.get("is_week_rollup"):
+            values = (["Weekly Actual", f"Wk {r['week_no']}", r["mort"], r["cum_mort_pct"],
+                      r["cum_mort"], r["cum_mort_pct"], r["balance"], r["livability_pct"],
+                      r["std_feed_per_bird"], r["act_feed_per_bird"],
+                      r["std_cum_feed_per_bird"], r["cum_feed_per_bird"],
+                      r["std_bwt"], r["avg_bwt"], r["std_fcr"], r["fcr"]]
+                     + [None] * len(phase_names)
+                     + [r["feed_in_out_display"], None, r["daily_cons_display"],
+                        r["total_cons_display"], r["closing_stock_display"]]
+                     + [v for v, _ in r["closing_stock_by_type"]]
+                     + [None, None])
+            ws.append([float(v) if isinstance(v, Decimal) else v for v in values])
+            for cell in ws[row_idx]:
+                cell.fill, cell.font, cell.border = FILL_WEEK, FONT_BOLD, BORDER
+            continue
+
+        values = ([r["entry_date"], r["age"], r["mort"], r["mort_pct"], r["cum_mort"],
+                  r["cum_mort_pct"], r["balance"], r["livability_pct"],
+                  r["std_feed_per_bird"], r["act_feed_per_bird"],
+                  r["std_cum_feed_per_bird"], r["cum_feed_per_bird"],
+                  r["std_bwt"], r["avg_bwt"], r["std_fcr"], r["fcr"]]
+                 + [(v if v is not None else None) for v in r["feed_received_by_type"]]
+                 + [r["feed_in_out_display"], r["feed_type_consumed_display"],
+                    r["daily_cons_display"], r["total_cons_display"], r["closing_stock_display"]]
+                 + [v for v, _ in r["closing_stock_by_type"]]
+                 + [r.get("remarks") or "-", r["req_feed_display"]])
+        ws.append([float(v) if isinstance(v, Decimal) else v for v in values])
+        row = ws[row_idx]
+        for cell in row:
+            cell.border = BORDER
+        if r.get("is_last_entry"):
+            for cell in row:
+                cell.fill = FILL_TODAY
+        else:
+            for i in std_cols:
+                row[i - 1].fill, row[i - 1].font = FILL_STD, FONT_BOLD
+            for i in actual_cols:
+                row[i - 1].fill = FILL_ACTUAL
+            for i in daily_fill_cols:
+                row[i - 1].fill, row[i - 1].font = FILL_DAILY, FONT_BLUE
+            for i in optional_fill_cols:
+                row[i - 1].fill, row[i - 1].font = FILL_OPTIONAL, FONT_BLUE
+            row[type_col - 1].fill = FILL_TYPE
+            row[remarks_col - 1].fill, row[remarks_col - 1].font = PatternFill("solid", fgColor="FFFFFF"), FONT_BLUE
+            for i in auto_cols:
+                row[i - 1].fill = FILL_AUTO
+        if r.get("fcr_exception"):
+            row[15].font = FONT_EXCEPTION
+        if r.get("livability_exception"):
+            row[7].font = FONT_EXCEPTION
+    for i in range(1, len(col_labels) + 1):
+        ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = 13
+
+    # Feed Reconciliation block
+    ws2 = wb.create_sheet("Feed Reconciliation")
+    header_row(1, ["Feed Type", "Age Range", "Std g/bird", "Requirement (kg)", "Sent (kg)",
+                  "Consumed (kg)", "Availability (kg)", "Excess/Short Sent (kg)",
+                  "Still To Send (kg)", "Bags To Send"])
+    for r in recon_rows:
+        ws2.append([r["item"], r.get("phase_band") or "-", r.get("due_bird"),
+                   r.get("req_qty"), r["feed_in"], r["cons_qty"], r["avail_qty"],
+                   r["excess_sent"], r["still_to_send"], r.get("bags")])
+    if recon_rows and recon_totals:
+        total_row_idx = ws2.max_row + 1
+        ws2.append(["Total", "", "", recon_totals["req_qty"], recon_totals["feed_in"],
+                   recon_totals["cons_qty"], recon_totals["avail_qty"], recon_totals["excess_sent"],
+                   recon_totals["still_to_send"], recon_totals["bags"]])
+        for cell in ws2[total_row_idx]:
+            cell.font = FONT_BOLD
+    for row in ws2.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, Decimal):
+                cell.value = float(cell.value)
+            cell.border = BORDER
+    for i in range(1, 11):
+        ws2.column_dimensions[ws2.cell(row=1, column=i).column_letter].width = 16
+
+    # Feed Forecast block
+    ws3 = wb.create_sheet("Feed Forecast")
+    if forecast:
+        header_row(1, ["Habit % vs Std", "Avg Daily Mort (7d)", "Live Birds",
+                      "Next 3 Days (kg)", "Next 7 Days (kg)", "Order Needed 7 Days (kg)",
+                      "Bags", "Stock Covers (days)"]
+                     + [f"Day +{i}" for i in range(1, len(forecast["days"]) + 1)])
+        ws3.append([float(forecast["habit_pct_display"]), float(forecast["avg_daily_mort_7d"]),
+                   float(forecast["live_birds"]), float(forecast["next_3d"]), float(forecast["next_7d"]),
+                   float(forecast["order_needed_7d"]),
+                   float(forecast["order_needed_7d_bags"]) if forecast["order_needed_7d_bags"] is not None else None,
+                   float(forecast["stock_covers_days"]) if forecast["stock_covers_days"] is not None else None]
+                  + [float(d) for d in forecast["days"]])
+        for row in ws3.iter_rows():
+            for cell in row:
+                cell.border = BORDER
+        for i in range(1, 9 + len(forecast["days"])):
+            ws3.column_dimensions[ws3.cell(row=1, column=i).column_letter].width = 15
+
+    # Batch Sales block
+    ws4 = wb.create_sheet("Batch Sales")
+    header_row(1, ["Date", "Sale No.", "Party Name", "DC No.", "Birds Sold", "Weight Sold (kg)",
+                  "Avg Wt (kg)", "Rate (Rs/kg)", "Amount (Rs)", "Cum Birds Sold",
+                  "Cum Weight Sold (kg)", "Vehicle No."])
+    for s in sales_rows:
+        ws4.append([s["date"], s["sale_no"], s.get("party") or "-", s.get("doc_no") or "-",
+                   float(s["birds"]) if s["birds"] is not None else None,
+                   float(s["weight"]) if s["weight"] is not None else None,
+                   float(s["avg_weight"]) if s["avg_weight"] is not None else None,
+                   float(s["rate"]) if s["rate"] is not None else None,
+                   float(s["amount"]) if s["amount"] is not None else None,
+                   float(s["cum_birds"]), float(s["cum_weight"]), s.get("vehicle") or "-"])
+    if sales_rows:
+        total_row_idx = ws4.max_row + 1
+        ws4.append(["Total", "", "", "", float(sales_totals["birds"]), float(sales_totals["weight"]),
+                   "", "", float(sales_totals["amount"]), "", "", ""])
+        for cell in ws4[total_row_idx]:
+            cell.font = FONT_BOLD
+    for row in ws4.iter_rows():
+        for cell in row:
+            cell.border = BORDER
+    for i in range(1, 13):
+        ws4.column_dimensions[ws4.cell(row=1, column=i).column_letter].width = 15
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    farm_slug = (batch.broiler_farm.farm_name or "farm").replace(" ", "_")
+    response["Content-Disposition"] = f'attachment; filename="batch_daily_card_{farm_slug}_{batch.batch_name}.xlsx"'
+    wb.save(response)
+    return response
 
 
 @login_required

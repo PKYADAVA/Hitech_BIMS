@@ -1,0 +1,597 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Batch Daily Card Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='broiler_batch_daily_card_report' %}
+
+<style>
+  /* One continuous daily-card grid, styled after the farm's own Excel sheet
+     rather than as a set of separate report cards: a sticky 2-row header
+     (group band + column band), colour-coded rows (Weekly Actual / totals),
+     and the same dense all-borders look the paper card has. */
+  .bdc-wrap { overflow:auto; max-height:82vh; border:1px solid #c7d6e3; border-radius:.4rem; }
+  .bdc-grid { border-collapse:collapse; font-size:.68rem; width:max-content; min-width:100%; }
+  .bdc-grid th, .bdc-grid td { border:1px solid #c7d6e3; padding:.2rem .4rem; white-space:nowrap; text-align:center; }
+  .bdc-grid td.num { text-align:right; }
+  .bdc-grid td.txt { text-align:left; }
+  .bdc-grid thead th { background:#1b3a6b; color:#fff; font-weight:700; position:sticky; z-index:3; }
+  .bdc-grid thead tr:first-child th { top:0; }
+  .bdc-grid thead tr:last-child th { top:22px; }
+  .bdc-grid tbody tr:nth-child(even) td { background:#f7f9fb; }
+
+  /* Date and Age stay put while the grid scrolls sideways — the two columns
+     a reader needs to keep in view no matter how far right they've scrolled
+     to compare a figure against. Widths are fixed so the second column's
+     sticky offset (left:72px) lines up with the first's real width.
+
+     Scoped by explicit class, not :nth-child — the group header row's first
+     cell is one <th colspan="2"> (Date+Age merged), so nth-child(2) in that
+     row lands on the Mortality No. group label instead of a Date/Age cell,
+     pinning it sticky by mistake and clipping/overlapping the header text
+     next to it as the grid scrolled. */
+  .bdc-grid td.bdc-col-date, .bdc-grid th.bdc-col-date { position:sticky; left:0; z-index:1; width:72px; min-width:72px; max-width:72px; }
+  .bdc-grid td.bdc-col-age, .bdc-grid th.bdc-col-age { position:sticky; left:72px; z-index:1; width:40px; min-width:40px; max-width:40px; }
+  /* The group header's own Date+Age cell is one merged <th colspan="2">, so
+     it needs the first column's left offset but the combined width of both. */
+  .bdc-grid thead th.bdc-col-date-age { position:sticky; left:0; z-index:4; width:112px; min-width:112px; max-width:112px; }
+  .bdc-grid thead th.bdc-col-date, .bdc-grid thead th.bdc-col-age { z-index:4; }
+  .bdc-grid tbody td.bdc-col-date, .bdc-grid tbody td.bdc-col-age { background:#eef2f7; }
+  .bdc-grid tbody tr:nth-child(even) td.bdc-col-date,
+  .bdc-grid tbody tr:nth-child(even) td.bdc-col-age { background:#e3e9f1; }
+  tr.bdc-week-row td.bdc-col-date, tr.bdc-week-row td.bdc-col-age { background:#c7d6e8 !important; }
+
+  /* Colours read directly off the farm's own .xlsx (openpyxl fill/font dump),
+     not approximated from the screenshot — cell by cell:
+       Daily Mort/Daily Cons (bags) .... fill #FFF9DB, text #0000FF (blue)
+       Std columns (Feed Intake/Cum Feed/Body Wt/FCR) .... fill #FCE4D6, bold
+       Actual columns (Feed Intake/Cum Feed/FCR) .... fill #E4DFEC
+       Body Wt Actual + Feed Revd by Type .... fill #E2EFDA, text #0000FF
+       Feed Type Consumed .... fill #D9F0EE
+       Remarks .... fill #FFFFFF, text #0000FF
+       Sales fields .... fill #FFF2CC, text #0000FF
+       Age + most auto/calculated cells .... fill #EDEDED
+       Weekly Actual row .... fill #DDEBF7
+     Mortality's own blue/amber/red-by-severity text colour is this app's
+     addition (the sheet doesn't vary Daily Mort's colour by value, only its
+     fixed blue font) and is kept since it's useful, layered on top of the
+     sheet's own blue. */
+  /* Weekly Actual rows keep every column's own fill — the sheet's blue band
+     only shows through on the handful of columns that carry no figure that
+     week (the blank Feed Revd / Feed Type Consumed cells), not as a flat
+     override on top of the Std/Actual/daily colours. Only bold + the extra
+     row border mark it apart from a daily row. */
+  tr.bdc-week-row td { background:#ddebf7; font-weight:700; }
+  tr.bdc-mort-blue td.bdc-mort { color:#2b62c9; }
+  tr.bdc-mort-amber td.bdc-mort { color:#b8860b; }
+  tr.bdc-mort-red td.bdc-mort { color:#c0392b; }
+
+  /* Column-fill rules need to beat the even-row zebra stripe above on every
+     row, not just odd ones — `.bdc-grid tbody tr:nth-child(even) td` carries
+     three type selectors (tbody, tr, td) that out-specificity a plain
+     `.bdc-grid td.bdc-xxx` pair despite both having two class-level
+     selectors, so these are repeated under tbody tr to match it. */
+  .bdc-grid tbody tr td.bdc-std { background:#fce4d6; font-weight:700; }
+  .bdc-grid tbody tr td.bdc-actual { background:#e4dfec; }
+  .bdc-grid tbody tr td.bdc-col-age { background:#ededed; font-weight:700; }
+  .bdc-grid tbody tr td.bdc-auto { background:#ededed; }
+  .bdc-grid tbody tr td.bdc-fill-daily { background:#fff9db; color:#0000ff; }
+  .bdc-grid tbody tr td.bdc-fill-optional { background:#e2efda; color:#0000ff; }
+  .bdc-grid tbody tr td.bdc-fill-type { background:#d9f0ee; }
+  .bdc-grid tbody tr td.bdc-fill-remarks { background:#ffffff; color:#0000ff; }
+
+  /* Group bands at the very top of the page, compact like the sheet's own
+     Feed Reconciliation / Feed Forecast / Feed Type Wise strips rather than
+     full report cards. */
+  .bdc-band { margin-bottom:.6rem; }
+  .bdc-band-title { background:#5b4a17; color:#fff; font-weight:700; font-size:.72rem;
+    padding:.25rem .6rem; }
+  .bdc-band table { border-collapse:collapse; font-size:.7rem; width:100%; }
+  .bdc-band th, .bdc-band td { border:1px solid #c7d6e3; padding:.25rem .5rem; text-align:center; white-space:nowrap; }
+  .bdc-band th { background:#1b3a6b; color:#fff; font-weight:700; }
+  .bdc-band td.num { text-align:right; }
+  .bdc-band .bdc-hero { font-size:.95rem; font-weight:800; }
+  /* The Day +1..+7 breakdown is supporting detail behind the Bags/Stock
+     Covers hero figures beside it — a lighter tint and smaller type keep it
+     from competing with them for attention. */
+  .bdc-band .bdc-day-col { background:#f4f7fa; font-size:.66rem; color:#5a6b7d; font-weight:600; }
+  .bdc-band td.bdc-day-col { color:#1b3a6b; font-weight:700; }
+
+  .bdc-snapshot { display:flex; flex-wrap:wrap; gap:0; border:1px solid #c7d6e3; margin-bottom:.6rem; }
+  .bdc-snapshot > div { padding:.35rem .75rem; border-right:1px solid #c7d6e3; font-size:.78rem; }
+  .bdc-snapshot > div:last-child { border-right:0; }
+  .bdc-snapshot .l { color:#5a6b7d; margin-right:.35rem; }
+  .bdc-snapshot .v { font-weight:700; color:#1b3a6b; }
+
+  .bdc-current-phase td { background:#eafbe7 !important; }
+
+  .bdc-section-title { font-weight:700; font-size:.95rem; margin:1.25rem 0 .5rem; color:#0d5f8a; }
+  .bdc-section-title i { margin-right:.35rem; }
+
+  /* Last-entered day — the register's own "today" — gets a left accent bar
+     and a slightly heavier border so it's findable at a glance in a 20+ row
+     grid, and the page auto-scrolls to it on load (see script at bottom). */
+  tr.bdc-today td { border-top:2px solid #0d5f8a; border-bottom:2px solid #0d5f8a; }
+  tr.bdc-today td.bdc-col-date { border-left:4px solid #0d5f8a; }
+
+  /* Exception cells: FCR running >10% over standard, or livability under the
+     farm's usual 90% floor — red text/bold, same cue the negative-closing-
+     stock column already uses, so a problem day doesn't need the whole row
+     read to be noticed. */
+  .bdc-grid td.bdc-exception { color:#c0392b; font-weight:700; }
+
+  @media print {
+    .no-print { display:none !important; }
+    .bdc-wrap { max-height:none !important; overflow:visible !important; }
+    .bdc-grid thead th { position:static; }
+  }
+
+  /* Condensed phone view: the full grid is desktop-dense (20+ columns), so
+     below 768px it's replaced by one stacked card per day carrying only the
+     figures a farm visit actually needs — mortality, FCR, feed consumed,
+     closing stock — with the full grid still reachable via a toggle for
+     anyone who wants every column on a small screen. */
+  .bdc-cards { display:none; }
+  @media (max-width: 768px) {
+    .bdc-wrap.bdc-grid-wrap { display:none; }
+    .bdc-wrap.bdc-grid-wrap.bdc-force-grid { display:block; }
+    .bdc-cards { display:block; }
+    .bdc-cards.bdc-force-hide { display:none; }
+  }
+  .bdc-card { border:1px solid #c7d6e3; border-radius:.4rem; margin-bottom:.5rem; overflow:hidden; }
+  .bdc-card.bdc-today { border-color:#0d5f8a; border-width:2px; }
+  .bdc-card-head { background:#1b3a6b; color:#fff; padding:.4rem .6rem; display:flex; justify-content:space-between; font-size:.85rem; font-weight:700; }
+  .bdc-card-head.bdc-week-row { background:#dce6f1; color:#1b3a6b; }
+  .bdc-card-body { display:grid; grid-template-columns:1fr 1fr; gap:.1rem 0; font-size:.78rem; }
+  .bdc-card-body > div { padding:.3rem .6rem; border-bottom:1px solid #eef2f7; }
+  .bdc-card-body .l { color:#5a6b7d; display:block; font-size:.68rem; }
+  .bdc-card-body .v { font-weight:600; }
+  .bdc-card-body .v.bdc-exception { color:#c0392b; }
+  .bdc-view-toggle { display:none; }
+  @media (max-width: 768px) { .bdc-view-toggle { display:inline-block; } }
+</style>
+
+{% include '_report_letterhead.html' with title='Batch Daily Card Report' %}
+
+<!-- Filters -->
+<div class="rpt-filter no-print"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Branch</label>
+      <select class="form-select form-select-sm" id="bdc-branch">
+        <option value="">select</option>
+        {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3"><label class="form-label">Farm</label>
+      <select class="form-select form-select-sm" id="bdc-farm">
+        <option value="">select</option>
+        {% for f in farms %}<option value="{{ f.id }}" data-branch="{{ f.branch_id }}">{{ f.farm_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-4"><label class="form-label">Batch <span class="text-danger">*</span></label>
+      <select class="form-select form-select-sm" name="batch" id="bdc-batch" required>
+        <option value="">select</option>
+        {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
+          {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}{% if b.is_closed %} (Closed){% endif %}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      {% if batch %}
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()" title="Print / Save as PDF"><i class="fas fa-print"></i></button>
+      <a class="btn btn-outline-success btn-sm" href="?batch={{ batch.id }}&export=xlsx" title="Download Excel"><i class="fas fa-file-excel"></i></a>
+      {% endif %}
+    </div>
+  </form>
+  {% if batch %}
+  <div class="mt-2">
+    <button class="btn btn-outline-primary btn-sm bdc-view-toggle" type="button" id="bdc-toggle-view">
+      <i class="fas fa-table me-1"></i><span id="bdc-toggle-label">Show Full Grid</span>
+    </button>
+  </div>
+  {% endif %}
+</div></div>
+
+{% if not batch %}
+<div class="card"><div class="card-body text-center text-muted py-4">
+  {% if batch_requested %}No batch found for that selection.{% else %}Pick a batch above to view its Daily Card.{% endif %}
+</div></div>
+{% else %}
+
+<!-- Farm Name / Placement Bird / Placement Date / Target Day strip -->
+<div class="bdc-snapshot">
+  <div><span class="l">Farm Name</span><span class="v">{{ snapshot.farm_name }}</span></div>
+  <div><span class="l">Placement Bird</span><span class="v">{{ snapshot.placed_birds|floatformat:0 }}</span></div>
+  <div><span class="l">Placement Date</span><span class="v">{{ snapshot.placement_date|date:"d-M-Y"|default:"-" }}</span></div>
+  <div><span class="l">Target Day</span><span class="v">{{ snapshot.target_day|default:"-" }}</span></div>
+</div>
+
+{% if programme_gap %}
+<div class="alert alert-warning py-2 px-3 mb-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ programme_gap }} — Total Requirement/Still To Send can't be read without one; Sent/Consumed/Availability below are still exact.</div>
+{% endif %}
+
+<!-- FEED RECONCILIATION (kg) — requirement vs sent vs consumed -->
+<div class="bdc-band">
+  <div class="bdc-band-title">FEED RECONCILIATION (kg) — requirement vs sent vs consumed</div>
+  <table>
+    <thead><tr>
+      <th>Target Day (1–{{ snapshot.target_day|default:"-" }})</th><th>Total Requirement</th><th>Total Sent</th><th>Consumed</th>
+      <th>Availability (Stock)</th><th>Excess Sent</th><th>Still To Send</th><th>Bags To Send (50 kg)</th>
+    </tr></thead>
+    <tbody><tr>
+      <td class="num bdc-hero">{{ snapshot.target_day|default:"-" }}</td>
+      <td class="num bdc-hero">{% if recon_totals.req_qty %}{{ recon_totals.req_qty|floatformat:0 }}{% else %}-{% endif %}</td>
+      <td class="num bdc-hero">{{ recon_totals.feed_in|floatformat:0 }}</td>
+      <td class="num bdc-hero">{{ recon_totals.cons_qty|floatformat:0 }}</td>
+      <td class="num bdc-hero {% if recon_totals.avail_qty < 0 %}text-danger{% endif %}">{{ recon_totals.avail_qty|floatformat:0 }}</td>
+      <td class="num bdc-hero">{{ recon_totals.excess_sent|floatformat:0 }}</td>
+      <td class="num bdc-hero">{{ recon_totals.still_to_send|floatformat:0 }}</td>
+      <td class="num bdc-hero">{{ recon_totals.bags|floatformat:0 }}</td>
+    </tr></tbody>
+  </table>
+</div>
+
+<!-- FEED FORECAST — next 3 / 7 days -->
+<div class="bdc-band">
+  <div class="bdc-band-title">FEED FORECAST — next 3 / 7 days (std intake × your consumption habit × projected live birds)</div>
+  <div class="bdc-wrap" style="max-height:none;">
+    <table style="width:max-content; min-width:100%;">
+      <thead><tr>
+          <th>Habit % vs Std</th><th>Avg Daily Mort (7d)</th><th>Live Birds</th>
+          <th>Next 3 Days (kg)</th><th>Next 7 Days (kg)</th>
+          <th>Order Needed 7 Days (kg)</th>
+          <th>Bags (50 kg)</th><th>Stock Covers (days)</th>
+          <th class="bdc-day-col">Day +1</th><th class="bdc-day-col">Day +2</th><th class="bdc-day-col">Day +3</th>
+          <th class="bdc-day-col">Day +4</th><th class="bdc-day-col">Day +5</th><th class="bdc-day-col">Day +6</th><th class="bdc-day-col">Day +7</th>
+          <th>Last Day Entered</th>
+        </tr></thead>
+        <tbody><tr>
+          <td class="num bdc-hero">{{ forecast.habit_pct_display|floatformat:0 }}%</td>
+          <td class="num bdc-hero">{{ forecast.avg_daily_mort_7d|floatformat:1 }}</td>
+          <td class="num bdc-hero">{{ forecast.live_birds|floatformat:0 }}</td>
+          <td class="num bdc-hero">{{ forecast.next_3d|floatformat:0 }}</td>
+          <td class="num bdc-hero">{{ forecast.next_7d|floatformat:0 }}</td>
+          <td class="num bdc-hero">{{ forecast.order_needed_7d|floatformat:0 }}</td>
+          <td class="num bdc-hero">{% if forecast.order_needed_7d_bags is not None %}{{ forecast.order_needed_7d_bags|floatformat:0 }}{% else %}-{% endif %}</td>
+          <td class="num bdc-hero {% if forecast.stock_covers_days is not None and forecast.stock_covers_days < 3 %}text-danger{% endif %}">{% if forecast.stock_covers_days is not None %}{{ forecast.stock_covers_days|floatformat:1 }}{% else %}-{% endif %}</td>
+          {% for d in forecast.days %}<td class="num bdc-day-col">{{ d|floatformat:0 }}</td>{% endfor %}
+          <td class="num bdc-hero">{{ snapshot.target_day|default:"-" }}</td>
+        </tr></tbody>
+      </table>
+  </div>
+</div>
+
+<!-- FEED TYPE WISE — requirement vs sent vs consumed -->
+<div class="bdc-band">
+  <div class="bdc-band-title">FEED TYPE WISE — requirement vs sent vs consumed (kg, up to Target Day; type age ranges from Standards sheet)</div>
+  <table>
+    <thead><tr>
+      <th>Feed Type</th><th>Age Range (days)</th><th>Std g/bird (to Target Day)</th>
+      <th>Requirement (kg)</th><th>Sent (kg)</th><th>Consumed (kg)</th><th>Availability (kg)</th>
+      <th>Excess / (Short) Sent (kg)</th><th>Still To Send (kg)</th><th>Bags To Send (50 kg)</th>
+    </tr></thead>
+    <tbody>
+      {% for r in recon_rows %}
+      <tr class="{% if r.is_current %}bdc-current-phase{% endif %}">
+        <td class="txt">{{ r.item }}</td>
+        <td>{{ r.phase_band|default:"-" }}</td>
+        <td class="num">{% if r.due_bird is not None %}{{ r.due_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num">{% if r.req_qty is not None %}{{ r.req_qty|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num">{{ r.feed_in|floatformat:0 }}</td>
+        <td class="num">{{ r.cons_qty|floatformat:0 }}</td>
+        <td class="num {% if r.avail_qty < 0 %}text-danger{% endif %}">{{ r.avail_qty|floatformat:0 }}</td>
+        <td class="num">{{ r.excess_sent|floatformat:0 }}</td>
+        <td class="num">{{ r.still_to_send|floatformat:0 }}</td>
+        <td class="num">{% if r.bags is not None %}{{ r.bags|floatformat:0 }}{% else %}-{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10" class="text-center text-muted py-2">No feed programme or feed movement for this batch.</td></tr>
+      {% endfor %}
+      {% if recon_rows %}
+      <tr class="bdc-week-row">
+        <td class="txt">Total</td><td></td><td></td>
+        <td class="num">{{ recon_totals.req_qty|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.feed_in|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.cons_qty|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.avail_qty|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.excess_sent|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.still_to_send|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.bags|floatformat:0 }}</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- The daily card grid itself: one continuous table, group header band on
+     top of the column header band, matching the sheet's own two header rows.
+     Hidden below 768px in favour of the stacked .bdc-cards view, unless the
+     reader explicitly asks for it via the toggle button above. -->
+<div class="bdc-wrap bdc-grid-wrap" id="bdc-grid-wrap">
+  <table class="bdc-grid">
+    <thead>
+      <tr>
+        <th colspan="2" class="bdc-col-date-age"></th>
+        <th colspan="4">Mortality No.</th>
+        <th></th>
+        <th></th>
+        <th colspan="2">Feed Intake (gm/bird)</th>
+        <th colspan="2">Cum Feed (gm/bird)</th>
+        <th colspan="2">Body Weight (gm)</th>
+        <th colspan="2">FCR</th>
+        {% if phase_names %}<th colspan="{{ phase_names|length }}">Feed Revd (+) / Trfr (−) by Type (bags)</th>{% endif %}
+        <th></th>
+        <th></th>
+        <th colspan="3">Feed Consumption (Kg (Bags))</th>
+        {% if phase_names %}<th colspan="{{ phase_names|length }}">Closing Stock by Type (kg)</th>{% endif %}
+        <th></th>
+        <th colspan="2"></th>
+      </tr>
+      <tr>
+        <th class="bdc-col-date">Date</th><th class="bdc-col-age">Age</th>
+        <th>Daily Mort</th><th>Daily %</th><th>Cum Total</th><th>Cum %</th>
+        <th>Closing Birds (No's)</th>
+        <th>Livability %</th>
+        <th>Std</th><th>Actual</th>
+        <th>Std</th><th>Actual</th>
+        <th>Std</th><th>Actual</th>
+        <th>Std</th><th>Actual</th>
+        {% for name in phase_names %}<th>{{ name }}</th>{% endfor %}
+        <th>Revd (+) / Trfr (−)</th>
+        <th>Feed Type Consumed</th>
+        <th>Daily Cons</th>
+        <th>Total Cons</th>
+        <th>Closing Stock</th>
+        {% for name in phase_names %}<th>{{ name }}</th>{% endfor %}
+        <th>Remarks / Vaccine / Medicine</th>
+        <th>Feed Requirement</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in daily_rows %}
+      {% if r.is_week_rollup %}
+      <tr class="bdc-week-row">
+        <td class="txt bdc-col-date bdc-auto">Weekly Actual</td><td class="bdc-col-age">Wk {{ r.week_no }}</td>
+        <td class="num bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
+        <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
+        <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{{ r.balance|floatformat:0 }}</td>
+        <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</td>
+        <td class="num bdc-std">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual">{% if r.act_feed_per_bird is not None %}{{ r.act_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-std">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual">{{ r.cum_feed_per_bird|floatformat:0 }}</td>
+        <td class="num bdc-std">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-fill-optional">{{ r.avg_bwt|floatformat:0 }}</td>
+        <td class="num bdc-std">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</td>
+        {% for name in phase_names %}<td class="bdc-fill-optional"></td>{% endfor %}
+        <td class="num bdc-fill-optional">{{ r.feed_in_out_display }}</td>
+        <td class="txt bdc-fill-type"></td>
+        <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.total_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
+        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-auto {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
+        <td class="txt bdc-fill-remarks"></td>
+        <td class="num bdc-auto"></td>
+      </tr>
+      {% else %}
+      <tr class="{% if r.mort_pct >= 1 %}bdc-mort-red{% elif r.mort_pct >= 0.5 %}bdc-mort-amber{% elif r.mort_pct > 0.02 %}bdc-mort-blue{% endif %} {% if r.is_last_entry %}bdc-today{% endif %}"
+          {% if r.is_last_entry %}id="bdc-today-row"{% endif %}>
+        <td class="bdc-col-date bdc-auto">{{ r.entry_date|date:"d-M-Y" }}</td>
+        <td class="num bdc-col-age">{{ r.age }}</td>
+        <td class="num bdc-mort bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
+        <td class="num bdc-auto">{{ r.mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
+        <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{{ r.balance|floatformat:0 }}</td>
+        <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</td>
+        <td class="num bdc-std">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual">{{ r.act_feed_per_bird|floatformat:0 }}</td>
+        <td class="num bdc-std">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual">{{ r.cum_feed_per_bird|floatformat:0 }}</td>
+        <td class="num bdc-std">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-fill-optional">{{ r.avg_bwt|floatformat:0 }}</td>
+        <td class="num bdc-std">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %}</td>
+        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</td>
+        {% for v in r.feed_received_by_type %}
+        <td class="num bdc-fill-optional">{% if v is not None %}{{ v }}{% else %}-{% endif %}</td>
+        {% endfor %}
+        <td class="num bdc-fill-optional">{{ r.feed_in_out_display }}</td>
+        <td class="txt bdc-fill-type">{{ r.feed_type_consumed_display }}</td>
+        <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.total_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
+        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-auto {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
+        <td class="txt bdc-fill-remarks">{{ r.remarks|default:"-" }}</td>
+        <td class="num bdc-auto">{{ r.req_feed_display }}</td>
+      </tr>
+      {% endif %}
+      {% empty %}
+      <tr><td colspan="22" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Condensed phone view: one card per day, the fields a farm visit actually
+     needs. Toggled against the full grid above via the button in the filter
+     bar (JS below); hidden entirely above 768px where the grid already
+     fits comfortably. -->
+<div class="bdc-cards" id="bdc-cards">
+  {% for r in daily_rows %}
+  {% if r.is_week_rollup %}
+  <div class="bdc-card">
+    <div class="bdc-card-head bdc-week-row"><span>Weekly Actual — Wk {{ r.week_no }}</span><span>{{ r.week_from|date:"d-M" }} – {{ r.week_to|date:"d-M" }}</span></div>
+    <div class="bdc-card-body">
+      <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.cum_mort_pct|floatformat:2 }}% cum)</span></div>
+      <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
+      <div><span class="l">Body Weight</span><span class="v">{{ r.avg_bwt|floatformat:0 }} g</span></div>
+      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</span></div>
+      <div><span class="l">Daily Cons</span><span class="v">{{ r.daily_cons_display }}</span></div>
+      <div><span class="l">Closing Stock</span><span class="v">{{ r.closing_stock_display }}</span></div>
+      <div><span class="l">Livability</span><span class="v {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</span></div>
+    </div>
+  </div>
+  {% else %}
+  <div class="bdc-card {% if r.is_last_entry %}bdc-today{% endif %}" {% if r.is_last_entry %}id="bdc-today-card"{% endif %}>
+    <div class="bdc-card-head"><span>{{ r.entry_date|date:"d-M-Y" }}</span><span>Day {{ r.age }}</span></div>
+    <div class="bdc-card-body">
+      <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.mort_pct|floatformat:2 }}%)</span></div>
+      <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
+      <div><span class="l">Body Weight</span><span class="v">{{ r.avg_bwt|floatformat:0 }} g <small class="text-muted">(std {% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %})</small></span></div>
+      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }} <small class="text-muted">(std {% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %})</small></span></div>
+      <div><span class="l">Feed Type</span><span class="v">{{ r.feed_type_consumed_display }}</span></div>
+      <div><span class="l">Daily Cons</span><span class="v">{{ r.daily_cons_display }}</span></div>
+      <div><span class="l">Closing Stock</span><span class="v">{{ r.closing_stock_display }}</span></div>
+      <div><span class="l">Livability</span><span class="v {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</span></div>
+      {% if r.remarks %}<div style="grid-column:1/-1;"><span class="l">Remarks</span><span class="v">{{ r.remarks }}</span></div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% empty %}
+  <div class="text-center text-muted py-4">No daily entries recorded for this batch.</div>
+  {% endfor %}
+</div>
+
+<!-- Batch Sales kept as its own table rather than folded into the daily
+     grid's right edge — a sale happens on a handful of days out of the
+     whole cycle, so burying it as mostly-blank columns at the far right of
+     a 20+ column grid made it easy to miss; a short standalone table reads
+     at a glance. -->
+<div class="bdc-section-title"><i class="fas fa-truck-loading"></i>Batch Sales (Lifting)</div>
+<div class="card"><div class="card-body p-2">
+  <div class="bdc-wrap" style="max-height:40vh;">
+    <table class="table table-bordered table-hover mb-0 rpt-table ds-grid" style="width:max-content; min-width:100%;">
+      <thead><tr>
+        <th>Date</th><th>Sale No.</th><th>Party Name</th><th>DC No.</th>
+        <th>Birds Sold</th><th>Weight Sold (kg)</th><th>Avg Wt (kg)</th>
+        <th>Rate (₹/kg)</th><th>Amount (₹)</th><th>Cum Birds Sold</th><th>Cum Weight Sold (kg)</th>
+        <th>Vehicle No.</th>
+      </tr></thead>
+      <tbody>
+        {% for s in sales_rows %}
+        <tr style="background:#fff2cc; color:#0000ff;">
+          <td>{{ s.date|date:"d-M-Y" }}</td>
+          <td class="txt">{{ s.sale_no }}</td>
+          <td class="txt">{{ s.party|default:"-" }}</td>
+          <td class="txt">{{ s.doc_no|default:"-" }}</td>
+          <td class="num">{{ s.birds|floatformat:0 }}</td>
+          <td class="num">{{ s.weight|floatformat:2 }}</td>
+          <td class="num">{{ s.avg_weight|floatformat:2 }}</td>
+          <td class="num">{{ s.rate|floatformat:2 }}</td>
+          <td class="num">{{ s.amount|floatformat:2 }}</td>
+          <td class="num">{{ s.cum_birds|floatformat:0 }}</td>
+          <td class="num">{{ s.cum_weight|floatformat:2 }}</td>
+          <td class="txt">{{ s.vehicle|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="12" class="text-center text-muted py-2">No sales/liftings recorded for this batch.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if sales_rows %}
+      <tfoot><tr>
+        <td colspan="4" class="text-end">Total</td>
+        <td class="num">{{ sales_totals.birds|floatformat:0 }}</td>
+        <td class="num">{{ sales_totals.weight|floatformat:2 }}</td>
+        <td></td><td></td>
+        <td class="num">{{ sales_totals.amount|floatformat:2 }}</td>
+        <td></td><td></td><td></td>
+      </tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div></div>
+
+{% endif %}
+
+<script>
+$(function () {
+  // Branch narrows Farm, Farm narrows Batch — same cascade as the other
+  // broiler reports (see broiler_batch_report.html).
+  //
+  // Options are detached and re-appended rather than hidden: main.js turns
+  // every .form-select into a Select2, which renders its own list from the
+  // options and pays no attention to `hidden`/`display:none` — hiding them
+  // left every farm's batches showing regardless of the Branch/Farm picked.
+  // Detach (not empty) so the options keep their data attributes.
+  var $branch = $('#bdc-branch');
+  var $farm = $('#bdc-farm');
+  var $batch = $('#bdc-batch');
+  if (!$branch.length) return;
+
+  var allFarmOptions = $farm.children().toArray();
+  var allBatchOptions = $batch.children().toArray();
+
+  function filterFarms() {
+    var branchId = $branch.val();
+    var chosen = $farm.val();
+    var keep = $(allFarmOptions).filter(function () {
+      return !this.value || !branchId || $(this).data('branch') == branchId;
+    });
+    $farm.children().detach();
+    $farm.append(keep);
+    var survives = keep.filter(function () { return this.value === chosen; }).length;
+    $farm.val(survives ? chosen : '').trigger('change.select2');
+  }
+  function filterBatches() {
+    var farmId = $farm.val();
+    var chosen = $batch.val();
+    var keep = $(allBatchOptions).filter(function () {
+      return !this.value || !farmId || $(this).data('farm') == farmId;
+    });
+    $batch.children().detach();
+    $batch.append(keep);
+    var survives = keep.filter(function () { return this.value === chosen; }).length;
+    $batch.val(survives ? chosen : '').trigger('change.select2');
+  }
+  $branch.on('change', filterFarms);
+  $farm.on('change', filterBatches);
+
+  // On a reload with a batch already picked (Submit, or a direct link),
+  // restore Branch and Farm to match it — otherwise they reset to "select"
+  // every time while Batch itself still shows the chosen one, which reads
+  // as if the cascade forgot the first two steps.
+  var chosenBatchOpt = $batch.children().filter(function () { return this.selected; })[0];
+  if (chosenBatchOpt) {
+    var farmId = chosenBatchOpt.dataset.farm;
+    var farmOpt = $(allFarmOptions).filter(function () { return this.value === farmId; })[0];
+    if (farmOpt) {
+      $branch.val(farmOpt.dataset.branch).trigger('change.select2');
+      filterFarms();
+      $farm.val(farmId).trigger('change.select2');
+      filterBatches();
+      $batch.val(chosenBatchOpt.value).trigger('change.select2');
+    }
+  }
+});
+
+  (function () {
+    // Scroll the last-entered day into view on load, in whichever view
+    // (grid or cards) is currently visible, so the daily visit's own day
+    // doesn't need to be found by eye in a long register.
+    var todayRow = document.getElementById("bdc-today-row");
+    var todayCard = document.getElementById("bdc-today-card");
+    var gridWrap = document.getElementById("bdc-grid-wrap");
+    if (todayRow && gridWrap) {
+      gridWrap.scrollTop = Math.max(0, todayRow.offsetTop - gridWrap.clientHeight / 2);
+    }
+    if (todayCard) {
+      todayCard.scrollIntoView({ block: "center" });
+    }
+
+    // Grid/cards toggle, phone widths only — the cards view is the default
+    // there, but a reader who wants every column can still pull up the
+    // full grid without resizing anything.
+    var toggleBtn = document.getElementById("bdc-toggle-view");
+    var toggleLabel = document.getElementById("bdc-toggle-label");
+    var cards = document.getElementById("bdc-cards");
+    if (toggleBtn && gridWrap && cards) {
+      toggleBtn.addEventListener("click", function () {
+        var showingGrid = gridWrap.classList.toggle("bdc-force-grid");
+        cards.classList.toggle("bdc-force-hide", showingGrid);
+        toggleLabel.textContent = showingGrid ? "Show Card View" : "Show Full Grid";
+      });
+    }
+  })();
+</script>
+{% endblock %}
