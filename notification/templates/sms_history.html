@@ -2,7 +2,14 @@
 {% load static %}
 
 {% block title %}SMS History - BIMS{% endblock %}
-{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">
+<style>
+  .sms-filter-grid { display:flex; flex-wrap:nowrap; gap:.6rem; align-items:end; }
+  .sms-filter-grid > div { flex:1 1 0; min-width:0; }
+  @media (max-width:1200px) { .sms-filter-grid { flex-wrap:wrap; }
+                              .sms-filter-grid > div { flex:1 1 180px; } }
+</style>
+{% endblock %}
 {% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_subnav.html' with module='notification_report' active_tab='sms_history' %}
@@ -24,49 +31,49 @@
 <!-- Filters -->
 <div class="card mb-3 rpt-filter no-print">
   <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-2">
+    <div class="sms-filter-grid mb-2">
+      <div>
         <label class="form-label">From Date</label>
         <input type="date" class="form-control" id="from-date">
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">To Date</label>
         <input type="date" class="form-control" id="to-date">
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">Module</label>
         <select class="form-select" id="module">
           <option value="">-All-</option>
           {% for key, label in doc_sources %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">Template</label>
         <select class="form-select" id="template">
           <option value="">-All-</option>
           {% for t in templates %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">Status</label>
         <select class="form-select" id="status">
           <option value="">-All-</option>
           {% for value, label in statuses %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div>
         <label class="form-label">Mobile</label>
         <input type="text" class="form-control" id="mobile" placeholder="Number contains...">
       </div>
-      <div class="col-md-3">
+      <div>
         <label class="form-label">Search</label>
         <input type="text" class="form-control" id="q" placeholder="Party / document / message / gateway ID">
       </div>
-      <div class="col-md-3 d-flex gap-2">
-        <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
-        <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
-        <button class="btn btn-outline-secondary" id="refresh-btn"><i class="fas fa-rotate"></i> Refresh</button>
-      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap justify-content-end">
+      <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
+      <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
+      <button class="btn btn-outline-secondary" id="refresh-btn"><i class="fas fa-rotate"></i> Refresh</button>
     </div>
   </div>
 </div>

@@ -153,6 +153,15 @@ export function extraRowActions(
     }
     return out;
   }
+  if (resourceKey === "broiler-farmer-farm-setup-request") {
+    // Same eraser as the location capture register above, but only while the
+    // request is still a Draft — once submitted, the pin is part of what a
+    // reviewer is approving, same rule the web register enforces server-side.
+    if (row.status === "draft" && perms.edit && handlers?.clearLocation) {
+      return [clearLocationAction(row, () => handlers.clearLocation!(row))];
+    }
+    return [];
+  }
   if (resourceKey === "hatchery-hatch-settings") {
     return perms.add ? [completeHatchAction(row, navigate)] : [];
   }

@@ -1084,6 +1084,9 @@ layouts open it from the account menu.
               {% if 'notification_transaction' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'notification_transaction' %}">
                 <i class="fas fa-comments"></i>Transaction Messaging
               </a></li>{% endif %}
+              {% if 'whatsapp_conversations' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'whatsapp_conversations' %}">
+                <i class="fab fa-whatsapp"></i>WhatsApp Conversations
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

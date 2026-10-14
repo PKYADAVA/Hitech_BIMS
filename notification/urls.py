@@ -8,6 +8,7 @@ from .views import (
     SmsTemplateManageView,
     SmsHistoryPageView,
     SmsSettingsPageView,
+    WhatsappConversationsPageView,
     WhatsappHistoryPageView,
     WhatsappSettingsPageView,
     WhatsappTemplateAPI,
@@ -28,6 +29,7 @@ from .views import (
     whatsapp_history_refresh_status,
     whatsapp_history_retry,
     whatsapp_media_link,
+    whatsapp_recent_contacts,
     whatsapp_send_service_message,
     whatsapp_settings_test,
     whatsapp_sync_contact,
@@ -86,7 +88,10 @@ urlpatterns = [
     path("whatsapp-conversation/send/", whatsapp_send_service_message, name="whatsapp_send_service_message"),
     path("whatsapp-sync-contact/", whatsapp_sync_contact, name="whatsapp_sync_contact"),
     path("whatsapp-media-link/", whatsapp_media_link, name="whatsapp_media_link"),
+    path("whatsapp-recent-contacts/", whatsapp_recent_contacts, name="whatsapp_recent_contacts"),
 
     path("notification-transaction/", NotificationTransactionPageView.as_view(),
          name="notification_transaction"),
+    path("whatsapp-conversations/", WhatsappConversationsPageView.as_view(),
+         name="whatsapp_conversations"),
 ]

@@ -422,7 +422,15 @@ $(function () {
       $("#gps-note").text(err.code === err.PERMISSION_DENIED
         ? "Location permission denied — allow location for this site, then press again."
         : "Could not read the location — check the site is opened over HTTPS, then press again.");
-    }, { enableHighAccuracy: true, timeout: 10000 });
+    }, {
+      enableHighAccuracy: true, timeout: 10000,
+      // maximumAge defaults to 0, but some browsers (notably Android
+      // WebView/Chrome) still hand back a cached fix on a re-click within
+      // the same page session unless this is set explicitly — which is why
+      // reopening a draft and pressing Capture again could silently keep
+      // showing the old coordinates instead of a fresh reading.
+      maximumAge: 0,
+    });
   });
 
   // State/District/Village/Address, filled from the pin — same

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Conversations - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_transaction' active_tab='whatsapp_conversations' %}
+<style>
+  .conv-page .page-header { margin-bottom:.6rem; }
+  .conv-page .page-header-title { font-size:1.15rem; }
+  .conv-page .page-header-subtitle { font-size:.8rem; }
+
+  .conv-layout { display:flex; gap:.75rem; align-items:flex-start; }
+  .conv-search { flex:0 0 320px; }
+  .conv-thread { flex:1 1 auto; min-width:0; }
+  #conv-thread-body { height:65vh; overflow-y:auto; background:var(--bg-subtle,#f1f3f5); border-radius:.4rem; padding:.6rem; }
+  .conv-bubble { max-width:75%; padding:.45rem .65rem; border-radius:.6rem; margin-bottom:.5rem; font-size:.85rem; }
+  .conv-bubble.inbound { background:#fff; margin-right:auto; }
+  .conv-bubble.outbound { background:#d9fdd3; margin-left:auto; }
+  .conv-bubble .conv-meta { font-size:.68rem; color:var(--text-muted,#65727e); margin-top:.2rem; }
+  .conv-contact-list { max-height:65vh; overflow-y:auto; }
+  .conv-contact-item { padding:.5rem .6rem; border-radius:.4rem; cursor:pointer; font-size:.85rem; }
+  .conv-contact-item:hover { background:var(--bg-subtle,#f1f3f5); }
+  .conv-contact-item.active { background:#1fa855; color:#fff; }
+</style>
+<div class="conv-page">
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fab fa-whatsapp"></i> WhatsApp Conversations</div>
+      <div class="page-header-subtitle">Browse message threads, reply within the 24-hour service window, sync contacts, and download media</div>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="conv-layout">
+      <div class="conv-search">
+        <div class="input-group mb-2">
+          <input type="text" class="form-control" id="conv-phone-search" placeholder="Search mobile number...">
+          <button class="btn btn-outline-secondary" id="conv-phone-go" title="Open conversation"><i class="fas fa-magnifying-glass"></i></button>
+        </div>
+        <div class="text-muted small mb-2">Recent contacts from WhatsApp sends</div>
+        <div class="conv-contact-list" id="conv-contact-list"></div>
+      </div>
+      <div class="conv-thread">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <div class="fw-semibold" id="conv-thread-title">Select a contact or search a number</div>
+            <div class="text-muted small" id="conv-thread-subtitle"></div>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary" id="conv-sync-contact-btn" disabled><i class="fas fa-address-book"></i> Sync Contact</button>
+          </div>
+        </div>
+        <div id="conv-thread-body"><div class="text-muted small p-3">No conversation loaded.</div></div>
+        <div class="input-group mt-2">
+          <input type="text" class="form-control" id="conv-reply-text" placeholder="Type a reply (only works within the 24-hour service window)..." disabled>
+          <button class="btn btn-success" id="conv-reply-send" disabled><i class="fas fa-paper-plane"></i> Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const CONV_URLS = {
+    recentContacts: "{% url 'whatsapp_recent_contacts' %}",
+    conversation: "{% url 'whatsapp_conversation' %}",
+    reply: "{% url 'whatsapp_send_service_message' %}",
+    syncContact: "{% url 'whatsapp_sync_contact' %}",
+    mediaLink: "{% url 'whatsapp_media_link' %}",
+  };
+
+  // escapeHtml() provided globally by main.js
+
+  let convPhone = null;
+  let convContacts = [];
+
+  function loadRecentContacts() {
+    $.getJSON(CONV_URLS.recentContacts, function (resp) {
+      convContacts = resp.contacts || [];
+      renderContactList();
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to load recent contacts.");
+    });
+  }
+
+  function renderContactList() {
+    const wrap = $("#conv-contact-list").empty();
+    if (!convContacts.length) {
+      wrap.append('<div class="text-muted small p-2">No WhatsApp contacts yet.</div>');
+      return;
+    }
+    convContacts.forEach(function (c) {
+      wrap.append(`<div class="conv-contact-item ${c.mobile === convPhone ? "active" : ""}" data-phone="${escapeHtml(c.mobile)}" data-name="${escapeHtml(c.party_name)}" data-ptype="${escapeHtml(c.party_type)}">
+        <div class="fw-semibold">${escapeHtml(c.party_name || c.mobile)}</div>
+        <div class="small ${c.mobile === convPhone ? "" : "text-muted"}">${escapeHtml(c.mobile)}</div>
+      </div>`);
+    });
+  }
+
+  $(document).on("click", ".conv-contact-item", function () {
+    openConversation($(this).data("phone"), $(this).data("name"), $(this).data("ptype"));
+  });
+
+  $("#conv-phone-go").on("click", function () {
+    const phone = $("#conv-phone-search").val().trim();
+    if (phone) openConversation(phone, "", "");
+  });
+  $("#conv-phone-search").on("keydown", function (e) {
+    if (e.key === "Enter") $("#conv-phone-go").trigger("click");
+  });
+
+  function convBubbleHtml(m) {
+    const cls = m.direction === "outbound" ? "outbound" : "inbound";
+    let body = escapeHtml(m.preview || "");
+    if (m.media_id) {
+      body += ` <button class="btn btn-sm btn-outline-secondary download-media ms-1" data-media-id="${escapeHtml(m.media_id)}"><i class="fas fa-download"></i></button>`;
+    }
+    return `<div class="conv-bubble ${cls}">
+      <div>${body}</div>
+      <div class="conv-meta">${escapeHtml(m.created_at || "")} &middot; ${escapeHtml(m.status || "")}</div>
+    </div>`;
+  }
+
+  function openConversation(phone, name, ptype) {
+    convPhone = phone;
+    renderContactList();
+    $("#conv-thread-title").text(name ? `${name} — ${phone}` : phone);
+    $("#conv-thread-subtitle").text(ptype || "");
+    $("#conv-sync-contact-btn").prop("disabled", !name).data("phone", phone).data("name", name).data("ptype", ptype);
+    $("#conv-reply-text, #conv-reply-send").prop("disabled", false);
+    const body = $("#conv-thread-body").html('<div class="text-muted small p-3">Loading...</div>');
+    $.getJSON(CONV_URLS.conversation, { phone: phone }, function (resp) {
+      const messages = resp.messages || [];
+      if (!messages.length) {
+        body.html('<div class="text-muted small p-3">No messages yet with this number.</div>');
+        return;
+      }
+      body.html(messages.map(convBubbleHtml).join(""));
+      body.scrollTop(body[0].scrollHeight);
+    }).fail(function (xhr) {
+      body.html('<div class="text-danger small p-3">' + escapeHtml(xhr.responseJSON?.error || "Failed to load conversation.") + '</div>');
+    });
+  }
+
+  $(document).on("click", "#conv-thread-body .download-media", function () {
+    const mediaId = $(this).data("media-id");
+    $.getJSON(CONV_URLS.mediaLink, { media_id: mediaId }, function (resp) {
+      if (resp.download_url) window.open(resp.download_url, "_blank", "noopener");
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to fetch download link.");
+    });
+  });
+
+  $("#conv-reply-send").on("click", function () {
+    const text = $("#conv-reply-text").val().trim();
+    if (!convPhone || !text) return;
+    $(this).prop("disabled", true);
+    $.ajax({
+      url: CONV_URLS.reply, method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: { phone: convPhone, body: text },
+    }).done(function () {
+      $("#conv-reply-text").val("");
+      openConversation(convPhone, $("#conv-sync-contact-btn").data("name"), $("#conv-sync-contact-btn").data("ptype"));
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to send reply — the 24-hour service window may have closed.");
+    }).always(function () {
+      $("#conv-reply-send").prop("disabled", false);
+    });
+  });
+  $("#conv-reply-text").on("keydown", function (e) {
+    if (e.key === "Enter") $("#conv-reply-send").trigger("click");
+  });
+
+  $("#conv-sync-contact-btn").on("click", async function () {
+    const phone = $(this).data("phone"), name = $(this).data("name"), ptype = $(this).data("ptype");
+    if (!phone || !name) return;
+    if (!(await window.bimsConfirm(`Create/sync a WhatsApp contact for ${name} (${phone})?`))) return;
+    $.ajax({
+      url: CONV_URLS.syncContact, method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: { name: name, phone: phone, party_type: ptype },
+    }).done(function () {
+      window.showToast('success', "Contact synced to WhatsApp (LemIn AI).");
+    }).fail(function (xhr) {
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to sync contact.");
+    });
+  });
+
+  loadRecentContacts();
+});
+</script>
+{% endblock %}

@@ -307,6 +307,21 @@ class FarmCaptureClearView(V1ViewMixin, APIView):
             "Location cleared.")
 
 
+class FarmerFarmSetupRequestClearLocationView(V1ViewMixin, APIView):
+    """POST /api/v1/broiler/farmer-farm-setup-requests/<id>/clear-location —
+    the register's eraser on a draft, same reasoning as
+    ``FarmCaptureClearView`` above. Delegates to the web view so the
+    draft-only + submitter/reviewer rule lives in one place.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        return _web_result(
+            web.farmer_farm_setup_request_clear_location(_PostRequest(request), pk),
+            "Location cleared.")
+
+
 class DailyEntryGroupDeleteView(V1ViewMixin, APIView):
     """DELETE /api/v1/broiler/daily-entries/group?batch=<id> or ?farm=<id> —
     the register's group-level Delete, wiping every Daily Entry for one batch
@@ -350,6 +365,8 @@ def write_urls() -> list:
              FarmCaptureFillView.as_view(), name="broiler-captures-fill"),
         path("broiler/location-captures/<int:pk>/clear",
              FarmCaptureClearView.as_view(), name="broiler-captures-clear"),
+        path("broiler/farmer-farm-setup-requests/<int:pk>/clear-location",
+             FarmerFarmSetupRequestClearLocationView.as_view(), name="broiler-ffsr-clear-location"),
         path("broiler/location-captures/save/<int:pk>",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save"),
         path("broiler/daily-entries/group",

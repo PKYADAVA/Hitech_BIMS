@@ -162,6 +162,7 @@ urlpatterns = [
     path('farmer-farm-report/', views.farmer_farm_report,
          name='farmer_farm_report'),
     path('batch-wise-feed-scheduling-report/', views.batch_wise_feed_scheduling_report, name='batch_wise_feed_scheduling_report'),
+    path('batch-daily-card-report/', views.broiler_batch_daily_card_report, name='broiler_batch_daily_card_report'),
     path('gc-realization-report/', views.gc_realization_report, name='gc_realization_report'),
 
     # --- Farm Map & Route Planner -------------------------------------------
@@ -211,6 +212,8 @@ urlpatterns = [
          name='farmer_farm_setup_request_api_detail'),
     path('farmer-farm-setup-request/<int:id>/approve/', views.farmer_farm_setup_request_approve,
          name='farmer_farm_setup_request_approve'),
+    path('farmer-farm-setup-request/<int:id>/clear-location/', views.farmer_farm_setup_request_clear_location,
+         name='farmer_farm_setup_request_clear_location'),
     path('farmer-farm-setup-request/<int:id>/reject/', views.farmer_farm_setup_request_reject,
          name='farmer_farm_setup_request_reject'),
 

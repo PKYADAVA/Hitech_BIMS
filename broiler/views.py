@@ -1652,6 +1652,11 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                    "agreement_copy", "security_cheque"]
     FK_FIELDS = {"branch": "branch_id", "farmer_group": "farmer_group_id", "supervisor": "supervisor_id"}
     BOOL_FIELDS = {"physically_verified"}
+    # Numeric/datetime fields: a blank value here must become None, not "" —
+    # "" fails FloatField/DateTimeField/PositiveIntegerField validation on
+    # full_clean(), which is what turned a plain re-save (GPS re-captured as
+    # empty, or never captured at all) into a 400 "Internal server error".
+    NULLABLE_FIELDS = {"latitude", "longitude", "gps_accuracy_m", "gps_captured_at", "capacity_birds"}
     FORM_FIELDS = [
         "branch", "supervisor", "latitude", "longitude", "gps_accuracy_m", "gps_captured_at",
         "state", "district", "village_area", "line", "full_address",
@@ -1710,6 +1715,7 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                 "created_at": r.created_at.isoformat(),
                 "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
                 "review_note": r.review_note,
+                "has_location": r.latitude is not None and r.longitude is not None,
             } for r in qs.order_by("-created_at")]
             return JsonResponse(rows, safe=False)
         except Exception as e:
@@ -1743,6 +1749,8 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                         setattr(instance, self.FK_FIELDS[field], data[field] or None)
                     elif field in self.BOOL_FIELDS:
                         setattr(instance, field, data[field] in ("true", "1", "on", "True"))
+                    elif field in self.NULLABLE_FIELDS:
+                        setattr(instance, field, data[field] or None)
                     else:
                         setattr(instance, field, data[field] or "")
                 for field in self.FILE_FIELDS:
@@ -1827,6 +1835,36 @@ def farmer_farm_setup_request_reject(request, id):
     except ValidationError as e:
         return JsonResponse({"error": "; ".join(e.messages)}, status=400)
     return JsonResponse({"message": "Rejected"})
+
+
+@login_required
+@require_POST
+def farmer_farm_setup_request_clear_location(request, id):
+    """Wipe a draft's captured GPS pin and the address fields it filled in,
+    so the field supervisor gets a clean slate to re-capture from the
+    Register List instead of having to retype everything by hand. Only a
+    Draft may be touched -- once submitted, the location is part of what a
+    reviewer is approving."""
+    from user.access import user_can
+    instance = get_object_or_404(FarmerFarmSetupRequest, id=id)
+    if instance.status != FarmerFarmSetupRequest.Status.DRAFT:
+        return JsonResponse({"error": "Only a draft's location can be cleared."}, status=400)
+    if instance.submitted_by_id != request.user.id \
+            and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    instance.latitude = None
+    instance.longitude = None
+    instance.gps_accuracy_m = None
+    instance.gps_captured_at = None
+    instance.state = ""
+    instance.district = ""
+    instance.village_area = ""
+    instance.full_address = ""
+    instance.save(update_fields=[
+        "latitude", "longitude", "gps_accuracy_m", "gps_captured_at",
+        "state", "district", "village_area", "full_address",
+    ])
+    return JsonResponse({"message": "Location cleared"})
 
 
 def _batch_row_error(farm, shed_id, breed_id):
@@ -6879,6 +6917,589 @@ def farm_detailed_daily_entry_report(request):
         "batches": (BroilerBatch.objects.filter(broiler_farm_id=farm_id)
                     .order_by("-start_date") if farm_id else []),
         "batch_id": batch_id,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+def _kg_bags_display(kg, bags):
+    """'24 (0)' — kg with its bag count in parentheses, the single-column
+    format the Batch Daily Card uses everywhere a kg figure has a bags
+    equivalent, rather than two separate columns for the same number."""
+    kg_text = f"{kg:,.0f}" if kg is not None else "-"
+    bags_text = f"{bags:,.0f}" if bags is not None else "-"
+    return f"{kg_text} ({bags_text})"
+
+
+def _item_phase_names(batch, masters=None):
+    """Feed item id -> the phase name (Pre-Starter/Starter/Finisher, however
+    this batch's own Feed Phase Master spells them) it belongs to, so a day's
+    Feed Received or Feed Consumed can be filed under the Excel's Feed Type
+    Wise columns even though this app's DailyEntry only has two generic feed
+    slots rather than one column per feed type. Returns an ordered dict (by
+    from_age/seq_no, the programme's own feeding order) rather than whatever
+    order the database happens to return lines in, since Pre-Starter ->
+    Starter -> Finisher is the order a reader expects, not alphabetical."""
+    if masters is None:
+        masters = list(FeedPhaseMaster.objects.filter(status="active")
+                       .select_related("breed", "bird_category")
+                       .prefetch_related("lines__feed_item"))
+    out = {}
+    if not batch.breed_id:
+        return out
+    cat_id = batch.breed.bird_category_id
+    master = (next((m for m in masters if m.breed_id == batch.breed_id), None)
+             or (next((m for m in masters if cat_id and m.bird_category_id == cat_id), None)))
+    if not master:
+        return out
+    for pl in sorted(master.lines.all(), key=lambda x: (x.from_age, x.seq_no)):
+        if pl.feed_item_id and pl.feed_item_id not in out:
+            out[pl.feed_item_id] = pl.feed_item.description
+    return out
+
+
+def _batch_daily_card_rows(batch):
+    """Section 1 of the Batch Daily Card: one row per DailyEntry (reusing
+    _day_record_row, the same engine the Detailed Daily Entry Report runs),
+    with a Weekly Actual rollup row inserted after every 7th daily row —
+    day 1-7, 8-14, ... by sequence, matching the paper daily card's bands
+    rather than the calendar week. Each row is also widened with the extra
+    columns the Excel daily card shows that _day_record_row doesn't carry:
+    feed in bags (daily/total/closing stock per slot), feed received by type
+    (bags) on the day, and the day's own feed requirement (kg/bags) off the
+    breed's cumulative standard curve."""
+    from inventory.models import StockTransfer
+
+    entries = (DailyEntry.objects.filter(batch=batch)
+               .select_related("feed_1", "feed_2").order_by("date", "id"))
+    feed_ids = list(feed_items().values_list("id", flat=True))
+    chick_ids = list(chick_items().values_list("id", flat=True))
+    placed_cache, cum_act_cache, bwt_cache = {}, {}, {}
+
+    daily_rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache,
+                                  StockTransfer, BirdSale,
+                                  cum_act_cache=cum_act_cache, bwt_cache=bwt_cache)
+                 for e in entries]
+    for row in daily_rows:
+        row["livability_pct"] = (Decimal("100") - row["cum_mort_pct"]).quantize(Decimal("0.01"))
+        # Exception flag: FCR running hot against standard (>10% over) or
+        # livability sliding below the farm's usual 90% floor — the same
+        # red-text treatment the negative-closing-stock column already uses,
+        # so a problem day stands out without reading every cell.
+        row["fcr_exception"] = bool(row["std_fcr"] and row["fcr"] and row["fcr"] > row["std_fcr"] * Decimal("1.10"))
+        row["livability_exception"] = bool(row["livability_pct"] is not None and row["livability_pct"] < Decimal("90"))
+
+    item_by_id = {i.id: i for i in Item.objects.filter(
+        id__in={e.feed_1_id for e in entries if e.feed_1_id}
+             | {e.feed_2_id for e in entries if e.feed_2_id})}
+    item_phase = _item_phase_names(batch)
+    # Programme order (Pre-Starter -> Starter -> Finisher), not alphabetical —
+    # item_phase is itself already ordered this way (see _item_phase_names),
+    # so de-duplicating by first appearance keeps that order rather than
+    # re-sorting the names as strings.
+    phase_names = list(dict.fromkeys(item_phase.values()))
+
+    feed_in_by_day = {}
+    for r in (StockTransfer.objects.filter(to_batch=batch, item_id__in=feed_ids)
+             .values("date", "item_id").annotate(t=Sum("quantity"))):
+        feed_in_by_day.setdefault(r["date"], {})[r["item_id"]] = r["t"] or Decimal("0")
+
+    feed_out_by_day = {}
+    for r in (StockTransfer.objects.filter(from_batch=batch, item_id__in=feed_ids)
+             .values("date", "item_id").annotate(t=Sum("quantity"))):
+        feed_out_by_day.setdefault(r["date"], {})[r["item_id"]] = r["t"] or Decimal("0")
+
+    # One bag size per phase name, for converting that type's running kg
+    # balance to bags — same "pick whichever item in this phase has a bag
+    # size on file" convention as the other by-type columns.
+    phase_bag_kg = {}
+    for name in phase_names:
+        matching_items = [iid for iid, nm in item_phase.items() if nm == name]
+        phase_bag_kg[name] = next((_num(item_by_id[iid].kg_per_bag) for iid in matching_items
+                                   if iid in item_by_id and item_by_id[iid].kg_per_bag), None)
+
+    curve = []
+    if batch.breed_id:
+        curve = [(r["age"], r["cum_feed"] or Decimal("0"), None, None)
+                for r in (BreedStandard.objects.filter(breed_id=batch.breed_id, is_active=True)
+                         .order_by("age").values("age", "cum_feed"))]
+
+    q2 = Decimal("0.01")
+    # Running closing stock per feed type — received minus consumed minus
+    # transferred out, carried day to day. DailyEntry has no column for this
+    # (only two generic feed slots), so it's rebuilt here the same way the
+    # combined feed_1_stock/feed_2_stock fields are, just split by type
+    # instead of by slot.
+    stock_by_type = {name: Decimal("0") for name in phase_names}
+    for e, row in zip(entries, daily_rows):
+        item1, item2 = item_by_id.get(e.feed_1_id), item_by_id.get(e.feed_2_id)
+        kg1 = _num(item1.kg_per_bag) if item1 and item1.kg_per_bag else None
+        kg2 = _num(item2.kg_per_bag) if item2 and item2.kg_per_bag else None
+        bags_1 = _div(_num(e.feed_1_qty), kg1).quantize(q2) if kg1 else None
+        bags_2 = _div(_num(e.feed_2_qty), kg2).quantize(q2) if kg2 else None
+        stock_bags_1 = _div(_num(e.feed_1_stock), kg1).quantize(q2) if kg1 else None
+        stock_bags_2 = _div(_num(e.feed_2_stock), kg2).quantize(q2) if kg2 else None
+        # None when NEITHER slot has a bag size on file, so the column reads
+        # "-" rather than a silent 0.00 that looks like no feed moved.
+        row["feed_bags_today"] = ((bags_1 or Decimal("0")) + (bags_2 or Decimal("0"))
+                                  if bags_1 is not None or bags_2 is not None else None)
+        row["feed_stock_bags"] = ((stock_bags_1 or Decimal("0")) + (stock_bags_2 or Decimal("0"))
+                                  if stock_bags_1 is not None or stock_bags_2 is not None else None)
+        # Feed received vs transferred out, net, for the day — the Excel's
+        # "Total Revd (+) / Trfr (-) kg" column. This app records receipts via
+        # StockTransfer (feed_in_by_day below), not on the DailyEntry row
+        # itself, so it's looked up by date rather than read off `e`.
+        received_today_by_item = feed_in_by_day.get(e.date, {})
+        received_today_total = sum(received_today_by_item.values(), Decimal("0"))
+        row["feed_in_out"] = received_today_total.quantize(q2)
+        # Bagged using whichever of today's two feed items the receipt
+        # matches; a receipt of an item not fed today (rare) falls back to
+        # feed_1's bag size, same single-figure assumption the Excel itself
+        # makes for this column.
+        received_bag_kg = kg1 or kg2
+        row["feed_in_out_bags"] = (_div(received_today_total, received_bag_kg).quantize(q2)
+                                   if received_bag_kg else None)
+        row["feed_in_out_display"] = _kg_bags_display(row["feed_in_out"], row["feed_in_out_bags"])
+        # Daily Cons and Feed Type Consumed show the same per-slot figures —
+        # one slot's quantity when only one feed was fed, both slots' own kg
+        # (bags) separated by " / " on a changeover day — rather than Daily
+        # Cons collapsing them into one combined total that duplicates what
+        # the Feed Type Consumed column already carries.
+        slot1_qty = (_kg_bags_display(_num(e.feed_1_qty).quantize(q2), bags_1) if e.feed_1_id else "")
+        slot2_qty = (_kg_bags_display(_num(e.feed_2_qty).quantize(q2), bags_2) if e.feed_2_id else "")
+        row["daily_cons_display"] = " / ".join(p for p in (slot1_qty, slot2_qty) if p) or "-"
+        # Feed Type Consumed: name(s) only — the quantity for each is already
+        # in Daily Cons right beside it, in the same slot order.
+        row["feed_type_consumed_display"] = (
+            f"{row['feed_1_item']} / {row['feed_2_item']}" if e.feed_2_id
+            else row["feed_1_item"] or "-")
+        row["closing_stock_display"] = _kg_bags_display(row["feed_stock"], row["feed_stock_bags"])
+        # Cumulative consumption in bags: the running total converted at
+        # today's bag size, same convention as the daily/closing-stock bag
+        # columns beside it.
+        row["cum_feed_bags"] = (_div(row["cum_feed"], kg1 or kg2).quantize(q2)
+                                if (kg1 or kg2) else None)
+        row["total_cons_display"] = _kg_bags_display(row["cum_feed"], row["cum_feed_bags"])
+
+        # Feed received that day, filed under each phase name the Excel keeps
+        # its own column for — None (not zero) on a day nothing of that type
+        # arrived, same as the sheet leaves those cells empty. A plain list in
+        # `phase_names` order (not a dict), so the template can zip it against
+        # the same `phase_names` it loops the header columns from, rather than
+        # needing a by-name lookup filter that doesn't exist in this codebase.
+        received_today = feed_in_by_day.get(e.date, {})
+        row["feed_received_by_type"] = []
+        for name in phase_names:
+            matching_items = [iid for iid, nm in item_phase.items() if nm == name]
+            total_kg = sum((received_today.get(iid, Decimal("0")) for iid in matching_items), Decimal("0"))
+            display = None
+            if total_kg:
+                kg_per_bag = next((_num(item_by_id[iid].kg_per_bag) for iid in matching_items
+                                   if iid in item_by_id and item_by_id[iid].kg_per_bag), None)
+                bags = _div(total_kg, kg_per_bag).quantize(q2) if kg_per_bag else None
+                display = _kg_bags_display(total_kg.quantize(q2), bags)
+            row["feed_received_by_type"].append(display)
+
+        # Running closing stock per feed type, carried from the day before:
+        # + received today, - consumed today (feed_1/feed_2, whichever slot
+        # holds that type), - transferred out today.
+        consumed_by_item = {}
+        if e.feed_1_id:
+            consumed_by_item[e.feed_1_id] = consumed_by_item.get(e.feed_1_id, Decimal("0")) + _num(e.feed_1_qty)
+        if e.feed_2_id:
+            consumed_by_item[e.feed_2_id] = consumed_by_item.get(e.feed_2_id, Decimal("0")) + _num(e.feed_2_qty)
+        out_today = feed_out_by_day.get(e.date, {})
+        row["closing_stock_by_type"] = []
+        for name in phase_names:
+            matching_items = [iid for iid, nm in item_phase.items() if nm == name]
+            in_kg = sum((received_today.get(iid, Decimal("0")) for iid in matching_items), Decimal("0"))
+            cons_kg = sum((consumed_by_item.get(iid, Decimal("0")) for iid in matching_items), Decimal("0"))
+            out_kg = sum((out_today.get(iid, Decimal("0")) for iid in matching_items), Decimal("0"))
+            stock_by_type[name] += in_kg - cons_kg - out_kg
+            stock_kg = stock_by_type[name].quantize(q2)
+            bag_kg = phase_bag_kg.get(name)
+            stock_bags = _div(stock_kg, bag_kg).quantize(q2) if bag_kg else None
+            # (display text, negative flag) so the template can colour a
+            # shortfall red without needing to parse the combined string
+            # back into a number.
+            row["closing_stock_by_type"].append(
+                (_kg_bags_display(stock_kg, stock_bags), stock_kg < 0))
+
+        # Requirement for THIS day alone: the std cumulative curve's value at
+        # today's age minus yesterday's, i.e. what a standard bird was due to
+        # eat today — not the whole-flock requirement to date (that's Section
+        # 2's Due to Date figure).
+        req_bird = None
+        if curve and row["age"] is not None:
+            req_bird = _feed_curve_at(curve, row["age"]) - _feed_curve_at(curve, row["age"] - 1)
+        row["req_feed_per_bird"] = req_bird.quantize(q2) if req_bird is not None else None
+        req_feed_kg = (_div(req_bird * row["opening"], 1000).quantize(q2)
+                      if req_bird is not None else None)
+        row["req_feed_kg"] = req_feed_kg
+        # Bagged at whichever of today's two feed items has a bag size on
+        # file — same single-figure convention as the other bag columns.
+        req_bag_kg = kg1 or kg2
+        row["req_feed_bags"] = (_div(req_feed_kg, req_bag_kg).quantize(q2)
+                                if req_feed_kg is not None and req_bag_kg else None)
+        row["req_feed_display"] = _kg_bags_display(row["req_feed_kg"], row["req_feed_bags"])
+
+    # Fields a week can sum; body weight and FCR are read off the week's last
+    # day (closing position), not summed or averaged — an average of ratios
+    # across the week isn't the ratio of the week's totals.
+    sum_keys = ["mort", "culls", "sold", "sold_wt", "feed_con",
+               "feed_1_con", "feed_2_con", "feed_in", "feed_out", "feed_in_out"]
+
+    out = []
+    week_no, bucket = 0, []
+    for row in daily_rows:
+        out.append(row)
+        bucket.append(row)
+        if len(bucket) == 7:
+            week_no += 1
+            last = bucket[-1]
+            first = bucket[0]
+            rollup = {k: sum((_num(r[k]) for r in bucket), Decimal("0")) for k in sum_keys}
+            bags_vals = [r["feed_bags_today"] for r in bucket if r["feed_bags_today"] is not None]
+            in_bags_vals = [r["feed_in_out_bags"] for r in bucket if r["feed_in_out_bags"] is not None]
+            rollup.update({
+                "is_week_rollup": True, "week_no": week_no,
+                "week_from": first["entry_date"], "week_to": last["entry_date"],
+                "avg_bwt": last["avg_bwt"], "std_bwt": last["std_bwt"],
+                "fcr": last["fcr"], "std_fcr": last["std_fcr"], "cfcr": last["cfcr"],
+                "balance": last["balance"], "cum_mort": last["cum_mort"],
+                "cum_mort_pct": last["cum_mort_pct"], "livability_pct": last["livability_pct"],
+                "feed_stock": last["feed_stock"],
+                "cum_feed": last["cum_feed"], "age": last["age"],
+                "feed_bags_today": sum(bags_vals, Decimal("0")) if bags_vals else None,
+                "feed_stock_bags": last["feed_stock_bags"],
+                "feed_in_out_bags": sum(in_bags_vals, Decimal("0")) if in_bags_vals else None,
+                "cum_feed_bags": last["cum_feed_bags"],
+                "closing_stock_by_type": last["closing_stock_by_type"],
+                "fcr_exception": last["fcr_exception"],
+                "livability_exception": last["livability_exception"],
+            })
+            rollup["feed_in_out_display"] = _kg_bags_display(rollup["feed_in_out"], rollup["feed_in_out_bags"])
+            rollup["daily_cons_display"] = _kg_bags_display(rollup["feed_con"], rollup["feed_bags_today"])
+            rollup["total_cons_display"] = _kg_bags_display(rollup["cum_feed"], rollup["cum_feed_bags"])
+            rollup["closing_stock_display"] = _kg_bags_display(rollup["feed_stock"], rollup["feed_stock_bags"])
+            out.append(rollup)
+            bucket = []
+    # Flag the last-entered day — the register's own "today", since a flock
+    # a week stale should still highlight the day it was last walked rather
+    # than the calendar date.
+    if daily_rows:
+        daily_rows[-1]["is_last_entry"] = True
+    return out, daily_rows, phase_names
+
+
+def _batch_feed_forecast(batch, as_of, birds, curve, avail_qty=Decimal("0"), bag_kg=None, horizon=7):
+    """Section 3 top block: the Excel's own forecast method — std intake for
+    each of the next `horizon` days (from the breed curve, one age ahead per
+    day) times a Habit % (this flock's actual intake vs. std, from its last 7
+    days) times that day's projected live birds (today's birds minus the
+    flock's own average daily mortality over those same 7 days, compounding
+    forward) — rather than the flat daily-burn-rate projection Section 2 uses
+    for its own Next 3/7 Days columns. Both are legitimate; this is the one
+    the paper daily card actually shows."""
+    q2 = Decimal("0.01")
+    week_entries = list(DailyEntry.objects.filter(
+        batch=batch, date__gt=as_of - timedelta(days=7), date__lte=as_of
+    ).order_by("date"))
+    actual_feed_7d = sum((_num(e.feed_1_qty) + _num(e.feed_2_qty) for e in week_entries), Decimal("0"))
+    avg_mort_7d = (_div(sum((Decimal(e.mortality) for e in week_entries), Decimal("0")), 7)
+                  if week_entries else Decimal("0"))
+
+    age = (as_of - batch.start_date).days if batch.start_date else None
+    std_feed_7d = Decimal("0")
+    if curve and age is not None:
+        for d in range(7):
+            _bwt, intake = _std_at(curve, max(age - d, 0))
+            if intake:
+                std_feed_7d += _div(Decimal(str(intake)) * birds, 1000)
+    habit_pct = _div(actual_feed_7d, std_feed_7d) if std_feed_7d > 0 else Decimal("1")
+
+    days, live = [], birds
+    for d in range(1, horizon + 1):
+        live = max(live - avg_mort_7d, Decimal("0"))
+        _bwt, intake = _std_at(curve, (age + d) if age is not None else None)
+        day_kg = (_div(Decimal(str(intake)) * live, 1000) * habit_pct).quantize(q2) if intake else Decimal("0.00")
+        days.append(day_kg)
+
+    next3 = sum(days[:3], Decimal("0"))
+    next7 = sum(days[:7], Decimal("0"))
+    order_needed = next7 - avail_qty
+    order_needed = order_needed if order_needed > 0 else Decimal("0")
+    return {
+        "habit_pct": habit_pct.quantize(Decimal("0.0001")),
+        "habit_pct_display": (habit_pct * 100).quantize(q2),
+        "avg_daily_mort_7d": avg_mort_7d.quantize(q2),
+        "live_birds": birds,
+        "next_3d": next3.quantize(q2), "next_7d": next7.quantize(q2),
+        "order_needed_7d": order_needed.quantize(q2),
+        "order_needed_7d_bags": (_div(order_needed, bag_kg).quantize(q2) if bag_kg else None),
+        "stock_covers_days": (_div(avail_qty, _div(next7, horizon)).quantize(q2)
+                              if next7 > 0 and avail_qty > 0 else None),
+        "days": days,
+    }
+
+
+def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
+    """Sections 2 & 3 of the Batch Daily Card: one row per feed phase of this
+    batch's Feed Phase Master, same reconciliation math as the Batch wise Feed
+    Scheduling report (requirement/sent/consumed/availability/days-cover), but
+    scoped to one batch and reading every requested forecast horizon off the
+    same daily burn rate rather than one horizon per request."""
+    from inventory.models import StockTransfer, Item
+
+    q2 = Decimal("0.01")
+    if not batch:
+        return [], ""
+
+    placed = _num(StockTransfer.objects.filter(
+        to_batch_id=batch.id, item_id__in=chick_items().values_list("id", flat=True)
+    ).aggregate(t=Sum("quantity"))["t"])
+    losses = DailyEntry.objects.filter(batch=batch).aggregate(
+        m=Sum("mortality"), c=Sum("culls"))
+    sold = _num(BirdSale.objects.filter(batch=batch).aggregate(b=Sum("birds"))["b"])
+    alive = placed - _num(losses["m"]) - _num(losses["c"]) - sold
+    birds = alive if alive > 0 else placed
+
+    age = (as_of - batch.start_date).days if batch.start_date else None
+
+    masters = list(FeedPhaseMaster.objects.filter(status="active")
+                   .select_related("breed", "bird_category")
+                   .prefetch_related("lines__feed_item"))
+    master = _feed_phase_master_for(batch, as_of, masters)
+    programme_gap = _feed_programme_gap(batch, as_of, masters) if master is None else ""
+    curve = []
+    if batch.breed_id:
+        curve = [(r["age"], r["cum_feed"] or Decimal("0"), r["body_weight"], r["feed_intake"])
+                for r in (BreedStandard.objects.filter(breed_id=batch.breed_id, is_active=True)
+                         .order_by("age").values("age", "cum_feed", "body_weight", "feed_intake"))]
+    _std_bwt, std_intake = _std_at(curve, age)
+
+    feed_in = {r["item_id"]: r["t"] or Decimal("0") for r in
+              StockTransfer.objects.filter(to_batch=batch).exclude(
+                  item_id__in=chick_items().values_list("id", flat=True)
+              ).values("item_id").annotate(t=Sum("quantity"))}
+    feed_out = {r["item_id"]: r["t"] or Decimal("0") for r in
+               StockTransfer.objects.filter(from_batch=batch).exclude(
+                   item_id__in=chick_items().values_list("id", flat=True)
+               ).values("item_id").annotate(t=Sum("quantity"))}
+    consumed = {}
+    for slot_item, slot_qty in (("feed_1_id", "feed_1_qty"), ("feed_2_id", "feed_2_qty")):
+        for r in (DailyEntry.objects.filter(batch=batch, **{f"{slot_item}__isnull": False})
+                 .values(slot_item).annotate(t=Sum(slot_qty))):
+            consumed[r[slot_item]] = consumed.get(r[slot_item], Decimal("0")) + (r["t"] or Decimal("0"))
+
+    # Burn rate: mean of the last 3 daily entries that used the item within
+    # the fortnight up to `as_of`, same window the Feed Scheduling report
+    # uses, so Days Cover here agrees with that report for the same batch.
+    window_floor = as_of - timedelta(days=14)
+    recent = {}
+    for de in (DailyEntry.objects.filter(batch=batch, date__gte=window_floor, date__lte=as_of)
+              .values("date", "feed_1_id", "feed_1_qty", "feed_2_id", "feed_2_qty")
+              .order_by("-date", "-id")):
+        for slot_item, slot_qty in (("feed_1_id", "feed_1_qty"), ("feed_2_id", "feed_2_qty")):
+            if not de[slot_item]:
+                continue
+            bucket = recent.setdefault(de[slot_item], [])
+            if len(bucket) < 3:
+                bucket.append(de[slot_qty] or Decimal("0"))
+    daily_rate = {k: _div(sum(v), len(v)) for k, v in recent.items() if v}
+
+    item_meta = {r["id"]: r for r in Item.objects.filter(
+        id__in=set(feed_in) | set(feed_out) | set(consumed)
+    ).values("id", "description", "kg_per_bag")}
+
+    phase_items, ordered = [], []
+    if master:
+        for pl in sorted(master.lines.all(), key=lambda x: (x.from_age, x.seq_no)):
+            if pl.status == "active" and pl.feed_item_id and pl.feed_item_id not in phase_items:
+                phase_items.append(pl.feed_item_id)
+                ordered.append((pl.feed_item_id, pl.feed_item.description, pl.feed_item.kg_per_bag, pl))
+    for item_id in set(feed_in) | set(feed_out) | set(consumed):
+        if item_id not in phase_items:
+            phase_items.append(item_id)
+            meta = item_meta.get(item_id) or {}
+            ordered.append((item_id, meta.get("description") or "", meta.get("kg_per_bag"), None))
+
+    phase_lines = [o for o in ordered if o[3] is not None]
+    current_item, next_phase = None, ""
+    for idx, (iid, _nm, _kg, pl) in enumerate(phase_lines):
+        if age is not None and pl.from_age <= age and (pl.to_age is None or age <= pl.to_age):
+            current_item = iid
+            next_phase = phase_lines[idx + 1][1] if idx + 1 < len(phase_lines) else ""
+            break
+
+    rows = []
+    for item_id, item_name, kg_per_bag, pl in ordered:
+        in_qty = feed_in.get(item_id, Decimal("0"))
+        cons_qty = consumed.get(item_id, Decimal("0"))
+        out_qty = feed_out.get(item_id, Decimal("0"))
+        due_bird, basis = _phase_feed_due(curve, pl, age)
+        due_qty = (due_bird / 1000 * birds) if due_bird is not None else None
+        avail_qty = in_qty - cons_qty - out_qty
+        is_current = pl is not None and item_id == current_item
+        rate = daily_rate.get(item_id, Decimal("0"))
+        rate_basis = "actual" if rate > 0 else ""
+        if rate <= 0 and is_current and std_intake:
+            rate = _div(Decimal(str(std_intake)) * birds, 1000)
+            rate_basis = "std" if rate > 0 else ""
+        cap_bird = ((pl.max_feed_qty or Decimal("0")) * 1000) if pl else None
+        row = {
+            "item": item_name, "item_id": item_id,
+            "phase_band": ("" if pl is None else
+                          (f"{pl.from_age}+" if pl.to_age is None else f"{pl.from_age}-{pl.to_age}")),
+            "phase_state": ("" if pl is None or age is None else
+                           "current" if is_current else
+                           "upcoming" if pl.from_age > age else "done"),
+            "req_qty": (cap_bird / 1000 * birds).quantize(q2) if cap_bird else None,
+            "due_bird": due_bird.quantize(q2) if due_bird is not None else None,
+            "due_qty": due_qty.quantize(q2) if due_qty is not None else None,
+            "basis": basis,
+            "feed_in": in_qty.quantize(q2),
+            "cons_qty": cons_qty.quantize(q2),
+            "out_qty": out_qty.quantize(q2),
+            "avail_qty": avail_qty.quantize(q2),
+            "bags": _div(avail_qty, kg_per_bag).quantize(q2) if kg_per_bag else None,
+            # Excess/Still-to-send compare what this phase has needed SO FAR
+            # (due_qty, the cumulative curve up to today) against what's
+            # actually been sent — separate from the forecast columns below,
+            # which project what the next few days will need.
+            "excess_sent": (in_qty - due_qty).quantize(q2) if due_qty is not None and in_qty > due_qty else Decimal("0.00"),
+            "still_to_send": (due_qty - in_qty).quantize(q2) if due_qty is not None and due_qty > in_qty else Decimal("0.00"),
+            "daily_rate": rate.quantize(q2), "rate_basis": rate_basis,
+            "days_cover": _div(avail_qty, rate).quantize(q2) if rate > 0 else None,
+            "is_current": is_current, "bag_kg": kg_per_bag,
+        }
+        for h in horizons:
+            need = (rate * h).quantize(q2)
+            row[f"next_{h}d_kg"] = need
+            row[f"next_{h}d_bags"] = _div(need, kg_per_bag).quantize(q2) if kg_per_bag else None
+            short = need - avail_qty
+            row[f"order_{h}d_kg"] = short.quantize(q2) if short > 0 else Decimal("0.00")
+            row[f"order_{h}d_bags"] = (_div(short, kg_per_bag).quantize(q2)
+                                       if short > 0 and kg_per_bag else Decimal("0.00"))
+        rows.append(row)
+    return rows, programme_gap
+
+
+@login_required
+def broiler_batch_daily_card_report(request):
+    """Broiler > Reports > Batch Daily Card Report — the paper daily card for
+    one batch, rebuilt in the app: a day-by-day mortality/feed/weight/FCR
+    register with weekly rollups, a feed-type reconciliation (requirement vs
+    sent vs consumed vs still-to-send), a 3-day and 7-day feed forecast, and
+    the batch's sales/liftings — the four blocks of the farm's Excel sheet,
+    read live off the same daily entries every other broiler report runs on.
+    """
+    from account.models import CompanyProfile
+
+    batch_id = (request.GET.get("batch") or "").strip()
+    batch = (scope_multi(request.user,
+                         BroilerBatch.objects.select_related(
+                             "broiler_farm__branch", "broiler_farm__supervisor",
+                             "broiler_farm__farmer", "breed"),
+                         farms="broiler_farm_id", branches="broiler_farm__branch_id")
+             .filter(id=batch_id).first()) if batch_id else None
+
+    daily_rows, sales_rows = [], []
+    recon_rows, programme_gap = [], ""
+    recon_totals, forecast = None, None
+    sales_totals = {"birds": Decimal("0"), "weight": Decimal("0"), "amount": Decimal("0")}
+    snapshot = None
+    phase_names = []
+    q2 = Decimal("0.01")
+
+    if batch:
+        daily_rows, raw_rows, phase_names = _batch_daily_card_rows(batch)
+
+        as_of = batch.end_date or timezone.localdate()
+        # Target Day: the paper card's own age marker — the last day an entry
+        # was actually recorded, not today, so a flock a week stale still
+        # reads against the day it was last walked rather than one it hasn't
+        # reached on this register.
+        target_day = raw_rows[-1]["age"] if raw_rows else None
+
+        recon_rows, programme_gap = _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7))
+        recon_totals = {
+            "req_qty": sum((r["req_qty"] or Decimal("0") for r in recon_rows), Decimal("0")),
+            "due_qty": sum((r["due_qty"] or Decimal("0") for r in recon_rows), Decimal("0")),
+            "feed_in": sum((r["feed_in"] for r in recon_rows), Decimal("0")),
+            "cons_qty": sum((r["cons_qty"] for r in recon_rows), Decimal("0")),
+            "avail_qty": sum((r["avail_qty"] for r in recon_rows), Decimal("0")),
+            "excess_sent": sum((r["excess_sent"] for r in recon_rows), Decimal("0")),
+            "still_to_send": sum((r["still_to_send"] for r in recon_rows), Decimal("0")),
+            "bags": sum((r["bags"] or Decimal("0") for r in recon_rows), Decimal("0")),
+        }
+
+        from inventory.models import StockTransfer as _ST
+        placed = _num(_ST.objects.filter(
+            to_batch_id=batch.id, item_id__in=chick_items().values_list("id", flat=True)
+        ).aggregate(t=Sum("quantity"))["t"])
+        losses = DailyEntry.objects.filter(batch=batch).aggregate(m=Sum("mortality"), c=Sum("culls"))
+        sold_total = _num(BirdSale.objects.filter(batch=batch).aggregate(b=Sum("birds"))["b"])
+        alive = placed - _num(losses["m"]) - _num(losses["c"]) - sold_total
+        birds = alive if alive > 0 else placed
+        curve = []
+        if batch.breed_id:
+            curve = [(r["age"], r["cum_feed"] or Decimal("0"), r["body_weight"], r["feed_intake"])
+                    for r in (BreedStandard.objects.filter(breed_id=batch.breed_id, is_active=True)
+                             .order_by("age").values("age", "cum_feed", "body_weight", "feed_intake"))]
+        # The current phase's own bag size for the forecast's single Bags
+        # column — the Excel assumes one bag size across the whole forecast,
+        # which holds in practice since every feed on a farm is usually
+        # bagged the same way; falls back to any row's bag size if none of
+        # them is marked current (e.g. the programme has expired).
+        current_row = next((r for r in recon_rows if r["is_current"]), None)
+        bag_kg = ((current_row and current_row.get("bag_kg"))
+                 or next((r.get("bag_kg") for r in recon_rows if r.get("bag_kg")), None))
+        forecast = _batch_feed_forecast(batch, as_of, birds, curve,
+                                        avail_qty=recon_totals["avail_qty"], bag_kg=bag_kg, horizon=7)
+
+        snapshot = {
+            "farm_name": batch.broiler_farm.farm_name,
+            "placed_birds": placed,
+            "placement_date": batch.start_date,
+            "target_day": target_day,
+        }
+
+        # Batch Sales is its own table below the daily grid (a lifting is a
+        # handful of days out of the whole cycle, easy to miss as mostly-
+        # blank columns at the far right of a 20+ column grid).
+        cum_birds = cum_weight = Decimal("0")
+        for s in BirdSale.objects.filter(batch=batch).select_related(
+                "customer", "farmer", "lifting_supervisor").order_by("date", "id"):
+            cum_birds += s.birds
+            cum_weight += _num(s.net_weight)
+            sales_rows.append({
+                "date": s.date, "sale_no": s.sale_no,
+                "birds": s.birds, "weight": s.net_weight, "avg_weight": s.avg_weight,
+                "rate": s.rate, "amount": s.amount,
+                "party": (s.customer.name if s.customer_id
+                         else s.farmer.farmer_name if s.farmer_id else ""),
+                "vehicle": s.vehicle, "doc_no": s.doc_no,
+                "cum_birds": cum_birds, "cum_weight": cum_weight.quantize(Decimal("0.01")),
+            })
+        sales_totals = {
+            "birds": cum_birds, "weight": cum_weight.quantize(Decimal("0.01")),
+            "amount": sum((s.amount for s in BirdSale.objects.filter(batch=batch)), Decimal("0")),
+        }
+
+    return render(request, "broiler_batch_daily_card_report.html", {
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
+        "batches": scope_multi(request.user,
+                               BroilerBatch.objects.select_related("broiler_farm")
+                               .order_by("-start_date", "-id"),
+                               farms="broiler_farm_id",
+                               branches="broiler_farm__branch_id"),
+        "batch": batch, "batch_requested": bool(batch_id),
+        "snapshot": snapshot,
+        "daily_rows": daily_rows, "phase_names": phase_names,
+        "recon_rows": recon_rows, "recon_totals": recon_totals, "programme_gap": programme_gap,
+        "forecast": forecast,
+        "sales_rows": sales_rows, "sales_totals": sales_totals,
         "company": CompanyProfile.get_solo(),
     })
 

@@ -534,6 +534,7 @@ MODULE_REGISTRY = [
                     ("sms_transaction", "SMS Transaction", ("sms_transaction_source",)),
                     ("whatsapp_transaction", "WhatsApp Transaction", ("whatsapp_transaction_source",)),
                     ("notification_transaction", "Transaction Messaging"),
+                    ("whatsapp_conversations", "WhatsApp Conversations"),
                 ],
             },
             {

@@ -904,6 +904,35 @@ def party_choices(user=None):
     }
 
 
+def resolve_party_by_mobile(mobile):
+    """Best-effort (party_type, name) for a bare mobile number, by matching
+    against Customer/Supplier/Farmer -- for display contexts (e.g. the
+    WhatsApp Conversations contact list) where a message log row was
+    created without a party already attached (a free-text service-message
+    reply logs only the phone number, not who it belongs to). Matches on
+    the last 10 digits so a stored +91-prefixed MSISDN still matches a
+    bare 10-digit number in the party tables, or the other way round.
+    Returns (None, "") if no party table has this number."""
+    from broiler.models import Farmer
+    from purchase.models import Supplier
+    from sales.models import Customer
+
+    digits = "".join(ch for ch in str(mobile) if ch.isdigit())[-10:]
+    if not digits:
+        return None, ""
+
+    customer = Customer.objects.filter(mobile__endswith=digits).values_list("name", flat=True).first()
+    if customer:
+        return "customer", customer
+    supplier = Supplier.objects.filter(mobile__endswith=digits).values_list("name", flat=True).first()
+    if supplier:
+        return "supplier", supplier
+    farmer = Farmer.objects.filter(phone_no__endswith=digits).values_list("farmer_name", flat=True).first()
+    if farmer:
+        return "farmer", farmer
+    return None, ""
+
+
 # Always-available variables, filled from company profile / clock / session.
 GENERIC_VARIABLE_KEYS = list(_GENERIC_KEYS)
 

@@ -10,7 +10,7 @@ import json
 import logging
 
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -1428,6 +1428,36 @@ def whatsapp_media_link(request):
 
 
 @login_required
+def whatsapp_recent_contacts(request):
+    """Distinct mobiles with at least one WhatsApp send, most recent first —
+    feeds the Conversations tab's contact list on Transaction Messaging so
+    staff can jump into a thread without already knowing the number. Same
+    "view" permission as WhatsApp history, since this is read-only."""
+    if not user_can(request.user, "whatsapp_history", "view"):
+        return JsonResponse({"error": "You do not have permission to view WhatsApp history."}, status=403)
+
+    from .comm_sources import resolve_party_by_mobile
+
+    seen = {}
+    for m in (WhatsappMessage.objects.exclude(mobile="")
+              .order_by("-created_at").values("mobile", "party_name", "party_type", "created_at")[:300]):
+        if m["mobile"] not in seen:
+            seen[m["mobile"]] = m
+    contacts = sorted(seen.values(), key=lambda m: m["created_at"], reverse=True)[:50]
+    out = []
+    for c in contacts:
+        name, party_type = c["party_name"], c["party_type"]
+        if not name:
+            # A free-text service-message reply logs only the phone number —
+            # fall back to matching it against the party tables so the
+            # contact list still shows a real name instead of the bare
+            # number.
+            party_type, name = resolve_party_by_mobile(c["mobile"])
+        out.append({"mobile": c["mobile"], "party_name": name or "", "party_type": party_type or ""})
+    return JsonResponse({"contacts": out})
+
+
+@login_required
 def whatsapp_history_retry(request, message_id):
     """Re-send a failed WhatsApp message with the same template and context,
     keeping an audit trail. Mirrors sms_retry — context is replayed from the
@@ -1520,3 +1550,15 @@ class NotificationTransactionPageView(View):
             ]),
             "company_name": CompanyProfile.get_solo().name,
         })
+
+
+class WhatsappConversationsPageView(View):
+    """Standalone WhatsApp Conversations page -- browse/search contacts and
+    reply within the 24h service window, separate from Transaction
+    Messaging's bulk template sends. Gated by its own
+    "whatsapp_conversations" tab (view access)."""
+
+    def get(self, request):
+        if not user_can(request.user, "whatsapp_conversations", "view"):
+            return HttpResponseForbidden("You do not have permission to view WhatsApp conversations.")
+        return render(request, "whatsapp_conversations.html", {})

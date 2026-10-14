@@ -181,15 +181,26 @@ export function ResourceListScreen({ route, navigation }: Props) {
    */
   const confirmClearLocation = async (row: Row) => {
     const label = config.card(row).title;
+    const isSetupRequest = config.key === "broiler-farmer-farm-setup-request";
     if (!(await confirm({
       title: "Clear the location?",
-      message: `${label} keeps its photos and documents. Only the GPS reading `
-             + "is removed, so the farm can be pinned again on the next visit.",
+      message: isSetupRequest
+        ? `${label} keeps everything else. The GPS reading and the address it `
+          + "filled in (State, District, Village, Full Address) are removed, "
+          + "so the farm can be pinned again on reopening."
+        : `${label} keeps its photos and documents. Only the GPS reading `
+          + "is removed, so the farm can be pinned again on the next visit.",
       confirmLabel: "Clear Pin",
       destructive: true,
     }))) return;
     try {
-      await http.post(`/broiler/location-captures/${row.id}/clear`);
+      // Each resource's own eraser lives at its own path — the farm setup
+      // register's draft pin is a different record (and a different
+      // server-side rule: draft-only) from a location capture's.
+      const clearPath = config.key === "broiler-farmer-farm-setup-request"
+        ? `/broiler/farmer-farm-setup-requests/${row.id}/clear-location`
+        : `/broiler/location-captures/${row.id}/clear`;
+      await http.post(clearPath);
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
     } catch (e) {
       notify("Could not clear", (e as Error)?.message ?? "Please try again.");
