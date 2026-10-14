@@ -6987,6 +6987,27 @@ def _batch_daily_card_rows(batch):
         # so a problem day stands out without reading every cell.
         row["fcr_exception"] = bool(row["std_fcr"] and row["fcr"] and row["fcr"] > row["std_fcr"] * Decimal("1.10"))
         row["livability_exception"] = bool(row["livability_pct"] is not None and row["livability_pct"] < Decimal("90"))
+        # FCR is computed off the last known weighing (see _day_record_row),
+        # which can be several days stale — a day with no fresh weighing of
+        # its own still shows a rising FCR (feed keeps accruing against a
+        # weight that hasn't moved), which reads as a sudden worsening trend
+        # rather than what it is: FCR needs feeding on a number Body Weight
+        # itself shows as 0 (nothing entered that day). Flagging it here
+        # rather than changing the FCR formula, which Live Flock Summary and
+        # Production Cost also read and must keep agreeing with.
+        row["bwt_stale"] = row["avg_bwt"] == Decimal("0")
+
+    # Daily Weight Gain: today's weighing minus the last ACTUAL weighing
+    # before it (skipping stale days, which carry no weighing of their own)
+    # — so a gain is only shown between two real weigh-ins, not against a
+    # day that just repeated the prior reading because nothing was entered.
+    last_real_bwt = None
+    for row in daily_rows:
+        if row["bwt_stale"]:
+            row["weight_gain"] = None
+        else:
+            row["weight_gain"] = (row["avg_bwt"] - last_real_bwt) if last_real_bwt is not None else None
+            last_real_bwt = row["avg_bwt"]
 
     item_by_id = {i.id: i for i in Item.objects.filter(
         id__in={e.feed_1_id for e in entries if e.feed_1_id}
@@ -7171,6 +7192,12 @@ def _batch_daily_card_rows(batch):
 
     out = []
     week_no, bucket = 0, []
+    # Cum Feed and Body Weight are running totals, so a week's own figure is
+    # how much they grew during the week — this week's closing value minus
+    # the PREVIOUS week's closing value (day 0 at the very start of the
+    # batch), not minus this week's own first day, which would double-count
+    # every week's first day as already covered by the week before it.
+    prev_week_cum_feed = prev_week_std_cum_feed = prev_week_avg_bwt = prev_week_std_bwt = Decimal("0")
     for row in daily_rows:
         out.append(row)
         bucket.append(row)
@@ -7179,30 +7206,47 @@ def _batch_daily_card_rows(batch):
             last = bucket[-1]
             first = bucket[0]
             rollup = {k: sum((_num(r[k]) for r in bucket), Decimal("0")) for k in sum_keys}
-            # Feed Intake (gm/bird) for the week: the week's own average daily
-            # rate, not a sum (a week doesn't eat 7x its daily intake per
-            # bird) and not just the last day's figure (that's one day, not
-            # the week) — mirrors how Cum Feed is a running total but Feed
-            # Intake is a day-rate, just averaged over the 7 days instead of
-            # read off one of them.
+            # Feed Intake (gm/bird) for the week: the sum of the week's 7 daily
+            # intakes, same convention as every other weekly total on this
+            # register (Feed 1/Feed 2 kg, Daily Mort, etc.) — not an average.
             std_feed_vals = [r["std_feed_per_bird"] for r in bucket if r["std_feed_per_bird"] is not None]
             act_feed_vals = [_num(r["act_feed_per_bird"]) for r in bucket if r["act_feed_per_bird"] is not None]
             bags_vals = [r["feed_bags_today"] for r in bucket if r["feed_bags_today"] is not None]
             in_bags_vals = [r["feed_in_out_bags"] for r in bucket if r["feed_in_out_bags"] is not None]
+            # This week's own growth: this week's closing cum-feed/body-weight
+            # minus the PREVIOUS week's closing figure (0 for week 1, so its
+            # own total is simply its closing value) — every day's growth
+            # counted in exactly one week, none skipped or double-counted.
+            cur_std_cum_feed = _num(last["std_cum_feed_per_bird"])
+            cur_cum_feed = _num(last["cum_feed_per_bird"])
+            week_std_cum_feed = (cur_std_cum_feed - prev_week_std_cum_feed).quantize(q2)
+            week_cum_feed = (cur_cum_feed - prev_week_cum_feed).quantize(q2)
+            week_avg_bwt, week_std_bwt = None, None
+            if not last["bwt_stale"]:
+                week_avg_bwt = (_num(last["avg_bwt"]) - prev_week_avg_bwt).quantize(q2)
+                week_std_bwt = (_num(last["std_bwt"]) - prev_week_std_bwt).quantize(q2)
+                prev_week_avg_bwt = _num(last["avg_bwt"])
+                prev_week_std_bwt = _num(last["std_bwt"])
+            prev_week_std_cum_feed = cur_std_cum_feed
+            prev_week_cum_feed = cur_cum_feed
+
             rollup.update({
                 "is_week_rollup": True, "week_no": week_no,
                 "week_from": first["entry_date"], "week_to": last["entry_date"],
-                "avg_bwt": last["avg_bwt"], "std_bwt": last["std_bwt"],
+                "opening": first["opening"],
+                "avg_bwt": week_avg_bwt, "std_bwt": week_std_bwt,
+                "weight_gain": week_avg_bwt,
+                "bwt_stale": last["bwt_stale"],
                 "fcr": last["fcr"], "std_fcr": last["std_fcr"], "cfcr": last["cfcr"],
                 "balance": last["balance"], "cum_mort": last["cum_mort"],
                 "cum_mort_pct": last["cum_mort_pct"], "livability_pct": last["livability_pct"],
                 "feed_stock": last["feed_stock"],
                 "cum_feed": last["cum_feed"], "age": last["age"],
-                "std_cum_feed_per_bird": last["std_cum_feed_per_bird"],
-                "cum_feed_per_bird": last["cum_feed_per_bird"],
-                "std_feed_per_bird": (_div(sum(std_feed_vals, Decimal("0")), len(std_feed_vals)).quantize(q2)
+                "std_cum_feed_per_bird": week_std_cum_feed,
+                "cum_feed_per_bird": week_cum_feed,
+                "std_feed_per_bird": (sum(std_feed_vals, Decimal("0")).quantize(q2)
                                      if std_feed_vals else None),
-                "act_feed_per_bird": (_div(sum(act_feed_vals, Decimal("0")), len(act_feed_vals)).quantize(q2)
+                "act_feed_per_bird": (sum(act_feed_vals, Decimal("0")).quantize(q2)
                                      if act_feed_vals else None),
                 "feed_bags_today": sum(bags_vals, Decimal("0")) if bags_vals else None,
                 "feed_stock_bags": last["feed_stock_bags"],
@@ -7305,6 +7349,13 @@ def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
                    .prefetch_related("lines__feed_item"))
     master = _feed_phase_master_for(batch, as_of, masters)
     programme_gap = _feed_programme_gap(batch, as_of, masters) if master is None else ""
+    # No placement date on file silently breaks every age-dependent figure
+    # (Std g/bird, phase due-to-date) the same way a missing feed programme
+    # does — without a banner a reader sees "-" across the whole Std column
+    # and has to guess why, rather than being told the batch itself is
+    # missing its own placement date.
+    if not batch.start_date:
+        programme_gap = (programme_gap + "; " if programme_gap else "") + "No placement date on file"
     curve = []
     if batch.breed_id:
         curve = [(r["age"], r["cum_feed"] or Decimal("0"), r["body_weight"], r["feed_intake"])
@@ -7563,6 +7614,7 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
     FILL_DAILY = PatternFill("solid", fgColor="FFF9DB")
     FILL_OPTIONAL = PatternFill("solid", fgColor="E2EFDA")
     FILL_TYPE = PatternFill("solid", fgColor="D9F0EE")
+    FILL_STOCK = PatternFill("solid", fgColor="DCE6F5")
     FILL_WEEK = PatternFill("solid", fgColor="DDEBF7")
     FILL_HEADER = PatternFill("solid", fgColor="1B3A6B")
     FILL_TODAY = PatternFill("solid", fgColor="FFF59D")
@@ -7591,33 +7643,35 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
     ws.append([])
 
     # Daily register
-    col_labels = (["Date", "Age", "Daily Mort", "Daily %", "Cum Total", "Cum %",
+    col_labels = (["Date", "Age", "Opening Birds", "Daily Mort", "Daily %", "Cum Total", "Cum %",
                   "Closing Birds", "Livability %",
                   "Feed Intake Std", "Feed Intake Actual", "Cum Feed Std", "Cum Feed Actual",
-                  "Body Wt Std", "Body Wt Actual", "FCR Std", "FCR Actual"]
+                  "Body Wt Std", "Body Wt Actual", "Weight Gain", "FCR Std", "FCR Actual", "CFCR"]
                  + [f"Revd {n}" for n in phase_names]
                  + ["Revd(+)/Trfr(-)", "Feed Type Consumed", "Daily Cons", "Total Cons", "Closing Stock"]
                  + [f"Closing Stock {n}" for n in phase_names]
                  + ["Remarks", "Feed Requirement"])
     header_row(ws.max_row + 1, col_labels)
-    std_cols = {9, 11, 13, 15}
-    actual_cols = {10, 12, 14, 16}
-    daily_fill_cols = {3}
-    optional_fill_cols = {14} | set(range(17, 17 + len(phase_names))) | {17 + len(phase_names)}
-    type_col = 18 + len(phase_names)
-    remarks_col = 22 + 2 * len(phase_names)
-    auto_cols = ({2, 4, 5, 6, 7, 8, 20 + len(phase_names), 21 + len(phase_names)}
-                | set(range(23 + len(phase_names), 23 + 2 * len(phase_names)))
-                | {23 + 2 * len(phase_names)})
+    std_cols = {10, 12, 14, 17}
+    actual_cols = {11, 13, 15, 18}
+    daily_fill_cols = {4}
+    optional_fill_cols = {15} | set(range(20, 20 + len(phase_names))) | {20 + len(phase_names)}
+    type_col = 21 + len(phase_names)
+    remarks_col = 25 + 2 * len(phase_names)
+    stock_cols = set(range(25 + len(phase_names), 25 + 2 * len(phase_names)))
+    auto_cols = ({2, 3, 5, 6, 7, 8, 9, 16, 19, 23 + len(phase_names), 24 + len(phase_names),
+                 26 + 2 * len(phase_names)})
 
     for r in daily_rows:
         row_idx = ws.max_row + 1
         if r.get("is_week_rollup"):
-            values = (["Weekly Actual", f"Wk {r['week_no']}", r["mort"], r["cum_mort_pct"],
+            values = (["Weekly Actual", f"Wk {r['week_no']}", r["opening"], r["mort"], r["cum_mort_pct"],
                       r["cum_mort"], r["cum_mort_pct"], r["balance"], r["livability_pct"],
                       r["std_feed_per_bird"], r["act_feed_per_bird"],
                       r["std_cum_feed_per_bird"], r["cum_feed_per_bird"],
-                      r["std_bwt"], r["avg_bwt"], r["std_fcr"], r["fcr"]]
+                      r["std_bwt"], (None if r["bwt_stale"] else r["avg_bwt"]), r["weight_gain"],
+                      r["std_fcr"], (None if r["bwt_stale"] else r["fcr"]),
+                      (None if r["bwt_stale"] else r["cfcr"])]
                      + [None] * len(phase_names)
                      + [r["feed_in_out_display"], None, r["daily_cons_display"],
                         r["total_cons_display"], r["closing_stock_display"]]
@@ -7628,11 +7682,13 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
                 cell.fill, cell.font, cell.border = FILL_WEEK, FONT_BOLD, BORDER
             continue
 
-        values = ([r["entry_date"], r["age"], r["mort"], r["mort_pct"], r["cum_mort"],
+        values = ([r["entry_date"], r["age"], r["opening"], r["mort"], r["mort_pct"], r["cum_mort"],
                   r["cum_mort_pct"], r["balance"], r["livability_pct"],
                   r["std_feed_per_bird"], r["act_feed_per_bird"],
                   r["std_cum_feed_per_bird"], r["cum_feed_per_bird"],
-                  r["std_bwt"], r["avg_bwt"], r["std_fcr"], r["fcr"]]
+                  r["std_bwt"], (None if r["bwt_stale"] else r["avg_bwt"]), r["weight_gain"],
+                  r["std_fcr"], (None if r["bwt_stale"] else r["fcr"]),
+                  (None if r["bwt_stale"] else r["cfcr"])]
                  + [(v if v is not None else None) for v in r["feed_received_by_type"]]
                  + [r["feed_in_out_display"], r["feed_type_consumed_display"],
                     r["daily_cons_display"], r["total_cons_display"], r["closing_stock_display"]]
@@ -7656,12 +7712,14 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
                 row[i - 1].fill, row[i - 1].font = FILL_OPTIONAL, FONT_BLUE
             row[type_col - 1].fill = FILL_TYPE
             row[remarks_col - 1].fill, row[remarks_col - 1].font = PatternFill("solid", fgColor="FFFFFF"), FONT_BLUE
+            for i in stock_cols:
+                row[i - 1].fill = FILL_STOCK
             for i in auto_cols:
                 row[i - 1].fill = FILL_AUTO
         if r.get("fcr_exception"):
-            row[15].font = FONT_EXCEPTION
+            row[17].font = FONT_EXCEPTION
         if r.get("livability_exception"):
-            row[7].font = FONT_EXCEPTION
+            row[8].font = FONT_EXCEPTION
     for i in range(1, len(col_labels) + 1):
         ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = 13
 

@@ -40,7 +40,6 @@
   .bdc-grid tbody td.bdc-col-date, .bdc-grid tbody td.bdc-col-age { background:#eef2f7; }
   .bdc-grid tbody tr:nth-child(even) td.bdc-col-date,
   .bdc-grid tbody tr:nth-child(even) td.bdc-col-age { background:#e3e9f1; }
-  tr.bdc-week-row td.bdc-col-date, tr.bdc-week-row td.bdc-col-age { background:#c7d6e8 !important; }
 
   /* Colours read directly off the farm's own .xlsx (openpyxl fill/font dump),
      not approximated from the screenshot — cell by cell:
@@ -57,12 +56,16 @@
      addition (the sheet doesn't vary Daily Mort's colour by value, only its
      fixed blue font) and is kept since it's useful, layered on top of the
      sheet's own blue. */
-  /* Weekly Actual rows keep every column's own fill — the sheet's blue band
-     only shows through on the handful of columns that carry no figure that
-     week (the blank Feed Revd / Feed Type Consumed cells), not as a flat
-     override on top of the Std/Actual/daily colours. Only bold + the extra
-     row border mark it apart from a daily row. */
-  tr.bdc-week-row td { background:#ddebf7; font-weight:700; }
+  /* Weekly Actual / Week Total rows: one flat fill across the whole row,
+     same as the farm's own "Week N Total" rows in their working sheet — a
+     plain uniform band, not a per-column colour carryover or an accent
+     line. !important since it needs to override every column's own
+     Std/Actual/auto/etc. fill class on this row specifically.
+
+     The darker #c7d6e8 (not the paler #ddebf7) — the same shade the sticky
+     Date/Age columns already used on this row, now carried across every
+     column instead of standing out as its own darker strip. */
+  tr.bdc-week-row td { background:#c7d6e8 !important; font-weight:700; }
   tr.bdc-mort-blue td.bdc-mort { color:#2b62c9; }
   tr.bdc-mort-amber td.bdc-mort { color:#b8860b; }
   tr.bdc-mort-red td.bdc-mort { color:#c0392b; }
@@ -80,6 +83,11 @@
   .bdc-grid tbody tr td.bdc-fill-optional { background:#e2efda; color:#0000ff; }
   .bdc-grid tbody tr td.bdc-fill-type { background:#d9f0ee; }
   .bdc-grid tbody tr td.bdc-fill-remarks { background:#ffffff; color:#0000ff; }
+  /* Closing Stock by Type: its own lavender-blue, distinct from every other
+     fill already in the grid (Std peach, Actual lavender-purple, the feed-
+     type greens/teal) so a stock figure reads as its own category rather
+     than borrowing another column group's colour. */
+  .bdc-grid tbody tr td.bdc-fill-stock { background:#dce6f5; }
 
   /* Group bands at the very top of the page, compact like the sheet's own
      Feed Reconciliation / Feed Forecast / Feed Type Wise strips rather than
@@ -205,7 +213,7 @@
 </div>
 
 {% if programme_gap %}
-<div class="alert alert-warning py-2 px-3 mb-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ programme_gap }} — Total Requirement/Still To Send can't be read without one; Sent/Consumed/Availability below are still exact.</div>
+<div class="alert alert-warning py-2 px-3 mb-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ programme_gap }} — Std g/bird, Total Requirement and Still To Send can't be read without both; Sent/Consumed/Availability below are still exact.</div>
 {% endif %}
 
 <!-- FEED RECONCILIATION (kg) — requirement vs sent vs consumed -->
@@ -312,13 +320,16 @@
     <thead>
       <tr>
         <th colspan="2" class="bdc-col-date-age"></th>
+        <th></th>
         <th colspan="4">Mortality No.</th>
         <th></th>
         <th></th>
         <th colspan="2">Feed Intake (gm/bird)</th>
         <th colspan="2">Cum Feed (gm/bird)</th>
         <th colspan="2">Body Weight (gm)</th>
+        <th></th>
         <th colspan="2">FCR</th>
+        <th></th>
         {% if phase_names %}<th colspan="{{ phase_names|length }}">Feed Revd (+) / Trfr (−) by Type (bags)</th>{% endif %}
         <th></th>
         <th></th>
@@ -329,13 +340,16 @@
       </tr>
       <tr>
         <th class="bdc-col-date">Date</th><th class="bdc-col-age">Age</th>
+        <th>Opening Birds</th>
         <th>Daily Mort</th><th>Daily %</th><th>Cum Total</th><th>Cum %</th>
         <th>Closing Birds (No's)</th>
         <th>Livability %</th>
         <th>Std</th><th>Actual</th>
         <th>Std</th><th>Actual</th>
         <th>Std</th><th>Actual</th>
+        <th>Weight Gain</th>
         <th>Std</th><th>Actual</th>
+        <th>CFCR</th>
         {% for name in phase_names %}<th>{{ name }}</th>{% endfor %}
         <th>Revd (+) / Trfr (−)</th>
         <th>Feed Type Consumed</th>
@@ -352,6 +366,7 @@
       {% if r.is_week_rollup %}
       <tr class="bdc-week-row">
         <td class="txt bdc-col-date bdc-auto">Weekly Actual</td><td class="bdc-col-age">Wk {{ r.week_no }}</td>
+        <td class="num bdc-auto">{{ r.opening|floatformat:0 }}</td>
         <td class="num bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
         <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
@@ -363,16 +378,18 @@
         <td class="num bdc-std">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num bdc-actual">{{ r.cum_feed_per_bird|floatformat:0 }}</td>
         <td class="num bdc-std">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %}</td>
-        <td class="num bdc-fill-optional">{{ r.avg_bwt|floatformat:0 }}</td>
+        <td class="num bdc-fill-optional">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }}{% endif %}</td>
+        <td class="num bdc-auto">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num bdc-std">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %}</td>
-        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</td>
+        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{% if r.bwt_stale %}-{% else %}{{ r.fcr|floatformat:2 }}{% endif %}</td>
+        <td class="num bdc-auto">{% if r.bwt_stale %}-{% else %}{{ r.cfcr|floatformat:2 }}{% endif %}</td>
         {% for name in phase_names %}<td class="bdc-fill-optional"></td>{% endfor %}
         <td class="num bdc-fill-optional">{{ r.feed_in_out_display }}</td>
         <td class="txt bdc-fill-type"></td>
         <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
         <td class="num bdc-auto">{{ r.total_cons_display }}</td>
         <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
-        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-auto {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
+        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-fill-stock {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
         <td class="txt bdc-fill-remarks"></td>
         <td class="num bdc-auto"></td>
       </tr>
@@ -381,6 +398,7 @@
           {% if r.is_last_entry %}id="bdc-today-row"{% endif %}>
         <td class="bdc-col-date bdc-auto">{{ r.entry_date|date:"d-M-Y" }}</td>
         <td class="num bdc-col-age">{{ r.age }}</td>
+        <td class="num bdc-auto">{{ r.opening|floatformat:0 }}</td>
         <td class="num bdc-mort bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.mort_pct|floatformat:2 }}%</td>
         <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
@@ -392,9 +410,11 @@
         <td class="num bdc-std">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num bdc-actual">{{ r.cum_feed_per_bird|floatformat:0 }}</td>
         <td class="num bdc-std">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %}</td>
-        <td class="num bdc-fill-optional">{{ r.avg_bwt|floatformat:0 }}</td>
+        <td class="num bdc-fill-optional">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }}{% endif %}</td>
+        <td class="num bdc-auto">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num bdc-std">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %}</td>
-        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</td>
+        <td class="num bdc-actual {% if r.fcr_exception %}bdc-exception{% endif %}">{% if r.bwt_stale %}-{% else %}{{ r.fcr|floatformat:2 }}{% endif %}</td>
+        <td class="num bdc-auto">{% if r.bwt_stale %}-{% else %}{{ r.cfcr|floatformat:2 }}{% endif %}</td>
         {% for v in r.feed_received_by_type %}
         <td class="num bdc-fill-optional">{% if v is not None %}{{ v }}{% else %}-{% endif %}</td>
         {% endfor %}
@@ -403,13 +423,13 @@
         <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
         <td class="num bdc-auto">{{ r.total_cons_display }}</td>
         <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
-        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-auto {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
+        {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-fill-stock {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
         <td class="txt bdc-fill-remarks">{{ r.remarks|default:"-" }}</td>
         <td class="num bdc-auto">{{ r.req_feed_display }}</td>
       </tr>
       {% endif %}
       {% empty %}
-      <tr><td colspan="22" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
+      <tr><td colspan="25" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -425,10 +445,13 @@
   <div class="bdc-card">
     <div class="bdc-card-head bdc-week-row"><span>Weekly Actual — Wk {{ r.week_no }}</span><span>{{ r.week_from|date:"d-M" }} – {{ r.week_to|date:"d-M" }}</span></div>
     <div class="bdc-card-body">
+      <div><span class="l">Opening Birds</span><span class="v">{{ r.opening|floatformat:0 }}</span></div>
       <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.cum_mort_pct|floatformat:2 }}% cum)</span></div>
       <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
-      <div><span class="l">Body Weight</span><span class="v">{{ r.avg_bwt|floatformat:0 }} g</span></div>
-      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }}</span></div>
+      <div><span class="l">Body Weight</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }} g{% endif %}</span></div>
+      <div><span class="l">Weight Gain</span><span class="v">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }} g{% else %}-{% endif %}</span></div>
+      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{% if r.bwt_stale %}-{% else %}{{ r.fcr|floatformat:2 }}{% endif %}</span></div>
+      <div><span class="l">CFCR</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.cfcr|floatformat:2 }}{% endif %}</span></div>
       <div><span class="l">Daily Cons</span><span class="v">{{ r.daily_cons_display }}</span></div>
       <div><span class="l">Closing Stock</span><span class="v">{{ r.closing_stock_display }}</span></div>
       <div><span class="l">Livability</span><span class="v {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</span></div>
@@ -438,10 +461,13 @@
   <div class="bdc-card {% if r.is_last_entry %}bdc-today{% endif %}" {% if r.is_last_entry %}id="bdc-today-card"{% endif %}>
     <div class="bdc-card-head"><span>{{ r.entry_date|date:"d-M-Y" }}</span><span>Day {{ r.age }}</span></div>
     <div class="bdc-card-body">
+      <div><span class="l">Opening Birds</span><span class="v">{{ r.opening|floatformat:0 }}</span></div>
       <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.mort_pct|floatformat:2 }}%)</span></div>
       <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
-      <div><span class="l">Body Weight</span><span class="v">{{ r.avg_bwt|floatformat:0 }} g <small class="text-muted">(std {% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %})</small></span></div>
-      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{{ r.fcr|floatformat:2 }} <small class="text-muted">(std {% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %})</small></span></div>
+      <div><span class="l">Body Weight</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }} g{% endif %} <small class="text-muted">(std {% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %})</small></span></div>
+      <div><span class="l">Weight Gain</span><span class="v">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }} g{% else %}-{% endif %}</span></div>
+      <div><span class="l">FCR</span><span class="v {% if r.fcr_exception %}bdc-exception{% endif %}">{% if r.bwt_stale %}-{% else %}{{ r.fcr|floatformat:2 }}{% endif %} <small class="text-muted">(std {% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:2 }}{% else %}-{% endif %})</small></span></div>
+      <div><span class="l">CFCR</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.cfcr|floatformat:2 }}{% endif %}</span></div>
       <div><span class="l">Feed Type</span><span class="v">{{ r.feed_type_consumed_display }}</span></div>
       <div><span class="l">Daily Cons</span><span class="v">{{ r.daily_cons_display }}</span></div>
       <div><span class="l">Closing Stock</span><span class="v">{{ r.closing_stock_display }}</span></div>
