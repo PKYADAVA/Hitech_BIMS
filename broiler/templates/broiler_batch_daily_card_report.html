@@ -265,7 +265,7 @@
   <table>
     <thead><tr>
       <th>Feed Type</th><th>Age Range (days)</th><th>Std g/bird (to Target Day)</th>
-      <th>Requirement (kg)</th><th>Sent (kg)</th><th>Consumed (kg)</th><th>Availability (kg)</th>
+      <th>Requirement (kg)</th><th>Feed In (kg)</th><th>Feed Out (kg)</th><th>Consumed (kg)</th><th>Availability (kg)</th>
       <th>Excess / (Short) Sent (kg)</th><th>Still To Send (kg)</th><th>Bags To Send (50 kg)</th>
     </tr></thead>
     <tbody>
@@ -276,6 +276,7 @@
         <td class="num">{% if r.due_bird is not None %}{{ r.due_bird|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num">{% if r.req_qty is not None %}{{ r.req_qty|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num">{{ r.feed_in|floatformat:0 }}</td>
+        <td class="num">{{ r.out_qty|floatformat:0 }}</td>
         <td class="num">{{ r.cons_qty|floatformat:0 }}</td>
         <td class="num {% if r.avail_qty < 0 %}text-danger{% endif %}">{{ r.avail_qty|floatformat:0 }}</td>
         <td class="num">{{ r.excess_sent|floatformat:0 }}</td>
@@ -283,13 +284,14 @@
         <td class="num">{% if r.bags is not None %}{{ r.bags|floatformat:0 }}{% else %}-{% endif %}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="10" class="text-center text-muted py-2">No feed programme or feed movement for this batch.</td></tr>
+      <tr><td colspan="11" class="text-center text-muted py-2">No feed programme or feed movement for this batch.</td></tr>
       {% endfor %}
       {% if recon_rows %}
       <tr class="bdc-week-row">
         <td class="txt">Total</td><td></td><td></td>
         <td class="num">{{ recon_totals.req_qty|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.feed_in|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.out_qty|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.cons_qty|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.avail_qty|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.excess_sent|floatformat:0 }}</td>

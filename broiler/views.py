@@ -7029,7 +7029,28 @@ def _batch_daily_card_rows(batch):
     # (only two generic feed slots), so it's rebuilt here the same way the
     # combined feed_1_stock/feed_2_stock fields are, just split by type
     # instead of by slot.
+    #
+    # Seeded with whatever arrived before the batch's first DailyEntry (feed
+    # dispatched ahead of placement, a common lead-time pattern) — without
+    # this the running balance starts flat at zero and every later receipt
+    # reads as a shortfall, going more negative day over day instead of
+    # showing the stock that was actually on the ground.
     stock_by_type = {name: Decimal("0") for name in phase_names}
+    if entries:
+        first_date = entries[0].date
+        pre_in = (StockTransfer.objects.filter(
+                      to_batch=batch, item_id__in=feed_ids, date__lt=first_date)
+                  .values("item_id").annotate(t=Sum("quantity")))
+        pre_out = (StockTransfer.objects.filter(
+                       from_batch=batch, item_id__in=feed_ids, date__lt=first_date)
+                   .values("item_id").annotate(t=Sum("quantity")))
+        pre_in_by_item = {r["item_id"]: r["t"] or Decimal("0") for r in pre_in}
+        pre_out_by_item = {r["item_id"]: r["t"] or Decimal("0") for r in pre_out}
+        for name in phase_names:
+            matching_items = [iid for iid, nm in item_phase.items() if nm == name]
+            opening_kg = (sum((pre_in_by_item.get(iid, Decimal("0")) for iid in matching_items), Decimal("0"))
+                         - sum((pre_out_by_item.get(iid, Decimal("0")) for iid in matching_items), Decimal("0")))
+            stock_by_type[name] = opening_kg
     for e, row in zip(entries, daily_rows):
         item1, item2 = item_by_id.get(e.feed_1_id), item_by_id.get(e.feed_2_id)
         kg1 = _num(item1.kg_per_bag) if item1 and item1.kg_per_bag else None
@@ -7440,6 +7461,7 @@ def broiler_batch_daily_card_report(request):
             "req_qty": sum((r["req_qty"] or Decimal("0") for r in recon_rows), Decimal("0")),
             "due_qty": sum((r["due_qty"] or Decimal("0") for r in recon_rows), Decimal("0")),
             "feed_in": sum((r["feed_in"] for r in recon_rows), Decimal("0")),
+            "out_qty": sum((r["out_qty"] for r in recon_rows), Decimal("0")),
             "cons_qty": sum((r["cons_qty"] for r in recon_rows), Decimal("0")),
             "avail_qty": sum((r["avail_qty"] for r in recon_rows), Decimal("0")),
             "excess_sent": sum((r["excess_sent"] for r in recon_rows), Decimal("0")),
@@ -7645,18 +7667,18 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
 
     # Feed Reconciliation block
     ws2 = wb.create_sheet("Feed Reconciliation")
-    header_row(1, ["Feed Type", "Age Range", "Std g/bird", "Requirement (kg)", "Sent (kg)",
-                  "Consumed (kg)", "Availability (kg)", "Excess/Short Sent (kg)",
+    header_row(1, ["Feed Type", "Age Range", "Std g/bird", "Requirement (kg)", "Feed In (kg)",
+                  "Feed Out (kg)", "Consumed (kg)", "Availability (kg)", "Excess/Short Sent (kg)",
                   "Still To Send (kg)", "Bags To Send"])
     for r in recon_rows:
         ws2.append([r["item"], r.get("phase_band") or "-", r.get("due_bird"),
-                   r.get("req_qty"), r["feed_in"], r["cons_qty"], r["avail_qty"],
+                   r.get("req_qty"), r["feed_in"], r["out_qty"], r["cons_qty"], r["avail_qty"],
                    r["excess_sent"], r["still_to_send"], r.get("bags")])
     if recon_rows and recon_totals:
         total_row_idx = ws2.max_row + 1
         ws2.append(["Total", "", "", recon_totals["req_qty"], recon_totals["feed_in"],
-                   recon_totals["cons_qty"], recon_totals["avail_qty"], recon_totals["excess_sent"],
-                   recon_totals["still_to_send"], recon_totals["bags"]])
+                   recon_totals["out_qty"], recon_totals["cons_qty"], recon_totals["avail_qty"],
+                   recon_totals["excess_sent"], recon_totals["still_to_send"], recon_totals["bags"]])
         for cell in ws2[total_row_idx]:
             cell.font = FONT_BOLD
     for row in ws2.iter_rows():
@@ -7664,7 +7686,7 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
             if isinstance(cell.value, Decimal):
                 cell.value = float(cell.value)
             cell.border = BORDER
-    for i in range(1, 11):
+    for i in range(1, 12):
         ws2.column_dimensions[ws2.cell(row=1, column=i).column_letter].width = 16
 
     # Feed Forecast block
