@@ -7218,6 +7218,60 @@ def _batch_daily_card_rows(batch):
                                 if req_feed_kg is not None and req_bag_kg else None)
         row["req_feed_display"] = _kg_bags_display(row["req_feed_kg"], row["req_feed_bags"])
 
+    # The register stops at the last day walked, but the card is read against
+    # the breed's whole cycle — a reader wants to see what the flock is
+    # heading into, not just where it has been. Every age the breed defines
+    # beyond the last entry gets a row carrying that age's standards and its
+    # projected date (placement + age); every actual figure on it stays blank,
+    # because nothing has happened on that day yet. `is_projected` lets the
+    # template grey them and keeps them out of anything that would read them
+    # as real.
+    if daily_rows:
+        last_real = daily_rows[-1]
+        last_age = last_real["age"]
+        placed_on = _placement_date(batch)
+        max_std_age = (BreedStandard.objects
+                       .filter(breed_id=batch.breed_id, is_active=True)
+                       .order_by("-age").values_list("age", flat=True).first()
+                       if batch.breed_id else None)
+        # Keys that describe the batch rather than the day (farm, line,
+        # supervisor...) carry over; everything else blanks, so a projected
+        # row cannot be mistaken for a day that was actually walked.
+        carry = {"batch", "batch_no", "book_no", "branch", "farm_code",
+                "farmer", "farmer_contact", "farm_location", "line",
+                "supervisor", "placed"}
+        if last_age is not None and max_std_age and placed_on:
+            for age in range(last_age + 1, max_std_age + 1):
+                std = _breed_standard_at(batch.breed_id, age)
+                row = {k: (last_real[k] if k in carry else None) for k in last_real}
+                row.update({
+                    "age": age,
+                    "entry_date": placed_on + timedelta(days=age),
+                    "is_projected": True,
+                    "is_last_entry": False,
+                    # No weighing on a day that has not happened. True here
+                    # is what keeps the weekly rollup from reading a blank as
+                    # this week's closing weight and reporting the whole of
+                    # the previous week's weight as a loss.
+                    "bwt_stale": True,
+                    "fcr_exception": False,
+                    "livability_exception": False,
+                    "feed_received_by_type": [None] * len(phase_names),
+                    "closing_stock_by_type": [(None, False)] * len(phase_names),
+                    # The *_display keys are rendered straight into cells, so
+                    # a None would print the word "None" rather than an empty
+                    # cell the way the numeric columns do.
+                    "feed_in_out_display": "", "feed_type_consumed_display": "",
+                    "daily_cons_display": "", "daily_total_display": "",
+                    "total_cons_display": "", "closing_stock_display": "",
+                    "req_feed_display": "", "remarks": "",
+                    "std_bwt": std.body_weight if std else None,
+                    "std_fcr": std.fcr if std else None,
+                    "std_feed_per_bird": std.feed_intake if std else None,
+                    "std_cum_feed_per_bird": std.cum_feed if std else None,
+                })
+                daily_rows.append(row)
+
     # Fields a week can sum; body weight and FCR are read off the week's last
     # day (closing position), not summed or averaged — an average of ratios
     # across the week isn't the ratio of the week's totals.
@@ -7250,6 +7304,14 @@ def _batch_daily_card_rows(batch):
             # falling back to `last` only when the week carries none at all
             # (which is what bwt_stale then correctly reports).
             weighed = next((r for r in reversed(bucket) if not r["bwt_stale"]), last)
+            # Closing positions (cum mortality, livability, stock) come off
+            # the week's last REAL day. A week straddling the end of the
+            # register ends on projected rows, which carry no actuals, and
+            # reading those blanked the week's closing figures and left a
+            # bare "%" in the cells.
+            last_actual = next((r for r in reversed(bucket) if not r.get("is_projected")), None)
+            if last_actual is not None:
+                last = last_actual
             rollup = {k: sum((_num(r[k]) for r in bucket), Decimal("0")) for k in sum_keys}
             # Feed Intake (gm/bird) for the week: the sum of the week's 7 daily
             # intakes, same convention as every other weekly total on this
@@ -7324,8 +7386,11 @@ def _batch_daily_card_rows(batch):
     # Flag the last-entered day — the register's own "today", since a flock
     # a week stale should still highlight the day it was last walked rather
     # than the calendar date.
-    if daily_rows:
-        daily_rows[-1]["is_last_entry"] = True
+    # The last REAL entry, not daily_rows[-1] — that is now a projected row
+    # on any batch whose breed curve runs past the register.
+    last_real_row = next((r for r in reversed(daily_rows) if not r.get("is_projected")), None)
+    if last_real_row is not None:
+        last_real_row["is_last_entry"] = True
     return out, daily_rows, phase_names
 
 
@@ -7339,14 +7404,33 @@ def _batch_feed_forecast(batch, as_of, birds, curve, avail_qty=Decimal("0"), bag
     for its own Next 3/7 Days columns. Both are legitimate; this is the one
     the paper daily card actually shows."""
     q2 = Decimal("0.01")
+    # Anchored to the flock's last entered day, not the calendar date. For an
+    # open batch as_of is today, and a register a few days (or months) behind
+    # left the 7-day window empty: actual intake came out zero while std
+    # intake did not, so Habit % was 0 and every figure derived from it --
+    # Next 3/7 Days, Order Needed, every Day +n -- multiplied to zero beside
+    # a correct Live Birds. The rest of the card already reads the flock's
+    # own last walked day (it is what Last Day Entered reports); the forecast
+    # now does too, falling back to as_of only when nothing is entered.
+    last_entry_date = (DailyEntry.objects.filter(batch=batch, date__lte=as_of)
+                       .order_by("-date").values_list("date", flat=True).first())
+    anchor = last_entry_date or as_of
     week_entries = list(DailyEntry.objects.filter(
-        batch=batch, date__gt=as_of - timedelta(days=7), date__lte=as_of
+        batch=batch, date__gt=anchor - timedelta(days=7), date__lte=anchor
     ).order_by("date"))
     actual_feed_7d = sum((_num(e.feed_1_qty) + _num(e.feed_2_qty) for e in week_entries), Decimal("0"))
     avg_mort_7d = (_div(sum((Decimal(e.mortality) for e in week_entries), Decimal("0")), 7)
                   if week_entries else Decimal("0"))
 
-    age = (as_of - batch.start_date).days if batch.start_date else None
+    # _placement_date, not batch.start_date: without the fallback a batch
+    # placed via a chicks placement had age=None, so std_feed_7d stayed zero
+    # and the whole forecast — Next 3/7 Days, Order Needed, every Day +n —
+    # read 0 beside a correct Live Birds and Avg Daily Mort.
+    placed_on = _placement_date(batch)
+    # Same anchor as the window above: reading std intake at today's age while
+    # actual intake came off a register that stops months earlier compares two
+    # different flocks.
+    age = (anchor - placed_on).days if placed_on else None
     std_feed_7d = Decimal("0")
     if curve and age is not None:
         for d in range(7):
@@ -7409,6 +7493,65 @@ def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
     placed_on = _placement_date(batch)
     age = (as_of - placed_on).days if placed_on else None
 
+    # Walk the cycle day by day to find, for each phase, the birds that came
+    # out of it alive and the feed eaten by the ones that did not.
+    #
+    # A phase's requirement is what it took to feed the shed it actually fed.
+    # Measured against the flock placed, it charged the later phases for birds
+    # that died before reaching them; against the flock left today, it fell
+    # with every death and then jumped back when the shed emptied. Both read
+    # one number as if it meant two things.
+    #
+    # So: the birds still standing at the end of the phase are owed its whole
+    # cap, and every bird that left mid-phase -- dead, culled or lifted -- is
+    # owed exactly what it ate while it was there. Feed is booked per shed per
+    # day, not per bird, so a departing bird's share is the running
+    # feed-per-bird at the point it left: each day's feed over that day's
+    # opening count, accumulated.
+    closing_by_age, per_bird_by_age, departed_by_age = {}, {}, {}
+    if placed_on:
+        sold_by_date = {r["date"]: r["b"] or Decimal("0") for r in
+                       BirdSale.objects.filter(batch=batch)
+                       .values("date").annotate(b=Sum("birds"))}
+        running = placed
+        for e in (DailyEntry.objects.filter(batch=batch).order_by("date", "id")
+                  .values("date", "mortality", "culls", "feed_1_qty", "feed_2_qty")):
+            day_age = (e["date"] - placed_on).days
+            opening = running
+            day_feed = _num(e["feed_1_qty"]) + _num(e["feed_2_qty"])
+            per_bird_by_age[day_age] = (day_feed / opening) if opening > 0 else Decimal("0")
+            departed_by_age[day_age] = (_num(e["mortality"]) + _num(e["culls"])
+                                       + _num(sold_by_date.get(e["date"])))
+            running = opening - departed_by_age[day_age]
+            closing_by_age[day_age] = running
+
+    def _phase_requirement(pl, cap_kg):
+        """(closing birds x phase cap) + feed eaten WITHIN this phase by the
+        birds that left during it.
+
+        The per-bird feed accumulates from the phase's own first day, not
+        from placement: charging a bird that was lifted on day 35 for its
+        whole life's intake would bill the Finisher phase again for the
+        Pre-Starter and Starter feed those same phases have already counted,
+        which read 5,816 kg against 2,968 kg actually eaten.
+
+        Falls back to the placed count for a phase the flock has not reached,
+        where nothing has been eaten yet and the placed count is the only
+        honest basis for what it will take."""
+        if pl is None or not closing_by_age:
+            return cap_kg * placed
+        lo = pl.from_age or 0
+        hi = pl.to_age if pl.to_age is not None else max(closing_by_age)
+        in_band = sorted(a for a in closing_by_age if lo <= a <= hi)
+        if not in_band:
+            return cap_kg * placed
+        closing = closing_by_age[in_band[-1]]
+        departed_feed, cum_in_phase = Decimal("0"), Decimal("0")
+        for a in in_band:
+            cum_in_phase += per_bird_by_age.get(a, Decimal("0"))
+            departed_feed += departed_by_age.get(a, Decimal("0")) * cum_in_phase
+        return cap_kg * closing + departed_feed
+
     masters = list(FeedPhaseMaster.objects.filter(status="active")
                    .select_related("breed", "bird_category")
                    .prefetch_related("lines__feed_item"))
@@ -7419,7 +7562,13 @@ def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
     # does — without a banner a reader sees "-" across the whole Std column
     # and has to guess why, rather than being told the batch itself is
     # missing its own placement date.
-    if not batch.start_date:
+    #
+    # Tested against the same placed_on the figures above are computed from,
+    # not batch.start_date: a batch placed via a chicks placement has no
+    # start_date but does have a placement date, and testing the raw field
+    # warned that the figures could not be read while they sat populated
+    # beside the banner, with the placement date itself on screen above it.
+    if not placed_on:
         programme_gap = (programme_gap + "; " if programme_gap else "") + "No placement date on file"
     curve = []
     if batch.breed_id:
@@ -7504,7 +7653,12 @@ def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
             "phase_state": ("" if pl is None or age is None else
                            "current" if is_current else
                            "upcoming" if pl.from_age > age else "done"),
-            "req_qty": (cap_bird / 1000 * birds).quantize(q2) if cap_bird else None,
+            # See _phase_requirement: the survivors' full cap plus what the
+            # birds that left mid-phase actually ate. The prorated due_qty
+            # below still follows the live count -- that one answers "what is
+            # owed to the birds I have today", a different question.
+            "req_qty": (_phase_requirement(pl, cap_bird / 1000).quantize(q2)
+                       if cap_bird else None),
             "due_bird": due_bird.quantize(q2) if due_bird is not None else None,
             "due_qty": due_qty.quantize(q2) if due_qty is not None else None,
             "basis": basis,

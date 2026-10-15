@@ -227,6 +227,11 @@ class PlacementWithoutStartDateTests(TestCase):
             line.strip()
             for line in source.splitlines()
             if re.search(r"\bbatch\.start_date\b", line)
+            # Comments are prose, not reads. Each fix here leaves a note
+            # explaining what it replaced, and those notes name the very
+            # expression they warn against -- without this the audit starts
+            # failing on its own documentation once the code is clean.
+            and not line.strip().startswith("#")
             and "agreement" not in line
             and " or " not in line
             and "return batch.start_date" not in line

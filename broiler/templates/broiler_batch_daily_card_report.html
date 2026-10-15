@@ -11,9 +11,20 @@
      rather than as a set of separate report cards: a sticky 2-row header
      (group band + column band), colour-coded rows (Weekly Actual / totals),
      and the same dense all-borders look the paper card has. */
-  .bdc-wrap { overflow:auto; max-height:82vh; border:1px solid #c7d6e3; border-radius:.4rem; }
+  /* Still a scroll box, but tall enough to hold a whole cycle without
+     scrolling inside it. A full 36-day batch is 42 rows (the days plus a
+     weekly row each week) at ~22px, about 985px of table, where the old
+     82vh cap showed ~818px on a 1000px screen and hid the last seven rows —
+     the end of the cycle, which is what a reader is usually after.
+     1060px covers a full cycle; the vh term keeps it inside a short
+     viewport, where it falls back to scrolling as before. */
+  .bdc-wrap { overflow:auto; max-height:min(1060px, 88vh); border:1px solid #c7d6e3; border-radius:.4rem; }
   .bdc-grid { border-collapse:collapse; font-size:.68rem; width:max-content; min-width:100%; }
-  .bdc-grid th, .bdc-grid td { border:1px solid #c7d6e3; padding:.2rem .4rem; white-space:nowrap; text-align:center; }
+  /* Tight vertical padding buys ~2.5px a row, ~105px over a full cycle's 42
+     rows — enough to fit the whole cycle on a 1000px screen rather than
+     hiding its last few days. Sideways padding is untouched, so the columns
+     read exactly as before. */
+  .bdc-grid th, .bdc-grid td { border:1px solid #c7d6e3; padding:.12rem .4rem; white-space:nowrap; text-align:center; }
   .bdc-grid td.num { text-align:right; }
   .bdc-grid td.txt { text-align:left; }
   .bdc-grid thead th { background:#1b3a6b; color:#fff; font-weight:700; position:sticky; z-index:3; }
@@ -128,6 +139,14 @@
      stock column already uses, so a problem day doesn't need the whole row
      read to be noticed. */
   .bdc-grid td.bdc-exception { color:#c0392b; font-weight:700; }
+  /* Days the breed defines that the flock has not reached: the Std columns
+     carry the curve, every actual figure is blank. Greyed and italic so the
+     eye reads them as what is coming rather than as days with nothing
+     recorded, and the date is shown as a projection off the placement date. */
+  .bdc-grid tbody tr.bdc-projected td { color:#8a93a0; font-style:italic; background:#fbfbfc; }
+  .bdc-grid tbody tr.bdc-projected td.bdc-std { background:#fdf0ea; color:#9a7d70; }
+  .bdc-grid tbody tr.bdc-projected td.bdc-col-date,
+  .bdc-grid tbody tr.bdc-projected td.bdc-col-age { background:#f1f3f6; color:#8a93a0; }
 
   @media print {
     .no-print { display:none !important; }
@@ -269,11 +288,11 @@
 
 <!-- FEED TYPE WISE — requirement vs sent vs consumed -->
 <div class="bdc-band">
-  <div class="bdc-band-title">FEED TYPE WISE — requirement vs sent vs consumed (kg, up to Target Day; type age ranges from Standards sheet)</div>
+  <div class="bdc-band-title">FEED TYPE WISE — requirement vs sent vs consumed (kg; Std g/bird is prorated to Target Day, Requirement is closing birds × phase cap plus what the birds lost or lifted in that phase ate; type age ranges from Standards sheet)</div>
   <table>
     <thead><tr>
       <th>Feed Type</th><th>Age Range (days)</th><th>Std g/bird (to Target Day)</th>
-      <th>Requirement (kg)</th><th>Feed In (kg)</th><th>Feed Out (kg)</th><th>Consumed (kg)</th><th>Availability (kg)</th>
+      <th>Requirement (kg, phase birds)</th><th>Feed In (kg)</th><th>Feed Out (kg)</th><th>Consumed (kg)</th><th>Availability (kg)</th>
       <th>Excess / (Short) Sent (kg)</th><th>Still To Send (kg)</th><th>Bags To Send (50 kg)</th>
     </tr></thead>
     <tbody>
@@ -399,18 +418,18 @@
         <td class="num bdc-auto"></td>
       </tr>
       {% else %}
-      <tr class="{% if r.mort_pct >= 1 %}bdc-mort-red{% elif r.mort_pct >= 0.5 %}bdc-mort-amber{% elif r.mort_pct > 0.02 %}bdc-mort-blue{% endif %} {% if r.is_last_entry %}bdc-today{% endif %}"
+      <tr class="{% if r.is_projected %}bdc-projected{% elif r.mort_pct >= 1 %}bdc-mort-red{% elif r.mort_pct >= 0.5 %}bdc-mort-amber{% elif r.mort_pct > 0.02 %}bdc-mort-blue{% endif %} {% if r.is_last_entry %}bdc-today{% endif %}"
           {% if r.is_last_entry %}id="bdc-today-row"{% endif %}>
         <td class="bdc-col-date bdc-auto">{{ r.entry_date|date:"d-M-Y" }}</td>
         <td class="num bdc-col-age">{{ r.age }}</td>
         <td class="num bdc-auto">{{ r.opening|floatformat:0 }}</td>
         <td class="num bdc-mort bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
-        <td class="num bdc-auto">{{ r.mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{% if r.mort_pct is not None %}{{ r.mort_pct|floatformat:2 }}%{% endif %}</td>
         <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
-        <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{% if r.cum_mort_pct is not None %}{{ r.cum_mort_pct|floatformat:2 }}%{% endif %}</td>
         <td class="num bdc-mort bdc-fill-daily">{{ r.sold|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.balance|floatformat:0 }}</td>
-        <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{% if r.livability_pct is not None %}{{ r.livability_pct|floatformat:2 }}%{% endif %}</td>
         <td class="num bdc-std">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
         <td class="num bdc-actual">{{ r.act_feed_per_bird|floatformat:0 }}</td>
         <td class="num bdc-std">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
