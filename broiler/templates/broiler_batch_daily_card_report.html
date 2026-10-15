@@ -232,7 +232,7 @@
       <td class="num bdc-hero {% if recon_totals.avail_qty < 0 %}text-danger{% endif %}">{{ recon_totals.avail_qty|floatformat:0 }}</td>
       <td class="num bdc-hero">{{ recon_totals.excess_sent|floatformat:0 }}</td>
       <td class="num bdc-hero">{{ recon_totals.still_to_send|floatformat:0 }}</td>
-      <td class="num bdc-hero">{{ recon_totals.bags|floatformat:0 }}</td>
+      <td class="num bdc-hero">{{ recon_totals.bags|floatformat:2 }}</td>
     </tr></tbody>
   </table>
 </div>
@@ -258,7 +258,7 @@
           <td class="num bdc-hero">{{ forecast.next_3d|floatformat:0 }}</td>
           <td class="num bdc-hero">{{ forecast.next_7d|floatformat:0 }}</td>
           <td class="num bdc-hero">{{ forecast.order_needed_7d|floatformat:0 }}</td>
-          <td class="num bdc-hero">{% if forecast.order_needed_7d_bags is not None %}{{ forecast.order_needed_7d_bags|floatformat:0 }}{% else %}-{% endif %}</td>
+          <td class="num bdc-hero">{% if forecast.order_needed_7d_bags is not None %}{{ forecast.order_needed_7d_bags|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num bdc-hero {% if forecast.stock_covers_days is not None and forecast.stock_covers_days < 3 %}text-danger{% endif %}">{% if forecast.stock_covers_days is not None %}{{ forecast.stock_covers_days|floatformat:1 }}{% else %}-{% endif %}</td>
           {% for d in forecast.days %}<td class="num bdc-day-col">{{ d|floatformat:0 }}</td>{% endfor %}
           <td class="num bdc-hero">{{ snapshot.target_day|default:"-" }}</td>
@@ -289,7 +289,7 @@
         <td class="num {% if r.avail_qty < 0 %}text-danger{% endif %}">{{ r.avail_qty|floatformat:0 }}</td>
         <td class="num">{{ r.excess_sent|floatformat:0 }}</td>
         <td class="num">{{ r.still_to_send|floatformat:0 }}</td>
-        <td class="num">{% if r.bags is not None %}{{ r.bags|floatformat:0 }}{% else %}-{% endif %}</td>
+        <td class="num">{% if r.bags is not None %}{{ r.bags|floatformat:2 }}{% else %}-{% endif %}</td>
       </tr>
       {% empty %}
       <tr><td colspan="11" class="text-center text-muted py-2">No feed programme or feed movement for this batch.</td></tr>
@@ -304,7 +304,7 @@
         <td class="num">{{ recon_totals.avail_qty|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.excess_sent|floatformat:0 }}</td>
         <td class="num">{{ recon_totals.still_to_send|floatformat:0 }}</td>
-        <td class="num">{{ recon_totals.bags|floatformat:0 }}</td>
+        <td class="num">{{ recon_totals.bags|floatformat:2 }}</td>
       </tr>
       {% endif %}
     </tbody>
@@ -322,6 +322,7 @@
         <th colspan="2" class="bdc-col-date-age"></th>
         <th></th>
         <th colspan="4">Mortality No.</th>
+        <th></th>
         <th></th>
         <th></th>
         <th colspan="2">Feed Intake (gm/bird)</th>
@@ -342,6 +343,7 @@
         <th class="bdc-col-date">Date</th><th class="bdc-col-age">Age</th>
         <th>Opening Birds</th>
         <th>Daily Mort</th><th>Daily %</th><th>Cum Total</th><th>Cum %</th>
+        <th>Sold Birds</th>
         <th>Closing Birds (No's)</th>
         <th>Livability %</th>
         <th>Std</th><th>Actual</th>
@@ -368,9 +370,10 @@
         <td class="txt bdc-col-date bdc-auto">Weekly Actual</td><td class="bdc-col-age">Wk {{ r.week_no }}</td>
         <td class="num bdc-auto">{{ r.opening|floatformat:0 }}</td>
         <td class="num bdc-fill-daily">{{ r.mort|floatformat:0 }}</td>
-        <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-auto">{{ r.mort_pct|floatformat:2 }}%</td>
         <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-fill-daily">{{ r.sold|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.balance|floatformat:0 }}</td>
         <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</td>
         <td class="num bdc-std">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
@@ -403,6 +406,7 @@
         <td class="num bdc-auto">{{ r.mort_pct|floatformat:2 }}%</td>
         <td class="num bdc-auto">{{ r.cum_mort|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.cum_mort_pct|floatformat:2 }}%</td>
+        <td class="num bdc-mort bdc-fill-daily">{{ r.sold|floatformat:0 }}</td>
         <td class="num bdc-auto">{{ r.balance|floatformat:0 }}</td>
         <td class="num bdc-auto {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</td>
         <td class="num bdc-std">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:0 }}{% else %}-{% endif %}</td>
@@ -429,7 +433,7 @@
       </tr>
       {% endif %}
       {% empty %}
-      <tr><td colspan="25" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
+      <tr><td colspan="26" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -447,6 +451,7 @@
     <div class="bdc-card-body">
       <div><span class="l">Opening Birds</span><span class="v">{{ r.opening|floatformat:0 }}</span></div>
       <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.cum_mort_pct|floatformat:2 }}% cum)</span></div>
+      <div><span class="l">Sold Birds</span><span class="v">{{ r.sold|floatformat:0 }}</span></div>
       <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
       <div><span class="l">Body Weight</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }} g{% endif %}</span></div>
       <div><span class="l">Weight Gain</span><span class="v">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }} g{% else %}-{% endif %}</span></div>
@@ -463,6 +468,7 @@
     <div class="bdc-card-body">
       <div><span class="l">Opening Birds</span><span class="v">{{ r.opening|floatformat:0 }}</span></div>
       <div><span class="l">Mortality</span><span class="v">{{ r.mort|floatformat:0 }} ({{ r.mort_pct|floatformat:2 }}%)</span></div>
+      <div><span class="l">Sold Birds</span><span class="v">{{ r.sold|floatformat:0 }}</span></div>
       <div><span class="l">Closing Birds</span><span class="v">{{ r.balance|floatformat:0 }}</span></div>
       <div><span class="l">Body Weight</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.avg_bwt|floatformat:0 }} g{% endif %} <small class="text-muted">(std {% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:0 }}{% else %}-{% endif %})</small></span></div>
       <div><span class="l">Weight Gain</span><span class="v">{% if r.weight_gain is not None %}{{ r.weight_gain|floatformat:0 }} g{% else %}-{% endif %}</span></div>

@@ -6926,7 +6926,7 @@ def _kg_bags_display(kg, bags):
     format the Batch Daily Card uses everywhere a kg figure has a bags
     equivalent, rather than two separate columns for the same number."""
     kg_text = f"{kg:,.0f}" if kg is not None else "-"
-    bags_text = f"{bags:,.0f}" if bags is not None else "-"
+    bags_text = f"{bags:,.2f}" if bags is not None else "-"
     return f"{kg_text} ({bags_text})"
 
 
@@ -6979,6 +6979,27 @@ def _batch_daily_card_rows(batch):
                                   StockTransfer, BirdSale,
                                   cum_act_cache=cum_act_cache, bwt_cache=bwt_cache)
                  for e in entries]
+    for e, row in zip(entries, daily_rows):
+        # This report's own placement-day-is-Age-0 rule, recomputed fresh
+        # from the entry date rather than trusting the stored
+        # DailyEntry.age_days -- some older entries were saved before that
+        # counting rule existed and still carry a stale value (e.g. a
+        # placement-day entry stored as Age 1). Scoped to this report only;
+        # every other report/FCR/growing-charge calculation keeps reading
+        # the stored age_days as before.
+        start_date = batch.start_date or None
+        if start_date:
+            row["age"] = max((e.date - start_date).days, 0)
+            # The Std columns were looked up inside _day_record_row against
+            # the (possibly stale) stored age -- re-pointing the age without
+            # re-pointing these would show, say, Age 0 next to a day-1
+            # standard. Recomputed here so the two stay in step for this
+            # report's own display only.
+            std = _breed_standard_at(batch.breed_id, row["age"])
+            row["std_bwt"] = std.body_weight if std else None
+            row["std_fcr"] = std.fcr if std else None
+            row["std_feed_per_bird"] = std.feed_intake if std else None
+            row["std_cum_feed_per_bird"] = std.cum_feed if std else None
     for row in daily_rows:
         row["livability_pct"] = (Decimal("100") - row["cum_mort_pct"]).quantize(Decimal("0.01"))
         # Exception flag: FCR running hot against standard (>10% over) or
@@ -7192,12 +7213,14 @@ def _batch_daily_card_rows(batch):
 
     out = []
     week_no, bucket = 0, []
-    # Cum Feed and Body Weight are running totals, so a week's own figure is
-    # how much they grew during the week — this week's closing value minus
-    # the PREVIOUS week's closing value (day 0 at the very start of the
-    # batch), not minus this week's own first day, which would double-count
-    # every week's first day as already covered by the week before it.
-    prev_week_cum_feed = prev_week_std_cum_feed = prev_week_avg_bwt = prev_week_std_bwt = Decimal("0")
+    # Body Weight is a running total, so a week's own figure is how much it
+    # grew during the week — this week's closing value minus the PREVIOUS
+    # week's closing value (day 0 at the very start of the batch), not minus
+    # this week's own first day, which would double-count every week's first
+    # day as already covered by the week before it. Cum Feed's weekly row
+    # shows the running total itself (matching its own last day), not a
+    # growth figure, so it needs no such tracking.
+    prev_week_avg_bwt = Decimal("0")
     for row in daily_rows:
         out.append(row)
         bucket.append(row)
@@ -7213,37 +7236,47 @@ def _batch_daily_card_rows(batch):
             act_feed_vals = [_num(r["act_feed_per_bird"]) for r in bucket if r["act_feed_per_bird"] is not None]
             bags_vals = [r["feed_bags_today"] for r in bucket if r["feed_bags_today"] is not None]
             in_bags_vals = [r["feed_in_out_bags"] for r in bucket if r["feed_in_out_bags"] is not None]
-            # This week's own growth: this week's closing cum-feed/body-weight
-            # minus the PREVIOUS week's closing figure (0 for week 1, so its
-            # own total is simply its closing value) — every day's growth
-            # counted in exactly one week, none skipped or double-counted.
-            cur_std_cum_feed = _num(last["std_cum_feed_per_bird"])
             cur_cum_feed = _num(last["cum_feed_per_bird"])
-            week_std_cum_feed = (cur_std_cum_feed - prev_week_std_cum_feed).quantize(q2)
-            week_cum_feed = (cur_cum_feed - prev_week_cum_feed).quantize(q2)
-            week_avg_bwt, week_std_bwt = None, None
+            # Weight Gain is the week's own growth (this week's closing
+            # weighing minus the PREVIOUS week's closing weighing); Std/
+            # Actual Body Weight on the row are the closing weighing itself,
+            # same running-total convention as Cum Feed above -- these were
+            # both being set to the gain figure, so Actual duplicated
+            # Weight Gain instead of showing where the flock's weight
+            # actually stood at the end of the week.
+            week_weight_gain = None
             if not last["bwt_stale"]:
-                week_avg_bwt = (_num(last["avg_bwt"]) - prev_week_avg_bwt).quantize(q2)
-                week_std_bwt = (_num(last["std_bwt"]) - prev_week_std_bwt).quantize(q2)
+                week_weight_gain = (_num(last["avg_bwt"]) - prev_week_avg_bwt).quantize(q2)
                 prev_week_avg_bwt = _num(last["avg_bwt"])
-                prev_week_std_bwt = _num(last["std_bwt"])
-            prev_week_std_cum_feed = cur_std_cum_feed
-            prev_week_cum_feed = cur_cum_feed
+
+            # The week's own mortality rate -- its mort total over its own
+            # opening headcount, the same ratio a daily row's own "Daily %"
+            # uses (mort_today / opening). Distinct from Cum % beside it,
+            # which is the whole batch's mortality to date -- the template
+            # was reading cum_mort_pct for both columns, so a week's actual
+            # weekly rate never showed, only the running total twice over.
+            week_mort_pct = (_div(rollup["mort"] * 100, first["opening"]).quantize(q2)
+                             if first["opening"] else Decimal("0"))
 
             rollup.update({
                 "is_week_rollup": True, "week_no": week_no,
                 "week_from": first["entry_date"], "week_to": last["entry_date"],
                 "opening": first["opening"],
-                "avg_bwt": week_avg_bwt, "std_bwt": week_std_bwt,
-                "weight_gain": week_avg_bwt,
+                "mort_pct": week_mort_pct,
+                "avg_bwt": last["avg_bwt"], "std_bwt": last["std_bwt"],
+                "weight_gain": week_weight_gain,
                 "bwt_stale": last["bwt_stale"],
                 "fcr": last["fcr"], "std_fcr": last["std_fcr"], "cfcr": last["cfcr"],
                 "balance": last["balance"], "cum_mort": last["cum_mort"],
                 "cum_mort_pct": last["cum_mort_pct"], "livability_pct": last["livability_pct"],
                 "feed_stock": last["feed_stock"],
                 "cum_feed": last["cum_feed"], "age": last["age"],
-                "std_cum_feed_per_bird": week_std_cum_feed,
-                "cum_feed_per_bird": week_cum_feed,
+                # Running total as of the week's last day, matching that
+                # day's own row — not the week's own growth — so the column
+                # stays one continuous ascending sequence through the weekly
+                # rows instead of a delta that reads as a drop.
+                "std_cum_feed_per_bird": last["std_cum_feed_per_bird"],
+                "cum_feed_per_bird": cur_cum_feed.quantize(q2),
                 "std_feed_per_bird": (sum(std_feed_vals, Decimal("0")).quantize(q2)
                                      if std_feed_vals else None),
                 "act_feed_per_bird": (sum(act_feed_vals, Decimal("0")).quantize(q2)
@@ -7547,7 +7580,7 @@ def broiler_batch_daily_card_report(request):
         snapshot = {
             "farm_name": batch.broiler_farm.farm_name,
             "placed_birds": placed,
-            "placement_date": batch.start_date,
+            "placement_date": _placement_date(batch),
             "target_day": target_day,
         }
 

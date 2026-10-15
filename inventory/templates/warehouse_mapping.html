@@ -317,7 +317,19 @@ $(function () {
     loadData();
   }
   function onError(xhr) {
-    alert(xhr.responseJSON?.error || "Failed to save mapping.");
+    // A rejected $.ajax() call can land here with its error in any shape:
+    // a plain string (the common case), a DRF-style {field: [messages]}
+    // validation object, or nothing at all (a network failure/500 with no
+    // JSON body) — alert()ing the raw object directly used to show the
+    // literal text "[object Object]" instead of a useful message.
+    const err = xhr?.responseJSON?.error;
+    let message = "Failed to save mapping.";
+    if (typeof err === "string") {
+      message = err;
+    } else if (err && typeof err === "object") {
+      message = Object.values(err).flat().join(" ") || message;
+    }
+    alert(message);
   }
 
   $(document).on("click", ".delete-hatchery-mapping", function () {

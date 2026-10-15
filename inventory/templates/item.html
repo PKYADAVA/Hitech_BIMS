@@ -381,10 +381,10 @@
                 </select>
                 <div class="itl-hint">Follows the storage unit unless you choose another.</div>
               </div>
-              <div class="col-md-4" id="itl-kg-wrap" hidden>
-                <label for="kg_per_bag" class="form-label">Bag Capacity (kg)</label>
+              <div class="col-md-4" id="itl-kg-wrap">
+                <label for="kg_per_bag" class="form-label" id="itl-kg-label">Pack Capacity (kg)</label>
                 <input type="number" id="kg_per_bag" class="form-control" placeholder="e.g. 50" step="0.01" min="0">
-                <div class="itl-hint">Used to convert bags to kilograms in reports and prices.</div>
+                <div class="itl-hint">Used to convert packs to kilograms in reports and prices.</div>
               </div>
             </div>
           </div>
@@ -921,11 +921,23 @@
         let lastStorage = "";
 
         const setSelect = (selector, value) => $(selector).val(value === null || value === undefined ? "" : String(value)).trigger("change.select2");
-        const isBag = (id) => { const u = UOM_BY_ID.get(String(id || "")); return !!u && /\bbag\b/i.test(u.label); };
 
-        function refreshBagField() {
-            const show = isBag($("#storage_uom").val()) || isBag($("#consumption_uom").val()) || !!$("#kg_per_bag").val();
-            $("#itl-kg-wrap").prop("hidden", !show);
+        // Named pack units get their own name in the label ("Box Capacity",
+        // "Carton Capacity"...) so the field reads naturally for whichever
+        // unit the item is actually packed in; anything else (Kg, Litre,
+        // Piece, a custom unit with no pack word in its name) falls back to
+        // the generic "Pack Capacity" rather than guessing a wrong name.
+        const PACK_WORDS = ["bag", "box", "carton", "drum", "sack"];
+        function packWordIn(id) {
+            const u = UOM_BY_ID.get(String(id || ""));
+            if (!u) return null;
+            const label = u.label.toLowerCase();
+            return PACK_WORDS.find((w) => new RegExp(`\\b${w}\\b`).test(label)) || null;
+        }
+        function refreshBagLabel() {
+            const word = packWordIn($("#storage_uom").val()) || packWordIn($("#consumption_uom").val());
+            const label = word ? word.charAt(0).toUpperCase() + word.slice(1) : "Pack";
+            $("#itl-kg-label").text(`${label} Capacity (kg)`);
         }
 
         $("#storage_uom").on("change", function () {
@@ -933,9 +945,9 @@
             const consumption = $("#consumption_uom").val() || "";
             if (!consumption || consumption === lastStorage) setSelect("#consumption_uom", storage);
             lastStorage = storage;
-            refreshBagField();
+            refreshBagLabel();
         });
-        $("#consumption_uom").on("change", refreshBagField);
+        $("#consumption_uom").on("change", refreshBagLabel);
 
         function warehouseIds() {
             return $(".itl-wh:checked").map((_i, el) => el.value).get();
@@ -1017,7 +1029,7 @@
             setWarehouses(kept ? kept.warehouses : $(".itl-wh").map((_i, el) => el.value).get());
             $("#is_active").prop("checked", kept ? kept.active : true);
             lastStorage = $("#storage_uom").val() || "";
-            refreshBagField();
+            refreshBagLabel();
             checkDuplicate();
         }
 
@@ -1036,7 +1048,7 @@
             setWarehouses(it.warehouse);
             $("#is_active").prop("checked", it.is_active !== false);
             lastStorage = $("#storage_uom").val() || "";
-            refreshBagField();
+            refreshBagLabel();
         }
 
         function setMode(mode, code) {
