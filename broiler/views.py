@@ -7241,6 +7241,15 @@ def _batch_daily_card_rows(batch):
             week_no += 1
             last = bucket[-1]
             first = bucket[0]
+            # Body Weight, FCR and CFCR are read off a weighing, and the
+            # week's final day often has none (a flock is weighed twice a
+            # week, not daily). Reading them off `last` regardless left a
+            # whole week blank whenever its 7th day happened to be an
+            # unweighed one, discarding the real weighings taken earlier in
+            # that same week. Use the week's last ACTUAL weighing instead,
+            # falling back to `last` only when the week carries none at all
+            # (which is what bwt_stale then correctly reports).
+            weighed = next((r for r in reversed(bucket) if not r["bwt_stale"]), last)
             rollup = {k: sum((_num(r[k]) for r in bucket), Decimal("0")) for k in sum_keys}
             # Feed Intake (gm/bird) for the week: the sum of the week's 7 daily
             # intakes, same convention as every other weekly total on this
@@ -7258,9 +7267,9 @@ def _batch_daily_card_rows(batch):
             # Weight Gain instead of showing where the flock's weight
             # actually stood at the end of the week.
             week_weight_gain = None
-            if not last["bwt_stale"]:
-                week_weight_gain = (_num(last["avg_bwt"]) - prev_week_avg_bwt).quantize(q2)
-                prev_week_avg_bwt = _num(last["avg_bwt"])
+            if not weighed["bwt_stale"]:
+                week_weight_gain = (_num(weighed["avg_bwt"]) - prev_week_avg_bwt).quantize(q2)
+                prev_week_avg_bwt = _num(weighed["avg_bwt"])
 
             # The week's own mortality rate -- its mort total over its own
             # opening headcount, the same ratio a daily row's own "Daily %"
@@ -7276,10 +7285,10 @@ def _batch_daily_card_rows(batch):
                 "week_from": first["entry_date"], "week_to": last["entry_date"],
                 "opening": first["opening"],
                 "mort_pct": week_mort_pct,
-                "avg_bwt": last["avg_bwt"], "std_bwt": last["std_bwt"],
+                "avg_bwt": weighed["avg_bwt"], "std_bwt": weighed["std_bwt"],
                 "weight_gain": week_weight_gain,
-                "bwt_stale": last["bwt_stale"],
-                "fcr": last["fcr"], "std_fcr": last["std_fcr"], "cfcr": last["cfcr"],
+                "bwt_stale": weighed["bwt_stale"],
+                "fcr": weighed["fcr"], "std_fcr": weighed["std_fcr"], "cfcr": weighed["cfcr"],
                 "balance": last["balance"], "cum_mort": last["cum_mort"],
                 "cum_mort_pct": last["cum_mort_pct"], "livability_pct": last["livability_pct"],
                 "feed_stock": last["feed_stock"],
@@ -7299,7 +7308,8 @@ def _batch_daily_card_rows(batch):
                 "feed_in_out_bags": sum(in_bags_vals, Decimal("0")) if in_bags_vals else None,
                 "cum_feed_bags": last["cum_feed_bags"],
                 "closing_stock_by_type": last["closing_stock_by_type"],
-                "fcr_exception": last["fcr_exception"],
+                # Flags the same reading the FCR above came from.
+                "fcr_exception": weighed["fcr_exception"],
                 "livability_exception": last["livability_exception"],
             })
             rollup["feed_in_out_display"] = _kg_bags_display(rollup["feed_in_out"], rollup["feed_in_out_bags"])
@@ -7391,7 +7401,13 @@ def _batch_feed_reconciliation_rows(batch, as_of, horizons=(3, 7)):
     alive = placed - _num(losses["m"]) - _num(losses["c"]) - sold
     birds = alive if alive > 0 else placed
 
-    age = (as_of - batch.start_date).days if batch.start_date else None
+    # Through _placement_date, not batch.start_date directly: a batch created
+    # from a chicks placement can carry no start_date, and age=None makes
+    # _phase_feed_due give up, blanking Std g/bird on every phase row while
+    # Requirement beside it (read off the phase cap, which needs no age)
+    # still shows -- two columns from the same table disagreeing.
+    placed_on = _placement_date(batch)
+    age = (as_of - placed_on).days if placed_on else None
 
     masters = list(FeedPhaseMaster.objects.filter(status="active")
                    .select_related("breed", "bird_category")
