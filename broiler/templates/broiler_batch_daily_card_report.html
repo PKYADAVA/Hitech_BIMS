@@ -334,10 +334,10 @@
         {% if phase_names %}<th colspan="{{ phase_names|length }}">Feed Revd (+) / Trfr (−) by Type (bags)</th>{% endif %}
         <th></th>
         <th></th>
-        <th colspan="3">Feed Consumption (Kg (Bags))</th>
+        <th colspan="4">Feed Consumption (Kg (Bags))</th>
         {% if phase_names %}<th colspan="{{ phase_names|length }}">Closing Stock by Type (kg)</th>{% endif %}
         <th></th>
-        <th colspan="2"></th>
+        <th></th>
       </tr>
       <tr>
         <th class="bdc-col-date">Date</th><th class="bdc-col-age">Age</th>
@@ -356,6 +356,7 @@
         <th>Revd (+) / Trfr (−)</th>
         <th>Feed Type Consumed</th>
         <th>Daily Cons</th>
+        <th>Daily Total</th>
         <th>Total Cons</th>
         <th>Closing Stock</th>
         {% for name in phase_names %}<th>{{ name }}</th>{% endfor %}
@@ -390,6 +391,7 @@
         <td class="num bdc-fill-optional">{{ r.feed_in_out_display }}</td>
         <td class="txt bdc-fill-type"></td>
         <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.daily_total_display }}</td>
         <td class="num bdc-auto">{{ r.total_cons_display }}</td>
         <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
         {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-fill-stock {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
@@ -425,6 +427,7 @@
         <td class="num bdc-fill-optional">{{ r.feed_in_out_display }}</td>
         <td class="txt bdc-fill-type">{{ r.feed_type_consumed_display }}</td>
         <td class="num bdc-fill-daily">{{ r.daily_cons_display }}</td>
+        <td class="num bdc-auto">{{ r.daily_total_display }}</td>
         <td class="num bdc-auto">{{ r.total_cons_display }}</td>
         <td class="num bdc-auto">{{ r.closing_stock_display }}</td>
         {% for v, is_neg in r.closing_stock_by_type %}<td class="num bdc-fill-stock {% if is_neg %}text-danger{% endif %}">{{ v }}</td>{% endfor %}
@@ -433,7 +436,7 @@
       </tr>
       {% endif %}
       {% empty %}
-      <tr><td colspan="26" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
+      <tr><td colspan="27" class="text-center text-muted py-4">No daily entries recorded for this batch.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -476,6 +479,7 @@
       <div><span class="l">CFCR</span><span class="v">{% if r.bwt_stale %}-{% else %}{{ r.cfcr|floatformat:2 }}{% endif %}</span></div>
       <div><span class="l">Feed Type</span><span class="v">{{ r.feed_type_consumed_display }}</span></div>
       <div><span class="l">Daily Cons</span><span class="v">{{ r.daily_cons_display }}</span></div>
+      <div><span class="l">Daily Total</span><span class="v">{{ r.daily_total_display }}</span></div>
       <div><span class="l">Closing Stock</span><span class="v">{{ r.closing_stock_display }}</span></div>
       <div><span class="l">Livability</span><span class="v {% if r.livability_exception %}bdc-exception{% endif %}">{{ r.livability_pct|floatformat:2 }}%</span></div>
       {% if r.remarks %}<div style="grid-column:1/-1;"><span class="l">Remarks</span><span class="v">{{ r.remarks }}</span></div>{% endif %}

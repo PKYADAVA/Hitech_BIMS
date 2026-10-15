@@ -5749,6 +5749,11 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             "feed_1_bags": round(_bags(feed_1_kg, de.feed_1), 2),
             "feed_2_name": de.feed_2.description if de.feed_2_id else "", "feed_2_kg": feed_2_kg,
             "feed_2_bags": round(_bags(feed_2_kg, de.feed_2), 2),
+            # Combined across both feed slots -- on a changeover day (both
+            # fed) Feed 1/Feed 2 above only show each type's own quantity,
+            # with no single figure for how much was fed that day in total.
+            "daily_total_kg": feed_1_kg + feed_2_kg,
+            "daily_total_bags": round(_bags(feed_1_kg, de.feed_1) + _bags(feed_2_kg, de.feed_2), 2),
             "cum_feed_kg": cum_feed_kg,
             "feed_per_bird_g": round(cum_feed_kg * 1000 / placement_total, 2) if placement_total else 0,
             "balance_feed_kg": (de.feed_1_stock or 0) + (de.feed_2_stock or 0),
@@ -5778,6 +5783,8 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             "avg_weight_kg": last["avg_weight_kg"], "fcr": last["fcr"],
             "feed_1_kg": sum(r["feed_1_kg"] for r in week_rows), "feed_1_bags": sum(r["feed_1_bags"] for r in week_rows),
             "feed_2_kg": sum(r["feed_2_kg"] for r in week_rows), "feed_2_bags": sum(r["feed_2_bags"] for r in week_rows),
+            "daily_total_kg": sum(r["daily_total_kg"] for r in week_rows),
+            "daily_total_bags": sum(r["daily_total_bags"] for r in week_rows),
             "cum_feed_kg": last["cum_feed_kg"], "feed_per_bird_g": last["feed_per_bird_g"],
             "balance_feed_kg": last["balance_feed_kg"], "balance_feed_bags": last["balance_feed_bags"],
         })
@@ -7130,6 +7137,12 @@ def _batch_daily_card_rows(batch):
         slot1_qty = (_kg_bags_display(_num(e.feed_1_qty).quantize(q2), bags_1) if e.feed_1_id else "")
         slot2_qty = (_kg_bags_display(_num(e.feed_2_qty).quantize(q2), bags_2) if e.feed_2_id else "")
         row["daily_cons_display"] = " / ".join(p for p in (slot1_qty, slot2_qty) if p) or "-"
+        # On a changeover day (both slots fed), Daily Cons above shows each
+        # feed type's own quantity separately -- useful for knowing which
+        # type was fed how much, but it leaves no single combined figure for
+        # the day. Daily Total adds that: both slots summed into the one
+        # number feed_con/feed_bags_today already hold.
+        row["daily_total_display"] = _kg_bags_display(row["feed_con"], row["feed_bags_today"])
         # Feed Type Consumed: name(s) only — the quantity for each is already
         # in Daily Cons right beside it, in the same slot order.
         row["feed_type_consumed_display"] = (
@@ -7291,6 +7304,9 @@ def _batch_daily_card_rows(batch):
             })
             rollup["feed_in_out_display"] = _kg_bags_display(rollup["feed_in_out"], rollup["feed_in_out_bags"])
             rollup["daily_cons_display"] = _kg_bags_display(rollup["feed_con"], rollup["feed_bags_today"])
+            # No changeover ambiguity at week level -- the week's combined
+            # total is the same figure either column would show.
+            rollup["daily_total_display"] = rollup["daily_cons_display"]
             rollup["total_cons_display"] = _kg_bags_display(rollup["cum_feed"], rollup["cum_feed_bags"])
             rollup["closing_stock_display"] = _kg_bags_display(rollup["feed_stock"], rollup["feed_stock_bags"])
             out.append(rollup)
@@ -8315,32 +8331,34 @@ def _phase_feed_due(curve, pl, age):
     """Feed (g/bird) a phase should have delivered by `age`, and the basis it
     was read from.
 
-    The phase's Max Feed Qty is a changeover *trigger* — the total per-bird
-    feed at which the flock moves on — so comparing it to consumption
-    mid-phase always flatters the flock. What's wanted is feed due so far,
-    taken from the breed standard's cumulative curve across the phase's own
-    age band ("std"); where the breed has no curve, the cap spread evenly
-    over the band ("pro"); and for an open-ended last phase with neither, the
-    cap itself ("cap"). Returns (None, "") when there's nothing to go on.
+    Read off the Feed Phase Master's own Max Feed Qty for this phase, spread
+    evenly over the phase's age band ("pro") so a flock still mid-phase is
+    compared against how much of the phase has actually elapsed rather than
+    the phase's whole-span target — comparing it to the full cap mid-phase
+    would always flatter the flock. For an open-ended last phase the cap
+    itself is due once the phase is reached ("cap"). Only when the Master
+    carries no cap at all does this fall back to the breed standard's
+    cumulative curve across the phase's own age band ("std"). Returns
+    (None, "") when there's nothing on either source to go on.
     """
     if pl is None or age is None:
         return None, ""
     lo, hi = pl.from_age or 0, pl.to_age
     upto = age if hi is None else min(age, hi)
     if upto < lo:
-        return Decimal("0"), "std" if curve else ""
+        return Decimal("0"), "pro" if (pl.max_feed_qty or Decimal("0")) > 0 else ("std" if curve else "")
+    cap_g = (pl.max_feed_qty or Decimal("0")) * 1000
+    if cap_g > 0:
+        if hi is None:
+            return cap_g, "cap"
+        span = Decimal(hi - lo + 1)
+        elapsed = Decimal(min(upto - lo + 1, hi - lo + 1))
+        return (cap_g * elapsed / span), "pro"
     if curve:
         due = _feed_curve_at(curve, upto) - _feed_curve_at(curve, lo - 1)
         if due > 0:
             return due, "std"
-    cap_g = (pl.max_feed_qty or Decimal("0")) * 1000
-    if cap_g <= 0:
-        return None, ""
-    if hi is None:
-        return cap_g, "cap"
-    span = Decimal(hi - lo + 1)
-    elapsed = Decimal(min(upto - lo + 1, hi - lo + 1))
-    return (cap_g * elapsed / span), "pro"
+    return None, ""
 
 
 def _warehouse_feed_stock(wh_ids, item_ids, as_of):
@@ -8451,11 +8469,12 @@ def batch_wise_feed_scheduling_report(request):
     its age, phase and closing burn rate are the ones it actually had.
 
     "Scheduled to Date (cumulative intake)" is feed due so far, not the phase's
-    whole allowance — the breed standard's intake accumulated over the phase's
-    age band, where "Day's Intake" is the same curve read for today alone. See
+    whole allowance — the Feed Phase Master's own Max Feed Qty for the phase,
+    prorated by how far through the phase's age band the flock has got, where
+    "Day's Intake" is the same figure read for today alone. See
     ``_phase_feed_due`` for how it is read and what the basis marker on each row
     means. Difference is that cumulative figure minus consumption, so a positive
-    number is a flock behind its curve and a negative one is a flock ahead of
+    number is a flock behind schedule and a negative one is a flock ahead of
     it; the Phase Cap column keeps the changeover trigger itself in view.
 
     Every phase of the batch's programme is listed whatever the flock's age —
