@@ -94,24 +94,20 @@ def expense_groups(profile=None):
 
 
 def _scoped_bank_cash(user):
-    """Every BankCashMaster this user may see.
+    """Every BankCashMaster -- ``user`` is accepted but not yet used to narrow
+    this.
 
-    A row mapped to no Office (``sectors`` empty) is the master's own "All
-    Offices" meaning, so it stays visible to everyone; a row mapped to
-    specific Offices is narrowed to the ones this user is scoped to, the same
-    Web-Access setting every other picker in this form already reads through.
-    An unscoped user (``warehouses_for`` returning everything) sees every row
-    either way.
+    An attempt at scoping this by the user's own Offices (via
+    ``sectors``/``warehouses_for``) locked out a real user who held their
+    branch and warehouse directly, not through the Office Mapping that
+    ``warehouses_for`` actually reads -- the two did not agree, and the result
+    was every bank/cash account disappearing for them. ``BankCashMaster.
+    sectors`` has not been reliably kept in step with who should see a row,
+    so filtering on it is not safe yet; reverted to showing every account
+    rather than risk the same lockout again. Revisit once sectors is a
+    trustworthy signal.
     """
-    from django.db.models import Q
-
-    from user.services.scoping import warehouses_for
-
-    qs = BankCashMaster.objects.all()
-    if user is not None:
-        allowed = warehouses_for(user).values_list("pk", flat=True)
-        qs = qs.filter(Q(sectors__isnull=True) | Q(sectors__in=allowed)).distinct()
-    return qs
+    return BankCashMaster.objects.all()
 
 
 def paid_from_accounts(cash_only=True, user=None):
