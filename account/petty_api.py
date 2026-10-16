@@ -205,6 +205,11 @@ def petty_expense_form(request, id=None):
         "expense": expense,
         "today": timezone.localdate().isoformat(),
         "next_no": PettyExpense.next_expense_no(service.company()),
+        # The New Category button posts to the chart of accounts, not this
+        # form's own right -- same gate the endpoint itself already enforces
+        # (see petty_expense_category), just surfaced here too so a user
+        # without it never sees a button that would only 403 them anyway.
+        "can_add_coa": user_can(request.user, "coa", "add"),
     })
 
 

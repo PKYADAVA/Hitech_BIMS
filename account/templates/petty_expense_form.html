@@ -344,12 +344,14 @@
     <section class="pe-card">
       <header>
         <span class="pe-step">3</span> Expense Items
+        {% if can_add_coa %}
         <span class="ms-auto">
           <button type="button" class="btn btn-sm btn-outline-primary" id="pe-new-cat"
                   title="Add a category or sub category to the chart of accounts">
             <i class="fas fa-folder-plus"></i> New Category
           </button>
         </span>
+        {% endif %}
       </header>
       <div class="pe-body p-0">
         <div class="table-responsive">
@@ -1160,7 +1162,41 @@ $(function () {
     card.style.display = "";
   }
 
+  // One save at a time. Nothing stopped a second click landing while the
+  // first request was still out: the buttons stayed live for the whole
+  // round trip, so an impatient double-tap on Save Draft, or Save Draft
+  // followed by Save & Post, sent two saves for one expense. On a new
+  // expense that is two rows in the register, because the id that would
+  // have made the second one an update is only known once the first
+  // returns. Slow connections are where it bites, which is also where the
+  // second click is most tempting.
+  let saving = false;
+  // Declared with `saving`, not after save(): `let` is hoisted but not
+  // initialised, so the finally block below -- which reads it on the very
+  // first click -- hit the temporal dead zone and threw a ReferenceError
+  // out of the click handler. The buttons were never re-enabled and never
+  // visibly disabled either, because the throw landed between the two.
+  let leaving = false;
+
   async function save(post) {
+    if (saving) { return; }
+    saving = true;
+    const buttons = [el("pe-draft"), el("pe-post"), el("pe-cancel")];
+    buttons.forEach(b => { if (b) b.disabled = true; });
+    try {
+      await doSave(post);
+    } finally {
+      // Left disabled on the way out: a successful save navigates away, and
+      // re-enabling first gives a window where the page is still here and
+      // the buttons work again.
+      if (!leaving) {
+        saving = false;
+        buttons.forEach(b => { if (b) b.disabled = false; });
+      }
+    }
+  }
+
+  async function doSave(post) {
     showProblems([]);
     const url = EXPENSE_ID ? `/api/petty-expenses/${EXPENSE_ID}/save/`
                            : "/api/petty-expenses/save/";
@@ -1197,6 +1233,10 @@ $(function () {
       out.status === "Posted"
         ? " posted" + (out.voucher_no ? " as " + out.voucher_no : "") + "."
         : " saved as a draft."));
+    // Saved: there is nothing left to lose, so the unload guard below must
+    // not challenge the navigation this line is about to start.
+    touched = false;
+    leaving = true;
     window.location.href = "{% url 'petty_expense_list' %}";
   }
 

@@ -145,9 +145,11 @@
     <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#trialBalanceModal">
       <i class="fas fa-balance-scale"></i> Trial Balance
     </button>
+    {% if page_perms.add %}
     <button class="btn btn-primary btn-sm" id="new-voucher-btn">
       <i class="fas fa-plus"></i> New Voucher
     </button>
+    {% endif %}
   </div>
 </div>
 
@@ -545,6 +547,18 @@ $(document).ready(function () {
         party: {{ narration_settings.include_party|yesno:"true,false" }},
     };
 
+    // The backend already refuses Edit/Post/Cancel/Delete to a user without
+    // the matching right on this tab (WebAccessMiddleware) -- these buttons
+    // were rendered to everyone regardless, status-gated only, so a view-only
+    // user saw a full Edit/Delete row and only found out it was refused after
+    // clicking. Hidden here instead, same page_perms convention Petty Expense
+    // already uses.
+    const PERMS = {
+        add: {{ page_perms.add|yesno:"true,false" }},
+        edit: {{ page_perms.edit|yesno:"true,false" }},
+        del: {{ page_perms.delete|yesno:"true,false" }},
+    };
+
     function buildAutoNarration() {
         if (!NARR.enabled) return '';
         const voucherType = $('#voucher-type').val();
@@ -760,12 +774,16 @@ $(document).ready(function () {
         let acts = '<button class="btn btn-outline-primary btn-sm view-voucher"'
             + ' data-id="' + v.id + '" title="View"><i class="fas fa-eye"></i></button>';
         if (v.status === 'Draft') {
-            acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
-                + ' data-id="' + v.id + '" title="Edit"><i class="fas fa-pen"></i></button>'
-                + '<button class="btn btn-outline-success btn-sm post-voucher"'
-                + ' data-id="' + v.id + '" title="Post"><i class="fas fa-check"></i></button>'
-                + '<button class="btn btn-outline-danger btn-sm delete-voucher"'
-                + ' data-id="' + v.id + '" title="Delete draft"><i class="fas fa-trash"></i></button>';
+            if (PERMS.edit) {
+                acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
+                    + ' data-id="' + v.id + '" title="Edit"><i class="fas fa-pen"></i></button>'
+                    + '<button class="btn btn-outline-success btn-sm post-voucher"'
+                    + ' data-id="' + v.id + '" title="Post"><i class="fas fa-check"></i></button>';
+            }
+            if (PERMS.del) {
+                acts += '<button class="btn btn-outline-danger btn-sm delete-voucher"'
+                    + ' data-id="' + v.id + '" title="Delete draft"><i class="fas fa-trash"></i></button>';
+            }
         }
         if (v.status === 'Posted' && !v.system_generated) {
             // Edit here saves in place in one step (account.services.journal
@@ -775,13 +793,17 @@ $(document).ready(function () {
             // for something that should stay on the record but come off the
             // books. Delete is the harder one: it removes the voucher and
             // its lines entirely, same as Petty Expense's Delete.
-            acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
-                + ' data-id="' + v.id + '" title="Edit and repost"><i class="fas fa-pen"></i></button>'
-                + '<button class="btn btn-outline-danger btn-sm cancel-voucher"'
-                + ' data-id="' + v.id + '" title="Cancel"><i class="fas fa-ban"></i></button>'
-                + '<button class="btn btn-outline-danger btn-sm delete-voucher"'
-                + ' data-id="' + v.id + '" data-no="' + escapeHtml(v.voucher_no || '')
-                + '" data-status="Posted" title="Delete"><i class="fas fa-trash"></i></button>';
+            if (PERMS.edit) {
+                acts += '<button class="btn btn-outline-warning btn-sm edit-voucher"'
+                    + ' data-id="' + v.id + '" title="Edit and repost"><i class="fas fa-pen"></i></button>';
+            }
+            if (PERMS.del) {
+                acts += '<button class="btn btn-outline-danger btn-sm cancel-voucher"'
+                    + ' data-id="' + v.id + '" title="Cancel"><i class="fas fa-ban"></i></button>'
+                    + '<button class="btn btn-outline-danger btn-sm delete-voucher"'
+                    + ' data-id="' + v.id + '" data-no="' + escapeHtml(v.voucher_no || '')
+                    + '" data-status="Posted" title="Delete"><i class="fas fa-trash"></i></button>';
+            }
         }
         return '<tr>'
             + '<td><span class="jv-no">' + escapeHtml(v.voucher_no) + '</span>'
@@ -1306,11 +1328,13 @@ $(document).ready(function () {
                     <td class="text-end">${v.total_debit}</td><td class="text-end">${v.total_credit}</td><td></td></tr></tfoot>
                 </table>`);
             const actions = [];
-            if (v.status === 'Draft') actions.push(`<button class="btn btn-success post-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-check"></i> Post</button>`);
+            if (v.status === 'Draft' && PERMS.edit) actions.push(`<button class="btn btn-success post-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-check"></i> Post</button>`);
             if (v.status === 'Posted' && !v.system_generated) {
-                actions.push(`<button class="btn btn-warning edit-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-pen"></i> Edit</button>`);
-                actions.push(`<button class="btn btn-outline-danger cancel-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-ban"></i> Cancel</button>`);
-                actions.push(`<button class="btn btn-outline-danger delete-voucher" data-id="${v.id}" data-no="${escapeHtml(v.voucher_no || '')}" data-status="Posted" data-bs-dismiss="modal"><i class="fas fa-trash"></i> Delete</button>`);
+                if (PERMS.edit) actions.push(`<button class="btn btn-warning edit-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-pen"></i> Edit</button>`);
+                if (PERMS.del) {
+                    actions.push(`<button class="btn btn-outline-danger cancel-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-ban"></i> Cancel</button>`);
+                    actions.push(`<button class="btn btn-outline-danger delete-voucher" data-id="${v.id}" data-no="${escapeHtml(v.voucher_no || '')}" data-status="Posted" data-bs-dismiss="modal"><i class="fas fa-trash"></i> Delete</button>`);
+                }
             }
             $('#voucher-view-actions').html(actions.join(' ') || '<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>');
             $('#voucherViewModal').modal('show');

@@ -25,6 +25,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from account.api_views import _audit, _company, _get_account, _parse_body, MAX_PAGE_SIZE
 from account.models import FinancialYear, Voucher
 from account.services import journal
+from user.access import user_can
 
 
 def _serialize_voucher(voucher, with_lines=False, edit_count=0):
@@ -82,6 +83,11 @@ def _get_voucher(company, id):
     if voucher is None:
         raise Http404("Voucher not found")
     return voucher
+
+
+def _forbidden(action):
+    return JsonResponse(
+        {"error": f"You do not have permission to {action} vouchers."}, status=403)
 
 
 @login_required
@@ -165,6 +171,8 @@ class VoucherListCreateAPI(View):
         })
 
     def post(self, request):
+        if not user_can(request.user, "vouchers", "add"):
+            return _forbidden("add")
         data = _parse_body(request)
         company = _company(request)
         try:
@@ -194,10 +202,14 @@ class VoucherListCreateAPI(View):
 @method_decorator(login_required, name="dispatch")
 class VoucherDetailAPI(View):
     def get(self, request, id):
+        if not user_can(request.user, "vouchers", "view"):
+            return _forbidden("view")
         company = _company(request)
         return JsonResponse(_serialize_voucher(_get_voucher(company, id), with_lines=True))
 
     def put(self, request, id):
+        if not user_can(request.user, "vouchers", "edit"):
+            return _forbidden("edit")
         data = _parse_body(request)
         company = _company(request)
         voucher = _get_voucher(company, id)
@@ -236,6 +248,8 @@ class VoucherDetailAPI(View):
         return JsonResponse(_serialize_voucher(voucher, with_lines=True))
 
     def delete(self, request, id):
+        if not user_can(request.user, "vouchers", "delete"):
+            return _forbidden("delete")
         company = _company(request)
         voucher = _get_voucher(company, id)
         if voucher.status == "Cancelled":
@@ -258,7 +272,6 @@ class VoucherDetailAPI(View):
 
 
 @method_decorator(login_required, name="dispatch")
-@method_decorator(login_required, name="dispatch")
 class VoucherAttachmentAPI(View):
     """Bills and advices on a voucher: add one, or take one off a draft."""
 
@@ -266,6 +279,8 @@ class VoucherAttachmentAPI(View):
     LIMIT = 5 * 1024 * 1024
 
     def post(self, request, id, attachment_id=None):
+        if not user_can(request.user, "vouchers", "edit"):
+            return _forbidden("edit")
         from account.models import VoucherAttachment
 
         company = _company(request)
@@ -296,8 +311,11 @@ class VoucherAttachmentAPI(View):
                             status=400 if refused and not saved else 200)
 
 
+@method_decorator(login_required, name="dispatch")
 class VoucherPostAPI(View):
     def post(self, request, id):
+        if not user_can(request.user, "vouchers", "edit"):
+            return _forbidden("post")
         company = _company(request)
         voucher = _get_voucher(company, id)
         try:
@@ -312,6 +330,8 @@ class VoucherPostAPI(View):
 @method_decorator(login_required, name="dispatch")
 class VoucherCancelAPI(View):
     def post(self, request, id):
+        if not user_can(request.user, "vouchers", "delete"):
+            return _forbidden("cancel")
         data = _parse_body(request)
         company = _company(request)
         voucher = _get_voucher(company, id)
