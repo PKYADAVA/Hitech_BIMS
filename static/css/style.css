@@ -708,8 +708,15 @@ footer { margin-top: auto; }
        gaps and padding, and the sixth control needed 403 of the 390 there
        are. The 13px comes back from the five gaps and the outer padding
        rather than from any control's own size. */
+    /* flex-start left row two's 12px of slack (374px available, 362px of
+       content) stacked entirely on the right, next to the already-8px
+       padding -- a visibly bigger gap on that side than the left. Letting
+       the attendance group stretch by that same 12px (it is already the
+       one item sized by its own content rather than a fixed glyph) spreads
+       the slack into the pill instead of leaving it as dead space past the
+       last control. */
     #mainNavbar {
-      justify-content: flex-start; column-gap: 10px;
+      justify-content: flex-start; column-gap: 4px;
       padding-left: max(8px, env(safe-area-inset-left, 0px));
       padding-right: max(8px, env(safe-area-inset-right, 0px));
     }
@@ -732,7 +739,9 @@ footer { margin-top: auto; }
     }
     /* Ends the first row after the search: without it the pill and the
        first control crowd in beside the box and squeeze it back down to
-       "Sear", which is what this layout set out to fix. */
+       "Sear" (or, tried without this rule at all, the attendance group
+       and its neighbours squeeze in too and search drops to ~70px --
+       the same failure, reached a different way). */
     #mainNavbar::after {
       content: ""; order: 2; flex-basis: 100%; height: 0; margin: 0;
     }
@@ -741,37 +750,50 @@ footer { margin-top: auto; }
        pushed the six round controls onto a third row and made the bar
        123px tall; at its natural size it shares the second row with them
        and the bar is two rows again. */
-    #mainNavbar > .nav-attendance-group { order: 3; flex: 0 1 auto; min-width: 0; }
+    /* flex-grow: 1, not 0 -- row two was 12px short of the 374px it had to
+       work with, and with every item flex-start that slack piled up past
+       the last control as a gap bigger than the bar's own 8px padding on
+       the other side. The pill is the one item sized by its own content
+       rather than a fixed glyph, so it is what absorbs the row's slack. */
+    #mainNavbar > .nav-attendance-group { order: 3; flex: 1 1 auto; min-width: 0; }
     #mainNavbar > .nav-attendance-group .nav-attendance { width: auto; }
+    /* The check-in/out buttons are icon-only here (the label is already
+       hidden below the expand width) but still carry the 12px side padding
+       sized for the icon-plus-label desktop version -- 24px of padding
+       around a ~10px glyph. The full row (status pill, two buttons,
+       account, two theme toggles) needed 382px of a 374px content width;
+       this alone gives back the 8px that was missing. */
+    #mainNavbar > .nav-attendance-group .nav-attendance-btn.btn {
+      padding: 0 6px !important;
+    }
     /* The pill's own padding is what decides whether the last control fits
        beside it or drops to a row of its own: the row came to 397px against
        390 of screen. Tightening the status text and its buttons recovers
        the margin without shortening any label. */
     #mainNavbar > .nav-attendance-group .btn,
     #mainNavbar > .nav-attendance-group .nav-attendance-status {
-      padding-left: .4rem; padding-right: .4rem; font-size: .72rem;
+      padding-left: .3rem; padding-right: .3rem; font-size: .7rem;
     }
-    /* The status word is the longest thing on the row and the least
-       load-bearing -- the two buttons beside it already say what can be
-       done. Capping it leaves the controls their own spacing instead of
-       having them pressed together to make room for a label. */
+    /* The account button (.user-btn, the hamburger + initials pill) is 67px
+       at its desktop padding -- 12px to the bars, 9px between them and the
+       initials. Neither buys legibility on a phone, where the row was 36px
+       short of fitting the sixth control and this was the easiest width to
+       give back without shortening a label or shrinking a touch target. */
+    #mainNavbar .user-btn.btn {
+      padding: 3px 4px 3px 7px !important; gap: 5px;
+    }
+    /* No cap on the status. At 86px "Not Checked In" was cut to "Not
+       Checked In" with the end ellipsised, which is the one phrase on this
+       bar a person reads before deciding whether to press anything. It
+       keeps its natural width and the row wraps around it. */
     #mainNavbar > .nav-attendance-group .nav-attendance-status {
-      max-width: 86px; overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap;
     }
-    /* Six controls and the pill need more than a phone's width of row. The
-       status text is the only part that can give it up without shrinking a
-       touch target, so on a phone it drops to its dot alone and the two
-       buttons beside it still say whether checking in or out is available.
-       The cut is at 480px, not 420: a 430px handset put the text back and
-       went straight to three rows again. The full wording returns on a
-       tablet, where the row has the width for it. */
-    @media (max-width: 479.98px) {
-      #mainNavbar > .nav-attendance-group .nav-attendance-status {
-        max-width: 0; padding-left: 0 !important; padding-right: 0 !important;
-        margin: 0 !important; border: 0 !important;
-      }
-    }
+    /* The status stays readable. Collapsing it to its dot bought the row
+       enough width for all six controls, but "Checked In" / "Not Checked
+       In" is the one thing on this bar a person actually reads before
+       deciding whether to press anything -- a bar that is one row taller
+       is the cheaper price. */
     /* The layout flip stays: it switches between the top bar and the side
        rail, and that is a choice people make on a phone too. It is the
        sixth control on the row, so the room comes from the status label
