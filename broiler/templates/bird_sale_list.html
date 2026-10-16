@@ -102,12 +102,13 @@
           <div class="mb-3">
             <label class="form-label">Photo type</label>
             <select name="kind" class="form-select">
-              {% for value, label in photo_kinds %}<option value="{{ value }}"{% if value == "other" %} selected{% endif %}>{{ label }}</option>{% endfor %}
+              {% for value, label in photo_kinds %}<option value="{{ value }}"{% if value == "weighbridge" %} selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
           </div>
           <div class="mb-1">
             <label class="form-label">Photo(s)</label>
-            <input type="file" name="photos" class="form-control" accept="image/*" multiple required>
+            <input type="file" name="photos" class="form-control" accept="image/*" multiple required
+                   data-paste-drop>
             <div class="form-text">Up to 5 photos per type for this lifting.</div>
           </div>
         </div>

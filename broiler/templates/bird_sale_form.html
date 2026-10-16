@@ -211,14 +211,15 @@
           <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
             <label class="form-label mb-0 small fw-semibold" for="evidence-kind">Add a photo</label>
             <select class="form-select form-select-sm w-auto" id="evidence-kind" data-no-search>
-              {% for value, label in photo_kinds %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+              {% for value, label in photo_kinds %}<option value="{{ value }}"{% if value == "weighbridge" %} selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
             <input type="file" class="form-control form-control-sm w-auto" id="evidence-file"
-                   accept="image/*">
+                   accept="image/*" data-paste-drop="plain">
             <button type="button" class="btn btn-sm btn-outline-primary" id="evidence-add">
               <i class="fas fa-upload me-1"></i>Upload
             </button>
             <span class="small text-muted" id="evidence-msg"></span>
+            <span class="small text-muted w-100">Pick a file, drag one in, or paste a screenshot with Ctrl+V.</span>
           </div>
         {% endif %}
       </div>

@@ -106,12 +106,9 @@
         <form id="bsr-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
           <div class="flex-grow-1">
             <label class="form-label small">Add file(s)</label>
-            <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required>
+            <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required
+                   data-paste-drop>
             <div class="form-text">Bank slip, UPI screenshot or scanned cheque — more can always be added.</div>
-          </div>
-          <div>
-            <label class="form-label small">Caption (optional)</label>
-            <input type="text" name="caption" class="form-control form-control-sm" style="width:12rem">
           </div>
           <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
         </form>
@@ -154,8 +151,9 @@ $(function () {
   // thumbnail standing for the set, with the count as a small corner badge.
   function attachCell(row) {
     const files = row.attachments || [];
-    const addBtn = `<button type="button" class="bsr-add-attach bsr-attach" data-id="${row.id}" title="Payment proof"><i class="fas fa-plus"></i></button>`;
-    if (!files.length) return addBtn || '<span class="text-muted">—</span>';
+    // Adding is the Upload button in the Action column; this cell only ever
+    // shows what is already filed.
+    if (!files.length) return '<span class="text-muted">—</span>';
     const first = files[0];
     const thumb = /\.pdf($|\?)/i.test(first.name)
       ? `<span class="bsr-thumb-pdf" title="${escapeHtml(first.caption || first.name)}"><i class="fas fa-file-pdf"></i></span>`
@@ -164,7 +162,7 @@ $(function () {
               title="View ${files.length} payment proof file${files.length > 1 ? "s" : ""}">`
       + thumb
       + (files.length > 1 ? `<span class="bsr-more">+${files.length - 1}</span>` : "")
-      + `</button>` + addBtn;
+      + `</button>`;
   }
 
   let attachReceiptId = null;
@@ -245,6 +243,7 @@ $(function () {
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             <button type="button" class="btn btn-outline-secondary btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>
+            {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-attach" data-id="${row.id}" title="Payment proof"><i class="fas fa-upload"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
