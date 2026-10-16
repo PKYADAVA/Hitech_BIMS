@@ -763,7 +763,7 @@ PICKER_MASTERS = {
         "bird_sale_list", "supervisor_trip_report",
     },
     "coa": {
-        "egg_purchase_list", "general_purchase_list",
+        "egg_purchase_list", "general_purchase_list", "vouchers",
     },
     # Not sensitive, but it belongs to the Growing Charges master and a batch
     # cannot be recorded without naming one.

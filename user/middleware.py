@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 
 from .access import (MASTER_REFERENCE_URLS, PUBLIC_URL_NAMES, URLNAME_TO_TAB, derive_tab,
-                     resolve_action, user_can)
+                     picker_read_allowed, resolve_action, user_can)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,19 @@ class WebAccessMiddleware:
         # that asks for it. See MASTER_REFERENCE_URLS — writes still need the
         # master's own rights, and what comes back is still data-scoped.
         if action == "view" and self._is_reference_read(request, url_name):
+            return None
+
+        # A narrower version of the same idea for masters MASTER_REFERENCE_TABS
+        # deliberately excludes (coa, supplier, customer, ...) because they are
+        # not safe to open to anyone merely logged in. PICKER_MASTERS opens the
+        # read only to a user who holds one of the specific transaction tabs
+        # that actually asks for that master as a picker — already the rule the
+        # phone's own API enforces (api/permissions.py); the web page was never
+        # given the same exception, so a voucher-entry user without the Chart
+        # of Accounts master's own tab saw an empty account dropdown on a form
+        # that has nothing to do with managing the chart itself.
+        if (request.method in ("GET", "HEAD") and action == "view"
+                and picker_read_allowed(user, tab)):
             return None
 
         self._record(request, view_func, url_name, user, "denied", tab, action)
