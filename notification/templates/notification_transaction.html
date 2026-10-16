@@ -368,22 +368,27 @@ $(function () {
     const parts = len === 0 ? 1 : (len <= single ? 1 : Math.ceil(len / multi));
     return { len: len, parts: parts, unicode: isUnicode };
   }
-  function renderMessage(body, ctx) {
+  // The generic variables the server fills in at send time via
+  // common_context(): a row's own context deliberately carries only its
+  // document's fields (DEFAULT_CONTEXT drops the generic keys), so any
+  // preview has to supply these itself or show them as missing. Both
+  // channels read them from here -- the WhatsApp preview used the raw row
+  // context and so marked CurrentDate with a red cross on every row, while
+  // the message it would actually send resolved the date correctly.
+  function withGenerics(ctx) {
     const now = new Date();
-    const full = Object.assign({
+    return Object.assign({
       CompanyName: COMPANY_NAME, UserName: USER_NAME,
       CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
       CurrentTime: now.toTimeString().slice(0, 5),
     }, ctx);
+  }
+  function renderMessage(body, ctx) {
+    const full = withGenerics(ctx);
     return body.replace(/\{(\w+)\}/g, (m, name) => (name in full ? full[name] : m));
   }
   function renderMessageMarked(body, ctx) {
-    const now = new Date();
-    const full = Object.assign({
-      CompanyName: COMPANY_NAME, UserName: USER_NAME,
-      CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
-      CurrentTime: now.toTimeString().slice(0, 5),
-    }, ctx);
+    const full = withGenerics(ctx);
     return escapeHtml(body).replace(/\{(\w+)\}/g, function (m, name) {
       const value = full[name];
       const missing = value === undefined || value === null || value === "";
@@ -415,8 +420,9 @@ $(function () {
     if (!t.parameter_map.length) {
       return `<div class="small"><code>${escapeHtml(t.template_name)}</code><br><span class="text-muted">No parameters.</span></div>`;
     }
+    const waCtx = withGenerics(r.context);
     const params = t.parameter_map.map((name, n) =>
-      `<div>${paramLabel(n + 1)} <span class="text-muted">${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
+      `<div>${paramLabel(n + 1)} <span class="text-muted">${escapeHtml(name)}:</span> ${paramValueHtml(waCtx[name])}</div>`
     ).join("");
     return `<div class="small"><code>${escapeHtml(t.template_name)}</code>${params}</div>`;
   }
