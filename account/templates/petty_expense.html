@@ -913,12 +913,25 @@ $(function () {
   const cashModal = document.getElementById("px-cash-modal")
     && new bootstrap.Modal(document.getElementById("px-cash-modal"));
 
+  // "From" is every bank plus every other cash box — a box can be topped up
+  // by a bank transfer or by moving cash in from another box, just not from
+  // itself, so whichever box "Into" currently has is left out of this list.
+  function fillCashFrom() {
+    const intoId = el("px-cash-box").value;
+    const current = el("px-cash-from").value;
+    const options = (M.banks || []).filter(b => String(b.id) !== String(intoId));
+    el("px-cash-from").innerHTML = options.map(
+      b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+    if (options.some(b => String(b.id) === String(current))) {
+      el("px-cash-from").value = current;
+    }
+  }
+
   $("#px-replenish").on("click", function () {
     const boxes = M.paid_from || [];
     el("px-cash-box").innerHTML = boxes.map(
       b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
-    el("px-cash-from").innerHTML = (M.banks || []).map(
-      b => '<option value="' + b.id + '">' + escapeHtml(b.label) + '</option>').join("");
+    fillCashFrom();
     el("px-cash-date").value = new Date().toISOString().slice(0, 10);
     el("px-cash-ref").value = "";
     el("px-cash-remark").value = "";
@@ -930,6 +943,7 @@ $(function () {
     // What the box is short of its float, offered rather than imposed.
     const chosen = el("px-cash-box").value;
     const row = (lastCards.cash || []).find(c => String(c.id) === String(chosen));
+    fillCashFrom();
     if (!row) { el("px-cash-note").textContent = ""; return; }
     el("px-cash-amount").value = row.top_up > 0 ? row.top_up.toFixed(2) : "";
     el("px-cash-note").textContent = row.float_amount

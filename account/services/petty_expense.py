@@ -93,7 +93,28 @@ def expense_groups(profile=None):
     ]
 
 
-def paid_from_accounts(cash_only=True):
+def _scoped_bank_cash(user):
+    """Every BankCashMaster this user may see.
+
+    A row mapped to no Office (``sectors`` empty) is the master's own "All
+    Offices" meaning, so it stays visible to everyone; a row mapped to
+    specific Offices is narrowed to the ones this user is scoped to, the same
+    Web-Access setting every other picker in this form already reads through.
+    An unscoped user (``warehouses_for`` returning everything) sees every row
+    either way.
+    """
+    from django.db.models import Q
+
+    from user.services.scoping import warehouses_for
+
+    qs = BankCashMaster.objects.all()
+    if user is not None:
+        allowed = warehouses_for(user).values_list("pk", flat=True)
+        qs = qs.filter(Q(sectors__isnull=True) | Q(sectors__in=allowed)).distinct()
+    return qs
+
+
+def paid_from_accounts(cash_only=True, user=None):
     """The accounts a petty expense can be paid from, with each one's balance.
 
     Cash only by default, because that is what "petty" means here: money out
@@ -102,7 +123,7 @@ def paid_from_accounts(cash_only=True):
     not from a column kept here: one place holds what an account is worth, and
     it is the place the reports read.
     """
-    masters = BankCashMaster.objects.all().order_by("-is_cash", "code")
+    masters = _scoped_bank_cash(user).order_by("-is_cash", "code")
     if cash_only:
         masters = masters.filter(is_cash=True)
     rows = []
@@ -160,7 +181,7 @@ def cash_health(master=None):
 @transaction.atomic
 def replenish(box, amount, from_account, date=None, user=None, reference="",
               remark=""):
-    """Put money into a cash box from a bank account.
+    """Put money into a cash box, from a bank account or another cash box.
 
     A contra, because nothing is earned or spent by moving your own money
     between your own accounts -- and posted through the same engine as
@@ -171,9 +192,8 @@ def replenish(box, amount, from_account, date=None, user=None, reference="",
         raise PettyExpenseError("Say how much is going into the box.")
     if not _is_cash(box):
         raise PettyExpenseError(f"{box} is not a cash box.")
-    if _is_cash(from_account):
-        raise PettyExpenseError("Cash is drawn from a bank account, not from "
-                                "another cash box.")
+    if from_account.pk == box.pk:
+        raise PettyExpenseError("A box cannot be topped up from itself.")
 
     to_ledger = ledger_for_bank_cash(box)
     from_ledger = ledger_for_bank_cash(from_account)
@@ -202,12 +222,16 @@ def replenish(box, amount, from_account, date=None, user=None, reference="",
         raise PettyExpenseError("  ".join(exc.messages)) from exc
 
 
-def bank_accounts():
-    """The accounts a cash box can be replenished from."""
+def bank_accounts(user=None):
+    """The accounts a cash box can be replenished from: every bank, plus every
+    other cash-in-hand/petty cash account this user may see — a box can be
+    topped up by a bank transfer or by moving cash in from another box, just
+    not from itself (the caller excludes the box being topped up from this
+    same list)."""
     rows = []
-    for master in BankCashMaster.objects.filter(is_cash=False).order_by("code"):
+    for master in _scoped_bank_cash(user).order_by("-is_cash", "code"):
         ledger = ledger_for_bank_cash(master)
-        rows.append({"id": master.pk, "label": str(master),
+        rows.append({"id": master.pk, "label": str(master), "is_cash": master.is_cash,
                      "balance": (float(journal.account_balance(ledger))
                                  if ledger else None)})
     return rows

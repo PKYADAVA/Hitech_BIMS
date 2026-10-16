@@ -150,12 +150,12 @@ def _masters(user=None):
         # Every group, empty ones included: this is what the New Category
         # box offers as a parent, and a category just made has nothing in it.
         "groups": service.expense_groups(),
-        "paid_from": service.paid_from_accounts(),
+        "paid_from": service.paid_from_accounts(user=user),
         # Cash only, at both ends: a petty expense is money leaving the cash
         # box, so the pickers offer nothing that could take it elsewhere.
         "modes": service.cash_payment_modes(),
         "mode_accounts": payment_mode_map("payment"),
-        "banks": service.bank_accounts(),
+        "banks": service.bank_accounts(user=user),
         "uoms": list(UnitOfMeasurement.objects.order_by("name").values("id", "name")),
         # The years the register can actually show, so the picker offers no
         # year that would come back empty. This year is always offered.
@@ -593,11 +593,15 @@ def petty_cash_replenish(request):
     if not user_can(request.user, "petty_expense_list", "add"):
         return JsonResponse({"error": "Not permitted."}, status=403)
     data = json.loads(request.body.decode("utf-8") or "{}")
-    box = get_object_or_404(BankCashMaster, pk=_int(data.get("box")))
-    bank = get_object_or_404(BankCashMaster, pk=_int(data.get("from")))
+    # Scoped the same way the picker that offered these options was, so a
+    # request built by hand cannot reach an account outside this user's
+    # Offices just because its id is guessable.
+    scoped = service._scoped_bank_cash(request.user)
+    box = get_object_or_404(scoped, pk=_int(data.get("box")))
+    source = get_object_or_404(scoped, pk=_int(data.get("from")))
     try:
         voucher = service.replenish(
-            box, _dec(data.get("amount")), bank,
+            box, _dec(data.get("amount")), source,
             date=parse_date(data.get("date") or "") or timezone.localdate(),
             user=request.user, reference=_reference(data.get("reference"), 100),
             remark=_sentence(data.get("remark"), 255))
