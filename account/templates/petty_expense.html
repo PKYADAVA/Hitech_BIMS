@@ -84,7 +84,20 @@
     background-position: right .1rem center; }
   .px-filter .form-select:focus, .px-filter .form-control:focus { box-shadow: none; }
   .px-pair { grid-column: span 2; }
-  @media (max-width: 575.98px) { .px-pair { grid-column: span 1; } }
+  /* On a phone the auto-fit above still fits two 148px columns into ~390px,
+     which is too narrow for a control with a label beside it -- the date
+     range lost its second date to the ellipsis ("16-1..."). One filter per
+     row below sm, the way every other list page in the ERP stacks, and the
+     pair keeps its full width rather than collapsing to one column just
+     where it has least room. */
+  @media (max-width: 575.98px) {
+    .px-filters { grid-template-columns: 1fr; }
+    .px-pair { grid-column: span 1; }
+    .px-filter { padding: .4rem .5rem; }
+    .px-filter label { font-size: .7rem; }
+    .px-filter .form-select, .px-filter .form-control { font-size: .95rem; }
+    .px-two .form-control { font-size: .9rem; }
+  }
   .px-two { display: flex; align-items: center; gap: .3rem; }
   .px-two .form-control { font-size: .76rem; padding: 0; }
   .px-two-sep { font-size: .68rem; color: var(--text-muted); }

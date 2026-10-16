@@ -1469,3 +1469,334 @@ window.loadOptions = function (select, url, data, options) {
     window.location.href = wrap.dataset.pageUrl;
   });
 })();
+
+/* Paste and drag-drop for file inputs.
+ *
+ * A file input opts in with data-paste-drop. The browse button keeps
+ * working exactly as before; this only adds two more ways to put the same
+ * files into it:
+ *
+ *   - paste (Ctrl+V) anywhere on the page while the input's card or modal
+ *     is the thing on screen, which is how a screenshot gets attached
+ *     without first being saved to disk;
+ *   - dropping files onto the input or its drop zone.
+ *
+ * Both go through the input's own .files via a DataTransfer, so whatever
+ * reads the input on submit -- a form post, FormData, a change handler --
+ * sees exactly what it would have seen from the file picker, and the
+ * input's own accept/multiple attributes still decide what is allowed.
+ */
+(function () {
+  function accepts(input, file) {
+    const accept = (input.getAttribute('accept') || '').trim();
+    if (!accept) return true;
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return accept.split(',').some(function (rule) {
+      rule = rule.trim().toLowerCase();
+      if (!rule) return false;
+      if (rule.endsWith('/*')) return type.startsWith(rule.slice(0, -1));
+      if (rule.startsWith('.')) return name.endsWith(rule);
+      return type === rule;
+    });
+  }
+
+  // A pasted screenshot arrives as a blob named "image.png", so several in
+  // a row would be indistinguishable in the file list. Stamping the name
+  // keeps them apart and makes it obvious where the file came from.
+  let pasteSeq = 0;
+  function named(file) {
+    if (file.name && file.name !== 'image.png' && file.name !== 'blob') return file;
+    const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const now = new Date();
+    const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    // The counter matters: two screenshots pasted inside the same second
+    // would otherwise be handed over under one name, and a server that
+    // keys on filename would keep only the last.
+    pasteSeq += 1;
+    return new File([file], 'pasted-' + stamp + '-' + pasteSeq + '.' + ext,
+                    { type: file.type });
+  }
+
+  function addFiles(input, files) {
+    const keep = [];
+    const multiple = input.multiple;
+    // Adding to what is already there, not replacing it: pasting a second
+    // screenshot into a multi-file input should leave the first attached.
+    if (multiple) for (let i = 0; i < input.files.length; i++) keep.push(input.files[i]);
+
+    let added = 0;
+    for (let i = 0; i < files.length; i++) {
+      if (!accepts(input, files[i])) continue;
+      keep.push(named(files[i]));
+      added++;
+      if (!multiple) break;
+    }
+    if (!added) return 0;
+
+    const dt = new DataTransfer();
+    (multiple ? keep : keep.slice(-1)).forEach(function (f) { dt.items.add(f); });
+    input.files = dt.files;
+    // Anything already listening for a pick hears this the same way.
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return added;
+  }
+
+  function flash(input, text) {
+    let note = input.parentNode.querySelector('.paste-drop-note');
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'form-text paste-drop-note';
+      input.parentNode.appendChild(note);
+    }
+    note.textContent = text;
+    note.style.color = '#1a7f45';
+    clearTimeout(note._t);
+    note._t = setTimeout(function () { note.textContent = ''; }, 4000);
+  }
+
+  /* Thumbnails of whatever is currently on the input.
+   *
+   * A file input shows "3 files" and nothing else, which is no use when the
+   * files arrived by paste: a screenshot has no meaningful name to check,
+   * so the only way to know the right thing is attached is to see it.
+   * Rebuilt from input.files on every change, so it is as true for a file
+   * picked through Browse as for one pasted or dropped.
+   *
+   * Each thumbnail carries a remove button. Removing rewrites input.files
+   * through a DataTransfer, the same way files are added -- which is the
+   * only way to drop one file from a selection, since a file input cannot
+   * be edited in place.
+   */
+  function fileIcon(file) {
+    const type = (file.type || '').toLowerCase();
+    if (type === 'application/pdf') return 'fa-file-pdf';
+    if (type.startsWith('video/')) return 'fa-file-video';
+    if (type.startsWith('audio/')) return 'fa-file-audio';
+    if (/sheet|excel|csv/.test(type)) return 'fa-file-excel';
+    if (/word|document/.test(type)) return 'fa-file-word';
+    return 'fa-file';
+  }
+
+  function humanSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function removeAt(input, index) {
+    const dt = new DataTransfer();
+    for (let i = 0; i < input.files.length; i++) {
+      if (i !== index) dt.items.add(input.files[i]);
+    }
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function clearAll(input) {
+    // An empty DataTransfer rather than input.value = '': both empty the
+    // input, but this keeps the one path for changing a selection, and the
+    // change event below is what redraws the thumbnails.
+    input.files = new DataTransfer().files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function renderThumbs(input) {
+    let wrap = input.parentNode.querySelector('.paste-drop-thumbs');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'paste-drop-thumbs';
+      // After the input, but before the hint text and the flash note, so
+      // the order reads: control, what is attached, then guidance.
+      input.parentNode.insertBefore(wrap, input.nextSibling);
+    }
+    // Object URLs hold the file in memory until revoked, and this redraws
+    // on every change.
+    (wrap._urls || []).forEach(function (u) { URL.revokeObjectURL(u); });
+    wrap._urls = [];
+    wrap.innerHTML = '';
+    if (!input.files.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+
+    Array.prototype.forEach.call(input.files, function (file, i) {
+      const cell = document.createElement('div');
+      cell.className = 'paste-drop-thumb';
+      cell.title = file.name + ' — ' + humanSize(file.size);
+
+      if ((file.type || '').startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        wrap._urls.push(url);
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = file.name;
+        cell.appendChild(img);
+      } else {
+        const ic = document.createElement('i');
+        ic.className = 'fas ' + fileIcon(file);
+        cell.appendChild(ic);
+      }
+
+      const cap = document.createElement('span');
+      cap.className = 'paste-drop-thumb-name';
+      cap.textContent = file.name;
+      cell.appendChild(cap);
+
+      const del = document.createElement('button');
+      del.type = 'button';           // never submits the form it sits in
+      del.className = 'paste-drop-thumb-x';
+      del.setAttribute('aria-label', 'Remove ' + file.name);
+      del.innerHTML = '&times;';
+      del.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        removeAt(input, i);
+      });
+      cell.appendChild(del);
+
+      wrap.appendChild(cell);
+    });
+
+    // Only worth offering once there is more than one file to clear --
+    // with a single thumbnail its own x is right there and says the same
+    // thing.
+    if (input.files.length > 1) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'paste-drop-clear';
+      clear.textContent = 'Clear all (' + input.files.length + ')';
+      clear.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearAll(input);
+      });
+      wrap.appendChild(clear);
+    }
+  }
+
+  // The drop target, widest first. closest() with a comma list returns the
+  // NEAREST match, which inside a dialog is the <form> -- so a file dropped
+  // on the dialog's own padding or header landed nowhere, and the highlight
+  // only ever covered the form. A dialog is the thing on screen, so the
+  // whole of it takes the drop.
+  function zoneFor(input) {
+    return input.closest('.modal-content')
+        || input.closest('form, .card')
+        || input.parentNode;
+  }
+
+  /* The visible drop zone.
+   *
+   * A bare file input reads "Choose Files / No file chosen", which says
+   * nothing about dragging or pasting -- the two ways most of these files
+   * actually arrive. The input is kept (it is still what carries the files
+   * and what the form submits) but moved out of sight behind a panel that
+   * states all three routes and is clickable across its whole area.
+   *
+   * Opt out with data-paste-drop="plain" where the inline control has to
+   * stay, such as a toolbar row with no room for a panel.
+   */
+  function buildZoneUI(input) {
+    if (input.dataset.pasteDrop === 'plain') return null;
+    const panel = document.createElement('div');
+    panel.className = 'paste-drop-panel';
+    panel.innerHTML =
+      '<i class="fas fa-cloud-arrow-up"></i>' +
+      '<span class="paste-drop-panel-main">Drag files here or <u>click to browse</u></span>' +
+      '<span class="paste-drop-panel-sub">or paste a screenshot with Ctrl+V</span>';
+    input.parentNode.insertBefore(panel, input);
+    input.classList.add('paste-drop-hidden-input');
+    // Clicking the panel opens the same picker the input would.
+    panel.addEventListener('click', function () { input.click(); });
+    // Keyboard: the panel stands in for the input, so it has to be reachable
+    // and operable without a mouse.
+    panel.tabIndex = 0;
+    panel.setAttribute('role', 'button');
+    panel.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+    return panel;
+  }
+
+  function wire(input) {
+    if (input._pasteDropWired) return;
+    input._pasteDropWired = true;
+
+    input._panel = buildZoneUI(input);
+
+    // One listener covers every route in: Browse fires change natively,
+    // and paste/drop fire it through addFiles().
+    input.addEventListener('change', function () { renderThumbs(input); });
+    renderThumbs(input);
+    // A form reset (Bootstrap's modals reset theirs on close) empties the
+    // input without firing change, which would leave stale thumbnails
+    // behind for the next time the dialog opens.
+    const owner = input.form;
+    if (owner) {
+      owner.addEventListener('reset', function () {
+        setTimeout(function () { renderThumbs(input); }, 0);
+      });
+    }
+
+    const zone = zoneFor(input);
+
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
+        zone.classList.add('paste-drop-over');
+        if (input._panel) input._panel.classList.add('paste-drop-panel-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        if (ev === 'dragleave' && zone.contains(e.relatedTarget)) return;
+        zone.classList.remove('paste-drop-over');
+        if (input._panel) input._panel.classList.remove('paste-drop-panel-over');
+      });
+    });
+    zone.addEventListener('drop', function (e) {
+      if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      const n = addFiles(input, e.dataTransfer.files);
+      if (n) flash(input, n + ' file' + (n > 1 ? 's' : '') + ' added.');
+    });
+
+    // Paste is a document-level event: it lands wherever the caret is, not
+    // on the file input, which cannot hold focus in the usual sense. Only
+    // the visible input takes it, so a page with several does not attach
+    // the same screenshot to all of them.
+    document.addEventListener('paste', function (e) {
+      if (!e.clipboardData || !e.clipboardData.files || !e.clipboardData.files.length) return;
+      const target = e.target;
+      if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName) && target.type !== 'file') return;
+      if (!input.offsetParent) return;
+      const openModal = document.querySelector('.modal.show');
+      if (openModal && !openModal.contains(input)) return;
+      if (!openModal && input.closest('.modal')) return;
+      const n = addFiles(input, e.clipboardData.files);
+      if (n) {
+        e.preventDefault();
+        flash(input, n + ' file' + (n > 1 ? 's' : '') + ' pasted.');
+      }
+    });
+  }
+
+  function wireAll(root) {
+    (root || document).querySelectorAll('input[type="file"][data-paste-drop]').forEach(wire);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    wireAll();
+    // Modals and rows that arrive after load (the evidence and attachment
+    // dialogs are rendered with the page but others are not).
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        m.addedNodes.forEach(function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.matches && n.matches('input[type="file"][data-paste-drop]')) wire(n);
+          else if (n.querySelectorAll) wireAll(n);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+})();

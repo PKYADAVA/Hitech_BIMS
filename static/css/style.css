@@ -680,6 +680,118 @@ footer { margin-top: auto; }
     height: var(--navbar-height, 56px); align-items: center;
     padding-top: 4px; padding-bottom: 4px;
   }
+  /* Below the expand width the row holds the mark, search, the attendance
+     group and four control buttons, which fit across a laptop but not a
+     phone or a portrait tablet. They wrap, but the fixed height above did
+     not grow with them, so the second row was drawn outside the bar -- over
+     the module tier beneath it. That is the overlap that showed on every
+     page at 390px and again at 768px, where a control wrapped to a row
+     ending 20px past the bar's edge.
+
+     The bar now owns the height its content needs. `auto` has to beat the
+     ID rule directly above, hence the same ID rather than a plainer
+     selector. --navbar-height still measures the FIRST row, which is what
+     the menus hung under the bar are positioned from, so those are
+     unaffected, and min-height keeps a one-row bar exactly as tall as it
+     was. */
+  #mainNavbar { height: auto; min-height: var(--navbar-height, 56px); row-gap: 4px; }
+  /* ...and the wrapped row has to look deliberate. The children carry
+     ms-auto/me-auto for the desktop row, where one auto margin pushes the
+     controls to the right edge. Once the bar wraps, every auto margin is
+     resolved again on its own line, so four 34px buttons were spread across
+     the full width at x=12, 106, 242 and 338 -- even gaps that read as a
+     broken row rather than a group. The margins are dropped below the
+     expand width and the bar lays its rows out itself: brand first, the
+     rest of the row after it, and the controls together at the end. */
+  @media (max-width: 767.98px) {
+    /* 4px gaps and a tighter right inset: row two came to 361px of content,
+       gaps and padding, and the sixth control needed 403 of the 390 there
+       are. The 13px comes back from the five gaps and the outer padding
+       rather than from any control's own size. */
+    #mainNavbar {
+      justify-content: flex-start; column-gap: 10px;
+      padding-left: max(8px, env(safe-area-inset-left, 0px));
+      padding-right: max(8px, env(safe-area-inset-right, 0px));
+    }
+    #mainNavbar > *:not(.navbar-brand) { margin-left: 0 !important; margin-right: 0 !important; }
+    /* Two rows that each do one job, rather than seven controls fighting
+       over one. The mark and the search box take the first -- the search
+       had been squeezed to "Sear" between the attendance pill and the bell,
+       which is not a search box. The attendance pill and the four round
+       controls take the second, spread across the width they now have.
+       The pill is forced onto that second row by making it wider than what
+       is left beside the search. */
+    /* The search takes the rest of the first row beside the mark, and the
+       pill and the round controls share the second. The max-width below
+       was sized for a single row that also had to hold three controls; on
+       two rows the box can have what is left beside the mark, which is the
+       difference between a search box and a field reading "Se". */
+    #mainNavbar > .nav-search {
+      display: flex !important; order: 1;
+      flex: 1 1 auto; min-width: 0; max-width: none;
+    }
+    /* Ends the first row after the search: without it the pill and the
+       first control crowd in beside the box and squeeze it back down to
+       "Sear", which is what this layout set out to fix. */
+    #mainNavbar::after {
+      content: ""; order: 2; flex-basis: 100%; height: 0; margin: 0;
+    }
+    /* The attendance group takes only the width its three buttons need.
+       Stretched to the full row it was 362px of mostly empty pill, which
+       pushed the six round controls onto a third row and made the bar
+       123px tall; at its natural size it shares the second row with them
+       and the bar is two rows again. */
+    #mainNavbar > .nav-attendance-group { order: 3; flex: 0 1 auto; min-width: 0; }
+    #mainNavbar > .nav-attendance-group .nav-attendance { width: auto; }
+    /* The pill's own padding is what decides whether the last control fits
+       beside it or drops to a row of its own: the row came to 397px against
+       390 of screen. Tightening the status text and its buttons recovers
+       the margin without shortening any label. */
+    #mainNavbar > .nav-attendance-group .btn,
+    #mainNavbar > .nav-attendance-group .nav-attendance-status {
+      padding-left: .4rem; padding-right: .4rem; font-size: .72rem;
+    }
+    /* The status word is the longest thing on the row and the least
+       load-bearing -- the two buttons beside it already say what can be
+       done. Capping it leaves the controls their own spacing instead of
+       having them pressed together to make room for a label. */
+    #mainNavbar > .nav-attendance-group .nav-attendance-status {
+      max-width: 86px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Six controls and the pill need more than a phone's width of row. The
+       status text is the only part that can give it up without shrinking a
+       touch target, so on a phone it drops to its dot alone and the two
+       buttons beside it still say whether checking in or out is available.
+       The cut is at 480px, not 420: a 430px handset put the text back and
+       went straight to three rows again. The full wording returns on a
+       tablet, where the row has the width for it. */
+    @media (max-width: 479.98px) {
+      #mainNavbar > .nav-attendance-group .nav-attendance-status {
+        max-width: 0; padding-left: 0 !important; padding-right: 0 !important;
+        margin: 0 !important; border: 0 !important;
+      }
+    }
+    /* The layout flip stays: it switches between the top bar and the side
+       rail, and that is a choice people make on a phone too. It is the
+       sixth control on the row, so the room comes from the status label
+       being capped above rather than from hiding it. */
+    #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) {
+      order: 4; flex: 0 0 auto;
+    }
+    /* The round controls keep their full size. Squeezing them to 32px to
+       win four pixels left them visibly smaller than the 34px buttons
+       beside them and clipped the account chip's initials; the width comes
+       from the status label instead, which has it to spare. */
+    #mainNavbar .theme-flip-form .btn,
+    #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) .btn {
+      min-width: 34px; min-height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    /* ...and the controls sit together under it rather than trailing off
+       the pill's right edge. */
+    #mainNavbar { align-content: flex-start; }
+  }
   #mainNavbar > a.navbar-brand { padding-top: 0 !important; padding-bottom: 0 !important; }
   #mainNavbar > a.navbar-brand { margin-right: 0 !important; min-width: 0; flex: 0 1 auto; }
   #mainNavbar > div { margin: 0 !important; flex: 0 0 auto; }
