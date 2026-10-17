@@ -124,13 +124,17 @@
     line-height: 1.3; }
   .per-text .per-cut { max-width: 240px; }
   /* The short, fixed-shape columns have nothing to wrap and read better on
-     one line: dates, numbers, the status pill, the voucher code. */
+     one line: #, Expense No., Date, numbers, the status pill, the voucher
+     code. Scoped by explicit class, not :nth-child — a hand-counted column
+     position silently went stale the first time a column was added (DETAIL_
+     HEAD gained Narration and these indices kept pointing at the columns
+     that used to be there), so the status pill's own text started wrapping
+     and bled into the columns beside it instead. */
   #per-table td.per-num, #per-table td.per-amount,
-  #per-table td:nth-child(1), #per-table td:nth-child(2),
-  #per-table td:nth-child(3), #per-table td:nth-child(10),
+  #per-table td.per-fixed,
   /* The status pill and the voucher code are single objects: "Cancelle/d"
      and "PV/2026-/27/0019" are two lines of nothing gained. */
-  #per-table td:nth-child(14), #per-table td:nth-child(16) { white-space: nowrap; }
+  #per-table td.per-status-cell, #per-table td.per-voucher-cell { white-space: nowrap; }
   .per-status { font-size: .68rem; font-weight: 600; border-radius: .35rem;
     padding: .1rem .4rem; }
   .per-draft { background: var(--neutral-subtle); color: var(--neutral-text); }
@@ -712,9 +716,9 @@ $(function () {
 
   // ---- the register, or its summary --------------------------------------
   const DETAIL_HEAD = ["#", "Expense No.", "Date", "Branch", "Farm / Location",
-                       "Category", "Sub Category", "Description", "Paid To",
-                       "Payment Mode", "Paid From", "Amount (₹)",
-                       "Balance (₹)", "Status", "Bills", "Voucher"];
+                       "Category", "Sub Category", "Description",
+                       "Paid To", "Payment Mode", "Paid From", "Amount (₹)",
+                       "Balance (₹)", "Narration", "Status", "Bills", "Voucher"];
 
   // Up to three bills shown, the rest counted; a photograph shows itself and
   // anything else shows a document mark.
@@ -743,15 +747,15 @@ $(function () {
     const body = $("#per-body").empty();
     const none = '<span class="per-none">—</span>';
     if (!data.rows.length) {
-      body.append('<tr><td colspan="15" class="per-none text-center py-3">'
+      body.append('<tr><td colspan="16" class="per-none text-center py-3">'
         + "Nothing matches these filters.</td></tr>");
     }
     data.rows.forEach(function (r, i) {
       const place = [r.farm, r.shed].filter(Boolean).join(" · ");
       body.append("<tr>"
-        + "<td>" + (i + 1) + "</td>"
-        + "<td>" + escapeHtml(r.expense_no) + "</td>"
-        + "<td>" + fmtDate(r.date) + "</td>"
+        + '<td class="per-fixed">' + (i + 1) + "</td>"
+        + '<td class="per-fixed">' + escapeHtml(r.expense_no) + "</td>"
+        + '<td class="per-fixed">' + fmtDate(r.date) + "</td>"
         + "<td>" + (escapeHtml(r.branch) || none) + "</td>"
         + '<td title="' + escapeHtml(place) + '"><span class="per-cut">' + (escapeHtml(place) || none) + "</span></td>"
         + '<td title="' + escapeHtml(r.category) + '"><span class="per-cut">' + (escapeHtml(r.category) || none) + "</span></td>"
@@ -764,10 +768,12 @@ $(function () {
         + '<td class="per-amount">' + money(r.amount) + "</td>"
         + '<td class="per-num">' + (r.balance === null || r.balance === undefined
             ? '<span class="per-none">\u2014</span>' : money(r.balance)) + "</td>"
-        + '<td><span class="per-status per-' + r.status.toLowerCase() + '">'
+        + '<td class="per-text" title="' + escapeHtml(r.narration) + '">'
+        + '<span class="per-cut">' + (escapeHtml(r.narration) || none) + "</span></td>"
+        + '<td class="per-status-cell"><span class="per-status per-' + r.status.toLowerCase() + '">'
         + escapeHtml(r.status) + "</span></td>"
         + "<td>" + bills(r.bills) + "</td>"
-        + "<td>" + (escapeHtml(r.voucher_no) || none) + "</td>"
+        + '<td class="per-voucher-cell">' + (escapeHtml(r.voucher_no) || none) + "</td>"
         + "</tr>");
     });
     $("#per-foot").html('<tr><td colspan="11">Posted total</td>'
@@ -875,7 +881,7 @@ $(function () {
     const lines = [head.join(",")].concat(data.rows.map(r => [
       r.expense_no, r.date, r.branch, r.farm, r.category, r.sub_category,
       r.description, r.paid_to, r.mode, r.paid_from, r.amount, r.balance,
-      r.status, r.attachments, r.voucher_no,
+      r.narration, r.status, r.attachments, r.voucher_no,
     ].map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")));
     const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
     const a = document.createElement("a");

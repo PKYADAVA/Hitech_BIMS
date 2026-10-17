@@ -41,12 +41,13 @@ layouts open it from the account menu.
     {% comment %}
     Check in/out status + action, right on the bar — the same reasoning as
     the sign-out button: reaching My Attendance for something done twice a
-    day was two clicks for a one-click action. Only rendered for users with
-    a linked Employee record (nav_attendance context processor), since most
-    web-only accounts have nothing to check in against.
+    day was two clicks for a one-click action. Always rendered, so the bar's
+    shape doesn't change between accounts; a user with no linked Employee
+    record sees it greyed out (has_employee below) rather than the widget
+    disappearing outright.
     {% endcomment %}
-    {% if nav_attendance is not None or request.user.employee %}
-    <div class="ms-xl-1 mt-3 mt-xl-0 mb-3 mb-xl-0 nav-attendance-group" id="navAttendanceWrap"
+    {% with has_employee=nav_attendance|default_if_none:request.user.employee %}
+    <div class="ms-xl-1 mt-3 mt-xl-0 mb-3 mb-xl-0 nav-attendance-group{% if not has_employee %} na-no-employee{% endif %}" id="navAttendanceWrap"
          data-csrf="{{ csrf_token }}"
          data-checkin-url="{% url 'self_attendance_check_in' %}"
          data-checkout-url="{% url 'self_attendance_check_out' %}"
@@ -55,26 +56,27 @@ layouts open it from the account menu.
          data-checked-out="{% if nav_attendance.check_out_at %}1{% else %}0{% endif %}"
          data-blocked="{% if nav_open_prior_day and not nav_attendance.check_in_at %}1{% else %}0{% endif %}">
       <button type="button" class="nav-attendance-btn nav-checkin-btn btn" id="navCheckInBtn"
-              {% if nav_attendance.check_in_at or nav_open_prior_day and not nav_attendance.check_in_at %}disabled{% endif %}
-              title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR first{% elif nav_attendance.check_in_at %}Already checked in{% else %}Tap to check in{% endif %}">
+              {% if not has_employee or nav_attendance.check_in_at or nav_open_prior_day and not nav_attendance.check_in_at %}disabled{% endif %}
+              title="{% if not has_employee %}Your account has no linked Employee record — contact HR{% elif nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR first{% elif nav_attendance.check_in_at %}Already checked in{% else %}Tap to check in{% endif %}">
         <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
         <span class="nav-attendance-label">Check In</span>
       </button>
       <button type="button" class="nav-attendance-btn nav-checkout-btn btn" id="navCheckOutBtn"
-              {% if not nav_attendance.check_in_at or nav_attendance.check_out_at %}disabled{% endif %}
-              title="{% if nav_attendance.check_out_at %}Already checked out{% elif not nav_attendance.check_in_at %}Check in first{% else %}Tap to check out{% endif %}">
+              {% if not has_employee or not nav_attendance.check_in_at or nav_attendance.check_out_at %}disabled{% endif %}
+              title="{% if not has_employee %}Your account has no linked Employee record — contact HR{% elif nav_attendance.check_out_at %}Already checked out{% elif not nav_attendance.check_in_at %}Check in first{% else %}Tap to check out{% endif %}">
         <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
         <span class="nav-attendance-label">Check Out</span>
       </button>
-      <span class="nav-attendance-status{% if nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
-            title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
-        {% if nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
+      <span class="nav-attendance-status{% if not has_employee %} na-no-employee{% elif nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
+            title="{% if not has_employee %}No Employee record linked to your account{% elif nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
+        {% if not has_employee %}Not Linked
+        {% elif nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
         {% elif nav_attendance.check_out_at %}{{ nav_status.status }}
         {% elif nav_attendance.check_in_at %}Checked In
         {% else %}Not Checked In{% endif %}
       </span>
     </div>
-    {% endif %}
+    {% endwith %}
 
     <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
     {% include "_alerthub_bell.html" %}
@@ -1155,10 +1157,11 @@ layouts open it from the account menu.
 {% endif %}
 
 {% if request.user.is_authenticated %}
-{% if nav_attendance is not None or request.user.employee %}
 <!-- Leaflet for the location step's map preview below. Not loaded globally
      in base.html (most pages never draw a map), so it rides along with this
-     include instead — present on every page, same as the widget it serves. -->
+     include instead — present on every page, same as the widget it serves.
+     The widget itself is now always rendered (greyed out with no linked
+     Employee record), so this no longer gates on that too. -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -1276,7 +1279,6 @@ layouts open it from the account menu.
     </div>
   </div>
 </div>
-{% endif %}
 
 {% if request.user.is_authenticated %}
 <!-- Profile, as a modal: opened from the user menu on any page and closed on

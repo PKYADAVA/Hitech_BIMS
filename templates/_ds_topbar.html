@@ -29,10 +29,12 @@ its own light-ground styling for the same components.
     {% comment %}
     Check in/out, right on the bar — same widget and the same IDs as the top
     navbar's (main_top_navbar.html), so static/js/main.js drives both from
-    one block. Only rendered for users with a linked Employee record.
+    one block. Always rendered, so the bar's shape doesn't change between
+    accounts; a user with no linked Employee record sees it greyed out
+    (has_employee below) rather than the widget disappearing outright.
     {% endcomment %}
-    {% if nav_attendance is not None or request.user.employee %}
-    <div id="navAttendanceWrap" class="nav-attendance-group"
+    {% with has_employee=nav_attendance|default_if_none:request.user.employee %}
+    <div id="navAttendanceWrap" class="nav-attendance-group{% if not has_employee %} na-no-employee{% endif %}"
          data-csrf="{{ csrf_token }}"
          data-checkin-url="{% url 'self_attendance_check_in' %}"
          data-checkout-url="{% url 'self_attendance_check_out' %}"
@@ -41,26 +43,27 @@ its own light-ground styling for the same components.
          data-checked-out="{% if nav_attendance.check_out_at %}1{% else %}0{% endif %}"
          data-blocked="{% if nav_open_prior_day and not nav_attendance.check_in_at %}1{% else %}0{% endif %}">
       <button type="button" class="ds-attendance-btn nav-checkin-btn btn" id="navCheckInBtn"
-              {% if nav_attendance.check_in_at or nav_open_prior_day and not nav_attendance.check_in_at %}disabled{% endif %}
-              title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR first{% elif nav_attendance.check_in_at %}Already checked in{% else %}Tap to check in{% endif %}">
+              {% if not has_employee or nav_attendance.check_in_at or nav_open_prior_day and not nav_attendance.check_in_at %}disabled{% endif %}
+              title="{% if not has_employee %}Your account has no linked Employee record — contact HR{% elif nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR first{% elif nav_attendance.check_in_at %}Already checked in{% else %}Tap to check in{% endif %}">
         <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
         <span class="nav-attendance-label">Check In</span>
       </button>
       <button type="button" class="ds-attendance-btn nav-checkout-btn btn" id="navCheckOutBtn"
-              {% if not nav_attendance.check_in_at or nav_attendance.check_out_at %}disabled{% endif %}
-              title="{% if nav_attendance.check_out_at %}Already checked out{% elif not nav_attendance.check_in_at %}Check in first{% else %}Tap to check out{% endif %}">
+              {% if not has_employee or not nav_attendance.check_in_at or nav_attendance.check_out_at %}disabled{% endif %}
+              title="{% if not has_employee %}Your account has no linked Employee record — contact HR{% elif nav_attendance.check_out_at %}Already checked out{% elif not nav_attendance.check_in_at %}Check in first{% else %}Tap to check out{% endif %}">
         <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
         <span class="nav-attendance-label">Check Out</span>
       </button>
-      <span class="ds-attendance-status{% if nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
-            title="{% if nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
-        {% if nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
+      <span class="ds-attendance-status{% if not has_employee %} na-no-employee{% elif nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
+            title="{% if not has_employee %}No Employee record linked to your account{% elif nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
+        {% if not has_employee %}Not Linked
+        {% elif nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
         {% elif nav_attendance.check_out_at %}{{ nav_status.status }}
         {% elif nav_attendance.check_in_at %}Checked In
         {% else %}Not Checked In{% endif %}
       </span>
     </div>
-    {% endif %}
+    {% endwith %}
 
     {% include "_alerthub_bell.html" %}
 

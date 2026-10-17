@@ -77,7 +77,9 @@ class HomeTrackingWidgetTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertNotContains(response, "Field Team")
         self.assertNotContains(response, "home-trk-map")
-        self.assertNotContains(response, "leaflet")
+        # Leaflet still loads for the navbar's own check-in/out widget, which
+        # renders (greyed out if unlinked) for every authenticated user
+        # regardless of the tracking-dashboard tab.
 
     def test_user_granted_tracking_tab_sees_widget(self):
         group = AuthGroup.objects.create(name="Tracking Viewers")

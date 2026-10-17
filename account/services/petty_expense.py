@@ -515,6 +515,7 @@ def report(expenses, group_by="category", limit=500):
                                            else i.account.description) for i in items})),
             "sub_category": ", ".join(sorted({i.account.description for i in items})),
             "description": "; ".join(i.description for i in items if i.description),
+            "narration": expense.narration,
             "paid_to": expense.paid_to_name,
             "mode": expense.payment_mode.name if expense.payment_mode_id else "",
             "paid_from": str(expense.paid_from) if expense.paid_from_id else "",

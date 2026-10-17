@@ -752,6 +752,16 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 .ds-topbar .ds-attendance-status.na-blocked {
   background: #fbe3e3; border-color: #f0bcbc; color: #b02a2a;
 }
+/* No linked Employee record: dim the whole group rather than color it like
+   an error state (na-blocked) — there's nothing wrong, just nothing to show,
+   same visual language disabled buttons already use. */
+.ds-topbar .nav-attendance-group.na-no-employee {
+  opacity: .5;
+}
+.ds-topbar .ds-attendance-status.na-no-employee {
+  background: var(--surface-hover, #f8fafc); border-color: var(--border, #e5e7eb);
+  color: var(--text-secondary, #94a3b8); cursor: default;
+}
 .ds-topbar .ds-attendance-status.na-halfday {
   background: #ece6fa; border-color: #d9cdf0; color: #6b3fa0;
 }
