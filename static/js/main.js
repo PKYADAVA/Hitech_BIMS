@@ -1800,3 +1800,270 @@ window.loadOptions = function (select, url, data, options) {
     }).observe(document.body, { childList: true, subtree: true });
   });
 })();
+
+/* Image editor: crop + rotate before upload.
+ *
+ * Any file input with data-paste-drop and data-image-edit (or just
+ * data-image-edit on its own) opens an editor modal when an image is
+ * picked, pasted, or dropped. The user can crop and rotate; on confirm
+ * the cropped blob replaces the original in the input. PDFs and
+ * non-images skip the editor.
+ *
+ * Requires Cropper.js to be loaded before this script.
+ */
+(function () {
+  if (typeof Cropper === 'undefined') return;
+
+  var modal, img, cropper, resolveEdit, rejectEdit;
+
+  function buildModal() {
+    var div = document.createElement('div');
+    div.innerHTML =
+      '<div class="modal fade" id="bimsImageEditor" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">' +
+        '<div class="modal-dialog modal-lg modal-dialog-centered">' +
+          '<div class="modal-content">' +
+            '<div class="modal-header py-2">' +
+              '<h6 class="modal-title"><i class="fas fa-crop-simple me-1"></i>Edit Image</h6>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body p-0" style="background:#1a1a2e">' +
+              '<img id="bimsEditorImg" style="display:block;max-width:100%">' +
+            '</div>' +
+            '<div class="modal-footer py-2 justify-content-between">' +
+              '<div class="d-flex gap-2">' +
+                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-rotate" data-deg="-90" title="Rotate left"><i class="fas fa-rotate-left"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-rotate" data-deg="90" title="Rotate right"><i class="fas fa-rotate-right"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-flip-h" title="Flip horizontal"><i class="fas fa-arrows-left-right"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-flip-v" title="Flip vertical"><i class="fas fa-arrows-up-down"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-reset" title="Reset"><i class="fas fa-undo"></i></button>' +
+              '</div>' +
+              '<div class="d-flex gap-2">' +
+                '<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Skip</button>' +
+                '<button type="button" class="btn btn-sm btn-primary bims-ed-apply"><i class="fas fa-check me-1"></i>Apply</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(div.firstChild);
+    modal = document.getElementById('bimsImageEditor');
+    img = document.getElementById('bimsEditorImg');
+
+    modal.querySelectorAll('.bims-ed-rotate').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (cropper) cropper.rotate(parseInt(this.dataset.deg));
+      });
+    });
+    modal.querySelector('.bims-ed-flip-h').addEventListener('click', function () {
+      if (cropper) {
+        var d = cropper.getData();
+        cropper.scaleX(d.scaleX === -1 ? 1 : -1);
+      }
+    });
+    modal.querySelector('.bims-ed-flip-v').addEventListener('click', function () {
+      if (cropper) {
+        var d = cropper.getData();
+        cropper.scaleY(d.scaleY === -1 ? 1 : -1);
+      }
+    });
+    modal.querySelector('.bims-ed-reset').addEventListener('click', function () {
+      if (cropper) cropper.reset();
+    });
+    modal.querySelector('.bims-ed-apply').addEventListener('click', function () {
+      if (!cropper) return;
+      var canvas = cropper.getCroppedCanvas({ maxWidth: 4096, maxHeight: 4096 });
+      canvas.toBlob(function (blob) {
+        if (resolveEdit) resolveEdit(blob);
+        bootstrap.Modal.getInstance(modal).hide();
+      }, 'image/jpeg', 0.92);
+    });
+    modal.addEventListener('hidden.bs.modal', function () {
+      if (cropper) { cropper.destroy(); cropper = null; }
+      if (rejectEdit) { rejectEdit('skip'); rejectEdit = null; }
+    });
+  }
+
+  function editImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!modal) buildModal();
+      resolveEdit = function (blob) {
+        resolveEdit = null; rejectEdit = null;
+        resolve(blob);
+      };
+      rejectEdit = function (reason) {
+        rejectEdit = null; resolveEdit = null;
+        reject(reason);
+      };
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        cropper = new Cropper(img, {
+          viewMode: 1,
+          autoCropArea: 1,
+          responsive: true,
+          restore: false,
+          background: false,
+        });
+      };
+      img.src = url;
+      new bootstrap.Modal(modal).show();
+    });
+  }
+
+  async function processFiles(input) {
+    var files = Array.from(input.files);
+    if (!files.length) return;
+    var changed = false;
+    var result = [];
+
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (!(f.type || '').startsWith('image/')) { result.push(f); continue; }
+      try {
+        var blob = await editImage(f);
+        var ext = 'jpg';
+        var newName = f.name.replace(/\.[^.]+$/, '') + '-edited.' + ext;
+        result.push(new File([blob], newName, { type: 'image/jpeg' }));
+        changed = true;
+      } catch (e) {
+        result.push(f);
+      }
+    }
+
+    if (changed) {
+      var dt = new DataTransfer();
+      result.forEach(function (f) { dt.items.add(f); });
+      input._skipEdit = true;
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function wireEditor(input) {
+    if (input._imageEditWired) return;
+    input._imageEditWired = true;
+
+    input.addEventListener('change', function () {
+      if (input._skipEdit) { input._skipEdit = false; return; }
+      var hasImage = Array.from(input.files).some(function (f) {
+        return (f.type || '').startsWith('image/');
+      });
+      if (hasImage) {
+        setTimeout(function () { processFiles(input); }, 100);
+      }
+    });
+  }
+
+  function wireAll(root) {
+    (root || document).querySelectorAll('input[type="file"][data-paste-drop]').forEach(wireEditor);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    wireAll();
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        m.addedNodes.forEach(function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.matches && n.matches('input[type="file"][data-paste-drop]')) wireEditor(n);
+          else if (n.querySelectorAll) wireAll(n);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+
+  window.BIMS_ImageEditor = { edit: editImage };
+})();
+
+/* Mobile paste zone.
+ *
+ * On mobile browsers, pasting an image into a file input is not possible.
+ * A contenteditable div accepts long-press → Paste on both Android and
+ * iOS, and the pasted image can be extracted from the paste event's
+ * clipboardData and fed into the nearest file input.
+ *
+ * Injected into every upload modal that has a data-paste-drop file input,
+ * only on touch devices.
+ */
+(function () {
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (!isTouch) return;
+
+  function buildPasteZone(input) {
+    if (input._mobilePasteZone) return;
+    var zone = document.createElement('div');
+    zone.className = 'mobile-paste-zone';
+    zone.contentEditable = 'true';
+    zone.setAttribute('role', 'textbox');
+    zone.setAttribute('aria-label', 'Long-press here to paste an image');
+    zone.innerHTML = '<i class="fas fa-paste"></i> Long-press here to paste an image';
+
+    zone.addEventListener('paste', function (e) {
+      e.preventDefault();
+      var items = (e.clipboardData || {}).items;
+      if (!items) return;
+      var files = [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+          var f = items[i].getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      zone.innerHTML = '<i class="fas fa-paste"></i> Long-press here to paste an image';
+      if (!files.length) return;
+
+      var dt = new DataTransfer();
+      if (input.multiple) {
+        for (var j = 0; j < input.files.length; j++) dt.items.add(input.files[j]);
+      }
+      files.forEach(function (f) {
+        var ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+        var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        var named = new File([f], 'pasted-' + stamp + '.' + ext, { type: f.type });
+        dt.items.add(named);
+      });
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+
+      var note = input.parentNode.querySelector('.paste-drop-note');
+      if (!note) {
+        note = document.createElement('div');
+        note.className = 'form-text paste-drop-note';
+        input.parentNode.appendChild(note);
+      }
+      note.textContent = files.length + ' file' + (files.length > 1 ? 's' : '') + ' pasted.';
+      note.style.color = '#1a7f45';
+      clearTimeout(note._t);
+      note._t = setTimeout(function () { note.textContent = ''; }, 4000);
+    });
+
+    zone.addEventListener('input', function () {
+      var imgs = zone.querySelectorAll('img');
+      if (imgs.length) {
+        imgs.forEach(function (i) { i.remove(); });
+      }
+      if (zone.textContent.trim() !== '') {
+        zone.innerHTML = '<i class="fas fa-paste"></i> Long-press here to paste an image';
+      }
+    });
+
+    input.parentNode.insertBefore(zone, input.nextSibling);
+    input._mobilePasteZone = zone;
+  }
+
+  function wireAll(root) {
+    (root || document).querySelectorAll('input[type="file"][data-paste-drop]').forEach(buildPasteZone);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    wireAll();
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        m.addedNodes.forEach(function (n) {
+          if (n.nodeType !== 1) return;
+          if (n.matches && n.matches('input[type="file"][data-paste-drop]')) buildPasteZone(n);
+          else if (n.querySelectorAll) wireAll(n);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+})();

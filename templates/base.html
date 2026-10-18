@@ -33,6 +33,9 @@
   <!-- Toastify -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.11.2/toastify.min.css" />
 
+  <!-- Cropper.js (image crop + rotate before upload) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" />
+
   <!-- Select2 (searchable dropdowns) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-5-theme/1.3.0/select2-bootstrap-5-theme.min.css" />
@@ -49,7 +52,7 @@
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20261018n" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20261018p" />
 
   <!-- Dark. Last, so its token values win over the light ones above, and
        harmless when the theme is light: every rule in it is behind
@@ -192,7 +195,10 @@
     window.BIMS_MAP = JSON.parse(
       document.getElementById("bims-map-config").textContent);
   </script>
-  <script src="{% static 'js/main.js' %}?v=20261016a"></script>
+  <!-- Cropper.js (image crop + rotate before upload) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+
+  <script src="{% static 'js/main.js' %}?v=20261018a"></script>
 
   <!-- Module menus, shared by the top bar and the sidebar (bump ?v= on edit) -->
   <script src="{% static 'js/nav_menu.js' %}?v=20260922f"></script>

@@ -1629,3 +1629,26 @@ button.acct-row { width: 100%; text-align: left; background: none; border: 0; }
   border-color: var(--ds-primary, #2f6fed); border-style: solid;
   background: rgba(47, 111, 237, .10);
 }
+
+/* Image editor modal — dark body so the crop area stands out. */
+#bimsImageEditor .modal-body { min-height: 200px; max-height: 70vh; overflow: hidden; }
+#bimsImageEditor .modal-footer .btn { min-width: 36px; }
+
+/* Mobile paste zone — a contenteditable div that accepts long-press paste
+   on phones, where file inputs cannot receive pasted images. */
+.mobile-paste-zone {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .6rem .75rem; margin-top: .5rem;
+  border: 1.5px dashed var(--ds-border, #c8d2dd); border-radius: .5rem;
+  background: var(--ds-surface, #f8fafc);
+  color: var(--ds-muted, #6b7785); font-size: .8rem;
+  cursor: text; -webkit-user-select: text; user-select: text;
+  min-height: 44px; outline: none;
+  transition: border-color .15s, background .15s;
+}
+.mobile-paste-zone:focus {
+  border-color: var(--ds-primary, #2f6fed);
+  background: rgba(47, 111, 237, .04);
+}
+.mobile-paste-zone > i { font-size: 1rem; opacity: .6; }
+.mobile-paste-zone img { display: none; }
