@@ -1639,8 +1639,15 @@ button.acct-row { width: 100%; text-align: left; background: none; border: 0; }
 }
 
 /* Image editor modal — dark body so the crop area stands out. */
-#bimsImageEditor .modal-body { min-height: 200px; max-height: 70vh; overflow: hidden; }
+#bimsImageEditor .modal-body { min-height: 300px; max-height: 65vh; overflow: hidden; }
 #bimsImageEditor .modal-footer .btn { min-width: 36px; }
+#bimsImageEditor .cropper-container { max-height: 65vh; }
+#bimsImageEditor .modal-footer .d-flex:first-child .btn {
+  border-color: #6c757d; color: #495057;
+}
+#bimsImageEditor .modal-footer .d-flex:first-child .btn:hover {
+  background: #6c757d; color: #fff;
+}
 
 /* Mobile paste zone — a contenteditable div that accepts long-press paste
    on phones, where file inputs cannot receive pasted images. */

@@ -1845,16 +1845,16 @@ window.loadOptions = function (select, url, data, options) {
               '<h6 class="modal-title"><i class="fas fa-crop-simple me-1"></i>Edit Image</h6>' +
               '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
             '</div>' +
-            '<div class="modal-body p-0" style="background:#1a1a2e">' +
-              '<img id="bimsEditorImg" style="display:block;max-width:100%">' +
+            '<div class="modal-body p-2" style="background:#1a1a2e;min-height:300px;max-height:65vh;overflow:hidden">' +
+              '<img id="bimsEditorImg" style="display:block;width:100%">' +
             '</div>' +
             '<div class="modal-footer py-2 justify-content-between">' +
               '<div class="d-flex gap-2">' +
-                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-rotate" data-deg="-90" title="Rotate left"><i class="fas fa-rotate-left"></i></button>' +
-                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-rotate" data-deg="90" title="Rotate right"><i class="fas fa-rotate-right"></i></button>' +
-                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-flip-h" title="Flip horizontal"><i class="fas fa-arrows-left-right"></i></button>' +
-                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-flip-v" title="Flip vertical"><i class="fas fa-arrows-up-down"></i></button>' +
-                '<button type="button" class="btn btn-sm btn-outline-light bims-ed-reset" title="Reset"><i class="fas fa-undo"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-rotate" data-deg="-90" title="Rotate left"><i class="fas fa-rotate-left"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-rotate" data-deg="90" title="Rotate right"><i class="fas fa-rotate-right"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-flip-h" title="Flip horizontal"><i class="fas fa-arrows-left-right"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-flip-v" title="Flip vertical"><i class="fas fa-arrows-up-down"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-reset" title="Reset"><i class="fas fa-undo"></i></button>' +
               '</div>' +
               '<div class="d-flex gap-2">' +
                 '<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Skip</button>' +
@@ -1870,7 +1870,27 @@ window.loadOptions = function (select, url, data, options) {
 
     modal.querySelectorAll('.bims-ed-rotate').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (cropper) cropper.rotate(parseInt(this.dataset.deg));
+        if (!cropper) return;
+        cropper.rotate(parseInt(this.dataset.deg));
+        var ct = cropper.getContainerData();
+        var cv = cropper.getCanvasData();
+        var scaleW = ct.width / cv.width;
+        var scaleH = ct.height / cv.height;
+        var scale = Math.min(scaleW, scaleH);
+        if (scale < 1) {
+          var imgData = cropper.getImageData();
+          cropper.zoomTo(imgData.width / imgData.naturalWidth * scale);
+        }
+        cv = cropper.getCanvasData();
+        cropper.setCanvasData({
+          left: (ct.width - cv.width) / 2,
+          top: (ct.height - cv.height) / 2,
+        });
+        cv = cropper.getCanvasData();
+        cropper.setCropBoxData({
+          left: cv.left, top: cv.top,
+          width: cv.width, height: cv.height,
+        });
       });
     });
     modal.querySelector('.bims-ed-flip-h').addEventListener('click', function () {
@@ -1914,18 +1934,43 @@ window.loadOptions = function (select, url, data, options) {
         reject(reason);
       };
       var url = URL.createObjectURL(file);
+      var imgReady = false;
       img.onload = function () {
-        URL.revokeObjectURL(url);
+        imgReady = true;
+        maybeInit();
+      };
+      img.src = url;
+      var modalReady = false;
+      var bsModal = new bootstrap.Modal(modal);
+      function onShown(e) {
+        if (e.target !== modal) return;
+        modal.removeEventListener('shown.bs.modal', onShown);
+        modalReady = true;
+        maybeInit();
+      }
+      modal.addEventListener('shown.bs.modal', onShown);
+      setTimeout(function () {
+        if (!modalReady) { modalReady = true; maybeInit(); }
+      }, 600);
+      bsModal.show();
+      function maybeInit() {
+        if (!imgReady || !modalReady) return;
+        if (cropper) { cropper.destroy(); cropper = null; }
         cropper = new Cropper(img, {
-          viewMode: 1,
+          viewMode: 0,
           autoCropArea: 1,
           responsive: true,
           restore: false,
-          background: false,
+          background: true,
+          guides: true,
+          center: true,
+          highlight: true,
+          cropBoxMovable: true,
+          cropBoxResizable: true,
+          toggleDragModeOnDblclick: true,
+          ready: function () { URL.revokeObjectURL(url); },
         });
-      };
-      img.src = url;
-      new bootstrap.Modal(modal).show();
+      }
     });
   }
 
