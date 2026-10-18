@@ -1641,6 +1641,25 @@ window.loadOptions = function (select, url, data, options) {
       cap.textContent = file.name;
       cell.appendChild(cap);
 
+      if ((file.type || '').startsWith('image/') && typeof Cropper !== 'undefined') {
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'paste-drop-thumb-edit';
+        edit.setAttribute('aria-label', 'Edit ' + file.name);
+        edit.innerHTML = '<i class="fas fa-crop-simple"></i>';
+        edit.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!window.BIMS_ImageEditor) return;
+          window.BIMS_ImageEditor.edit(file).then(function (blob) {
+            var newName = file.name.replace(/\.[^.]+$/, '') + '-edited.jpg';
+            var edited = new File([blob], newName, { type: 'image/jpeg' });
+            window.BIMS_ImageEditor.replaceFileAt(input, i, edited);
+          }).catch(function () {});
+        });
+        cell.appendChild(edit);
+      }
+
       const del = document.createElement('button');
       del.type = 'button';           // never submits the form it sits in
       del.className = 'paste-drop-thumb-x';
@@ -1910,68 +1929,19 @@ window.loadOptions = function (select, url, data, options) {
     });
   }
 
-  async function processFiles(input) {
-    var files = Array.from(input.files);
-    if (!files.length) return;
-    var changed = false;
-    var result = [];
-
-    for (var i = 0; i < files.length; i++) {
-      var f = files[i];
-      if (!(f.type || '').startsWith('image/')) { result.push(f); continue; }
-      try {
-        var blob = await editImage(f);
-        var ext = 'jpg';
-        var newName = f.name.replace(/\.[^.]+$/, '') + '-edited.' + ext;
-        result.push(new File([blob], newName, { type: 'image/jpeg' }));
-        changed = true;
-      } catch (e) {
-        result.push(f);
-      }
+  function replaceFileAt(input, index, newFile) {
+    var dt = new DataTransfer();
+    for (var i = 0; i < input.files.length; i++) {
+      dt.items.add(i === index ? newFile : input.files[i]);
     }
-
-    if (changed) {
-      var dt = new DataTransfer();
-      result.forEach(function (f) { dt.items.add(f); });
-      input._skipEdit = true;
-      input.files = dt.files;
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  function wireEditor(input) {
-    if (input._imageEditWired) return;
-    input._imageEditWired = true;
-
-    input.addEventListener('change', function () {
-      if (input._skipEdit) { input._skipEdit = false; return; }
-      var hasImage = Array.from(input.files).some(function (f) {
-        return (f.type || '').startsWith('image/');
-      });
-      if (hasImage) {
-        setTimeout(function () { processFiles(input); }, 100);
-      }
-    });
-  }
-
-  function wireAll(root) {
-    (root || document).querySelectorAll('input[type="file"][data-paste-drop]').forEach(wireEditor);
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    wireAll();
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        m.addedNodes.forEach(function (n) {
-          if (n.nodeType !== 1) return;
-          if (n.matches && n.matches('input[type="file"][data-paste-drop]')) wireEditor(n);
-          else if (n.querySelectorAll) wireAll(n);
-        });
-      });
-    }).observe(document.body, { childList: true, subtree: true });
-  });
-
-  window.BIMS_ImageEditor = { edit: editImage };
+  window.BIMS_ImageEditor = {
+    edit: editImage,
+    replaceFileAt: replaceFileAt,
+  };
 })();
 
 /* Mobile paste zone.

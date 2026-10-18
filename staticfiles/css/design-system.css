@@ -1582,6 +1582,14 @@ button.acct-row { width: 100%; text-align: left; background: none; border: 0; }
   font-size: .95rem; cursor: pointer;
 }
 .paste-drop-thumb-x:hover { background: #c0392b; }
+.paste-drop-thumb-edit {
+  position: absolute; top: .1rem; left: .1rem;
+  width: 18px; height: 18px; padding: 0; line-height: 16px;
+  border: 0; border-radius: 50%;
+  background: rgba(16, 24, 40, .62); color: #fff;
+  font-size: .6rem; cursor: pointer;
+}
+.paste-drop-thumb-edit:hover { background: var(--ds-primary, #2f6fed); }
 /* Clear all, shown with the thumbnails once there are two or more files.
    Aligned to the bottom of the row so it sits on the filename line rather
    than floating against the previews. */
