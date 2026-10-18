@@ -49,8 +49,8 @@ def web_access(request):
     # Anonymous requests (the login page) never get the shell: there is no
     # profile to read and no menu to show.
     from django.conf import settings
-    from .services.navigation import (nav_layout_for, role_label_for,
-                                      sidebar_for, theme_for)
+    from .services.navigation import (nav_layout_for,
+                                      role_label_for, sidebar_for, theme_for)
 
     ds_shell = False
     if user is not None and user.is_authenticated:

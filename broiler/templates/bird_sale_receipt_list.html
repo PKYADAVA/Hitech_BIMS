@@ -189,16 +189,20 @@ $(function () {
     $.getJSON(`/bird-sale-receipt/${id}/attachments/`, function (files) {
       const list = $("#bsr-attach-list");
       if (!files.length) { list.html('<div class="text-muted small">No payment proof filed yet.</div>'); return; }
-      list.html(`<div class="list-group">${files.map(f => `
-        <div class="list-group-item d-flex align-items-center justify-content-between gap-2">
-          <a href="${f.url}" target="_blank" rel="noopener" class="text-truncate">
-            <i class="fas ${/\.pdf($|\?)/i.test(f.name) ? "fa-file-pdf" : "fa-file-image"} me-1"></i>${escapeHtml(f.name)}
-            ${f.caption ? `<span class="text-muted small ms-1">— ${escapeHtml(f.caption)}</span>` : ""}
+      list.html(`<div class="row g-3">${files.map(f => {
+        const isPdf = /\.pdf($|\?)/i.test(f.name);
+        return `
+        <div class="col-6 col-md-4 text-center">
+          <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">
+            ${isPdf
+              ? `<div class="d-flex align-items-center justify-content-center rounded border bg-light" style="height:120px"><i class="fas fa-file-pdf fa-3x text-danger"></i></div>`
+              : `<img src="${escapeHtml(f.url)}" class="img-fluid rounded border" style="max-height:120px;object-fit:cover;width:100%" alt="${escapeHtml(f.caption || f.name)}">`}
           </a>
-          <span class="text-muted small text-nowrap">${escapeHtml(f.uploaded_by)} · ${escapeHtml(f.uploaded_at)}
-            {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2 bsr-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
-          </span>
-        </div>`).join("")}</div>`);
+          <div class="small text-muted mt-1">${escapeHtml(f.uploaded_by)} · ${escapeHtml(f.uploaded_at)}
+            {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 bsr-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </div>`;
+      }).join("")}</div>`);
     });
   }
   $(document).on("click", ".bsr-view-attach", function () {

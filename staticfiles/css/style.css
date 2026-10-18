@@ -717,17 +717,8 @@ footer { margin-top: auto; }
      expand width and the bar lays its rows out itself: brand first, the
      rest of the row after it, and the controls together at the end. */
   @media (max-width: 767.98px) {
-    /* 4px gaps and a tighter right inset: row two came to 361px of content,
-       gaps and padding, and the sixth control needed 403 of the 390 there
-       are. The 13px comes back from the five gaps and the outer padding
-       rather than from any control's own size. */
-    /* flex-start left row two's 12px of slack (374px available, 362px of
-       content) stacked entirely on the right, next to the already-8px
-       padding -- a visibly bigger gap on that side than the left. Letting
-       the attendance group stretch by that same 12px (it is already the
-       one item sized by its own content rather than a fixed glyph) spreads
-       the slack into the pill instead of leaving it as dead space past the
-       last control. */
+    /* space-evenly distributes the slack equally between and around all
+       items, giving the row a uniform rhythm on phone screens. */
     #mainNavbar {
       justify-content: space-evenly; column-gap: 0;
       padding-left: env(safe-area-inset-left, 0px);
@@ -916,13 +907,6 @@ footer { margin-top: auto; }
   #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) {
     order: 0;
   }
-  /* flex-grow: 1, not 0 -- with every control down to its smallest the row
-     no longer fills 390px, and every item flex-start left that slack
-     stacked as empty space past the last icon instead of spread into the
-     row. The attendance group is the one item sized by its own content
-     rather than a fixed glyph (same reasoning as the 1023.98px block
-     above), so it is what absorbs it, the same way it already does one
-     breakpoint up. */
   #mainNavbar > .nav-attendance-group { flex: 0 0 auto; justify-content: center; }
   /* Search growing takes priority over the attendance group's own slack-
      filling: once the box is open it is the one thing on the row someone
