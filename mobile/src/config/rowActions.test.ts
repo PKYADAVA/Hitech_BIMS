@@ -42,6 +42,19 @@ describe("extraRowActions", () => {
     expect(seen).toEqual([{ screen: "BirdSalePhotos", row: sale }]);
   });
 
+  it("offers End Trip to someone who may add but not edit", () => {
+    const addOnly = { add: true, edit: false, delete: false };
+    const trip = { id: 1, status: "In Progress" } as unknown as Row;
+    const actions = extraRowActions("hr-supervisor-trips", trip, nav, addOnly);
+    expect(actions.map((a) => a.key)).toEqual(["end-trip"]);
+    expect(actions[0].disabled).toBe(false);
+  });
+
+  it("withholds End Trip from someone with no add or edit", () => {
+    const trip = { id: 1, status: "In Progress" } as unknown as Row;
+    expect(extraRowActions("hr-supervisor-trips", trip, nav, readOnly)).toEqual([]);
+  });
+
   it("leaves a resource with no extra actions alone", () => {
     expect(extraRowActions("broiler-daily-entry", sale, nav, all)).toEqual([]);
   });

@@ -91,7 +91,7 @@
   </div>
 </div>
 
-<!-- Payment proof: scans/photos of the receipt's own paperwork. -->
+<!-- Payment proof: scans/photos of the receipt's own paperwork, view-only. -->
 <div class="modal fade" id="bsrAttachModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -102,18 +102,37 @@
       </div>
       <div class="modal-body">
         <div id="bsr-attach-list" class="mb-3"></div>
-        {% if page_perms.add %}
-        <form id="bsr-attach-form" class="d-flex gap-2 align-items-end flex-wrap border-top pt-3">
-          <div class="flex-grow-1">
-            <label class="form-label small">Add file(s)</label>
-            <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required
-                   data-paste-drop>
-            <div class="form-text">Bank slip, UPI screenshot or scanned cheque — more can always be added.</div>
-          </div>
-          <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
-        </form>
-        {% endif %}
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add payment proof from the office: a separate modal from the office,
+     reached only from the Action column's own Upload button. -->
+<div class="modal fade" id="bsrUploadAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-upload text-primary me-1"></i> Add Payment Proof
+          <span class="text-muted small" id="bsr-upload-title"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      {% if page_perms.add %}
+      <form id="bsr-attach-form">
+        <div class="modal-body">
+          <label class="form-label small">Add file(s)</label>
+          <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required
+                 data-paste-drop>
+          <div class="form-text">Bank slip, UPI screenshot or scanned cheque — more can always be added.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="modal-body text-muted small">You don't have permission to add payment proof.</div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -158,7 +177,7 @@ $(function () {
     const thumb = /\.pdf($|\?)/i.test(first.name)
       ? `<span class="bsr-thumb-pdf" title="${escapeHtml(first.caption || first.name)}"><i class="fas fa-file-pdf"></i></span>`
       : `<img src="${escapeHtml(first.url)}" alt="${escapeHtml(first.caption || first.name)}" title="${escapeHtml(first.caption || first.name)}" loading="lazy">`;
-    return `<button type="button" class="bsr-thumbs bsr-attach" data-id="${row.id}"
+    return `<button type="button" class="bsr-thumbs bsr-view-attach" data-id="${row.id}"
               title="View ${files.length} payment proof file${files.length > 1 ? "s" : ""}">`
       + thumb
       + (files.length > 1 ? `<span class="bsr-more">+${files.length - 1}</span>` : "")
@@ -182,12 +201,17 @@ $(function () {
         </div>`).join("")}</div>`);
     });
   }
-  $(document).on("click", ".bsr-attach", function () {
+  $(document).on("click", ".bsr-view-attach", function () {
     attachReceiptId = $(this).data("id");
     $("#bsr-attach-title").text("— " + $(this).closest("tr").find("td").eq(1).text());
-    $("#bsr-attach-form")[0]?.reset();
     loadAttachments(attachReceiptId);
     new bootstrap.Modal(document.getElementById("bsrAttachModal")).show();
+  });
+  $(document).on("click", ".bsr-upload-attach", function () {
+    attachReceiptId = $(this).data("id");
+    $("#bsr-upload-title").text("— " + $(this).closest("tr").find("td").eq(1).text());
+    $("#bsr-attach-form")[0]?.reset();
+    new bootstrap.Modal(document.getElementById("bsrUploadAttachModal")).show();
   });
   $("#bsr-attach-form").on("submit", function (e) {
     e.preventDefault();
@@ -199,8 +223,7 @@ $(function () {
       const body = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(body.error || "Upload failed.");
       window.showToast("success", body.message);
-      this.reset();
-      loadAttachments(attachReceiptId);
+      bootstrap.Modal.getInstance(document.getElementById("bsrUploadAttachModal"))?.hide();
       loadRows();
     }).catch(err => window.showToast("danger", err.message))
       .finally(() => btn.prop("disabled", false));
@@ -243,7 +266,7 @@ $(function () {
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             <button type="button" class="btn btn-outline-secondary btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>
-            {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-attach" data-id="${row.id}" title="Payment proof"><i class="fas fa-upload"></i></button>{% endif %}
+            {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add payment proof"><i class="fas fa-upload"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}

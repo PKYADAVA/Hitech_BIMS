@@ -56,11 +56,24 @@ its own light-ground styling for the same components.
       </button>
       <span class="ds-attendance-status{% if not has_employee %} na-no-employee{% elif nav_open_prior_day and not nav_attendance.check_in_at %} na-blocked{% elif nav_attendance.check_out_at %}{% if nav_status.status == 'Half Day' %} na-halfday{% elif nav_status.status == 'Late In' %} na-late{% else %} na-checked-out{% endif %}{% elif nav_attendance.check_in_at %} na-checked-in{% endif %}" id="navAttendanceStatus"
             title="{% if not has_employee %}No Employee record linked to your account{% elif nav_open_prior_day and not nav_attendance.check_in_at %}You never checked out on {{ nav_open_prior_day.date|date:'M d' }} — contact HR, then open My Attendance{% elif nav_attendance.check_out_at %}{{ nav_status.status }} today{% elif nav_attendance.check_in_at %}Checked in today{% else %}Not checked in{% endif %}">
-        {% if not has_employee %}Not Linked
+        {% comment %}
+        An icon of its own, so a phone that drops the label still shows
+        something that reads as a status rather than a bare colour dot --
+        the two buttons beside it already switch to icon-only at the same
+        width, so this one matching them is the consistent choice, not a
+        new pattern.
+        {% endcomment %}
+        <i class="fas na-status-icon
+          {% if not has_employee %}fa-link-slash
+          {% elif nav_open_prior_day and not nav_attendance.check_in_at %}fa-triangle-exclamation
+          {% elif nav_attendance.check_out_at %}fa-circle-check
+          {% elif nav_attendance.check_in_at %}fa-clock
+          {% else %}fa-circle{% endif %}" aria-hidden="true"></i>
+        <span class="na-status-label">{% if not has_employee %}Not Linked
         {% elif nav_open_prior_day and not nav_attendance.check_in_at %}Missed Checkout
         {% elif nav_attendance.check_out_at %}{{ nav_status.status }}
         {% elif nav_attendance.check_in_at %}Checked In
-        {% else %}Not Checked In{% endif %}
+        {% else %}Not Checked In{% endif %}</span>
       </span>
     </div>
     {% endwith %}
@@ -98,6 +111,7 @@ its own light-ground styling for the same components.
     holds both themes named, for choosing knowingly; this is for the switch
     someone makes twice a day when the light in the room changes, and it says
     what it will do rather than what is on: a moon means "go dark".
+
     {% endcomment %}
     <form method="post" action="{% url 'toggle_theme' %}" class="theme-flip-form">
       {% csrf_token %}

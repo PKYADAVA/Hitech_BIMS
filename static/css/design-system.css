@@ -661,6 +661,21 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
    it is capped at rather than the 280 that was left of its content width. */
 .ds-topbar-right { margin-left: auto; flex: 1 1 auto; display: flex; align-items: center;
                    justify-content: flex-end; gap: 10px; }
+/* Every pill keeps its own width rather than compressing into its neighbour
+   -- without this, the row had no wrap and no shrink protection, so on a
+   narrow phone the attendance pills and the account menu button overlapped
+   instead of crowding. The search icon is excluded here on purpose: with
+   every sibling pinned to flex-shrink:0, the row's fixed content alone
+   (search icon + burger + two attendance buttons + status + bell + power +
+   account + both theme switches) still adds up to more than a typical
+   phone's width, even with every control already at its smallest. Flexbox
+   resolves that overflow by shrinking the one item still allowed to --
+   .gs-wrap below -- but shrinking a flex item past its own minimum content
+   size pushes it negative instead of clamping at 0, which is what put the
+   search icon's box behind the burger instead of beside it. min-width:0
+   gives it a floor to shrink to instead. */
+.ds-topbar-right > *:not(.gs-wrap) { flex-shrink: 0; }
+.ds-topbar .gs-wrap { min-width: 0; }
 
 /* The search takes the free space, capped so it does not run the width of a
    wide monitor and leave the account button stranded at the far edge. */
@@ -735,7 +750,7 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 .ds-topbar .ds-attendance-btn i { font-size: .76rem; }
 
 .ds-topbar .ds-attendance-status {
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; gap: 6px;
   height: 34px; padding: 0 12px;
   border-radius: 999px; border: 1px solid var(--border, #e5e7eb);
   background: var(--surface-hover, #f8fafc);
@@ -743,6 +758,7 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   font-size: .78rem; font-weight: 600; line-height: 1; white-space: nowrap;
   cursor: pointer;
 }
+.ds-topbar .ds-attendance-status .na-status-icon { font-size: .72rem; }
 .ds-topbar .ds-attendance-status.na-checked-in {
   background: #e8f8ec; border-color: #bfe7c9; color: #1a7f37;
 }
@@ -771,6 +787,15 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
 @media (max-width: 480px) {
   .ds-topbar .ds-attendance-btn .nav-attendance-label { display: none; }
   .ds-topbar .ds-attendance-btn.btn { padding: 0 9px !important; }
+  /* The status pill still carried its full word ("Checked In", "Missed
+     Checkout"...) after the two buttons beside it had already dropped to
+     icons, so it was the one piece still wide enough to run into the
+     account menu button that follows it. Drops to its own icon the same
+     way, rather than disappearing or shrinking to a bare colour dot (which
+     read as a stray "o" with nothing in it) -- the word is still there on
+     tap, via its title, and on My Attendance, which this pill opens. */
+  .ds-topbar .ds-attendance-status { padding: 0 9px; min-width: 34px; justify-content: center; }
+  .ds-topbar .ds-attendance-status .na-status-label { display: none; }
 }
 
 /* Account handle: the menu bars and the person's initials, the pill the top
@@ -1024,6 +1049,62 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 212px); transition: margin-
   .ds-topbar .gs-wrap { flex: 1 1 auto; min-width: 0; max-width: none; }
   .ds-topbar .gs-box { min-width: 0; padding-left: 11px; }
   .ds-topbar .gs-input { min-width: 0; }
+
+  /* Collapsed to just the magnifying glass by default on a phone -- in CSS,
+     not behind a JS class, so there is no gap between first paint and the
+     script running where the full-width box could flash (or stay, if the
+     script never ran) over the menu burger beside it. _global_search.html's
+     script only ever toggles .gs-expanded on top of this; it does not add
+     the collapse itself. */
+  .ds-topbar .gs-wrap { flex: 0 0 38px; }
+  .ds-topbar .gs-wrap .gs-box { width: 38px; padding: 0; justify-content: center;
+    border-color: transparent; background: transparent; cursor: pointer; }
+  .ds-topbar .gs-wrap .gs-input,
+  .ds-topbar .gs-wrap .gs-kbd,
+  .ds-topbar .gs-wrap .gs-clear { display: none; }
+
+  /* Tapping the icon expands it back to a normal input; it stays expanded
+     once there is text or the input is focused, so a search in progress
+     never collapses under the reader. It grows in the row rather than
+     opening as an overlay: an overlay hid every icon on the bar while
+     searching, which is a worse trade than a tighter row. Every other
+     control past the search is already flex-shrink: 0 (set above, on
+     .ds-topbar-right > *:not(.gs-wrap)); .gs-wrap is the one item that
+     isn't, so once it claims flex-grow it is the only thing in the row
+     that can still give width back. */
+  .ds-topbar .gs-wrap.gs-expanded { flex: 1 1 auto; min-width: 38px; }
+  .ds-topbar .gs-wrap.gs-expanded .gs-box { width: 100%; padding: 2px 11px;
+    border-color: #ced4da; background: #fff; cursor: text; }
+  .ds-topbar .gs-wrap.gs-expanded .gs-input { display: block; }
+  .ds-topbar .gs-wrap.gs-expanded.has-text .gs-clear { display: block; }
+  /* The one other item allowed to give width back once search is open: the
+     status pill (which only ever showed a dot-sized colour cue at this
+     width anyway) steps aside first, same as the top-navbar layout's
+     attendance group giving its open-state slack back to search first. */
+  .ds-topbar:has(.gs-wrap.gs-expanded) .ds-attendance-status { display: none; }
+}
+
+/* Below 768px the bar's fixed controls -- search icon, burger, two
+   attendance buttons, status, bell, sign-out, theme, layout and the account
+   button -- add up to more than the screen even with every one of them
+   already at its smallest, so every control that still has spare padding
+   or gap gives a little of it up here. Nothing is hidden: the row is
+   tighter, not shorter. */
+@media (max-width: 767.98px) {
+  .ds-topbar { gap: 6px; padding: 0 8px; }
+  .ds-topbar-right { gap: 5px; }
+  .ds-topbar .ds-attendance-btn.btn,
+  .ds-topbar .ds-attendance-status { padding: 0 7px !important; }
+  .ds-topbar #ahBellWrap .ah-bell-btn.btn,
+  .ds-topbar .ds-power-btn { width: 30px; height: 30px; }
+  .ds-topbar .theme-flip { width: 30px; }
+  /* The bars glyph beside the avatar said "this opens a menu" on a desktop
+     pointer, where the avatar alone could be mistaken for a profile link;
+     on a phone, where every other control here is already down to its bare
+     icon, the avatar reads the same way on its own and the bars are the one
+     piece of this button spared nowhere else. */
+  .ds-topbar .ds-user-btn.btn { padding: 2px !important; gap: 0; }
+  .ds-topbar .ds-user-bars { display: none; }
 }
 
 /* The shell's own header replaces the navbar's spacing, so the first block on

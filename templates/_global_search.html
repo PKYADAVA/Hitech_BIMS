@@ -87,7 +87,32 @@ wrapper, so including this twice on one page is inert rather than broken.
     var input = document.getElementById('gs-input');
     var panel = document.getElementById('gs-panel');
     var clear = document.getElementById('gs-clear');
+    var box = wrap.querySelector('.gs-box');
     var timer = null, token = 0, active = -1;
+
+    // On a phone, in either layout, the search starts as just the icon --
+    // in CSS by default, so there is nothing for this script to race
+    // against on first paint. A tap adds .gs-expanded to open it in place
+    // and focuses the input; it only drops back once empty and blurred,
+    // never mid-search.
+    var collapsible = window.matchMedia('(max-width: 767.98px)').matches
+                    && (wrap.closest('.ds-topbar') || wrap.closest('.nav-search'));
+    if (collapsible) {
+      box.addEventListener('click', function (e) {
+        if (!wrap.classList.contains('gs-expanded')) {
+          e.preventDefault();
+          wrap.classList.add('gs-expanded');
+          input.focus();
+        }
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (!input.value.trim() && !wrap.classList.contains('is-open')) {
+            wrap.classList.remove('gs-expanded');
+          }
+        }, 150);
+      });
+    }
 
     function items() { return panel.querySelectorAll('.gs-item'); }
 

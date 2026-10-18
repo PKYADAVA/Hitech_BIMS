@@ -419,6 +419,7 @@ footer { margin-top: auto; }
 .bims-navbar .nav-attendance-status {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   height: 34px;
   padding: 0 12px;
   border-radius: var(--radius-full);
@@ -728,9 +729,9 @@ footer { margin-top: auto; }
        the slack into the pill instead of leaving it as dead space past the
        last control. */
     #mainNavbar {
-      justify-content: flex-start; column-gap: 4px;
-      padding-left: max(8px, env(safe-area-inset-left, 0px));
-      padding-right: max(8px, env(safe-area-inset-right, 0px));
+      justify-content: space-evenly; column-gap: 0;
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
     }
     #mainNavbar > *:not(.navbar-brand) { margin-left: 0 !important; margin-right: 0 !important; }
     /* Two rows that each do one job, rather than seven controls fighting
@@ -740,34 +741,22 @@ footer { margin-top: auto; }
        controls take the second, spread across the width they now have.
        The pill is forced onto that second row by making it wider than what
        is left beside the search. */
-    /* The search takes the rest of the first row beside the mark, and the
-       pill and the round controls share the second. The max-width below
-       was sized for a single row that also had to hold three controls; on
-       two rows the box can have what is left beside the mark, which is the
-       difference between a search box and a field reading "Se". */
+    /* The mark, the module-menu toggler, the search icon, the attendance
+       group and the round controls all fit one row now that search is an
+       icon rather than a box (below, in the 767.98px block) and the round
+       controls and account button are down to the sidebar layout's phone
+       sizes. The old order/::after split that forced this onto two rows
+       belonged to when the search box alone needed ~170px; it is overridden
+       to one row in the narrower block below, which loads after this and
+       wins the cascade. */
     #mainNavbar > .nav-search {
       display: flex !important; order: 1;
       flex: 1 1 auto; min-width: 0; max-width: none;
     }
-    /* Ends the first row after the search: without it the pill and the
-       first control crowd in beside the box and squeeze it back down to
-       "Sear" (or, tried without this rule at all, the attendance group
-       and its neighbours squeeze in too and search drops to ~70px --
-       the same failure, reached a different way). */
     #mainNavbar::after {
       content: ""; order: 2; flex-basis: 100%; height: 0; margin: 0;
     }
-    /* The attendance group takes only the width its three buttons need.
-       Stretched to the full row it was 362px of mostly empty pill, which
-       pushed the six round controls onto a third row and made the bar
-       123px tall; at its natural size it shares the second row with them
-       and the bar is two rows again. */
-    /* flex-grow: 1, not 0 -- row two was 12px short of the 374px it had to
-       work with, and with every item flex-start that slack piled up past
-       the last control as a gap bigger than the bar's own 8px padding on
-       the other side. The pill is the one item sized by its own content
-       rather than a fixed glyph, so it is what absorbs the row's slack. */
-    #mainNavbar > .nav-attendance-group { order: 3; flex: 1 1 auto; min-width: 0; }
+    #mainNavbar > .nav-attendance-group { order: 3; flex: 0 0 auto; min-width: 0; }
     #mainNavbar > .nav-attendance-group .nav-attendance { width: auto; }
     /* The check-in/out buttons are icon-only here (the label is already
        hidden below the expand width) but still carry the 12px side padding
@@ -792,34 +781,36 @@ footer { margin-top: auto; }
        short of fitting the sixth control and this was the easiest width to
        give back without shortening a label or shrinking a touch target. */
     #mainNavbar .user-btn.btn {
-      padding: 3px 4px 3px 7px !important; gap: 5px;
+      padding: 2px !important; gap: 0;
     }
-    /* No cap on the status. At 86px "Not Checked In" was cut to "Not
-       Checked In" with the end ellipsised, which is the one phrase on this
-       bar a person reads before deciding whether to press anything. It
-       keeps its natural width and the row wraps around it. */
+    /* The bars glyph said "this opens a menu" beside the avatar on a
+       desktop pointer; on a phone, where every other control on this row
+       is already down to its bare icon, the avatar alone reads the same
+       way, and the bars are the one piece of this button nothing else
+       here was spared. */
+    #mainNavbar .user-btn-bars { display: none; }
+    /* Same reasoning as the status pill below: shown as its own icon
+       instead, not the full word, once the row is this narrow. */
+    #mainNavbar > .nav-attendance-group .na-status-label { display: none; }
+    #mainNavbar > .nav-attendance-group .nav-attendance-status {
+      padding: 0 9px; min-width: 34px; justify-content: center;
+    }
     #mainNavbar > .nav-attendance-group .nav-attendance-status {
       white-space: nowrap;
     }
-    /* The status stays readable. Collapsing it to its dot bought the row
-       enough width for all six controls, but "Checked In" / "Not Checked
-       In" is the one thing on this bar a person actually reads before
-       deciding whether to press anything -- a bar that is one row taller
-       is the cheaper price. */
-    /* The layout flip stays: it switches between the top bar and the side
-       rail, and that is a choice people make on a phone too. It is the
-       sixth control on the row, so the room comes from the status label
-       being capped above rather than from hiding it. */
     #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) {
       order: 4; flex: 0 0 auto;
     }
-    /* The round controls keep their full size. Squeezing them to 32px to
-       win four pixels left them visibly smaller than the 34px buttons
-       beside them and clipped the account chip's initials; the width comes
-       from the status label instead, which has it to spare. */
+    /* 30px rather than the account chip's old 34px constraint: that
+       constraint was about not clipping the chip's spelled-out initials,
+       which no longer sit in this button -- it is the bare avatar circle
+       now, same as the sidebar layout's phone version, so 30px costs
+       nothing there. Every other round control shrinks to match it rather
+       than stand out as the one larger control on an otherwise-tightened
+       row. */
     #mainNavbar .theme-flip-form .btn,
     #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) .btn {
-      min-width: 34px; min-height: 34px;
+      min-width: 30px; min-height: 30px;
       display: inline-flex; align-items: center; justify-content: center;
     }
     /* ...and the controls sit together under it rather than trailing off
@@ -843,22 +834,103 @@ footer { margin-top: auto; }
      this layout had no search at all on a handset, though the sidebar one
      has carried it for a while.
 
-     The room comes from the mark, cropped to its hexagon the way the folded
-     rail crops it, which gives the box the 170-odd pixels it needs. */
-  /* What is left of the row after the mark and the three controls, and no
-     more: at `flex: 1 1 auto` against siblings that cannot shrink it took
-     322px of 390 and pushed the bell, sign-out and account off the side. */
+     It used to take the ~170px left of the mark as a full box, which was
+     the whole reason the bar needed two rows at all -- brand and search on
+     one, attendance and the round controls pushed to a second because
+     nothing was left beside the box for them. Collapsed to its icon, as
+     the sidebar layout's search already does below 768px, the search costs
+     the row 34px instead, which is enough to keep every control on the
+     bar's first and only row (the module tab strip stays its own row
+     below, unrelated to this). A tap expands it back over whatever is
+     beside it; _global_search.html's script drives both layouts' version
+     of this from the one gs-expanded class. */
   #mainNavbar .nav-search {
-    display: flex !important; flex: 1 1 60px; min-width: 0;
-    max-width: calc(100vw - 218px);
-    margin: 0 !important;
+    display: flex !important; flex: 0 0 auto; margin: 0 !important;
   }
-  #mainNavbar .gs-wrap { flex: 1 1 auto; min-width: 0; max-width: none; margin: 0; }
-  #mainNavbar .gs-box { min-width: 0; border-radius: 999px; padding-left: 12px; padding-right: 8px; }
-  #mainNavbar .gs-input { min-width: 0; font-size: 16px; }
+  /* .nav-search is what #mainNavbar actually sizes as a flex item -- .gs-wrap
+     growing inside it (below, .gs-wrap.gs-expanded) only reaches as far as
+     .nav-search's own box, and flex: 0 0 auto sizes that box to its
+     content's natural width, which is circular with a child that is itself
+     trying to grow to fill it. The two have to grow together: .nav-search
+     takes the row's flex-grow once search is open, and .gs-wrap simply
+     fills 100% of whatever .nav-search ends up with. */
+  #mainNavbar:has(.gs-wrap.gs-expanded) .nav-search { flex: 1 1 auto; min-width: 34px; }
+  /* .bims-navbar .gs-wrap sets a 300px floor via `width: clamp(...)` for the
+     desktop toolbar box; width and flex-basis can both try to size a flex
+     item; where a browser prefers it set the icon-only box back under that
+     floor. Overriding width directly removes the ambiguity instead of
+     relying on flex-basis to win every engine's resolution order. */
+  #mainNavbar .gs-wrap { flex: 0 0 34px; width: 34px; margin: 0; }
+  #mainNavbar .gs-box {
+    width: 34px; padding: 0; justify-content: center;
+    border-color: transparent; background: rgba(255,255,255,.08);
+  }
+  #mainNavbar .gs-box > i { color: rgba(255,255,255,.85); }
+  #mainNavbar .gs-input, #mainNavbar .gs-kbd, #mainNavbar .gs-clear { display: none; }
+  /* Expanded, the box grows in place rather than opening as an overlay: it
+     takes the same slack the attendance group absorbs when search is
+     collapsed (both flex: 1 1 auto, so whichever is actually growing -- the
+     attendance group normally, the search box once it has somewhere to
+     grow into of its own) rather than claiming a fixed width an overlay
+     would need to hide icons under. Every OTHER control past the search
+     stays flex-shrink: 0 (set where each is declared above and at the
+     1023.98px breakpoint), so a phone too narrow to fit the expanded box
+     and every icon drops the attendance group's open width first, down to
+     its own content size, before anything else gives. .gs-wrap just fills
+     .nav-search (above), which is the thing actually flex-growing now --
+     .gs-wrap trying to grow too, inside a parent sized by its own content,
+     is the circular sizing that left the box visually wider than its own
+     measured 34px while expanded. */
+  #mainNavbar .gs-wrap.gs-expanded { width: 100%; margin: 0; }
+  #mainNavbar .gs-wrap.gs-expanded .gs-box {
+    width: 100%; padding-left: 12px; padding-right: 8px;
+    border-radius: 999px; background: #fff; border-color: transparent;
+  }
+  #mainNavbar .gs-wrap.gs-expanded .gs-box > i { color: #93a4bd; }
+  #mainNavbar .gs-wrap.gs-expanded .gs-input { display: block; min-width: 0; font-size: 16px; }
+  #mainNavbar .gs-wrap.gs-expanded.has-text .gs-clear { display: block; }
   /* Cropped to the hexagon: at 34px a sliver of the wordmark came with it. */
   .bims-navbar .brand-logo {
     width: 29px; object-fit: cover; object-position: left center;
+    flex-shrink: 0;
+  }
+  /* The brand link's own flex: 0 1 auto (set above, for the wider
+     1023.98px block it was written for) let it shrink past its own
+     hexagon-cropped logo once search was open and genuinely contending for
+     width -- the logo was readable at 29px but cropped further than that
+     to single-digit widths. flex-shrink: 0 on the logo above stops the
+     image shrinking; this stops the link around it collapsing to less
+     than the logo needs. */
+  #mainNavbar > a.navbar-brand { flex: 0 0 auto; }
+
+  /* One row, not two: the ::after row-break and the order split above both
+     belonged to the full-width search box, which no longer exists at this
+     width (see the collapsed-to-icon rules above). Cancelling the break
+     puts the mark, the module-menu toggler, search, attendance and the
+     round controls back in the single row they were in before 1200px --
+     this is what closes the gap between the search icon and the toggler
+     beside it that showed as two rows instead of a flush one. */
+  #mainNavbar::after { display: none; }
+  #mainNavbar > .nav-search,
+  #mainNavbar > .nav-attendance-group,
+  #mainNavbar > *:not(.navbar-brand):not(.nav-search):not(.nav-attendance-group) {
+    order: 0;
+  }
+  /* flex-grow: 1, not 0 -- with every control down to its smallest the row
+     no longer fills 390px, and every item flex-start left that slack
+     stacked as empty space past the last icon instead of spread into the
+     row. The attendance group is the one item sized by its own content
+     rather than a fixed glyph (same reasoning as the 1023.98px block
+     above), so it is what absorbs it, the same way it already does one
+     breakpoint up. */
+  #mainNavbar > .nav-attendance-group { flex: 0 0 auto; justify-content: center; }
+  /* Search growing takes priority over the attendance group's own slack-
+     filling: once the box is open it is the one thing on the row someone
+     is actively using, so the pill gives the space back rather than the
+     two splitting it down the middle. :has() needs no polyfill here --
+     this whole stylesheet already assumes evergreen mobile Safari/Chrome. */
+  #mainNavbar:has(.gs-wrap.gs-expanded) > .nav-attendance-group {
+    display: none;
   }
 }
 
@@ -1891,10 +1963,16 @@ input#driving_license { height: 38px; width: 72px; max-width: 100%; }
 }
 
 @media (max-width: 768px) {
+  /* flex-wrap stays nowrap here -- this predates the one-row phone layout
+     built later in this file (search §767.98px block onward), and wrap
+     silently won the cascade over that work's own nowrap (set earlier in
+     source order, so it lost): with search expanded, that wrap put the
+     whole second half of the row on its own line instead of letting the
+     row compress to fit, which is the bug the later work exists to avoid.
+     height/padding stay as this block set them; only wrap was the clash. */
   .bims-navbar {
     height: auto;
     padding: 12px 16px;
-    flex-wrap: wrap;
   }
   .page-header {
     flex-direction: column;
@@ -2170,10 +2248,13 @@ img, svg, video, canvas {
 /* Navbar collapses at xl (see navbar-expand-xl), so its collapsed styling
    applies below 1200px. */
 @media (max-width: 1199.98px) {
+  /* flex-wrap stays nowrap -- same reasoning as the 768px block above:
+     this predates the later one-row phone layout work and was silently
+     winning the cascade over its nowrap, which is what let the row split
+     into two lines once search had room to grow into. */
   .bims-navbar {
     height: auto;
     padding: 10px 16px;
-    flex-wrap: wrap;
   }
   /* The open menu floats below the bar as a panel. In flow it would stretch
      the sticky navbar to the full viewport height and push the page out of

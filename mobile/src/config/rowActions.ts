@@ -136,7 +136,7 @@ export function extraRowActions(
   handlers?: { clearLocation?: (row: Row) => void },
 ): RecordAction[] {
   if (resourceKey === "hr-supervisor-trips") {
-    return perms.edit ? [endTripAction(row, navigate)] : [];
+    return perms.edit || perms.add ? [endTripAction(row, navigate)] : [];
   }
   if (resourceKey === "broiler-bird-sales") {
     // Gated on add, not edit — see uploadPhotosAction above: this only ever
