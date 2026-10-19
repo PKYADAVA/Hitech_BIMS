@@ -407,6 +407,7 @@ def route_history(request):
     allowed = set(branches_for(request.user, Branch.objects.all())
                   .values_list("id", flat=True))
     routes = routes.filter(Q(branch__isnull=True) | Q(branch_id__in=allowed))
+    routes = routes.filter(is_template=False)
 
     branch_id = _int(request.GET.get("branch"))
     supervisor_id = _int(request.GET.get("supervisor"))
@@ -741,4 +742,349 @@ def route_recalculate(request, route_id):
         "was_km": round(before, 2),
         "changed_km": round(plan["distance_km"] - before, 2),
         "estimated": plan["estimated"],
+    })
+
+
+# --- route templates -------------------------------------------------------
+
+
+@login_required
+def route_templates_list(request):
+    """GET — templates the current user may see, for the Load Template picker."""
+    allowed = set(branches_for(request.user, Branch.objects.all())
+                  .values_list("id", flat=True))
+    templates = (FarmRoute.objects
+                 .filter(is_template=True)
+                 .filter(Q(branch_id__isnull=True) | Q(branch_id__in=allowed))
+                 .select_related("branch", "supervisor")
+                 .order_by("template_name", "-created_at"))
+    return JsonResponse({"templates": [
+        {
+            "id": t.id,
+            "name": t.template_name or t.route_no,
+            "branch": t.branch.branch_name if t.branch_id else "",
+            "supervisor": t.supervisor.name if t.supervisor_id else "",
+            "farm_count": t.farm_count,
+            "distance_km": float(t.planned_distance_km),
+            "mode": t.mode,
+        } for t in templates
+    ]})
+
+
+@login_required
+@require_POST
+def route_save_as_template(request):
+    """POST — mark an existing route as a template, or save the current plan
+    as a new template route."""
+    try:
+        payload = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "Could not read the request."}, status=400)
+
+    template_name = (payload.get("template_name") or "").strip()
+    if not template_name:
+        return JsonResponse({"error": "Give the template a name."}, status=400)
+
+    route_id = _int(payload.get("route_id"))
+    if route_id:
+        route = _route_for(request.user, route_id)
+        if route is None:
+            return JsonResponse({"error": "Route not found."}, status=404)
+        route.is_template = True
+        route.template_name = template_name
+        route.save(update_fields=["is_template", "template_name"])
+        return JsonResponse({"id": route.id, "template_name": route.template_name})
+
+    plan = payload.get("plan") or {}
+    if not plan.get("stops"):
+        return JsonResponse({"error": "Calculate a route before saving it as a template."},
+                            status=400)
+
+    branch_id, supervisor_id = _int(payload.get("branch")), _int(payload.get("supervisor"))
+    branch = branches_for(request.user, Branch.objects.filter(id=branch_id)).first()
+    supervisor = supervisors_for(
+        request.user, Supervisor.objects.filter(id=supervisor_id)).first()
+
+    start = plan.get("start") or {}
+    route = save_route(
+        plan,
+        name=template_name,
+        date=payload.get("date") or timezone.localdate(),
+        branch=branch, supervisor=supervisor,
+        mode=(payload.get("mode") or "distance").strip(),
+        start=(start.get("label") or "Start", start.get("latitude"),
+               start.get("longitude")),
+        roundtrip=bool(payload.get("roundtrip", True)),
+        created_by=request.user,
+        status=FarmRoute.STATUS_DRAFT,
+    )
+    route.is_template = True
+    route.template_name = template_name
+    route.save(update_fields=["is_template", "template_name"])
+    return JsonResponse({"id": route.id, "template_name": route.template_name})
+
+
+@login_required
+def supervisor_live_positions(request):
+    """GET — live GPS of supervisors with active routes, for the map overlay."""
+    from tracking.models import EmployeeLiveLocation
+
+    today = timezone.localdate()
+    active_routes = (FarmRoute.objects
+                     .filter(status=FarmRoute.STATUS_STARTED, date=today,
+                             supervisor__isnull=False)
+                     .select_related("supervisor", "branch"))
+    allowed = set(branches_for(request.user, Branch.objects.all())
+                  .values_list("id", flat=True))
+    active_routes = [r for r in active_routes
+                     if r.branch_id is None or r.branch_id in allowed]
+    if not active_routes:
+        return JsonResponse({"supervisors": []})
+
+    emp_to_route = {}
+    for r in active_routes:
+        if r.supervisor.employee_id:
+            emp_to_route[r.supervisor.employee_id] = r
+
+    if not emp_to_route:
+        return JsonResponse({"supervisors": []})
+
+    locations = (EmployeeLiveLocation.objects
+                 .filter(employee_id__in=emp_to_route.keys())
+                 .select_related("employee"))
+    result = []
+    for loc in locations:
+        route = emp_to_route[loc.employee_id]
+        result.append({
+            "supervisor_id": route.supervisor_id,
+            "name": route.supervisor.name,
+            "branch": route.branch.branch_name if route.branch_id else "",
+            "route_no": route.route_no,
+            "latitude": float(loc.latitude),
+            "longitude": float(loc.longitude),
+            "speed_kmh": loc.speed_kmh,
+            "battery_pct": loc.battery_pct,
+            "status": loc.status,
+            "recorded_at": loc.recorded_at.isoformat() if loc.recorded_at else None,
+        })
+    return JsonResponse({"supervisors": result})
+
+
+@login_required
+def auto_suggest_farms(request):
+    """GET — rank farms by visit urgency for auto-scheduling.
+
+    Farms with active batches that have not been visited recently score highest.
+    Priority weight amplifies the score so a critical farm always beats a normal
+    one at the same staleness.
+    """
+    from hr.models import SupervisorTripVisit
+
+    user = request.user
+    farms = _visible_farms(user).filter(farm_status__iexact="active")
+    farms = farms.annotate(
+        active_batches=Count("broiler_batches",
+                             filter=Q(broiler_batches__end_date__isnull=True,
+                                      broiler_batches__is_closed=False),
+                             distinct=True))
+
+    branch_id = _int(request.GET.get("branch"))
+    supervisor_id = _int(request.GET.get("supervisor"))
+    if branch_id:
+        farms = farms.filter(branch_id=branch_id)
+    if supervisor_id:
+        farms = farms.filter(supervisor_id=supervisor_id)
+
+    max_farms = min(_int(request.GET.get("limit")) or 15, 50)
+
+    today = timezone.localdate()
+    last_visits = dict(
+        SupervisorTripVisit.objects
+        .filter(farm__in=farms, checked_in_at__isnull=False)
+        .values("farm_id")
+        .annotate(last=Max("checked_in_at"))
+        .values_list("farm_id", "last")
+    )
+
+    PRIORITY_WEIGHT = {"critical": 3.0, "high": 2.0, "normal": 1.0}
+
+    scored = []
+    for farm in farms:
+        if farm.farm_latitude is None or farm.farm_longitude is None:
+            continue
+        has_batch = farm.active_batches > 0
+        last = last_visits.get(farm.id)
+        if last:
+            days_since = (today - timezone.localdate(last)).days
+        else:
+            days_since = 999
+        weight = PRIORITY_WEIGHT.get(farm.visit_priority, 1.0)
+        batch_boost = 2.0 if has_batch else 1.0
+        score = days_since * weight * batch_boost
+        scored.append((score, days_since, farm))
+
+    scored.sort(key=lambda t: -t[0])
+    top = scored[:max_farms]
+
+    return JsonResponse({"farms": [
+        {
+            "id": farm.id,
+            "name": farm.farm_name,
+            "code": farm.farm_code or "",
+            "branch": farm.branch.branch_name if farm.branch_id else "",
+            "supervisor": farm.supervisor.name if farm.supervisor_id else "",
+            "priority": farm.visit_priority,
+            "days_since_visit": days_since,
+            "score": round(score, 1),
+        }
+        for score, days_since, farm in top
+    ]})
+
+
+@login_required
+def visit_analytics(request):
+    """Broiler > Utilities > Visit Analytics Dashboard."""
+    return render(request, "farm_visit_analytics.html", {
+        "active_tab": "visit_analytics",
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+    })
+
+
+@login_required
+def visit_analytics_data(request):
+    """GET — aggregated visit metrics for the analytics charts."""
+    from django.db.models import Avg, F
+    from django.db.models.functions import ExtractWeekDay, TruncDate
+    from hr.models import SupervisorTripVisit
+
+    user = request.user
+    branch_id = _int(request.GET.get("branch"))
+    supervisor_id = _int(request.GET.get("supervisor"))
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+
+    allowed = set(farms_for(user, BroilerFarm.objects.all())
+                  .values_list("id", flat=True))
+    visits = (SupervisorTripVisit.objects
+              .filter(farm_id__in=allowed, checked_in_at__isnull=False)
+              .select_related("trip", "farm", "farm__branch", "farm__supervisor"))
+    if branch_id:
+        visits = visits.filter(farm__branch_id=branch_id)
+    if supervisor_id:
+        visits = visits.filter(farm__supervisor_id=supervisor_id)
+    if from_date:
+        visits = visits.filter(trip__date__gte=from_date)
+    if to_date:
+        visits = visits.filter(trip__date__lte=to_date)
+
+    # 1. Visits per day (line chart)
+    daily = list(
+        visits.annotate(day=TruncDate("checked_in_at"))
+        .values("day").annotate(count=Count("id"))
+        .order_by("day")
+    )
+
+    # 2. Visit duration distribution (bar chart — bucketed)
+    durations = list(visits.filter(duration_minutes__gt=0)
+                     .values_list("duration_minutes", flat=True))
+    buckets = {"0-10": 0, "10-20": 0, "20-30": 0, "30-45": 0,
+               "45-60": 0, "60+": 0}
+    for d in durations:
+        if d <= 10:
+            buckets["0-10"] += 1
+        elif d <= 20:
+            buckets["10-20"] += 1
+        elif d <= 30:
+            buckets["20-30"] += 1
+        elif d <= 45:
+            buckets["30-45"] += 1
+        elif d <= 60:
+            buckets["45-60"] += 1
+        else:
+            buckets["60+"] += 1
+
+    # 3. Visits by day of week
+    weekday = list(
+        visits.annotate(dow=ExtractWeekDay("checked_in_at"))
+        .values("dow").annotate(count=Count("id"))
+        .order_by("dow")
+    )
+
+    # 4. Supervisor coverage (top 15)
+    sup_coverage = list(
+        visits.filter(farm__supervisor__isnull=False)
+        .values(name=F("farm__supervisor__name"))
+        .annotate(visit_count=Count("id"),
+                  avg_duration=Avg("duration_minutes"))
+        .order_by("-visit_count")[:15]
+    )
+
+    # 5. Route efficiency — planned vs actual distance
+    routes = (FarmRoute.objects.filter(trip__isnull=False)
+              .select_related("trip", "supervisor"))
+    route_allowed = set(branches_for(user, Branch.objects.all())
+                        .values_list("id", flat=True))
+    routes = routes.filter(Q(branch__isnull=True) | Q(branch_id__in=route_allowed))
+    if branch_id:
+        routes = routes.filter(branch_id=branch_id)
+    if supervisor_id:
+        routes = routes.filter(supervisor_id=supervisor_id)
+    if from_date:
+        routes = routes.filter(date__gte=from_date)
+    if to_date:
+        routes = routes.filter(date__lte=to_date)
+
+    efficiency = []
+    for r in routes.order_by("date")[:100]:
+        planned = float(r.planned_distance_km or 0)
+        actual = float(getattr(r.trip, "distance_km", 0) or 0)
+        if planned > 0:
+            efficiency.append({
+                "date": r.date.isoformat(),
+                "route_no": r.route_no,
+                "planned_km": round(planned, 1),
+                "actual_km": round(actual, 1),
+                "efficiency": round(planned / actual * 100, 1) if actual else None,
+            })
+
+    # 6. Summary stats
+    total_visits = visits.count()
+    avg_dur = visits.filter(duration_minutes__gt=0).aggregate(
+        avg=Avg("duration_minutes"))["avg"]
+    unique_farms = visits.values("farm_id").distinct().count()
+    total_farms = len(allowed)
+
+    return JsonResponse({
+        "daily": [{"date": d["day"].isoformat(), "count": d["count"]} for d in daily],
+        "duration_buckets": buckets,
+        "weekday": {d["dow"]: d["count"] for d in weekday},
+        "supervisor_coverage": sup_coverage,
+        "efficiency": efficiency,
+        "summary": {
+            "total_visits": total_visits,
+            "avg_duration": round(avg_dur, 1) if avg_dur else None,
+            "unique_farms_visited": unique_farms,
+            "total_farms": total_farms,
+            "coverage_pct": round(unique_farms / total_farms * 100, 1) if total_farms else 0,
+        },
+    })
+
+
+@login_required
+def route_load_template(request, route_id):
+    """GET — return a template's farm IDs so the planner can pre-select them."""
+    route = _route_for(request.user, route_id)
+    if route is None or not route.is_template:
+        return JsonResponse({"error": "Template not found."}, status=404)
+    farm_ids = list(route.stops.filter(farm__isnull=False)
+                    .order_by("sequence")
+                    .values_list("farm_id", flat=True))
+    return JsonResponse({
+        "id": route.id,
+        "template_name": route.template_name or route.route_no,
+        "farm_ids": farm_ids,
+        "branch_id": route.branch_id,
+        "supervisor_id": route.supervisor_id,
+        "mode": route.mode,
     })

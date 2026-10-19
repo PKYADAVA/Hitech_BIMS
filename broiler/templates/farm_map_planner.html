@@ -155,7 +155,17 @@ overridden by d-lg-block and the row is simply always there.
   nouns beside it, and a button on its own line reads as belonging to whatever
   comes next instead.
   {% endcomment %}
+  <div class="fmp-cell">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-bookmark"></i></span>
+      <span class="bd"><label>Template</label>
+        <select class="form-select form-select-sm" id="f-template">
+          <option value="">— Load Template —</option>
+        </select></span></div>
+  </div>
   <div class="d-flex gap-2 align-items-center">
+    <button class="btn btn-outline-warning text-nowrap" id="fmp-auto-suggest"
+            title="Auto-select farms that need a visit most urgently">
+      <i class="fas fa-wand-magic-sparkles"></i> Auto-Suggest</button>
     <button class="btn btn-primary text-nowrap" id="fmp-calculate">
       <i class="fas fa-route"></i> Calculate Route</button>
     <button class="btn btn-outline-secondary" id="fmp-refresh" title="Reload farms">
@@ -247,6 +257,10 @@ overridden by d-lg-block and the row is simply always there.
         <i class="fas fa-location-crosshairs"></i> Use My Location</button>
       <button class="btn btn-sm btn-outline-secondary" id="fmp-set-start">
         <i class="fas fa-crosshairs"></i> Set on map</button>
+      <button class="btn btn-sm btn-outline-secondary" id="fmp-colour-mode"
+              title="Toggle pin colouring: Priority or Last Visit"><i class="fas fa-exclamation-triangle me-1"></i>Priority</button>
+      <button class="btn btn-sm btn-outline-secondary" id="fmp-live-overlay"
+              title="Show live supervisor positions"><i class="fas fa-satellite-dish me-1"></i>Live</button>
       <button class="btn btn-sm btn-outline-secondary ms-auto" id="fmp-fullscreen"
               title="Fullscreen"><i class="fas fa-expand"></i></button>
       {% comment %}
@@ -275,6 +289,15 @@ overridden by d-lg-block and the row is simply always there.
           <span id="fmp-missing-count">0</span> farm(s) with no GPS</span>
       </a>
     </div>
+    <div id="fmp-visit-legend" class="d-none mt-1 d-flex flex-wrap gap-2 small text-muted">
+      <span><i class="fas fa-circle" style="color:#16a34a"></i> ≤3d</span>
+      <span><i class="fas fa-circle" style="color:#65a30d"></i> ≤7d</span>
+      <span><i class="fas fa-circle" style="color:#ca8a04"></i> ≤14d</span>
+      <span><i class="fas fa-circle" style="color:#ea580c"></i> ≤21d</span>
+      <span><i class="fas fa-circle" style="color:#dc2626"></i> ≤30d</span>
+      <span><i class="fas fa-circle" style="color:#991b1b"></i> >30d</span>
+      <span><i class="fas fa-circle" style="color:#6b7280"></i> Never</span>
+    </div>
   </div>
 
   <div class="col-lg-3 order-3">
@@ -285,9 +308,12 @@ overridden by d-lg-block and the row is simply always there.
           Select farms and choose <strong>Calculate Route</strong>.
         </div>
       </div>
-      <div class="card-footer p-2">
-        <button class="btn btn-success w-100" id="fmp-save" disabled>
+      <div class="card-footer p-2 d-flex gap-2">
+        <button class="btn btn-success flex-fill" id="fmp-save" disabled>
           <i class="fas fa-floppy-disk"></i> Save Route</button>
+        <button class="btn btn-outline-secondary" id="fmp-save-template" disabled
+                title="Save this route as a reusable template">
+          <i class="fas fa-bookmark"></i></button>
       </div>
     </div>
   </div>
@@ -352,7 +378,12 @@ overridden by d-lg-block and the row is simply always there.
     save: "{% url 'farm_route_save' %}",
     capture: "{% url 'farm_location_capture_add' %}",
     farm: "{% url 'branch_farm' %}",
-    history: "{% url 'route_history' %}"
+    history: "{% url 'route_history' %}",
+    templates: "{% url 'route_templates_list' %}",
+    saveTemplate: "{% url 'route_save_as_template' %}",
+    loadTemplate: "{% url 'route_load_template' 0 %}",
+    liveSupervisors: "{% url 'supervisor_live_positions' %}",
+    autoSuggest: "{% url 'auto_suggest_farms' %}"
   };
   window.FMP_TODAY = "{{ today|date:'Y-m-d' }}";
   window.FMP_BRANCH_POINTS = {{ branch_points_json|safe }};

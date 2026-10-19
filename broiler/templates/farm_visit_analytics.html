@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Visit Analytics{% endblock %}
+
+{% block css %}
+<style>
+  .va-stat { border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
+             padding:.75rem 1rem; display:flex; gap:.7rem; align-items:center; height:100%; }
+  .va-stat .ic { width:2.3rem; height:2.3rem; border-radius:.6rem; flex:0 0 auto;
+                 display:flex; align-items:center; justify-content:center; font-size:.95rem; }
+  .va-stat .lbl { font-size:.72rem; color:#64748b; display:block; }
+  .va-stat .val { font-size:1.3rem; font-weight:700; line-height:1.15; display:block; }
+  .va-chart-card { border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
+                   padding:1rem; height:100%; }
+  .va-chart-card h6 { font-size:.85rem; font-weight:600; color:#334155; margin-bottom:.75rem; }
+  .va-chart-card canvas { max-height:280px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='broiler_farm_route_planner' active_tab='visit_analytics' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-chart-line"></i> Visit Analytics</div>
+    <div class="page-header-subtitle">Route efficiency, visit patterns and supervisor coverage</div>
+  </div>
+  <div class="page-header-right">
+    <a class="btn btn-outline-secondary" href="{% url 'farm_map_planner' %}">
+      <i class="fas fa-map-location-dot"></i> Map &amp; Planner</a>
+  </div>
+</div>
+
+<form class="card mb-3" id="va-filters">
+  <div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" id="va-from">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" id="va-to">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Branch</label>
+        <select class="form-select" id="va-branch">
+          <option value="">All</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Supervisor</label>
+        <select class="form-select" id="va-supervisor">
+          <option value="">All</option>
+          {% for s in supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button type="button" class="btn btn-primary" id="va-apply">
+          <i class="fas fa-filter"></i> Apply</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row g-2 mb-3" id="va-summary">
+  <div class="col-6 col-lg"><div class="va-stat">
+    <span class="ic" style="background:#eef2ff;color:#4338ca;"><i class="fas fa-check-circle"></i></span>
+    <span><span class="lbl">Total Visits</span><span class="val" id="vs-visits">&mdash;</span></span></div></div>
+  <div class="col-6 col-lg"><div class="va-stat">
+    <span class="ic" style="background:#ecfdf5;color:#047857;"><i class="fas fa-clock"></i></span>
+    <span><span class="lbl">Avg Duration</span><span class="val" id="vs-duration">&mdash;</span></span></div></div>
+  <div class="col-6 col-lg"><div class="va-stat">
+    <span class="ic" style="background:#eff6ff;color:#1d4ed8;"><i class="fas fa-tractor"></i></span>
+    <span><span class="lbl">Farms Visited</span><span class="val" id="vs-farms">&mdash;</span></span></div></div>
+  <div class="col-6 col-lg"><div class="va-stat">
+    <span class="ic" style="background:#fff7ed;color:#c2410c;"><i class="fas fa-bullseye"></i></span>
+    <span><span class="lbl">Coverage</span><span class="val" id="vs-coverage">&mdash;</span></span></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="va-chart-card">
+      <h6><i class="fas fa-chart-area me-1"></i>Visits Per Day</h6>
+      <canvas id="chart-daily"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="va-chart-card">
+      <h6><i class="fas fa-calendar-week me-1"></i>Visits by Day of Week</h6>
+      <canvas id="chart-weekday"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="va-chart-card">
+      <h6><i class="fas fa-stopwatch me-1"></i>Visit Duration Distribution</h6>
+      <canvas id="chart-duration"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="va-chart-card">
+      <h6><i class="fas fa-users me-1"></i>Supervisor Coverage (Top 15)</h6>
+      <canvas id="chart-supervisor"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="va-chart-card">
+      <h6><i class="fas fa-gauge-high me-1"></i>Route Efficiency — Planned vs Actual Distance</h6>
+      <canvas id="chart-efficiency" style="max-height:320px;"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+  "use strict";
+
+  var DATA_URL = "{% url 'visit_analytics_data' %}";
+  var DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var charts = {};
+
+  function el(id) { return document.getElementById(id); }
+
+  function loadData() {
+    var params = new URLSearchParams();
+    var from = el("va-from").value, to = el("va-to").value;
+    var branch = el("va-branch").value, sup = el("va-supervisor").value;
+    if (from) params.set("from_date", from);
+    if (to) params.set("to_date", to);
+    if (branch) params.set("branch", branch);
+    if (sup) params.set("supervisor", sup);
+
+    fetch(DATA_URL + "?" + params.toString(), { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () {
+        el("vs-visits").textContent = "Error";
+      });
+  }
+
+  function render(data) {
+    var s = data.summary || {};
+    el("vs-visits").textContent = s.total_visits != null ? s.total_visits.toLocaleString() : "—";
+    el("vs-duration").textContent = s.avg_duration != null ? s.avg_duration + " min" : "—";
+    el("vs-farms").textContent = (s.unique_farms_visited || 0) + " / " + (s.total_farms || 0);
+    el("vs-coverage").textContent = s.coverage_pct != null ? s.coverage_pct + "%" : "—";
+
+    drawDaily(data.daily || []);
+    drawWeekday(data.weekday || {});
+    drawDuration(data.duration_buckets || {});
+    drawSupervisor(data.supervisor_coverage || []);
+    drawEfficiency(data.efficiency || []);
+  }
+
+  function destroyChart(key) {
+    if (charts[key]) { charts[key].destroy(); charts[key] = null; }
+  }
+
+  function drawDaily(rows) {
+    destroyChart("daily");
+    charts.daily = new Chart(el("chart-daily"), {
+      type: "line",
+      data: {
+        labels: rows.map(function (r) { return r.date; }),
+        datasets: [{
+          label: "Visits",
+          data: rows.map(function (r) { return r.count; }),
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,.1)",
+          fill: true, tension: 0.3, pointRadius: 2
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } },
+                  y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } } }
+    });
+  }
+
+  function drawWeekday(map) {
+    destroyChart("weekday");
+    var labels = [], values = [];
+    for (var i = 1; i <= 7; i++) {
+      labels.push(DAY_NAMES[i % 7]);
+      values.push(map[i] || 0);
+    }
+    charts.weekday = new Chart(el("chart-weekday"), {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#64748b"]
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } } }
+    });
+  }
+
+  function drawDuration(buckets) {
+    destroyChart("duration");
+    var labels = Object.keys(buckets);
+    var values = labels.map(function (k) { return buckets[k]; });
+    charts.duration = new Chart(el("chart-duration"), {
+      type: "bar",
+      data: {
+        labels: labels.map(function (l) { return l + " min"; }),
+        datasets: [{
+          label: "Visits",
+          data: values,
+          backgroundColor: "#8b5cf6"
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { display: false } } }
+    });
+  }
+
+  function drawSupervisor(rows) {
+    destroyChart("supervisor");
+    charts.supervisor = new Chart(el("chart-supervisor"), {
+      type: "bar",
+      data: {
+        labels: rows.map(function (r) { return r.name; }),
+        datasets: [{
+          label: "Visits",
+          data: rows.map(function (r) { return r.visit_count; }),
+          backgroundColor: "#047857"
+        }, {
+          label: "Avg Duration (min)",
+          data: rows.map(function (r) { return r.avg_duration ? Math.round(r.avg_duration) : 0; }),
+          backgroundColor: "#ca8a04"
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: "y",
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } } }
+    });
+  }
+
+  function drawEfficiency(rows) {
+    destroyChart("efficiency");
+    charts.efficiency = new Chart(el("chart-efficiency"), {
+      type: "bar",
+      data: {
+        labels: rows.map(function (r) { return r.route_no; }),
+        datasets: [{
+          label: "Planned (km)",
+          data: rows.map(function (r) { return r.planned_km; }),
+          backgroundColor: "#3b82f6"
+        }, {
+          label: "Actual (km)",
+          data: rows.map(function (r) { return r.actual_km; }),
+          backgroundColor: "#f97316"
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true } },
+        plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } } }
+    });
+  }
+
+  // Set default date range to last 30 days
+  var today = new Date();
+  var thirtyAgo = new Date(today);
+  thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+  el("va-to").value = today.toISOString().slice(0, 10);
+  el("va-from").value = thirtyAgo.toISOString().slice(0, 10);
+
+  el("va-apply").addEventListener("click", loadData);
+  loadData();
+})();
+</script>
+{% endblock %}

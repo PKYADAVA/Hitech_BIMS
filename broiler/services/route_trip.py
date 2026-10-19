@@ -15,12 +15,18 @@ it.
 """
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from broiler.models import FarmRoute, FarmRouteStop
+
+logger = logging.getLogger(__name__)
+
+GEOFENCE_RADIUS_M = getattr(settings, "FARM_CHECKIN_GEOFENCE_M", 500)
 
 
 class TripError(Exception):
@@ -123,6 +129,10 @@ def check_in(route, farm_id, *, latitude=None, longitude=None, when=None):
         stop.visited_at = when
         stop.actual_sequence = reached + 2      # the start is stop 1
         stop.save(update_fields=["visited_at", "actual_sequence"])
+
+    if latitude is not None and longitude is not None:
+        _geofence_check(visit, float(latitude), float(longitude))
+
     return visit
 
 
@@ -141,6 +151,9 @@ def check_out(route, farm_id, *, latitude=None, longitude=None, when=None):
     if latitude is not None and longitude is not None:
         visit.latitude, visit.longitude = float(latitude), float(longitude)
     visit.save()      # SupervisorTripVisit.save works the duration out itself
+
+    _eta_notification(route, farm_id, visit)
+
     return visit
 
 
@@ -197,3 +210,89 @@ def deviation(route):
         # having gone out.
         "actual_distance_known": bool(actual_km),
     }
+
+
+def _geofence_check(visit, lat, lng):
+    """Emit an alert when the check-in GPS is too far from the farm's pin."""
+    farm = visit.farm
+    if farm is None or farm.farm_latitude is None or farm.farm_longitude is None:
+        return
+    from tracking.services.geo import haversine_km
+
+    distance_m = haversine_km(lat, lng, farm.farm_latitude, farm.farm_longitude) * 1000
+    if distance_m <= GEOFENCE_RADIUS_M:
+        return
+
+    from alerts.constants import Severity
+    from alerts.services import emit_event
+
+    dist_label = (f"{distance_m:.0f} m" if distance_m < 1000
+                  else f"{distance_m / 1000:.1f} km")
+    emit_event(
+        action="geofence_warning",
+        event_type="farm_checkin_outside_geofence",
+        instance=farm,
+        title=f"Check-in {dist_label} away from {farm.farm_name}",
+        message=(f"Supervisor checked in at {farm.farm_name} but GPS "
+                 f"is {dist_label} from the farm pin "
+                 f"(threshold: {GEOFENCE_RADIUS_M} m)."),
+        severity=Severity.WARNING,
+        metadata={
+            "checkin_lat": lat, "checkin_lng": lng,
+            "farm_lat": farm.farm_latitude, "farm_lng": farm.farm_longitude,
+            "distance_m": round(distance_m, 1),
+            "threshold_m": GEOFENCE_RADIUS_M,
+            "visit_id": visit.pk,
+            "route_no": visit.trip.planned_route.route_no if hasattr(visit.trip, "planned_route") else "",
+        },
+    )
+
+
+def _eta_notification(route, farm_id, visit):
+    """Emit an ETA alert for the next farm after a check-out."""
+    try:
+        current_stop = (route.stops.filter(farm_id=farm_id)
+                        .order_by("sequence").first())
+        if current_stop is None:
+            return
+        next_stop = (route.stops
+                     .filter(sequence__gt=current_stop.sequence, farm__isnull=False,
+                             visited_at__isnull=True)
+                     .order_by("sequence").first())
+        if next_stop is None:
+            return
+
+        eta_minutes = (next_stop.leg_minutes or 0)
+        if not eta_minutes and next_stop.leg_distance_km:
+            eta_minutes = int(float(next_stop.leg_distance_km) / 0.5)
+
+        if eta_minutes <= 0:
+            return
+
+        from alerts.constants import Severity
+        from alerts.services import emit_event
+
+        supervisor_name = route.supervisor.name if route.supervisor_id else "Supervisor"
+        emit_event(
+            action="route_eta",
+            event_type="route_eta_next_farm",
+            instance=next_stop.farm,
+            title=f"{supervisor_name} heading to {next_stop.label} — ETA ~{eta_minutes} min",
+            message=(f"{supervisor_name} checked out of {current_stop.label} and is "
+                     f"heading to {next_stop.label}. Estimated arrival in "
+                     f"~{eta_minutes} minutes ({float(next_stop.leg_distance_km or 0):.1f} km)."),
+            severity=Severity.INFO,
+            metadata={
+                "route_id": route.pk,
+                "route_no": route.route_no,
+                "from_farm_id": farm_id,
+                "from_farm": current_stop.label,
+                "to_farm_id": next_stop.farm_id,
+                "to_farm": next_stop.label,
+                "eta_minutes": eta_minutes,
+                "leg_distance_km": float(next_stop.leg_distance_km or 0),
+                "supervisor_id": route.supervisor_id,
+            },
+        )
+    except Exception:
+        logger.exception("ETA notification failed")

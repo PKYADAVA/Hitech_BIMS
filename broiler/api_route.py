@@ -201,7 +201,7 @@ class CheckInView(RouteActionView):
         except (TypeError, ValueError):
             return self.fail("That farm id is not a number.")
         route.refresh_from_db()
-        return Response({
+        payload = {
             "farm_id": visit.farm_id,
             "checked_in_at": (visit.checked_in_at.isoformat()
                               if visit.checked_in_at else None),
@@ -209,14 +209,50 @@ class CheckInView(RouteActionView):
                                if visit.checked_out_at else None),
             "duration_minutes": visit.duration_minutes,
             "route": _route_payload(route),
-        })
+        }
+        lat = request.data.get("latitude")
+        lng = request.data.get("longitude")
+        if lat is not None and lng is not None and visit.farm:
+            farm = visit.farm
+            if farm.farm_latitude is not None and farm.farm_longitude is not None:
+                from tracking.services.geo import haversine_km
+                from broiler.services.route_trip import GEOFENCE_RADIUS_M
+                dist_m = haversine_km(
+                    float(lat), float(lng),
+                    farm.farm_latitude, farm.farm_longitude) * 1000
+                payload["distance_from_farm_m"] = round(dist_m, 1)
+                payload["geofence_ok"] = dist_m <= GEOFENCE_RADIUS_M
+        return Response(payload)
 
 
 class CheckOutView(CheckInView):
     """POST /api/v1/broiler/routes/<pk>/check-out — leaving the farm."""
 
     def post(self, request, pk):
-        return self._act(request, pk, check_out)
+        response = self._act(request, pk, check_out)
+        if response.status_code == 200:
+            farm_id = request.data.get("farm_id")
+            route = self.get_route(request, pk)
+            if route and farm_id:
+                try:
+                    current = (route.stops.filter(farm_id=int(farm_id))
+                               .order_by("sequence").first())
+                    if current:
+                        nxt = (route.stops
+                               .filter(sequence__gt=current.sequence,
+                                       farm__isnull=False,
+                                       visited_at__isnull=True)
+                               .order_by("sequence").first())
+                        if nxt:
+                            response.data["next_farm"] = {
+                                "farm_id": nxt.farm_id,
+                                "label": nxt.label,
+                                "distance_km": float(nxt.leg_distance_km or 0),
+                                "eta_minutes": nxt.leg_minutes or 0,
+                            }
+                except Exception:
+                    pass
+        return response
 
 
 def route_urls() -> list:

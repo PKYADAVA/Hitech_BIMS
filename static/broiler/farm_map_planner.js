@@ -32,10 +32,27 @@ window.FarmMapPlanner = (function () {
 
   var PRIORITY_COLOUR = { critical: "#dc2626", high: "#ea580c", normal: "#2563eb" };
   var INACTIVE_COLOUR = "#94a3b8";
+  var colourMode = "priority"; // "priority" or "visit"
+
+  var VISIT_THRESHOLDS = [
+    { days: 3,  colour: "#16a34a" }, // green — visited in last 3 days
+    { days: 7,  colour: "#65a30d" }, // lime
+    { days: 14, colour: "#ca8a04" }, // yellow
+    { days: 21, colour: "#ea580c" }, // orange
+    { days: 30, colour: "#dc2626" }, // red
+  ];
+  var VISIT_NEVER = "#6b7280";       // gray — never visited
+  var VISIT_OVERDUE = "#991b1b";     // dark red — >30 days
 
   // ---- small helpers ------------------------------------------------------
 
   function el(id) { return document.getElementById(id); }
+
+  function setSaveEnabled(on) {
+    el("fmp-save").disabled = !on;
+    var tmpl = el("fmp-save-template");
+    if (tmpl) tmpl.disabled = !on;
+  }
 
   function esc(text) {
     // main.js publishes escapeHtml globally; fall back so this file also
@@ -109,7 +126,17 @@ window.FarmMapPlanner = (function () {
 
   function markerColour(farm) {
     if ((farm.status || "").toLowerCase() !== "active") return INACTIVE_COLOUR;
+    if (colourMode === "visit") return visitColour(farm);
     return PRIORITY_COLOUR[farm.priority] || PRIORITY_COLOUR.normal;
+  }
+
+  function visitColour(farm) {
+    if (!farm.last_visit) return VISIT_NEVER;
+    var days = Math.floor((Date.now() - new Date(farm.last_visit).getTime()) / 86400000);
+    for (var i = 0; i < VISIT_THRESHOLDS.length; i++) {
+      if (days <= VISIT_THRESHOLDS[i].days) return VISIT_THRESHOLDS[i].colour;
+    }
+    return VISIT_OVERDUE;
   }
 
   function drawMarkers() {
@@ -343,7 +370,15 @@ window.FarmMapPlanner = (function () {
           '<span class="km">' + (s.leg_distance_km ? km(s.leg_distance_km) : "—") + "</span>" +
           "</div>";
       }).join("");
-    box.innerHTML = estimate + notes + head + order;
+    var share = '<div class="d-flex gap-2 mt-3 pt-2 border-top">' +
+      '<button class="btn btn-sm btn-outline-success flex-fill" data-share="whatsapp" title="Share via WhatsApp">' +
+        '<i class="fab fa-whatsapp me-1"></i>Share</button>' +
+      '<button class="btn btn-sm btn-outline-primary flex-fill" data-share="navigate" title="Open in Google Maps">' +
+        '<i class="fas fa-map-location-dot me-1"></i>Navigate</button>' +
+      '<button class="btn btn-sm btn-outline-secondary flex-fill" data-share="copy" title="Copy route text">' +
+        '<i class="fas fa-copy me-1"></i>Copy</button>' +
+      "</div>";
+    box.innerHTML = estimate + notes + head + order + share;
   }
 
   function line(icon, label, value, tone) {
@@ -522,7 +557,7 @@ window.FarmMapPlanner = (function () {
                      latitude: Number(position.coords.latitude.toFixed(6)),
                      longitude: Number(position.coords.longitude.toFixed(6)) };
       plan = null;
-      el("fmp-save").disabled = true;
+      setSaveEnabled(false);
       map.setView([startPoint.latitude, startPoint.longitude], Math.max(map.getZoom(), 12));
       renderStart(); renderSummary(); renderTable(); drawRoute();
       button.disabled = false;
@@ -593,7 +628,7 @@ window.FarmMapPlanner = (function () {
         selected = new Set(Array.from(selected).filter(function (id) { return visible.has(id); }));
         plan = null;
         page = 1;
-        el("fmp-save").disabled = true;
+        setSaveEnabled(false);
         renderAll();
       })
       .catch(function () { notify("Could not load the farms for this map.", "danger"); });
@@ -627,7 +662,7 @@ window.FarmMapPlanner = (function () {
         return;
       }
       plan = result.data;
-      el("fmp-save").disabled = false;
+      setSaveEnabled(true);
       if (plan.estimated) {
         notify("Routing service unavailable — showing straight-line estimates.", "warning");
       }
@@ -660,6 +695,227 @@ window.FarmMapPlanner = (function () {
       }
       notify("Route <b>" + esc(result.data.route_no) + "</b> saved.", "success");
     }).catch(function () { notify("The route could not be saved.", "danger"); });
+  }
+
+  // ---- templates -----------------------------------------------------------
+
+  function loadTemplates() {
+    fetch(window.FMP_URLS.templates, { credentials: "same-origin" })
+      .then(readJson)
+      .then(function (result) {
+        if (!result.ok) return;
+        var select = el("f-template");
+        var val = select.value;
+        select.innerHTML = '<option value="">— Load Template —</option>';
+        (result.data.templates || []).forEach(function (t) {
+          var opt = document.createElement("option");
+          opt.value = t.id;
+          opt.textContent = t.name + " (" + t.farm_count + " farms, " + t.distance_km + " km)";
+          select.appendChild(opt);
+        });
+        if (val) select.value = val;
+      });
+  }
+
+  function loadTemplate(templateId) {
+    if (!templateId) return;
+    var url = window.FMP_URLS.loadTemplate.replace(/\/0\//, "/" + templateId + "/");
+    fetch(url, { credentials: "same-origin" })
+      .then(readJson)
+      .then(function (result) {
+        if (!result.ok) {
+          notify(esc(result.data.error || "Could not load the template."), "danger");
+          return;
+        }
+        var data = result.data;
+        if (data.branch_id) el("f-branch").value = data.branch_id;
+        if (data.supervisor_id) el("f-supervisor").value = data.supervisor_id;
+        if (data.mode) el("f-mode").value = data.mode;
+        selected.clear();
+        (data.farm_ids || []).forEach(function (id) { selected.add(id); });
+        plan = null;
+        page = 1;
+        renderAll();
+        notify("Template <b>" + esc(data.template_name) + "</b> loaded — " +
+          data.farm_ids.length + " farms selected. Press <b>Calculate Route</b> to plan.", "info");
+      })
+      .catch(function () { notify("Could not load the template.", "danger"); });
+  }
+
+  function saveAsTemplate() {
+    var name = window.prompt("Template name:");
+    if (!name || !name.trim()) return;
+    var body = {
+      template_name: name.trim(),
+      plan: plan,
+      branch: el("f-branch").value,
+      supervisor: el("f-supervisor").value,
+      mode: el("f-mode").value,
+      date: window.FMP_TODAY,
+      roundtrip: true
+    };
+    fetch(window.FMP_URLS.saveTemplate, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify(body)
+    }).then(readJson).then(function (result) {
+      if (!result.ok) {
+        notify(esc(result.data.error || "Could not save template."), "danger");
+        return;
+      }
+      notify("Template <b>" + esc(result.data.template_name) + "</b> saved.", "success");
+      loadTemplates();
+    }).catch(function () { notify("Could not save the template.", "danger"); });
+  }
+
+  // ---- live supervisor overlay ---------------------------------------------
+
+  var liveLayer = null;
+  var liveInterval = null;
+  var liveActive = false;
+
+  function supervisorIcon(name, status) {
+    var bg = status === "moving" ? "#16a34a" : status === "idle" ? "#ca8a04" : "#64748b";
+    return L.divIcon({
+      className: "",
+      html: '<div style="background:' + bg + ';color:#fff;padding:2px 6px;border-radius:1rem;' +
+        'font-size:.7rem;font-weight:600;white-space:nowrap;border:2px solid #fff;' +
+        'box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;gap:4px;">' +
+        '<i class="fas fa-user" style="font-size:.6rem"></i>' + esc(name) + "</div>",
+      iconSize: null, iconAnchor: [12, 12]
+    });
+  }
+
+  function refreshLiveOverlay() {
+    fetch(window.FMP_URLS.liveSupervisors, { credentials: "same-origin" })
+      .then(readJson)
+      .then(function (result) {
+        if (!result.ok || !liveActive) return;
+        liveLayer.clearLayers();
+        (result.data.supervisors || []).forEach(function (s) {
+          var ago = s.recorded_at ? timeSince(s.recorded_at) : "";
+          var tip = s.name + " — " + s.route_no +
+            (s.speed_kmh ? " · " + s.speed_kmh + " km/h" : "") +
+            (s.battery_pct !== null ? " · " + s.battery_pct + "%" : "") +
+            (ago ? " · " + ago : "");
+          L.marker([s.latitude, s.longitude], { icon: supervisorIcon(s.name, s.status) })
+            .bindTooltip(tip, { direction: "top" })
+            .addTo(liveLayer);
+        });
+      });
+  }
+
+  function timeSince(iso) {
+    var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return diff + "s ago";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    return Math.floor(diff / 3600) + "h ago";
+  }
+
+  function toggleLiveOverlay() {
+    liveActive = !liveActive;
+    var btn = el("fmp-live-overlay");
+    btn.className = "btn btn-sm " + (liveActive ? "btn-success" : "btn-outline-secondary");
+    btn.innerHTML = liveActive
+      ? '<i class="fas fa-satellite-dish me-1"></i>Live <span class="spinner-grow spinner-grow-sm ms-1"></span>'
+      : '<i class="fas fa-satellite-dish me-1"></i>Live';
+    if (liveActive) {
+      if (!liveLayer) liveLayer = L.layerGroup().addTo(map);
+      else liveLayer.addTo(map);
+      refreshLiveOverlay();
+      liveInterval = window.setInterval(refreshLiveOverlay, 30000);
+    } else {
+      if (liveInterval) { window.clearInterval(liveInterval); liveInterval = null; }
+      if (liveLayer) map.removeLayer(liveLayer);
+    }
+  }
+
+  // ---- auto-suggest -------------------------------------------------------
+
+  function autoSuggest() {
+    var btn = el("fmp-auto-suggest");
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Suggesting…';
+    var params = new URLSearchParams({
+      branch: el("f-branch").value,
+      supervisor: el("f-supervisor").value,
+      limit: "15"
+    });
+    fetch(window.FMP_URLS.autoSuggest + "?" + params.toString(), { credentials: "same-origin" })
+      .then(readJson)
+      .then(function (result) {
+        if (!result.ok) {
+          notify(esc(result.data.error || "Auto-suggest failed."), "danger");
+          return;
+        }
+        var suggested = result.data.farms || [];
+        if (!suggested.length) {
+          notify("No farms need a visit right now — all are recently visited.", "info");
+          return;
+        }
+        var visible = new Set(farms.map(function (f) { return f.id; }));
+        selected.clear();
+        var matched = 0;
+        suggested.forEach(function (s) {
+          if (visible.has(s.id)) { selected.add(s.id); matched++; }
+        });
+        plan = null;
+        page = 1;
+        setSaveEnabled(false);
+        renderAll();
+        var details = suggested.slice(0, 5).map(function (s) {
+          return s.name + " (" + s.days_since_visit + "d ago)";
+        }).join(", ");
+        notify("<b>" + matched + " farms</b> auto-selected by visit urgency. " +
+          "Top picks: " + esc(details) +
+          (suggested.length > 5 ? "…" : "") +
+          " Press <b>Calculate Route</b> to plan.", "info");
+      })
+      .catch(function () { notify("Auto-suggest failed.", "danger"); })
+      .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Auto-Suggest';
+      });
+  }
+
+  // ---- sharing ------------------------------------------------------------
+
+  function buildGoogleMapsUrl() {
+    if (!plan || !plan.stops || plan.stops.length < 2) return null;
+    var parts = plan.stops
+      .filter(function (s) { return s.latitude !== null && s.longitude !== null; })
+      .map(function (s) { return s.latitude + "," + s.longitude; });
+    if (parts.length < 2) return null;
+    return "https://www.google.com/maps/dir/" + parts.join("/");
+  }
+
+  function shareRoute(method) {
+    var url = buildGoogleMapsUrl();
+    if (!url) {
+      notify("Calculate a route first.", "warning");
+      return;
+    }
+    var farmNames = plan.stops
+      .filter(function (s) { return s.kind === "farm"; })
+      .map(function (s, i) { return (i + 1) + ". " + s.label; })
+      .join("\n");
+    var text = "Farm Route (" + plan.farm_count + " farms, " +
+      km(plan.distance_km) + ", ~" + hhmm(plan.minutes) + ")\n" +
+      farmNames + "\n\nNavigate: " + url;
+
+    if (method === "whatsapp") {
+      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+    } else if (method === "copy") {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function () {
+          notify("Route copied to clipboard.", "success");
+        });
+      } else {
+        notify("Clipboard not available — open the link directly.", "warning");
+      }
+    } else {
+      window.open(url, "_blank");
+    }
   }
 
   // ---- wiring -------------------------------------------------------------
@@ -715,12 +971,26 @@ window.FarmMapPlanner = (function () {
       button.classList.remove("btn-primary");
       button.classList.add("btn-outline-secondary");
       plan = null;
-      el("fmp-save").disabled = true;
+      setSaveEnabled(false);
       renderStart(); renderSummary(); renderTable(); drawRoute();
     });
 
     el("fmp-base-map").addEventListener("click", function () { setBase("street"); });
     el("fmp-base-sat").addEventListener("click", function () { setBase("satellite"); });
+    var colourBtn = el("fmp-colour-mode");
+    if (colourBtn) {
+      colourBtn.addEventListener("click", function () {
+        colourMode = colourMode === "priority" ? "visit" : "priority";
+        this.innerHTML = colourMode === "visit"
+          ? '<i class="fas fa-calendar-check me-1"></i>Last Visit'
+          : '<i class="fas fa-exclamation-triangle me-1"></i>Priority';
+        this.className = "btn btn-sm " +
+          (colourMode === "visit" ? "btn-success" : "btn-outline-secondary");
+        var legend = el("fmp-visit-legend");
+        if (legend) legend.classList.toggle("d-none", colourMode !== "visit");
+        drawMarkers();
+      });
+    }
     el("fmp-show-labels").addEventListener("change", function () {
       if (this.checked) { labelLayer.addTo(map); } else { map.removeLayer(labelLayer); }
     });
@@ -739,6 +1009,18 @@ window.FarmMapPlanner = (function () {
     el("fmp-refresh").addEventListener("click", load);
     el("fmp-calculate").addEventListener("click", calculate);
     el("fmp-save").addEventListener("click", save);
+    el("fmp-save-template").addEventListener("click", saveAsTemplate);
+    el("fmp-live-overlay").addEventListener("click", toggleLiveOverlay);
+    el("fmp-auto-suggest").addEventListener("click", autoSuggest);
+    el("f-template").addEventListener("change", function () {
+      if (this.value) loadTemplate(this.value);
+      this.value = "";
+    });
+    loadTemplates();
+    document.addEventListener("click", function (e) {
+      var share = e.target.closest("[data-share]");
+      if (share) shareRoute(share.dataset.share);
+    });
     el("fmp-search").addEventListener("input", renderPicker);
     // "All" means all of what the search has left showing, which is what a
     // filtered list implies — otherwise searching would be a lie the moment
@@ -756,7 +1038,7 @@ window.FarmMapPlanner = (function () {
       var id = Number(event.target.value);
       if (event.target.checked) selected.add(id); else selected.delete(id);
       plan = null;
-      el("fmp-save").disabled = true;
+      setSaveEnabled(false);
       renderCounts(); drawMarkers(); drawRoute(); renderSummary(); renderTable();
     });
 

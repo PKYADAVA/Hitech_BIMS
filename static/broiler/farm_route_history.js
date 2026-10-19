@@ -139,6 +139,7 @@ window.RouteHistory = (function () {
             "</span></span></div>";
         }).join("");
 
+        lastStops = data.stops;
         modal.show();
         // Leaflet needs a visible container to size itself, so the map is
         // built after the modal is on screen rather than behind it.
@@ -241,6 +242,34 @@ window.RouteHistory = (function () {
     });
   }
 
+  var lastStops = null;
+
+  function shareRoute(method) {
+    if (!lastStops || lastStops.length < 2) return;
+    var parts = lastStops
+      .filter(function (s) { return s.latitude !== null && s.longitude !== null; })
+      .map(function (s) { return s.latitude + "," + s.longitude; });
+    if (parts.length < 2) return;
+    var url = "https://www.google.com/maps/dir/" + parts.join("/");
+    var farmNames = lastStops
+      .filter(function (s) { return s.kind === "farm"; })
+      .map(function (s, i) { return (i + 1) + ". " + s.label; }).join("\n");
+    var farms = lastStops.filter(function (s) { return s.kind === "farm"; });
+    var text = "Farm Route (" + farms.length + " farms)\n" +
+      farmNames + "\n\nNavigate: " + url;
+    if (method === "whatsapp") {
+      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+    } else if (method === "copy") {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function () {
+          window.alert("Route copied to clipboard.");
+        });
+      }
+    } else {
+      window.open(url, "_blank");
+    }
+  }
+
   function init() {
     modal = new bootstrap.Modal(document.getElementById("rhModal"));
     document.addEventListener("click", function (event) {
@@ -251,7 +280,9 @@ window.RouteHistory = (function () {
       var copy = event.target.closest(".rh-duplicate");
       if (copy) { duplicate(copy.dataset.route, copy); return; }
       var again = event.target.closest(".rh-recalc");
-      if (again) { recalculate(again.dataset.route, again); }
+      if (again) { recalculate(again.dataset.route, again); return; }
+      var share = event.target.closest("[data-rh-share]");
+      if (share) { shareRoute(share.dataset.rhShare); }
     });
   }
 

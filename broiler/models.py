@@ -3140,6 +3140,9 @@ class FarmRoute(models.Model):
     trip = models.OneToOneField("hr.SupervisorTrip", on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name="planned_route")
 
+    is_template = models.BooleanField(default=False, db_index=True)
+    template_name = models.CharField(max_length=150, blank=True)
+
     created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name="farm_routes")
     created_at = models.DateTimeField(auto_now_add=True)
