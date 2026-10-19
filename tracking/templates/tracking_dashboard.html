@@ -24,6 +24,7 @@
   .trk-photo-fallback { width:32px; height:32px; border-radius:50%; background:#6c757d; color:#fff;
                         display:inline-flex; align-items:center; justify-content:center; font-size:.8rem; }
   #trk-updated { font-size:.8rem; opacity:.75; }
+  .trk-farm-pin { background:none !important; border:none !important; }
 </style>
 {% endblock %}
 
@@ -110,6 +111,10 @@
         </select>
       </div>
       <div class="col-md-2 d-flex gap-2 justify-content-end">
+        <div class="form-check form-switch me-1 align-self-center">
+          <input class="form-check-input" type="checkbox" id="trk-show-farms">
+          <label class="form-check-label small" for="trk-show-farms">Farms</label>
+        </div>
         <button class="btn btn-sm btn-outline-primary" id="trk-sync-now"><i class="fas fa-cloud-arrow-down"></i> Sync Now</button>
         <button class="btn btn-sm btn-outline-secondary" id="trk-clear">Clear</button>
       </div>
@@ -153,6 +158,7 @@
   "use strict";
   const API_URL = "{% url 'api_tracking_live' %}";
   const SYNC_URL = "{% url 'api_tracking_sync_now' %}";
+  const FARM_DATA_URL = "{% url 'farm_map_data' %}";
   const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
   const REFRESH_MS = Math.max({{ refresh_seconds }}, 10) * 1000;
   const STATUS_BADGE = { online:"success", moving:"primary", idle:"warning", offline:"danger", unknown:"secondary" };
@@ -168,7 +174,48 @@
   }).addTo(map);
   const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
   map.addLayer(cluster);
+  const farmLayer = L.layerGroup();
   let fitted = false;
+  let farmsLoaded = false;
+
+  // Same teardrop pin as the Farm Map & Route Planner, so a farm looks like a
+  // farm wherever it's drawn, not a different shape depending which screen.
+  function farmPin() {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 28 36">' +
+      '<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#fd7e14"/>' +
+      '<circle cx="14" cy="14" r="5" fill="#fff"/></svg>';
+    return L.divIcon({ className: "trk-farm-pin", html: svg, iconSize: [18, 24], iconAnchor: [9, 24] });
+  }
+
+  function loadFarms() {
+    fetch(FARM_DATA_URL, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        farmLayer.clearLayers();
+        (data.farms || []).forEach(farm => {
+          L.marker([farm.latitude, farm.longitude], { icon: farmPin() })
+            .bindPopup(
+              "<strong>" + esc(farm.name) + "</strong>" +
+              (farm.code ? " <small class='text-muted'>" + esc(farm.code) + "</small>" : "") +
+              "<br><small>" + esc(farm.branch || "–") +
+              (farm.supervisor ? " · " + esc(farm.supervisor) : "") + "</small>" +
+              (farm.location ? "<br><small>" + esc(farm.location) + "</small>" : "")
+            )
+            .addTo(farmLayer);
+        });
+        farmsLoaded = true;
+      })
+      .catch(() => { /* transient failure; toggle off/on retries */ });
+  }
+
+  document.getElementById("trk-show-farms").addEventListener("change", function () {
+    if (this.checked) {
+      if (!farmsLoaded) loadFarms();
+      map.addLayer(farmLayer);
+    } else {
+      map.removeLayer(farmLayer);
+    }
+  });
 
   function esc(text) {
     return String(text == null ? "" : text).replace(/[&<>"']/g,
