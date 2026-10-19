@@ -100,7 +100,7 @@
           <span class="text-muted small" id="bsr-attach-title"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto">
         <div id="bsr-attach-list" class="mb-3"></div>
       </div>
     </div>
@@ -195,8 +195,8 @@ $(function () {
         <div class="col-6 col-md-4 mb-3 text-center">
           <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">
             ${isPdf
-              ? `<div class="d-flex align-items-center justify-content-center rounded border bg-light" style="height:120px"><i class="fas fa-file-pdf fa-3x text-danger"></i></div>`
-              : `<img src="${escapeHtml(f.url)}" class="img-fluid rounded border" alt="${escapeHtml(f.caption || f.name)}">`}
+              ? `<div class="d-flex align-items-center justify-content-center rounded border bg-light" style="height:180px"><i class="fas fa-file-pdf fa-3x text-danger"></i></div>`
+              : `<img src="${escapeHtml(f.url)}" class="img-fluid rounded border" style="max-height:280px;object-fit:contain;width:100%" alt="${escapeHtml(f.caption || f.name)}">`}
           </a>
           <div class="small text-muted mt-1">${escapeHtml(f.caption || f.name)}
             {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 bsr-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
