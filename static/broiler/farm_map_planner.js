@@ -30,6 +30,9 @@ window.FarmMapPlanner = (function () {
   var page = 1;
   var PAGE_SIZE = 12;
 
+  var farmDistances = {};      // farm_id → km from start (road)
+  var distBasis = "";          // "road" or "straight"
+
   var PRIORITY_COLOUR = { critical: "#dc2626", high: "#ea580c", normal: "#2563eb" };
   var INACTIVE_COLOUR = "#94a3b8";
   var colourMode = "priority"; // "priority" or "visit"
@@ -66,6 +69,7 @@ window.FarmMapPlanner = (function () {
   function km(value) {
     return (value === null || value === undefined) ? "—" : Number(value).toFixed(1) + " km";
   }
+
 
   function hhmm(minutes) {
     if (minutes === null || minutes === undefined) return "—";
@@ -114,13 +118,16 @@ window.FarmMapPlanner = (function () {
   // ---- map ----------------------------------------------------------------
 
   function pin(colour, label) {
+    var text = (label === undefined || label === "") ? ""
+      : '<text x="14" y="17" text-anchor="middle" fill="#fff" font-size="8" font-weight="700" font-family="sans-serif">' + label + '</text>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 28 36">' +
+      '<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="' + colour + '"/>' +
+      '<circle cx="14" cy="14" r="5" fill="#fff"/>' +
+      text + '</svg>';
     return L.divIcon({
-      className: "",
-      html: '<div class="fmp-pin" style="background:' + colour +
-            ';width:1.35rem;height:1.35rem;color:#fff;font-size:.7rem;' +
-            'display:flex;align-items:center;justify-content:center;">' +
-            (label === undefined ? "" : label) + "</div>",
-      iconSize: [22, 22], iconAnchor: [11, 11]
+      className: "fmp-pin",
+      html: svg,
+      iconSize: [18, 24], iconAnchor: [9, 24]
     });
   }
 
@@ -396,7 +403,7 @@ window.FarmMapPlanner = (function () {
     var body = el("fmp-body");
     var rows = farms.concat([]);
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">' +
+      body.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-4">' +
         "No farms match these filters.</td></tr>";
       el("fmp-count").textContent = "";
       el("fmp-pager").innerHTML = "";
@@ -431,6 +438,10 @@ window.FarmMapPlanner = (function () {
         '<td class="ds-num text-end">' + (f.live_birds ? Number(f.live_birds).toLocaleString("en-IN") : "—") + "</td>" +
         '<td class="ds-mid"><span class="badge badge-priority-' + esc(f.priority) + '">' +
           esc(f.priority.charAt(0).toUpperCase() + f.priority.slice(1)) + "</span></td>" +
+        '<td class="ds-num text-end">' +
+          (farmDistances[f.id] != null
+            ? km(farmDistances[f.id]) + (distBasis === "straight" ? ' <span class="badge bg-warning text-dark" style="font-size:.55rem">est</span>' : "")
+            : "—") + "</td>" +
         '<td class="ds-num text-end">' + (stop ? km(stop.leg_distance_km) : "—") + "</td>" +
         '<td class="ds-num text-end">' + (stop ? km(stop.cumulative_distance_km) : "—") + "</td>" +
         '<td class="ds-num text-end">' + (stop ? hhmm(stop.leg_minutes) : "—") + "</td>" +
@@ -560,6 +571,7 @@ window.FarmMapPlanner = (function () {
       setSaveEnabled(false);
       map.setView([startPoint.latitude, startPoint.longitude], Math.max(map.getZoom(), 12));
       renderStart(); renderSummary(); renderTable(); drawRoute();
+      fetchDistances();
       button.disabled = false;
       button.innerHTML = original;
     }, function (error) {
@@ -630,6 +642,7 @@ window.FarmMapPlanner = (function () {
         page = 1;
         setSaveEnabled(false);
         renderAll();
+        fetchDistances();
       })
       .catch(function () { notify("Could not load the farms for this map.", "danger"); });
   }
@@ -830,6 +843,26 @@ window.FarmMapPlanner = (function () {
     }
   }
 
+  // ---- farm distances from start -------------------------------------------
+
+  function fetchDistances() {
+    var sp = currentStart();
+    if (!sp) { farmDistances = {}; distBasis = ""; return; }
+    var params = new URLSearchParams({
+      lat: sp.latitude, lng: sp.longitude,
+      branch: el("f-branch").value,
+      supervisor: el("f-supervisor").value
+    });
+    fetch(window.FMP_URLS.distances + "?" + params.toString(), { credentials: "same-origin" })
+      .then(readJson)
+      .then(function (result) {
+        if (!result.ok) return;
+        farmDistances = result.data.distances || {};
+        distBasis = result.data.basis || "";
+        renderTable();
+      });
+  }
+
   // ---- auto-suggest -------------------------------------------------------
 
   function autoSuggest() {
@@ -973,6 +1006,7 @@ window.FarmMapPlanner = (function () {
       plan = null;
       setSaveEnabled(false);
       renderStart(); renderSummary(); renderTable(); drawRoute();
+      fetchDistances();
     });
 
     el("fmp-base-map").addEventListener("click", function () { setBase("street"); });

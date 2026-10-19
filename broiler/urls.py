@@ -204,6 +204,8 @@ urlpatterns = [
          name='supervisor_live_positions'),
     path('farm-map-planner/auto-suggest/', route_planner.auto_suggest_farms,
          name='auto_suggest_farms'),
+    path('farm-map-planner/distances/', route_planner.farm_distances_from_start,
+         name='farm_distances_from_start'),
     path('farm-visit-analytics/', route_planner.visit_analytics,
          name='visit_analytics'),
     path('farm-visit-analytics/data/', route_planner.visit_analytics_data,

@@ -62,7 +62,9 @@
              white-space:nowrap; }
   .fmp-legend { background:#fff; border:1px solid #e5e7eb; border-radius:.5rem;
                 padding:.45rem .7rem; font-size:.75rem; }
-  .fmp-pin { border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
+  .fmp-pin { line-height:0; filter:drop-shadow(0 1px 3px rgba(0,0,0,.35));
+             background:none !important; border:none !important; }
+  .fmp-pin svg { display:block; overflow:visible; }
   .badge-priority-critical { background:#dc2626; color:#fff; }
   .badge-priority-high { background:#fed7aa; color:#9a3412; }
   .badge-priority-normal { background:#e2e8f0; color:#475569; }
@@ -347,6 +349,7 @@ overridden by d-lg-block and the row is simply always there.
             <th>Farm Code</th><th>Farm Name</th><th>Branch</th><th>Supervisor</th>
             <th>Active Batch</th><th class="ds-num text-end">Live Birds</th>
             <th class="ds-mid">Priority</th>
+            <th class="ds-num text-end">Dist. from Start</th>
             <th class="ds-num text-end">Distance from Prev.</th>
             <th class="ds-num text-end">Cumulative Dist.</th>
             <th class="ds-num text-end">Est. Time to Next</th>
@@ -355,7 +358,7 @@ overridden by d-lg-block and the row is simply always there.
           </tr>
         </thead>
         <tbody id="fmp-body">
-          <tr><td colspan="13" class="text-center text-muted py-4">Loading&hellip;</td></tr>
+          <tr><td colspan="14" class="text-center text-muted py-4">Loading&hellip;</td></tr>
         </tbody>
       </table>
     </div>
@@ -383,7 +386,8 @@ overridden by d-lg-block and the row is simply always there.
     saveTemplate: "{% url 'route_save_as_template' %}",
     loadTemplate: "{% url 'route_load_template' 0 %}",
     liveSupervisors: "{% url 'supervisor_live_positions' %}",
-    autoSuggest: "{% url 'auto_suggest_farms' %}"
+    autoSuggest: "{% url 'auto_suggest_farms' %}",
+    distances: "{% url 'farm_distances_from_start' %}"
   };
   window.FMP_TODAY = "{{ today|date:'Y-m-d' }}";
   window.FMP_BRANCH_POINTS = {{ branch_points_json|safe }};

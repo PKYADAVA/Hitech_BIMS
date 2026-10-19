@@ -1072,6 +1072,51 @@ def visit_analytics_data(request):
 
 
 @login_required
+def farm_distances_from_start(request):
+    """GET — road distance from a start point to each visible farm, via the
+    routing provider's distance matrix (one API call for all farms)."""
+    lat = request.GET.get("lat")
+    lng = request.GET.get("lng")
+    if lat is None or lng is None:
+        return JsonResponse({"error": "Start point required."}, status=400)
+    try:
+        start = (float(lat), float(lng))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid coordinates."}, status=400)
+
+    farms = _visible_farms(request.user)
+    branch_id = _int(request.GET.get("branch"))
+    supervisor_id = _int(request.GET.get("supervisor"))
+    if branch_id:
+        farms = farms.filter(branch_id=branch_id)
+    if supervisor_id:
+        farms = farms.filter(supervisor_id=supervisor_id)
+
+    mapped = [(f.id, f.farm_latitude, f.farm_longitude)
+              for f in farms
+              if f.farm_latitude is not None and f.farm_longitude is not None]
+    if not mapped:
+        return JsonResponse({"distances": {}})
+
+    from broiler.services.routing import RouteService, RoutingError
+
+    points = [start] + [(lat, lng) for _, lat, lng in mapped]
+    try:
+        svc = RouteService()
+        matrix = svc.provider.matrix(points, mode="distance")
+        row = matrix[0]
+        distances = {mapped[i][0]: round(row[i + 1], 1) for i in range(len(mapped))}
+        basis = svc.provider.basis
+    except (RoutingError, Exception):
+        from broiler.services.routing import haversine_km
+        distances = {fid: round(haversine_km(start, (lat, lng)) * 1.2, 1)
+                     for fid, lat, lng in mapped}
+        basis = "straight"
+
+    return JsonResponse({"distances": distances, "basis": basis})
+
+
+@login_required
 def route_load_template(request, route_id):
     """GET — return a template's farm IDs so the planner can pre-select them."""
     route = _route_for(request.user, route_id)

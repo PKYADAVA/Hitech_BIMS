@@ -149,6 +149,8 @@ MODULE_REGISTRY = [
                       "route_check_in", "route_check_out",
                       "route_duplicate", "route_recalculate")),
                     ("route_reports", "Route & Visit Reports"),
+                    ("visit_analytics", "Visit Analytics",
+                     ("visit_analytics_data",)),
                 ],
             },
         ],

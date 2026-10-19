@@ -137,6 +137,7 @@ TAB_ICONS = {
     "region": "fas fa-map-marked-alt",
     "route_history": "fas fa-clock-rotate-left",
     "route_reports": "fas fa-clipboard-list",
+    "visit_analytics": "fas fa-chart-line",
     "self_attendance": "fas fa-user-clock",
     "sales_invoice_list": "fas fa-file-invoice-dollar",
     "sales_price_master": "fas fa-tag",

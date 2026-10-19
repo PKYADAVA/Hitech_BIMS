@@ -1878,7 +1878,7 @@ MOBILE_REPORT_URL_NAMES = [
     # already lays itself out for a phone, and a native map would mean a new
     # dependency and a new APK on every handset for a screen that is mostly a
     # map and a list.
-    "farm_map_planner", "route_history", "route_reports",
+    "farm_map_planner", "route_history", "route_reports", "visit_analytics",
     # Hatchery
     "hatchery_report", "egg_purchase_report", "incubation_report",
     "delivery_challan_report", "chick_sale_report",

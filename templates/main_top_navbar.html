@@ -397,6 +397,9 @@ layouts open it from the account menu.
                   {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}" target="_blank" rel="noopener">
                     <i class="fas fa-clipboard-list"></i>Route &amp; Visit Reports
                   </a></li>{% endif %}
+                  {% if 'visit_analytics' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'visit_analytics' %}" target="_blank" rel="noopener">
+                    <i class="fas fa-chart-line"></i>Visit Analytics
+                  </a></li>{% endif %}
                 </ul>
               </li>
               {% endif %}
