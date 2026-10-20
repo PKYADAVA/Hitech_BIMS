@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if profile %}Edit{% else %}Add{% endif %} Company — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_subnavbar.html' with active_tab='company_profile' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-building"></i> {% if profile %}Edit{% else %}Add{% endif %} Company</div>
+      <div class="page-header-subtitle">Letterhead and bank details printed on documents</div>
+    </div>
+    <div class="page-header-right">
+      <a class="btn btn-outline-secondary" href="{% url 'company_profile' %}"><i class="fas fa-arrow-left"></i> Back to Companies</a>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form id="company-form">
+      {% csrf_token %}
+      <input type="hidden" id="company-id" value="{{ profile.id|default:'' }}">
+
+      {% if profile %}
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <img id="logo-preview" src="{% if profile.logo %}{{ profile.logo.url }}{% endif %}" alt="Logo" class="rounded border" style="width:88px;height:88px;object-fit:contain;background:#fff">
+        <div>
+          <label for="logo-file" class="form-label mb-1">Logo <span class="text-muted small">(shown on invoices, challans and other printed documents)</span></label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="file" id="logo-file" accept="image/*" class="form-control form-control-sm" style="max-width:280px">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="logo-upload-btn" disabled>Upload</button>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="alert alert-light border small mb-4">
+        <i class="fas fa-circle-info me-1"></i> Save the company first, then come back here to upload its logo.
+      </div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="name" class="form-label">Company Name<span class="text-danger">*</span></label>
+          <input type="text" id="name" name="name" class="form-control" value="{{ profile.name|default:'' }}" required>
+        </div>
+        <div class="col-md-3">
+          <label for="mobile" class="form-label">Mobile</label>
+          <input type="text" id="mobile" name="mobile" class="form-control" value="{{ profile.mobile|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" id="email" name="email" class="form-control" value="{{ profile.email|default:'' }}">
+        </div>
+        <div class="col-md-8">
+          <label for="address" class="form-label">Address</label>
+          <textarea id="address" name="address" class="form-control" rows="2">{{ profile.address|default:'' }}</textarea>
+        </div>
+        <div class="col-md-4">
+          <label for="state" class="form-label">State</label>
+          <select id="state" name="state" class="form-select">
+            <option value="" {% if not profile.state %}selected{% endif %}>Select</option>
+            {% for st in states_and_union_territories %}
+            <option value="{{ st }}" {% if profile.state == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="gstin" class="form-label">GSTIN</label>
+          <input type="text" id="gstin" name="gstin" class="form-control" value="{{ profile.gstin|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="pan" class="form-label">PAN</label>
+          <input type="text" id="pan" name="pan" class="form-control" value="{{ profile.pan|default:'' }}">
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="is_default" name="is_default" {% if profile.is_default %}checked{% endif %}>
+            <label class="form-check-label" for="is_default">
+              Default company
+              <div class="form-text m-0">Used for any office that has no company of its own</div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <h6 class="mt-4 mb-3">Bank Details <span class="text-muted small">(shown on printed documents)</span></h6>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="bank_name" class="form-label">Bank Name</label>
+          <input type="text" id="bank_name" name="bank_name" class="form-control" value="{{ profile.bank_name|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="bank_account_no" class="form-label">Account No.</label>
+          <input type="text" id="bank_account_no" name="bank_account_no" class="form-control" value="{{ profile.bank_account_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="ifsc_code" class="form-label">IFSC Code</label>
+          <input type="text" id="ifsc_code" name="ifsc_code" class="form-control" value="{{ profile.ifsc_code|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="bank_branch" class="form-label">Branch</label>
+          <input type="text" id="bank_branch" name="bank_branch" class="form-control" value="{{ profile.bank_branch|default:'' }}">
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'company_profile' %}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const companyId = $("#company-id").val();
+
+  $("#logo-file").on("change", function () {
+    $("#logo-upload-btn").prop("disabled", !this.files.length);
+  });
+
+  $("#logo-upload-btn").on("click", function () {
+    const file = $("#logo-file")[0].files[0];
+    if (!companyId || !file) return;
+    const formData = new FormData();
+    formData.append("logo", file);
+    $(this).prop("disabled", true);
+    $.ajax({
+      url: `/company_profile_api/${companyId}/logo/`,
+      type: "POST",
+      data: formData,
+      processData: false,
+      contentType: false,
+      headers: { "X-CSRFToken": csrfToken },
+      success: function (resp) {
+        $("#logo-preview").attr("src", resp.logo_url);
+        $("#logo-file").val("");
+        showToast("success", "Logo uploaded.");
+      },
+      error: function (xhr) {
+        showToast("danger", xhr.responseJSON?.error || "Failed to upload logo.");
+      },
+      complete: function () { $("#logo-upload-btn").prop("disabled", true); },
+    });
+  });
+
+  $("#company-form").on("submit", function (e) {
+    e.preventDefault();
+    const payload = {
+      name: $("#name").val().trim(), mobile: $("#mobile").val().trim(),
+      email: $("#email").val().trim(), address: $("#address").val().trim(),
+      state: $("#state").val(), gstin: $("#gstin").val().trim(),
+      pan: $("#pan").val().trim(), bank_name: $("#bank_name").val().trim(),
+      bank_account_no: $("#bank_account_no").val().trim(),
+      ifsc_code: $("#ifsc_code").val().trim(), bank_branch: $("#bank_branch").val().trim(),
+      is_default: $("#is_default").is(":checked"),
+    };
+    $.ajax({
+      url: companyId ? `/company_profile_api/${companyId}/` : "{% url 'company_profile_api_list' %}",
+      type: companyId ? "PUT" : "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify(payload),
+      success: function (resp) {
+        if (companyId) {
+          showToast("success", "Company updated.");
+          window.location.href = "{% url 'company_profile' %}";
+        } else {
+          // Redirect into Edit for this new company so its logo can be uploaded next.
+          window.location.href = `/company-profile/${resp.id}/edit/`;
+        }
+      },
+      error: function (xhr) {
+        showToast("danger", xhr.responseJSON?.error || "Failed to save company.");
+      },
+    });
+  });
+});
+</script>
+{% endblock %}

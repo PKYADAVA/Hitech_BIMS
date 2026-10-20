@@ -638,8 +638,23 @@ class PaymentMode(models.Model):
 
 
 class CompanyProfile(models.Model):
-    """Single record holding the company's own letterhead/bank details, used on printed documents."""
+    """The company's own letterhead/bank details, used on printed documents.
+
+    Originally a single record (pk=1, via ``get_solo``); now a list, so a
+    group running more than one legal entity can hold each one's GSTIN,
+    address, bank details and logo separately. ``is_default`` replaces the
+    old implicit "pk=1 is special" rule: exactly one row carries it, and
+    ``get_solo`` returns that one rather than assuming pk=1 still exists.
+    Which company a transaction prints under is resolved from the office it
+    was raised at (see ``company_for_warehouse`` below); an office with no
+    company set falls back to the default.
+    """
     name = models.CharField(max_length=255, default="Company Name")
+    is_default = models.BooleanField(
+        default=False,
+        help_text=_("Used for any office that has no company of its own"))
+    logo = models.ImageField(upload_to="company_logos/", blank=True, null=True,
+                             help_text=_("Shown on invoices, challans and other printed documents"))
     address = models.TextField(blank=True)
     state = models.CharField(max_length=50, blank=True, help_text=_("Company's own state, for GST place-of-supply comparisons"))
     mobile = models.CharField(max_length=20, blank=True)
@@ -659,17 +674,44 @@ class CompanyProfile(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        # First company ever created becomes the default (pk=1) that get_solo
-        # and legacy single-company code paths rely on; later companies get
-        # their own pk so multi-company data stays isolated.
-        if self._state.adding and self.pk is None and not CompanyProfile.objects.exists():
-            self.pk = 1
+        # The first company ever created is the default, so a brand-new
+        # install still has one without anybody having to flip a switch.
+        is_first = self._state.adding and not CompanyProfile.objects.exists()
+        if is_first:
+            self.is_default = True
         super().save(*args, **kwargs)
+        # Exactly one default: setting this one clears it from every other
+        # row, rather than requiring the caller to unset the old one first.
+        if self.is_default:
+            CompanyProfile.objects.exclude(pk=self.pk).update(is_default=False)
 
     @classmethod
     def get_solo(cls):
-        obj, _created = cls.objects.get_or_create(pk=1)
-        return obj
+        """The default company — legacy call sites that don't yet resolve by
+        branch, and the fallback for a branch with no company of its own."""
+        obj = cls.objects.filter(is_default=True).first()
+        if obj:
+            return obj
+        obj = cls.objects.first()
+        if obj:
+            return obj
+        return cls.objects.create(is_default=True)
+
+
+def company_for_warehouse(warehouse):
+    """Which company a transaction prints under.
+
+    Resolved from the office/warehouse a transaction is raised against —
+    Sales Invoice, Chick Sale and Delivery Challan all carry one — rather
+    than from Branch, since that's the field every one of those forms
+    actually has. A warehouse with its own company uses that one; anything
+    else (no warehouse, or one that hasn't been assigned one) falls back to
+    the default, which is the same company every transaction printed under
+    before offices could have their own.
+    """
+    if warehouse is not None and getattr(warehouse, "company_id", None):
+        return warehouse.company
+    return CompanyProfile.get_solo()
 
 
 class NarrationSettings(models.Model):

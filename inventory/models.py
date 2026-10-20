@@ -106,6 +106,15 @@ class Warehouse(models.Model):
                                related_name="offices")
     address = models.TextField(blank=True)
     location = models.CharField(max_length=255, blank=True)
+    #: Which company's letterhead/GSTIN/bank details print on this office's
+    #: documents (Sales Invoice, Chick Sale, Delivery Challan). A string
+    #: reference, not an import, for the same reason the Mapping model above
+    #: avoids one: blank means "use the default company"
+    #: (account.models.company_for_warehouse handles the fallback).
+    company = models.ForeignKey(
+        "account.CompanyProfile",
+        on_delete=models.SET_NULL, null=True, blank=True, related_name="warehouses",
+        help_text="Company this office prints documents under; blank uses the default company")
 
     def __str__(self):
         return self.name

@@ -155,6 +155,7 @@ $(function () {
     const discount = Number(c.overall_discount) || 0;
     const grandTotal = Number(c.grand_total) || 0;
     let html = `<div class="company-header">
+      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:56px;height:56px;object-fit:contain;margin-bottom:4px">` : ""}
       <h4>${escapeHtml(company.name)}</h4>
       <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
       <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
@@ -216,6 +217,15 @@ $(function () {
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>{% endif %}
             {% if page_perms.print %}<button class="btn btn-outline-secondary btn-sm print-button" data-id="${row.id}" title="Print"><i class="fas fa-print"></i></button>{% endif %}
+            {% if page_perms.print %}
+            <div class="btn-group">
+              <button class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" data-id="${row.id}" title="Share"><i class="fas fa-share-nodes"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item share-challan" href="#" data-id="${row.id}" data-format="image"><i class="fas fa-image me-1"></i> Share as Image</a></li>
+                <li><a class="dropdown-item share-challan" href="#" data-id="${row.id}" data-format="pdf"><i class="fas fa-file-pdf me-1"></i> Share as PDF</a></li>
+              </ul>
+            </div>
+            {% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/delivery-challan/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/delivery-challan/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             ${row.converted_bill_no
@@ -273,6 +283,26 @@ $(function () {
   });
 
   $("#view-print-btn").on("click", function () { window.print(); });
+
+  $(document).on("click", ".share-challan", function (e) {
+    e.preventDefault();
+    const id = $(this).data("id");
+    const format = $(this).data("format");
+    $.getJSON(`/delivery_challan_api/${id}/`, function (c) {
+      const container = $("#print-challan-body");
+      container.html(renderChallanViewHtml(c));
+      const wrap = document.getElementById("print-only-container");
+      wrap.classList.remove("d-none");
+      wrap.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;background:#fff;padding:16px;";
+      window.shareElementAsInvoice(wrap, `Challan-${c.challan_no}`, { format: format })
+        .finally(function () {
+          wrap.classList.add("d-none");
+          wrap.style.cssText = "";
+        });
+    }).fail(function () {
+      window.showToast('danger', "Failed to load record for sharing.");
+    });
+  });
 
   $(document).on("click", ".delete-button", async function () {
     const id = $(this).data("id");

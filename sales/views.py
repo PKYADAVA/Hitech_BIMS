@@ -482,7 +482,7 @@ def _sales_invoice_item_dict(row):
 
 
 def _sales_invoice_form_context(user, inv=None):
-    from account.models import TermsConditions, BankCashMaster, CompanyProfile
+    from account.models import TermsConditions, BankCashMaster, CompanyProfile, company_for_warehouse
     items = list(Item.objects.for_entry(
         keep=list(inv.items.values_list("item_id", flat=True)) if inv else [])
                  .order_by("item_code").values(
@@ -500,7 +500,9 @@ def _sales_invoice_form_context(user, inv=None):
             [_sales_invoice_item_dict(r) for r in inv.items.select_related("item")]) if inv else "[]",
         "terms_list": list(TermsConditions.objects.order_by("type").values("id", "type", "party_type", "condition")),
         "banks": list(BankCashMaster.objects.order_by("name").values("id", "code", "name", "micr", "address", "contact_person", "is_cash")),
-        "company": CompanyProfile.get_solo(),
+        # The invoice's own office when editing one; a fresh form has no
+        # office picked yet, so it shows the default company until saved.
+        "company": company_for_warehouse(inv.branch) if inv else CompanyProfile.get_solo(),
         "states_and_union_territories": states_and_union_territories,
         "terms_json": json.dumps({t.id: t.condition for t in TermsConditions.objects.all()}),
         "banks_json": json.dumps({b["id"]: b for b in BankCashMaster.objects.values("id", "code", "name", "micr", "address", "contact_person")}, default=str),

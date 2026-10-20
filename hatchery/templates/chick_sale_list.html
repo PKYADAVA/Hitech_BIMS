@@ -50,8 +50,8 @@
             <th>DC No</th>
             <th>Customer</th>
             <th>Item</th>
-            <th>Birds</th>
-            <th class="ds-num">Quantity</th>
+            <th class="ds-num">Sale Qty</th>
+            <th class="ds-num">Billed Qty</th>
             <th class="ds-num">Free Qty</th>
             <th class="ds-num">Price</th>
             <th class="ds-num">Amount</th>
@@ -64,6 +64,75 @@
     </div>
   </div>
 </div>
+
+<!-- View Modal (read-only) -->
+<div class="modal fade" id="viewSaleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>View Chick Sale Invoice</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-none d-print-block mb-3 print-report-header">
+          <h4 class="mb-1">CHICK SALE INVOICE</h4>
+        </div>
+        <div id="view-sale-body" class="challan-view-content">
+          <div class="text-center text-muted py-4">Loading...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="view-print-btn"><i class="fas fa-print"></i> Print</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden print-only container: used by a row's Print/Share button so printing
+     and capture don't visibly open the View modal on screen first. -->
+<div id="print-only-container" class="d-none">
+  <div class="print-report-header mb-3"><h4 class="mb-1">CHICK SALE INVOICE</h4></div>
+  <div id="print-sale-body" class="challan-view-content"></div>
+</div>
+
+<style>
+.challan-view-content .company-header { text-align:center; border-bottom:2px solid #333; padding-bottom:8px; margin-bottom:12px; }
+.challan-view-content .company-header h4 { margin:0 0 4px; font-size:16px; }
+.challan-view-content .company-header div { font-size:12px; }
+.challan-view-content .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid #ccc; border-bottom:1px solid #ccc; margin-bottom:12px; font-size:12.5px; }
+.challan-view-content .detail-grid > div { padding:8px 10px; }
+.challan-view-content .detail-grid > div + div { border-left:1px solid #ccc; }
+.challan-view-content table { width:100%; border-collapse:collapse; margin-bottom:12px; }
+.challan-view-content table th, .challan-view-content table td { border:1px solid #333; padding:6px 8px; font-size:12.5px; }
+.challan-view-content table th { background:#eee; }
+.challan-view-content .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 10px; background:#fbe4d5; margin-bottom:8px; }
+.challan-view-content .amount-words { font-size:12.5px; margin-bottom:4px; }
+.challan-view-content .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:16px; font-size:12.5px; }
+.challan-view-content .signature-box { text-align:right; }
+.challan-view-content .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
+
+@media print {
+  @page { margin: 1.5cm; }
+  body * { visibility: hidden; }
+  #viewSaleModal.show, #viewSaleModal.show *,
+  #print-only-container, #print-only-container * { visibility: visible; }
+
+  #viewSaleModal.show { position: absolute; left: 0; top: 0; width: 100%; }
+  #viewSaleModal.show .modal-dialog { max-width: 100%; margin: 0; }
+  #viewSaleModal.show .modal-content { border: none; box-shadow: none; }
+  #viewSaleModal.show .modal-header {
+    background: #fff !important; color: #000 !important;
+    border-bottom: 2px solid #000; padding: 0 0 10px 0; margin-bottom: 10px;
+  }
+  #viewSaleModal.show .modal-title { display: none; }
+  #viewSaleModal.show .modal-header .btn-close,
+  #viewSaleModal.show .modal-footer { display: none !important; }
+  #viewSaleModal.show .modal-body { padding: 0; }
+
+  #print-only-container { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+}
+</style>
 
 {% endblock %}
 {% block js %}
@@ -80,6 +149,66 @@ $(function () {
 
   // escapeHtml() provided globally by main.js
 
+  function detailLines(pairs) {
+    return pairs.filter(([label, val]) => val).map(([label, val]) => `<b>${label}:</b> ${escapeHtml(val)}`).join("<br>");
+  }
+
+  function numberToWordsIndian(num) {
+    num = Math.round(Number(num) || 0); if (num === 0) return "Zero";
+    const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    function twoDigits(n) { if (n < 20) return ones[n]; return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : ""); }
+    function threeDigits(n) { let s = ""; if (n >= 100) { s += ones[Math.floor(n / 100)] + " Hundred"; n %= 100; if (n) s += " "; } if (n) s += twoDigits(n); return s; }
+    const crore = Math.floor(num / 10000000); num %= 10000000;
+    const lakh = Math.floor(num / 100000); num %= 100000;
+    const thousand = Math.floor(num / 1000); num %= 1000;
+    const hundred = num;
+    const parts = [];
+    if (crore) parts.push(threeDigits(crore) + " Crore");
+    if (lakh) parts.push(twoDigits(lakh) + " Lakh");
+    if (thousand) parts.push(twoDigits(thousand) + " Thousand");
+    if (hundred) parts.push(threeDigits(hundred));
+    return parts.join(" ");
+  }
+
+  function renderSaleViewHtml(cs) {
+    const company = cs.company || {};
+    const finalAmount = Number(cs.final_amount) || 0;
+    let html = `<div class="company-header">
+      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:56px;height:56px;object-fit:contain;margin-bottom:4px">` : ""}
+      <h4>${escapeHtml(company.name)}</h4>
+      <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
+      <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
+      <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
+    </div>`;
+    html += `<div class="detail-grid">
+      <div><b>Bill Number:</b> ${escapeHtml(cs.bill_no)}<br><b>Bill Date:</b> ${fmtDate(cs.date)}<br>${cs.dc_no ? "<b>DC No.:</b> " + escapeHtml(cs.dc_no) + "<br>" : ""}<b>Warehouse:</b> ${escapeHtml(cs.warehouse_name)}</div>
+      <div><b>Transport Details</b><hr>${detailLines([
+        ["Vehicle", cs.vehicle],
+        ["Driver", cs.driver],
+        ["Freight", cs.freight_type],
+      ])}</div>
+    </div>`;
+    html += `<div class="detail-grid">
+      <div><b>Billing Details</b><br>Name: ${escapeHtml(cs.customer_name)}<br>GSTIN: ${escapeHtml(cs.customer_gstin)} | Mobile: ${escapeHtml(cs.customer_mobile)}<br>Email: ${escapeHtml(cs.customer_email)}<br>Address: ${escapeHtml(cs.customer_address)}</div>
+      <div><b>Shipping Details</b><br>Name: ${escapeHtml(cs.customer_name)}<br>Address: ${escapeHtml(cs.shipping_address || cs.customer_address)}</div>
+    </div>`;
+    html += `<table><thead><tr><th class="ds-mid">Sr.</th><th>Item Description</th><th class="ds-num">Qty</th><th class="ds-num">Free Qty</th><th class="ds-num">Net Qty</th><th class="ds-num">Rate</th><th class="ds-num">Amount (₹)</th></tr></thead><tbody>`;
+    (cs.items || []).forEach((row, i) => {
+      html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td>${escapeHtml(row.total_qty)}</td><td>${escapeHtml(row.free_qty)}</td><td>${escapeHtml(row.net_qty)}</td><td>${escapeHtml(row.sale_rate)}</td><td>${escapeHtml(row.amount)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    if (Number(cs.freight_amount)) html += `<div class="total-row" style="background:#f0f0f0;font-weight:500;">Freight &nbsp; ${Number(cs.freight_amount).toFixed(2)}</div>`;
+    html += `<div class="total-row">Total &nbsp; ${finalAmount.toFixed(2)}</div>`;
+    html += `<div class="amount-words">Rs. ${numberToWordsIndian(finalAmount)} Only</div>`;
+    html += `<div class="footer-grid">
+      <div><b>Terms and Conditions</b><br>${cs.terms ? escapeHtml(cs.terms).replace(/\n/g, "<br>") : ""}${cs.remarks ? "<br><b>Remarks:</b> " + escapeHtml(cs.remarks).replace(/\n/g, "<br>") : ""}</div>
+      <div><b>Bank Details</b><br>A/c: ${escapeHtml(company.bank_account_no)}<br>Bank: ${escapeHtml(company.bank_name)}<br>IFSC: ${escapeHtml(company.ifsc_code)}<br>Branch: ${escapeHtml(company.bank_branch)}</div>
+      <div class="signature-box">For ${escapeHtml(company.name)}<div class="signature-line">Signature</div></div>
+    </div>`;
+    return html;
+  }
+
   function renderRows(rows) {
     if (table) { table.destroy(); }
     const tbody = $("#chick-sale-table tbody");
@@ -91,7 +220,7 @@ $(function () {
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.customer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
         <td>${escapeHtml(row.item_names)}</td>
-        <td>${escapeHtml(row.total_birds)}</td>
+        <td>${escapeHtml(row.total_sale_qty)}</td>
         <td>${escapeHtml(row.total_net_qty)}</td>
         <td>${escapeHtml(row.total_free_qty)}</td>
         <td>${Number(row.avg_amount).toFixed(2)}</td>
@@ -99,6 +228,17 @@ $(function () {
         <td>${escapeHtml(row.warehouse_name)}</td>
         <td>
           <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>{% endif %}
+            {% if page_perms.print %}<button class="btn btn-outline-secondary btn-sm print-button" data-id="${row.id}" title="Print"><i class="fas fa-print"></i></button>{% endif %}
+            {% if page_perms.print %}
+            <div class="btn-group">
+              <button class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown" data-id="${row.id}" title="Share"><i class="fas fa-share-nodes"></i></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item share-sale" href="#" data-id="${row.id}" data-format="image"><i class="fas fa-image me-1"></i> Share as Image</a></li>
+                <li><a class="dropdown-item share-sale" href="#" data-id="${row.id}" data-format="pdf"><i class="fas fa-file-pdf me-1"></i> Share as PDF</a></li>
+              </ul>
+            </div>
+            {% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/chick-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/chick-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -130,6 +270,48 @@ $(function () {
   }
 
   $("#filter-submit").on("click", applyDateFilter);
+
+  $(document).on("click", ".view-button", function () {
+    const id = $(this).data("id");
+    $("#view-sale-body").html('<div class="text-center text-muted py-4">Loading...</div>');
+    new bootstrap.Modal(document.getElementById("viewSaleModal")).show();
+    $.getJSON(`/chick_sale_api/${id}/`, function (cs) {
+      $("#view-sale-body").html(renderSaleViewHtml(cs));
+    }).fail(function () {
+      $("#view-sale-body").html('<div class="text-danger">Failed to load record.</div>');
+    });
+  });
+
+  $(document).on("click", ".print-button", function () {
+    const id = $(this).data("id");
+    $.getJSON(`/chick_sale_api/${id}/`, function (cs) {
+      $("#print-sale-body").html(renderSaleViewHtml(cs));
+      window.print();
+    }).fail(function () {
+      window.showToast('danger', "Failed to load record for printing.");
+    });
+  });
+
+  $("#view-print-btn").on("click", function () { window.print(); });
+
+  $(document).on("click", ".share-sale", function (e) {
+    e.preventDefault();
+    const id = $(this).data("id");
+    const format = $(this).data("format");
+    $.getJSON(`/chick_sale_api/${id}/`, function (cs) {
+      $("#print-sale-body").html(renderSaleViewHtml(cs));
+      const wrap = document.getElementById("print-only-container");
+      wrap.classList.remove("d-none");
+      wrap.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;background:#fff;padding:16px;";
+      window.shareElementAsInvoice(wrap, `Invoice-${cs.bill_no}`, { format: format })
+        .finally(function () {
+          wrap.classList.add("d-none");
+          wrap.style.cssText = "";
+        });
+    }).fail(function () {
+      window.showToast('danger', "Failed to load record for sharing.");
+    });
+  });
 
   $(document).on("click", ".delete-button", async function () {
     const id = $(this).data("id");

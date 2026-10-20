@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.views import View
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 import json
@@ -932,32 +933,128 @@ class ChartOfAccountsAPI(View):
 
 @login_required
 def company_profile(request):
-    profile = CompanyProfile.get_solo()
-
-    if request.method == "POST":
-        profile.name = request.POST.get("name", "").strip()
-        profile.address = request.POST.get("address", "").strip()
-        profile.state = request.POST.get("state", "").strip()
-        profile.mobile = request.POST.get("mobile", "").strip()
-        profile.email = request.POST.get("email", "").strip()
-        profile.gstin = request.POST.get("gstin", "").strip()
-        profile.pan = request.POST.get("pan", "").strip()
-        profile.bank_name = request.POST.get("bank_name", "").strip()
-        profile.bank_account_no = request.POST.get("bank_account_no", "").strip()
-        profile.ifsc_code = request.POST.get("ifsc_code", "").strip()
-        profile.bank_branch = request.POST.get("bank_branch", "").strip()
-        try:
-            profile.full_clean()
-            profile.save()
-            messages.success(request, "Company profile updated successfully.")
-            return redirect("company_profile")
-        except ValidationError as e:
-            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-
     return render(request, "company_profile.html", {
+        "states_and_union_territories": STATES_AND_TERRITORIES,
+    })
+
+
+@login_required
+def company_profile_form(request, id=None):
+    profile = CompanyProfile.objects.filter(id=id).first() if id else None
+    if id and not profile:
+        messages.error(request, "Company profile not found.")
+        return redirect("company_profile")
+    return render(request, "company_profile_form.html", {
         "profile": profile,
         "states_and_union_territories": STATES_AND_TERRITORIES,
     })
+
+
+def _company_profile_to_dict(profile):
+    return {
+        "id": profile.id, "name": profile.name, "address": profile.address,
+        "state": profile.state, "mobile": profile.mobile, "email": profile.email,
+        "gstin": profile.gstin, "pan": profile.pan, "is_default": profile.is_default,
+        "bank_name": profile.bank_name, "bank_account_no": profile.bank_account_no,
+        "ifsc_code": profile.ifsc_code, "bank_branch": profile.bank_branch,
+        "logo_url": profile.logo.url if profile.logo else "",
+        "warehouse_count": profile.warehouses.count(),
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class CompanyProfileAPI(View):
+    """Letterhead/bank-detail records an office can print its documents
+    under. One install can now hold several (a group running more than one
+    legal entity); ``is_default`` marks the one that any office without its
+    own company falls back to, so there is never a state with none."""
+
+    FIELDS = ["name", "address", "state", "mobile", "email", "gstin", "pan",
+              "bank_name", "bank_account_no", "ifsc_code", "bank_branch"]
+
+    def get(self, request, id=None):
+        if id:
+            profile = CompanyProfile.objects.filter(id=id).first()
+            if not profile:
+                return JsonResponse({"error": "Company profile not found."}, status=404)
+            return JsonResponse(_company_profile_to_dict(profile))
+        profiles = CompanyProfile.objects.order_by("-is_default", "name")
+        return JsonResponse([_company_profile_to_dict(p) for p in profiles], safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body or "{}")
+            profile = CompanyProfile()
+            for field in self.FIELDS:
+                setattr(profile, field, (data.get(field) or "").strip())
+            profile.is_default = bool(data.get("is_default"))
+            profile.full_clean()
+            profile.save()
+            return JsonResponse(_company_profile_to_dict(profile), status=201)
+        except ValidationError as e:
+            return JsonResponse({"error": " ".join(e.messages) if hasattr(e, "messages") else str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def put(self, request, id):
+        profile = CompanyProfile.objects.filter(id=id).first()
+        if not profile:
+            return JsonResponse({"error": "Company profile not found."}, status=404)
+        try:
+            data = json.loads(request.body or "{}")
+            for field in self.FIELDS:
+                if field in data:
+                    setattr(profile, field, (data.get(field) or "").strip())
+            if "is_default" in data:
+                profile.is_default = bool(data.get("is_default"))
+            profile.full_clean()
+            profile.save()
+            return JsonResponse(_company_profile_to_dict(profile))
+        except ValidationError as e:
+            return JsonResponse({"error": " ".join(e.messages) if hasattr(e, "messages") else str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def delete(self, request, id):
+        profile = CompanyProfile.objects.filter(id=id).first()
+        if not profile:
+            return JsonResponse({"error": "Company profile not found."}, status=404)
+        if profile.warehouses.exists():
+            return JsonResponse(
+                {"error": "This company is assigned to one or more offices. Reassign them first."},
+                status=400)
+        if CompanyProfile.objects.count() <= 1:
+            return JsonResponse({"error": "At least one company profile must remain."}, status=400)
+        was_default = profile.is_default
+        profile.delete()
+        if was_default:
+            fallback = CompanyProfile.objects.order_by("pk").first()
+            if fallback:
+                fallback.is_default = True
+                fallback.save(update_fields=["is_default"])
+        return JsonResponse({"message": "Company profile deleted"})
+
+
+@login_required
+@require_POST
+def company_profile_logo(request, id):
+    """Separate from the text-field PUT above: a logo is a file upload
+    (multipart), and the rest of the form is plain JSON — mixing the two on
+    one endpoint would mean every save round-trips the image whether or not
+    it changed."""
+    profile = CompanyProfile.objects.filter(id=id).first()
+    if not profile:
+        return JsonResponse({"error": "Company profile not found."}, status=404)
+    logo = request.FILES.get("logo")
+    if not logo:
+        return JsonResponse({"error": "Choose an image to upload."}, status=400)
+    profile.logo = logo
+    try:
+        profile.full_clean()
+        profile.save()
+    except ValidationError as e:
+        return JsonResponse({"error": " ".join(e.messages) if hasattr(e, "messages") else str(e)}, status=400)
+    return JsonResponse({"logo_url": profile.logo.url})
 
 
 @login_required()

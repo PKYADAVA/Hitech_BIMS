@@ -546,6 +546,12 @@ class DeliveryChallan(models.Model):
     place_of_supply = models.CharField(max_length=50, blank=True)
     overall_discount = models.DecimalField(max_digits=12, decimal_places=2, default=0, blank=True)
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="hatchery_challans")
+    #: Which office raised this challan — optional, since most installs run
+    #: one office and this exists mainly so its printed company (letterhead,
+    #: GSTIN, bank details) can be resolved per challan when there's more
+    #: than one (see account.models.company_for_warehouse).
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.SET_NULL, null=True, blank=True, related_name="hatchery_challans")
     shipping_address = models.TextField(blank=True)
     transport_mode = models.CharField(max_length=20, default="Road")
     vehicle_no = models.CharField(max_length=50, blank=True)
@@ -899,6 +905,9 @@ class ChickSale(models.Model):
 
     def total_birds(self):
         return self.items.aggregate(total=models.Sum('total_qty'))['total'] or 0
+
+    def total_sale_qty(self):
+        return self.items.aggregate(total=models.Sum('sale_qty'))['total'] or 0
 
     def total_net_qty(self):
         return self.items.aggregate(total=models.Sum('net_qty'))['total'] or 0

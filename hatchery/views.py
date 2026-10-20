@@ -702,9 +702,12 @@ class DeliveryChallanFormTemplateView(View):
 
 
 def _delivery_challan_to_dict(challan):
-    company = CompanyProfile.get_solo()
+    from account.models import company_for_warehouse
+    company = company_for_warehouse(challan.warehouse)
     return {
         "id": challan.id, "challan_no": challan.challan_no, "date": challan.date.isoformat(),
+        "warehouse": challan.warehouse_id,
+        "warehouse_name": challan.warehouse.name if challan.warehouse_id else "",
         "place_of_supply": challan.place_of_supply, "overall_discount": str(challan.overall_discount or 0),
         "customer": challan.customer_id, "customer_name": challan.customer.name,
         "customer_address": challan.customer.address, "customer_mobile": challan.customer.mobile,
@@ -725,6 +728,7 @@ def _delivery_challan_to_dict(challan):
             "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
             "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
             "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
+            "logo_url": company.logo.url if company.logo else "",
         },
         "items": [{
             "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
@@ -742,7 +746,8 @@ class DeliveryChallanAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None):
         try:
             if id:
-                return JsonResponse(_delivery_challan_to_dict(get_object_or_404(DeliveryChallan.objects.select_related("customer"), id=id)))
+                return JsonResponse(_delivery_challan_to_dict(
+                    get_object_or_404(DeliveryChallan.objects.select_related("customer", "warehouse"), id=id)))
             challans = list(DeliveryChallan.objects.select_related("customer")
                            .prefetch_related("items", "chick_sales").all())
 
@@ -798,6 +803,7 @@ class DeliveryChallanAPI(BaseAPIView):
                   "transport_document_date", "eway_bill_no", "eway_bill_date", "terms"]
         values = {field: data.get(field) or (None if field.endswith("_date") else "") for field in fields}
         values["customer"] = get_object_or_404(Customer, id=data["customer"])
+        values["warehouse"] = Warehouse.objects.filter(id=data.get("warehouse") or 0).first()
         values["print_price_details"] = bool(data.get("print_price_details", True))
         values["overall_discount"] = Decimal(str(data.get("overall_discount") or 0))
         if challan_id:
@@ -1501,7 +1507,8 @@ class ChickSaleFormTemplateView(View):
 
 
 def _chick_sale_to_dict(cs):
-    company = CompanyProfile.get_solo()
+    from account.models import company_for_warehouse
+    company = company_for_warehouse(cs.warehouse)
     return {
         "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
         "customer": cs.customer_id, "customer_name": cs.customer.name,
@@ -1521,6 +1528,7 @@ def _chick_sale_to_dict(cs):
             "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
             "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
             "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
+            "logo_url": company.logo.url if company.logo else "",
         },
         "items": [{
             "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
@@ -1564,7 +1572,7 @@ class ChickSaleAPI(BaseAPIView):
                     "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
                     "customer_name": cs.customer.name, "item_names": cs.item_names(),
                     "ledger_balance": lb, "ledger_balance_cr_dr": lb_cr_dr,
-                    "total_birds": str(cs.total_birds()), "total_net_qty": str(cs.total_net_qty()),
+                    "total_sale_qty": str(cs.total_sale_qty()), "total_net_qty": str(cs.total_net_qty()),
                     "total_free_qty": str(cs.total_free_qty()), "avg_amount": str(cs.avg_amount),
                     "final_amount": str(cs.final_amount), "warehouse_name": cs.warehouse.name,
                 })

@@ -100,7 +100,11 @@ def item_price_list(request):
 
 @login_required
 def warehouse(request):
-    return render(request, 'sector_offices.html', {'sectors': Sector.objects.order_by('name')})
+    from account.models import CompanyProfile
+    return render(request, 'sector_offices.html', {
+        'sectors': Sector.objects.order_by('name'),
+        'companies': CompanyProfile.objects.order_by('-is_default', 'name'),
+    })
 
 @login_required
 def sector(request):
@@ -386,17 +390,19 @@ class WarehouseAPI(View):
             "sector": warehouse.sector_id,
             "sector_name": warehouse.sector.name if warehouse.sector_id else "",
             "address": warehouse.address, "location": warehouse.location,
+            "company": warehouse.company_id,
+            "company_name": warehouse.company.name if warehouse.company_id else "",
         }
 
     def get(self, request, id=None):
         if id:
             try:
-                warehouse = Warehouse.objects.select_related("sector").get(id=id)
+                warehouse = Warehouse.objects.select_related("sector", "company").get(id=id)
                 return JsonResponse(self._to_dict(warehouse))
             except Warehouse.DoesNotExist:
                 raise Http404("Warehouse not found")
         else:
-            warehouses = [self._to_dict(w) for w in Warehouse.objects.select_related("sector").all()]
+            warehouses = [self._to_dict(w) for w in Warehouse.objects.select_related("sector", "company").all()]
             return JsonResponse(warehouses, safe=False)
 
     def post(self, request):
@@ -417,6 +423,7 @@ class WarehouseAPI(View):
         Warehouse.objects.create(
             name=data["name"], sector_id=data["sector"],
             address=data["address"], location=data["location"],
+            company_id=data.get("company") or None,
         )
         return JsonResponse({"message": "Office created"}, status=201)
 
@@ -439,6 +446,8 @@ class WarehouseAPI(View):
             warehouse.address = data["address"]
         if "location" in data:
             warehouse.location = data["location"]
+        if "company" in data:
+            warehouse.company_id = data.get("company") or None
         warehouse.save()
         return JsonResponse({"message": "Office updated"})
 

@@ -253,11 +253,14 @@
       <div class="modal-body">
         <div id="si-invoice-preview" class="si-invoice">
           <div class="inv-head">
-            <div class="inv-co">
-              <h3>{{ company.name }}</h3>
-              <div>{{ company.address|linebreaksbr }}</div>
-              <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
-              <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+            <div class="inv-co d-flex align-items-start gap-2">
+              {% if company.logo %}<img src="{{ company.logo.url }}" alt="" style="width:56px;height:56px;object-fit:contain">{% endif %}
+              <div>
+                <h3>{{ company.name }}</h3>
+                <div>{{ company.address|linebreaksbr }}</div>
+                <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
+                <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+              </div>
             </div>
             <div class="inv-title">TAX INVOICE</div>
           </div>

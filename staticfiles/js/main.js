@@ -768,6 +768,73 @@ $.extend(true, $.fn.dataTable.defaults, {
       modal.show();
     });
   };
+
+  // Renders a print/invoice-view element to a PNG (via html2canvas) and either
+  // hands it to the OS share sheet (phones — "share as image/PDF" to WhatsApp,
+  // email, etc.) or downloads it, when Web Share isn't available (desktop).
+  // `format` is "image" or "pdf"; PDF wraps the same canvas in a single-page
+  // pdfmake document rather than re-laying the invoice out a second time.
+  window.shareElementAsInvoice = function (el, filename, opts) {
+    opts = opts || {};
+    var format = opts.format || 'image';
+    if (typeof html2canvas === 'undefined') {
+      window.showToast('danger', 'Could not prepare the file for sharing.');
+      return Promise.reject(new Error('html2canvas not loaded'));
+    }
+    return html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+      .then(function (canvas) {
+        if (format === 'pdf') {
+          return canvasToPdfBlob(canvas).then(function (blob) {
+            return deliver(blob, filename + '.pdf', 'application/pdf');
+          });
+        }
+        return new Promise(function (resolve) {
+          canvas.toBlob(function (blob) {
+            resolve(deliver(blob, filename + '.png', 'image/png'));
+          }, 'image/png');
+        });
+      })
+      .catch(function (err) {
+        window.showToast('danger', 'Could not prepare the file for sharing.');
+        throw err;
+      });
+
+    function canvasToPdfBlob(canvas) {
+      return new Promise(function (resolve) {
+        var imgData = canvas.toDataURL('image/png');
+        // A4 at 72dpi; the image is scaled to fit the page width, height follows.
+        var pageWidth = 595.28;
+        var imgHeight = (canvas.height / canvas.width) * pageWidth;
+        var doc = {
+          pageSize: { width: pageWidth, height: Math.max(imgHeight, 841.89) },
+          pageMargins: [0, 0, 0, 0],
+          content: [{ image: imgData, width: pageWidth }],
+        };
+        pdfMake.createPdf(doc).getBlob(function (blob) { resolve(blob); });
+      });
+    }
+
+    function deliver(blob, name, mime) {
+      var file = new File([blob], name, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        return navigator.share({ files: [file], title: filename })
+          .catch(function (err) {
+            if (err && err.name === 'AbortError') return; // user cancelled
+            downloadBlob(blob, name);
+          });
+      }
+      downloadBlob(blob, name);
+      return Promise.resolve();
+    }
+
+    function downloadBlob(blob, name) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+  };
 })();
 
 $(document).ready(function () {
