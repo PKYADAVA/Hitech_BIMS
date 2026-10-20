@@ -132,6 +132,14 @@
   const farmLayer = L.layerGroup();
   let farmsLoaded = false;
 
+  // A click on open map (not a pin) offers that exact point in Google Maps —
+  // same link style as the pin popups, for a spot nothing is pinned to yet.
+  map.on("click", event => {
+    L.popup().setLatLng(event.latlng)
+      .setContent(gmapsLink(event.latlng.lat.toFixed(6), event.latlng.lng.toFixed(6)))
+      .openOn(map);
+  });
+
   // Same teardrop pin as the Farm Map & Route Planner, so a farm looks like a
   // farm wherever it's drawn, not a different shape depending which screen.
   // Inactive farms share the planner's own gray (#94a3b8) rather than a new
@@ -161,7 +169,8 @@
               "<br><small>" + esc(farm.branch || "–") +
               (farm.supervisor ? " · " + esc(farm.supervisor) : "") + "</small>" +
               (farm.location ? "<br><small>" + esc(farm.location) + "</small>" : "") +
-              (!isActive ? "<br><small class='text-muted'>Status: " + esc(farm.status || "inactive") + "</small>" : "")
+              (!isActive ? "<br><small class='text-muted'>Status: " + esc(farm.status || "inactive") + "</small>" : "") +
+              gmapsLink(farm.latitude, farm.longitude)
             )
             .addTo(farmLayer);
           if (farm.farmer) {
@@ -197,6 +206,11 @@
   function esc(text) {
     return String(text == null ? "" : text).replace(/[&<>"']/g,
       ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function gmapsLink(lat, lng) {
+    return "<div class='mt-1'><a href='https://www.google.com/maps/search/?api=1&query=" +
+      lat + "," + lng + "' target='_blank' rel='noopener'>" +
+      "<i class='fas fa-up-right-from-square'></i> Open in Google Maps</a></div>";
   }
   function hhmm(iso) {
     return iso ? new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) : "–";
@@ -305,10 +319,12 @@
       L.polyline(path, { weight: 4, opacity: 0.8 }).addTo(layer);
       if (path.length) {
         L.circleMarker(path[0], { radius: 7, color: "#198754", fillOpacity: 0.9 })
-          .bindPopup("Start" + (data.route.start_address ? "<br><small>" + esc(data.route.start_address) + "</small>" : ""))
+          .bindPopup("Start" + (data.route.start_address ? "<br><small>" + esc(data.route.start_address) + "</small>" : "") +
+                     gmapsLink(path[0][0], path[0][1]))
           .addTo(layer);
         L.circleMarker(path[path.length - 1], { radius: 7, color: "#dc3545", fillOpacity: 0.9 })
-          .bindPopup("End" + (data.route.end_address ? "<br><small>" + esc(data.route.end_address) + "</small>" : ""))
+          .bindPopup("End" + (data.route.end_address ? "<br><small>" + esc(data.route.end_address) + "</small>" : "") +
+                     gmapsLink(path[path.length - 1][0], path[path.length - 1][1]))
           .addTo(layer);
       }
     }
@@ -317,7 +333,8 @@
       bounds.push([entry.latitude, entry.longitude]);
       L.marker([entry.latitude, entry.longitude])
         .bindPopup("<strong>" + hhmm(entry.time) + "</strong> " + esc(entry.label) +
-                   (entry.address ? "<br><small>" + esc(entry.address) + "</small>" : ""))
+                   (entry.address ? "<br><small>" + esc(entry.address) + "</small>" : "") +
+                   gmapsLink(entry.latitude, entry.longitude))
         .addTo(layer);
     });
     if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });

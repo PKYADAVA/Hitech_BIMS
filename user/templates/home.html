@@ -1764,6 +1764,14 @@
   const farmLayer = L.layerGroup();
   let fitted = false;
   let farmsLoaded = false;
+
+  // A click on open map (not a pin) offers that exact point in Google Maps —
+  // same link style as the pin popups, for a spot nothing is pinned to yet.
+  map.on("click", event => {
+    L.popup().setLatLng(event.latlng)
+      .setContent(gmapsLink(event.latlng.lat.toFixed(6), event.latlng.lng.toFixed(6)))
+      .openOn(map);
+  });
   let routeMode = null; // {employeeId} while viewing a route instead of live positions
 
   // Same teardrop pin as the Farm Map & Route Planner, so a farm looks like a
@@ -1795,7 +1803,8 @@
               "<br><small>" + esc(farm.branch || "–") +
               (farm.supervisor ? " · " + esc(farm.supervisor) : "") + "</small>" +
               (farm.location ? "<br><small>" + esc(farm.location) + "</small>" : "") +
-              (!isActive ? "<br><small class='text-muted'>Status: " + esc(farm.status || "inactive") + "</small>" : "")
+              (!isActive ? "<br><small class='text-muted'>Status: " + esc(farm.status || "inactive") + "</small>" : "") +
+              gmapsLink(farm.latitude, farm.longitude)
             )
             .addTo(farmLayer);
           if (farm.farmer) {
@@ -1842,6 +1851,11 @@
     return String(text == null ? "" : text).replace(/[&<>"']/g,
       ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
   }
+  function gmapsLink(lat, lng) {
+    return "<div class='mt-1'><a href='https://www.google.com/maps/search/?api=1&query=" +
+      lat + "," + lng + "' target='_blank' rel='noopener'>" +
+      "<i class='fas fa-up-right-from-square'></i> Open in Google Maps</a></div>";
+  }
   function agoLabel(iso) {
     const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
     if (mins < 1) return "just now";
@@ -1864,7 +1878,8 @@
       marker.bindPopup(
         "<strong>" + esc(e.name) + "</strong><br><small>" + esc(e.designation) +
         (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
-        "<br><small>Updated " + esc(agoLabel(e.last_seen || e.recorded_at)) + "</small>"
+        "<br><small>Updated " + esc(agoLabel(e.last_seen || e.recorded_at)) + "</small>" +
+        gmapsLink(e.latitude, e.longitude)
       );
       cluster.addLayer(marker);
 

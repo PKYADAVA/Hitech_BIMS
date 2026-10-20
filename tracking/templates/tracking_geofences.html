@@ -168,6 +168,11 @@
     return String(text == null ? "" : text).replace(/[&<>"']/g,
       ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
   }
+  function gmapsLink(lat, lng) {
+    return "<div class='mt-1'><a href='https://www.google.com/maps/search/?api=1&query=" +
+      lat + "," + lng + "' target='_blank' rel='noopener'>" +
+      "<i class='fas fa-up-right-from-square'></i> Open in Google Maps</a></div>";
+  }
   function toast(message, ok) {
     Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
                style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
@@ -183,7 +188,8 @@
         radius: fence.radius_m, color: TYPE_COLOR[fence.geofence_type] || "#6c757d",
         weight: 2, fillOpacity: 0.12,
       }).bindPopup("<strong>" + esc(fence.name) + "</strong><br><small>" +
-                   esc(fence.geofence_type) + " · " + fence.radius_m + " m</small>")
+                   esc(fence.geofence_type) + " · " + fence.radius_m + " m</small>" +
+                   gmapsLink(fence.center_latitude, fence.center_longitude))
         .addTo(layer);
     });
     if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
@@ -242,9 +248,15 @@
     if (previewCircle) { map.removeLayer(previewCircle); previewCircle = null; }
   });
 
-  // Click the map (while the editor is open) to set the centre.
+  // Click the map (while the editor is open) to set the centre; otherwise a
+  // plain click just offers that point in Google Maps.
   map.on("click", event => {
-    if (!editorOpen) return;
+    if (!editorOpen) {
+      L.popup().setLatLng(event.latlng)
+        .setContent(gmapsLink(event.latlng.lat.toFixed(6), event.latlng.lng.toFixed(6)))
+        .openOn(map);
+      return;
+    }
     form.querySelector("[name=center_latitude]").value = event.latlng.lat.toFixed(6);
     form.querySelector("[name=center_longitude]").value = event.latlng.lng.toFixed(6);
     if (previewCircle) map.removeLayer(previewCircle);

@@ -132,12 +132,25 @@
   map.addLayer(cluster);
   let fitted = false;
 
+  // A click on open map (not a pin) offers that exact point in Google Maps —
+  // same link style as the pin popups, for a spot nothing is pinned to yet.
+  map.on("click", event => {
+    L.popup().setLatLng(event.latlng)
+      .setContent(gmapsLink(event.latlng.lat.toFixed(6), event.latlng.lng.toFixed(6)))
+      .openOn(map);
+  });
+
   const inIcon = L.divIcon({ className: "", html: '<i class="fas fa-circle-arrow-down fa-lg att-fence-ok"></i>' });
   const outIcon = L.divIcon({ className: "", html: '<i class="fas fa-circle-arrow-down fa-lg att-fence-bad"></i>' });
 
   function esc(text) {
     return String(text == null ? "" : text).replace(/[&<>"']/g,
       ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function gmapsLink(lat, lng) {
+    return "<div class='mt-1'><a href='https://www.google.com/maps/search/?api=1&query=" +
+      lat + "," + lng + "' target='_blank' rel='noopener'>" +
+      "<i class='fas fa-up-right-from-square'></i> Open in Google Maps</a></div>";
   }
   function toast(message, ok) {
     Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
@@ -181,7 +194,8 @@
               "<strong>" + esc(record.name) + "</strong>" +
               "<br><small>In: " + hhmm(record.check_in_at) +
               (record.geofence ? " · " + esc(record.geofence) : "") + "</small>" +
-              (record.check_in_address ? "<br><small>" + esc(record.check_in_address) + "</small>" : "")
+              (record.check_in_address ? "<br><small>" + esc(record.check_in_address) + "</small>" : "") +
+              gmapsLink(record.check_in_latitude, record.check_in_longitude)
             );
             cluster.addLayer(marker);
           }
