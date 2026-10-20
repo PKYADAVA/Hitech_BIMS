@@ -154,12 +154,14 @@ $(function () {
     const company = c.company || {};
     const discount = Number(c.overall_discount) || 0;
     const grandTotal = Number(c.grand_total) || 0;
-    let html = `<div class="company-header">
-      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:56px;height:56px;object-fit:contain;margin-bottom:4px">` : ""}
-      <h4>${escapeHtml(company.name)}</h4>
-      <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
-      <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
-      <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
+    let html = `<div class="company-header" style="display:flex;align-items:flex-start;justify-content:center;gap:10px;text-align:left">
+      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:88px;height:88px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">` : ""}
+      <div>
+        <h4>${escapeHtml(company.name)}</h4>
+        <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
+        <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
+        <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
+      </div>
     </div>`;
     html += `<div class="detail-grid">
       <div><b>Challan Number:</b> ${escapeHtml(c.challan_no)}<br><b>Challan Date:</b> ${fmtDate(c.date)}<br><b>Place of Supply:</b> ${escapeHtml(c.place_of_supply)}</div>

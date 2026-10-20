@@ -204,11 +204,14 @@
 
 <section class="sale-print" id="print-area">
   <h2>CHICK SALE INVOICE</h2>
-  <div class="company-header">
-    <h3>{{ company.name }}</h3>
-    <div>{{ company.address|linebreaksbr }}</div>
-    <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
-    <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+  <div class="company-header" style="display:flex;align-items:flex-start;justify-content:center;gap:10px;text-align:left">
+    {% if company.logo %}<img src="{{ company.logo.url }}" alt="" style="width:88px;height:88px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">{% endif %}
+    <div>
+      <h3>{{ company.name }}</h3>
+      <div>{{ company.address|linebreaksbr }}</div>
+      <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
+      <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+    </div>
   </div>
   <div class="detail-grid">
     <div>

@@ -693,6 +693,7 @@ class DeliveryChallanFormTemplateView(View):
             "delivery_challan_id": id,
             "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
             "items": _items_for_form(id, ("hatchery.DeliveryChallanItem", "challan_id", "item_id")),
             "next_challan_no": DeliveryChallan.next_challan_no() if id is None else None,
             "states_and_union_territories": STATES_AND_TERRITORIES,
