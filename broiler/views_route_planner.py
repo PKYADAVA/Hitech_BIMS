@@ -119,7 +119,11 @@ def farm_map_data(request):
     branch_id = _int(request.GET.get("branch"))
     supervisor_id = _int(request.GET.get("supervisor"))
     farm_id = _int(request.GET.get("farm"))
-    status = (request.GET.get("farm_status") or "").strip()
+    # "Active"/"Inactive" here means has-an-open-batch, same as everywhere
+    # else in the app (see BroilerFarm.computed_status) — applied below,
+    # once active_batches has been annotated, not against the deprecated
+    # farm_status column.
+    status = (request.GET.get("farm_status") or "").strip().lower()
     priority = (request.GET.get("priority") or "").strip()
     batch_status = (request.GET.get("batch_status") or "").strip()
 
@@ -129,8 +133,6 @@ def farm_map_data(request):
         farms = farms.filter(supervisor_id=supervisor_id)
     if farm_id:
         farms = farms.filter(id=farm_id)
-    if status:
-        farms = farms.filter(farm_status__iexact=status)
     if priority:
         farms = farms.filter(visit_priority=priority)
 
@@ -184,6 +186,10 @@ def farm_map_data(request):
         farms = farms.filter(active_batches__gt=0)
     elif batch_status == "empty":
         farms = farms.filter(active_batches=0)
+    if status == "active":
+        farms = farms.filter(active_batches__gt=0)
+    elif status == "inactive":
+        farms = farms.filter(active_batches=0)
 
     rows, missing = [], []
     for farm in farms.order_by("farm_name"):
@@ -197,7 +203,7 @@ def farm_map_data(request):
             "supervisor": farm.supervisor.name if farm.supervisor_id else "",
             "supervisor_id": farm.supervisor_id,
             "farmer": farm.farmer.farmer_name if farm.farmer_id else "",
-            "status": farm.farm_status or "",
+            "status": "active" if farm.active_batches else "inactive",
             "priority": farm.visit_priority,
             "active_batches": farm.active_batches,
             "batch_code": farm.batch_code or "",
@@ -881,12 +887,11 @@ def auto_suggest_farms(request):
     from hr.models import SupervisorTripVisit
 
     user = request.user
-    farms = _visible_farms(user).filter(farm_status__iexact="active")
-    farms = farms.annotate(
+    farms = _visible_farms(user).annotate(
         active_batches=Count("broiler_batches",
                              filter=Q(broiler_batches__end_date__isnull=True,
                                       broiler_batches__is_closed=False),
-                             distinct=True))
+                             distinct=True)).filter(active_batches__gt=0)
 
     branch_id = _int(request.GET.get("branch"))
     supervisor_id = _int(request.GET.get("supervisor"))

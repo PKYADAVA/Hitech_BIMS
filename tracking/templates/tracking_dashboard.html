@@ -96,14 +96,14 @@
           {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div class="col-md-1">
         <label class="form-label mb-0">Designation</label>
         <select id="trk-designation" class="form-select form-select-sm">
           <option value="">All</option>
           {% for d in designations %}<option value="{{ d.id }}">{{ d.title }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div class="col-md-1">
         <label class="form-label mb-0">Status</label>
         <select id="trk-status" class="form-select form-select-sm">
           <option value="">All</option>
@@ -113,17 +113,17 @@
           <option value="offline">Offline</option>
         </select>
       </div>
-      <div class="col-md-3 d-flex gap-2 justify-content-end align-items-center">
-        <div class="form-check form-switch mb-0">
+      <div class="col-md-4 d-flex gap-2 justify-content-end align-items-center flex-wrap">
+        <div class="form-check form-switch mb-0 text-nowrap">
           <input class="form-check-input" type="checkbox" id="trk-show-farms">
           <label class="form-check-label small" for="trk-show-farms">Farms</label>
         </div>
-        <select id="trk-farm-status" class="form-select form-select-sm" style="max-width:110px" disabled>
+        <select id="trk-farm-status" class="form-select form-select-sm" style="width:90px" disabled>
           <option value="active" selected>Active</option>
           <option value="inactive">Inactive</option>
           <option value="all">All</option>
         </select>
-        <button class="btn btn-sm btn-outline-primary" id="trk-sync-now"><i class="fas fa-cloud-arrow-down"></i> Sync Now</button>
+        <button class="btn btn-sm btn-outline-primary text-nowrap" id="trk-sync-now"><i class="fas fa-cloud-arrow-down"></i> Sync</button>
         <button class="btn btn-sm btn-outline-secondary" id="trk-clear">Clear</button>
       </div>
     </div>

@@ -228,31 +228,34 @@ class FarmerStatusTests(FarmMasterBase):
 
 
 class FarmStatusTests(FarmMasterBase):
+    """Active/Inactive is computed from whether the farm has an open batch —
+    there is no toggle to flip it by hand any more (see
+    BroilerFarm.computed_status)."""
 
-    def url(self, farm):
-        return reverse("broiler_farm_toggle_active", args=[farm.id])
-
-    def test_a_farm_switches_off_and_on_again(self):
-        self.assertEqual(self.client.post(self.url(self.busy)).json()["farm_status"], "inactive")
-        self.assertEqual(self.client.post(self.url(self.busy)).json()["farm_status"], "active")
-
-    def test_a_closed_farm_reopens_rather_than_going_inactive(self):
-        # Closed is where a farm ends up deliberately; the only useful thing a
-        # toggle can do to one is bring it back.
-        self.free.farm_status = "closed"
-        self.free.save()
-        self.assertEqual(self.client.post(self.url(self.free)).json()["farm_status"], "active")
-
-    def test_switching_a_farm_off_keeps_its_flock_and_sheds(self):
+    def test_a_farm_with_an_open_batch_is_active(self):
         self.place(self.busy, 1000)
-        BroilerFarmShed.objects.create(farm=self.busy, shed_name="Shed 1", capacity=1000)
-        self.client.post(self.url(self.busy))
-        row = self.farms()["Vishvanath Farm"]
-        self.assertEqual((row["farm_status"], row["occupied"], row["shed_count"]),
-                         ("inactive", True, 1))
+        self.assertEqual(self.farms()["Vishvanath Farm"]["computed_status"], "active")
+        self.assertTrue(self.busy.computed_status == "active")
 
-    def test_a_get_is_refused(self):
-        self.assertEqual(self.client.get(self.url(self.busy)).status_code, 405)
+    def test_a_farm_with_no_batch_is_inactive(self):
+        self.assertEqual(self.farms()["River Farm"]["computed_status"], "inactive")
+        self.assertEqual(self.free.computed_status, "inactive")
+
+    def test_a_farm_whose_batch_has_closed_is_inactive(self):
+        batch = self.place(self.busy, 1000)
+        batch.is_closed = True
+        batch.end_date = self.today
+        batch.save()
+        self.assertEqual(self.farms()["Vishvanath Farm"]["computed_status"], "inactive")
+
+    def test_closing_the_batch_keeps_the_farms_sheds(self):
+        batch = self.place(self.busy, 1000)
+        BroilerFarmShed.objects.create(farm=self.busy, shed_name="Shed 1", capacity=1000)
+        batch.is_closed = True
+        batch.end_date = self.today
+        batch.save()
+        row = self.farms()["Vishvanath Farm"]
+        self.assertEqual((row["computed_status"], row["shed_count"]), ("inactive", 1))
 
 
 class DuplicateWarningTests(FarmMasterBase):

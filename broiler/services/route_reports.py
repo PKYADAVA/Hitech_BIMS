@@ -312,7 +312,7 @@ def gps_missing(user, filters):
             farm.supervisor.name if farm.supervisor_id else "",
             farm.farmer.farmer_name if farm.farmer_id else "",
             ", ".join(p for p in (farm.area, farm.district, farm.state) if p),
-            farm.farm_status or "",
+            farm.computed_status,
             last[farm.id].strftime("%d-%m-%Y") if farm.id in last else "never",
         ])
     return columns, rows, {

@@ -274,6 +274,23 @@ class ChangeRequestReviewAPI(BaseAPIView):
                 if obj is None:
                     raise ValidationError("The record no longer exists.")
                 if cr.action == "delete":
+                    # Snapshotted before the row is gone, so a reviewer can
+                    # still see what was deleted after the fact — without
+                    # this, cr.payload stays null for a deletion (there is
+                    # nothing "proposed" to store at request time) and the
+                    # record itself is no longer fetchable once removed.
+                    detail_fn = handler.get("detail")
+                    if detail_fn:
+                        try:
+                            snapshot = json.loads(json.dumps(detail_fn(obj), default=str))
+                            # Letterhead data (name/GSTIN/bank details for
+                            # printing), not a property of the record itself —
+                            # the review screen has no renderer for a nested
+                            # object and showing it serves no reviewer need.
+                            snapshot.pop("company", None)
+                            cr.payload = snapshot
+                        except Exception:
+                            logger.warning("Could not snapshot %s #%s before deletion", cr.module, cr.object_id)
                     # A stock-bearing document (Stock Transfer, Medicine
                     # Transfer, …) needs its recompute chain re-run after the
                     # row is gone, using the location/item captured before

@@ -1467,27 +1467,6 @@ def broiler_farm_next_code(request):
 
 @login_required
 @require_POST
-def broiler_farm_toggle_active(request, id):
-    """Make a farm Active or Inactive.
-
-    Mirrors the farmer toggle, with one difference the farm has and the farmer
-    does not: a third state. A farm that was *closed* reopens as Active rather
-    than flipping to Inactive — closed is where a farm ends up deliberately, so
-    the only useful thing a toggle can do to one is bring it back.
-
-    Nothing recorded against the farm changes; it simply stops being offered
-    for new work.
-    """
-    farm = get_object_or_404(BroilerFarm, id=id)
-    farm.farm_status = "inactive" if farm.farm_status == "active" else "active"
-    farm.save(update_fields=["farm_status", "updated_at"])
-    state = "Active" if farm.farm_status == "active" else "Inactive"
-    return JsonResponse({"message": f"{farm.farm_name} is now {state}",
-                         "farm_status": farm.farm_status})
-
-
-@login_required
-@require_POST
 def farmers_bulk_status(request):
     """Make the ticked farmers Active or Inactive together."""
     try:
@@ -2333,7 +2312,7 @@ class BroilerFarmAPI(BaseAPIView):
                 .values(
                     "id", "farm_code", "farm_name", "region", "line", "farm_type",
                     "agreement_start_date", "agreement_end_date",
-                    "farm_capacity", "farm_status", "district", "state",
+                    "farm_capacity", "district", "state",
                     "location_verified", "farm_latitude", "farm_longitude", "visit_priority",
                     "branch_id", "supervisor_id", "farmer_id",
                     branch_name=F("branch__branch_name"),
@@ -2354,6 +2333,10 @@ class BroilerFarmAPI(BaseAPIView):
                 farm["shed_count"] = shed.get("shed_count", 0)
                 farm["shed_capacity"] = shed.get("shed_capacity", 0)
                 farm["occupied"] = bool(here.get("occupied"))
+                # Active/Inactive, computed from whether the farm has an
+                # open batch — same definition as BroilerFarm.computed_status,
+                # done here instead since occupancy is already in hand.
+                farm["computed_status"] = "active" if farm["occupied"] else "inactive"
                 farm["batch_name"] = here.get("batch_name")
                 farm["batch_id"] = here.get("batch_id")
                 farm["placed_on"] = here.get("placed_on")

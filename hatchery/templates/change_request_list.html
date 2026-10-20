@@ -153,6 +153,13 @@ $(function () {
       let actions = '';
       if (row.action === 'edit' && row.payload) {
         actions += `<button class="btn btn-outline-info btn-sm view-payload" data-id="${row.id}" title="View proposed changes"><i class="fas fa-eye"></i></button>`;
+      } else if (row.action === 'delete') {
+        // Pending: the record still exists, fetched live via detail_api.
+        // Approved: nothing left to fetch, so the snapshot taken at
+        // deletion time (stored in payload) is all there is to show.
+        if (row.status === 'pending' || row.payload) {
+          actions += `<button class="btn btn-outline-info btn-sm view-payload" data-id="${row.id}" title="View record"><i class="fas fa-eye"></i></button>`;
+        }
       }
       if (row.status === 'pending' && row.can_review) {
         actions += ` <button class="btn btn-outline-success btn-sm approve-button" data-id="${row.id}" title="Approve & apply"><i class="fas fa-check"></i></button>
@@ -304,13 +311,38 @@ $(function () {
   $(document).on("click", ".view-payload", function () {
     const row = allRows.find(r => r.id === $(this).data("id"));
     modalRowId = row.id;
-    $("#payload-title").text(`Proposed Changes — ${row.module_label} ${row.object_label}`);
+    const isDelete = row.action === "delete";
+    $("#payload-title").text(`${isDelete ? "Record Being Deleted" : "Proposed Changes"} — ${row.module_label} ${row.object_label}`);
     $("#payload-body").html('<div class="text-center text-muted py-4">Loading...</div>');
     $("#diff-summary").empty();
     $("#changes-only-toggle").prop("checked", false);
     $("#payloadModal .modal-body").removeClass("changes-only");
     setModalReviewButtons(row);
     new bootstrap.Modal(document.getElementById("payloadModal")).show();
+
+    if (isDelete) {
+      // Pending: the record still exists, so its live values are shown.
+      // Approved: payload already holds the snapshot taken at the moment
+      // it was deleted. Either way this is a record view, not a diff —
+      // buildDiffHtml(x, null) renders a plain "Proposed" column.
+      if (row.payload) {
+        const out = buildDiffHtml(row.payload, null);
+        $("#payload-body").html(out.html);
+        renderSummary(out.stats, false);
+      } else if (row.detail_api) {
+        $.getJSON(`${row.detail_api}${row.object_id}/`, function (current) {
+          const out = buildDiffHtml(current, null);
+          $("#payload-body").html(out.html);
+          renderSummary(out.stats, false);
+        }).fail(function () {
+          $("#payload-body").html('<div class="text-danger">The record could not be loaded.</div>');
+        });
+      } else {
+        $("#payload-body").html('<div class="text-muted">No details available for this deletion.</div>');
+      }
+      return;
+    }
+
     if (!row.detail_api) {
       const out = buildDiffHtml(row.payload, null);
       $("#payload-body").html(out.html);

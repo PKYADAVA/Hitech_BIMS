@@ -35,7 +35,7 @@ class FarmMasterListTests(TestCase):
         self.pinned = BroilerFarm.objects.create(
             farm_name="Vishvanath Farm", district="Ambedkar Nagar", state="Uttar Pradesh",
             farm_latitude=26.43, farm_longitude=82.54, location_verified=True, **common)
-        self.unpinned = BroilerFarm.objects.create(farm_name="River Farm", farm_status="closed",
+        self.unpinned = BroilerFarm.objects.create(farm_name="River Farm",
                                                    farm_type="integration", **common)
         self.client.force_login(get_user_model().objects.create_superuser("farmadmin", "f@x.com", "Str0ngPass!"))
 
@@ -57,8 +57,8 @@ class FarmMasterListTests(TestCase):
         self.assertEqual((pinned["farm_capacity"], pinned["shed_count"], pinned["district"]),
                          (5000, 0, "Ambedkar Nagar"))
         self.assertEqual((pinned["location_verified"], pinned["has_location"]), (True, True))
-        self.assertEqual((unpinned["has_location"], unpinned["farm_status"], unpinned["farm_type"]),
-                         (False, "closed", "integration"))
+        self.assertEqual((unpinned["has_location"], unpinned["computed_status"], unpinned["farm_type"]),
+                         (False, "inactive", "integration"))
         self.assertEqual((pinned["branch_name"], pinned["supervisor_name"], pinned["farmer_name"]),
                          ("Akbarpur", "A. Pal", "Vishvanath"))
 

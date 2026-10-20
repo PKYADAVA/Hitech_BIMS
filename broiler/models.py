@@ -740,11 +740,17 @@ class BroilerFarm(models.Model):
         help_text=_("Water pH from the last test"))
     water_tds = models.PositiveIntegerField(
         null=True, blank=True, help_text=_("Water TDS in ppm from the last test"))
+    # Deprecated as the source of truth for Active/Inactive: that is now
+    # computed from whether the farm has an open batch (see
+    # ``computed_status`` / ``BroilerFarm.objects_with_status`` below), not
+    # set by hand. The column stays, unused, rather than being dropped —
+    # migrating it away cleanly is more churn than it is worth for a field
+    # nothing writes to any more.
     farm_status = models.CharField(
         max_length=12, default="active", blank=True,
         choices=[("active", "Active"), ("inactive", "Inactive"),
                  ("closed", "Closed")],
-        help_text=_("Whether the farm is currently in use"))
+        help_text=_("Deprecated — Active/Inactive is now computed from open batches"))
 
     farm_sqft = models.CharField(
         max_length=20,
@@ -780,6 +786,39 @@ class BroilerFarm(models.Model):
     def get_batch_count(self):
         """Returns the number of batches in this farm."""
         return self.broilerbatch_set.count()
+
+    @property
+    def computed_status(self):
+        """"active" with an open (unclosed) batch, "inactive" otherwise.
+
+        Replaces the old hand-set ``farm_status`` as what Active/Inactive
+        means across the app: a farm with birds in it is active, an empty
+        or closed-out one is not — not a flag someone remembered to flip.
+        Touches the DB; prefer ``with_computed_status`` when listing many
+        farms, which annotates the same thing in one query instead of one
+        per farm.
+        """
+        return "active" if self.broiler_batches.filter(
+            end_date__isnull=True, is_closed=False).exists() else "inactive"
+
+    @staticmethod
+    def with_computed_status(queryset):
+        """Annotates ``queryset`` with ``computed_status`` ("active"/
+        "inactive"), in one query rather than one per row. Use this for any
+        list or filter that needs Active/Inactive across many farms."""
+        return queryset.annotate(
+            _open_batches=models.Count(
+                "broiler_batches",
+                filter=models.Q(broiler_batches__end_date__isnull=True,
+                                broiler_batches__is_closed=False),
+                distinct=True),
+        ).annotate(
+            computed_status=models.Case(
+                models.When(_open_batches__gt=0, then=models.Value("active")),
+                default=models.Value("inactive"),
+                output_field=models.CharField(),
+            )
+        )
 
     def clean(self):
         """Validate that the supervisor belongs to the selected branch."""
