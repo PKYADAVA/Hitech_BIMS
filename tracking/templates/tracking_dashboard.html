@@ -25,6 +25,9 @@
                         display:inline-flex; align-items:center; justify-content:center; font-size:.8rem; }
   #trk-updated { font-size:.8rem; opacity:.75; }
   .trk-farm-pin { background:none !important; border:none !important; }
+  .trk-farm-label { background:#fff; border:1px solid #cbd5e1; border-radius:.35rem;
+                    padding:.05rem .35rem; font-size:.7rem; font-weight:600;
+                    white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,.12); }
 </style>
 {% endblock %}
 
@@ -202,6 +205,14 @@
               (farm.location ? "<br><small>" + esc(farm.location) + "</small>" : "")
             )
             .addTo(farmLayer);
+          if (farm.farmer) {
+            L.marker([farm.latitude, farm.longitude], {
+              icon: L.divIcon({ className: "", html: '<span class="trk-farm-label">' +
+                                esc(farm.farmer) + "</span>",
+                                iconSize: [0, 0], iconAnchor: [-12, 8] }),
+              interactive: false
+            }).addTo(farmLayer);
+          }
         });
         farmsLoaded = true;
       })

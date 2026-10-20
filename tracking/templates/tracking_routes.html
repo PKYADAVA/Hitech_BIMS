@@ -28,6 +28,10 @@
   .timeline .t-time { font-weight:600; font-size:.85rem; }
   .timeline .t-label { font-size:.9rem; }
   .timeline small { opacity:.75; }
+  .route-farm-pin { background:none !important; border:none !important; }
+  .route-farm-label { background:#fff; border:1px solid #cbd5e1; border-radius:.35rem;
+                      padding:.05rem .35rem; font-size:.7rem; font-weight:600;
+                      white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,.12); }
 </style>
 {% endblock %}
 
@@ -62,7 +66,13 @@
       <div class="col-md-1">
         <button class="btn btn-sm btn-primary" id="route-load"><i class="fas fa-play"></i> Load</button>
       </div>
-      <div class="col-md-5"><div class="trk-chips" id="route-chips"></div></div>
+      <div class="col-md-1 d-flex align-items-center">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" id="route-show-farms">
+          <label class="form-check-label small" for="route-show-farms">Farms</label>
+        </div>
+      </div>
+      <div class="col-md-4"><div class="trk-chips" id="route-chips"></div></div>
     </div>
   </div>
 </div>
@@ -107,12 +117,62 @@
 (function () {
   "use strict";
   const API = "{% url 'api_tracking_route' %}";
+  const FARM_DATA_URL = "{% url 'farm_map_data' %}";
 
   const map = L.map("route-map").setView([22.9734, 78.6569], 5);
   L.tileLayer(BIMS_MAP.url, {
     maxZoom: BIMS_MAP.maxZoom, attribution: BIMS_MAP.attribution,
   }).addTo(map);
   const layer = L.layerGroup().addTo(map);
+  const farmLayer = L.layerGroup();
+  let farmsLoaded = false;
+
+  // Same teardrop pin as the Farm Map & Route Planner, so a farm looks like a
+  // farm wherever it's drawn, not a different shape depending which screen.
+  function farmPin() {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 28 36">' +
+      '<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z" fill="#fd7e14"/>' +
+      '<circle cx="14" cy="14" r="5" fill="#fff"/></svg>';
+    return L.divIcon({ className: "route-farm-pin", html: svg, iconSize: [18, 24], iconAnchor: [9, 24] });
+  }
+
+  function loadFarms() {
+    fetch(FARM_DATA_URL, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        farmLayer.clearLayers();
+        (data.farms || []).forEach(farm => {
+          L.marker([farm.latitude, farm.longitude], { icon: farmPin() })
+            .bindPopup(
+              "<strong>" + esc(farm.name) + "</strong>" +
+              (farm.code ? " <small class='text-muted'>" + esc(farm.code) + "</small>" : "") +
+              "<br><small>" + esc(farm.branch || "–") +
+              (farm.supervisor ? " · " + esc(farm.supervisor) : "") + "</small>" +
+              (farm.location ? "<br><small>" + esc(farm.location) + "</small>" : "")
+            )
+            .addTo(farmLayer);
+          if (farm.farmer) {
+            L.marker([farm.latitude, farm.longitude], {
+              icon: L.divIcon({ className: "", html: '<span class="route-farm-label">' +
+                                esc(farm.farmer) + "</span>",
+                                iconSize: [0, 0], iconAnchor: [-12, 8] }),
+              interactive: false
+            }).addTo(farmLayer);
+          }
+        });
+        farmsLoaded = true;
+      })
+      .catch(() => { /* transient failure; toggle off/on retries */ });
+  }
+
+  document.getElementById("route-show-farms").addEventListener("change", function () {
+    if (this.checked) {
+      if (!farmsLoaded) loadFarms();
+      map.addLayer(farmLayer);
+    } else {
+      map.removeLayer(farmLayer);
+    }
+  });
 
   function esc(text) {
     return String(text == null ? "" : text).replace(/[&<>"']/g,
