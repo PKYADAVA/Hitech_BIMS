@@ -48,6 +48,8 @@ from .models import (
     MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
     StockReceiveItem, warehouse_item_stock, ChargeType, TransferChargeHeader, TransferChargeLine,
     TransferChargeAllocation, TransferChargeAttachment,
+    StockTransferAttachment, MedicineTransferAttachment, InventoryAdjustmentAttachment,
+    StockIssueAttachment, StockReceiveAttachment,
 )
 from inventory.services import transfer_charges as tc_service
 from hatchery_master.models import Hatchery
@@ -1314,6 +1316,9 @@ def _stock_transfer_to_dict(row):
         "source_name": row.source_name,
         "vehicle_no": row.vehicle_no, "driver_name": row.driver_name,
         "remarks": row.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -1511,6 +1516,43 @@ def stock_transfer_transaction_history(request, pk):
     })
 
 
+@login_required
+def stock_transfer_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Stock Transfer — also reachable from Chicks Placement,
+    which is the same StockTransfer model under a farm-facing UI. Same
+    pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+    transfer = get_object_or_404(StockTransfer, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in transfer.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "stock_transfer_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [StockTransferAttachment.objects.create(
+            transfer=transfer, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "stock_transfer_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(transfer.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class StockTransferAPI(View):
 
@@ -1520,14 +1562,14 @@ class StockTransferAPI(View):
                 row = StockTransfer.objects.select_related(
                     "item__category", "from_warehouse", "from_farm", "from_batch",
                     "to_warehouse", "to_farm", "to_batch",
-                    "source_hatchery", "source_supplier").get(id=id)
+                    "source_hatchery", "source_supplier").prefetch_related("attachments").get(id=id)
                 return JsonResponse(_stock_transfer_to_dict(row))
             except StockTransfer.DoesNotExist:
                 raise Http404("Stock transfer not found")
 
         qs = _scope_transfer(request.user, StockTransfer.objects.select_related(
             "item__category", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch",
-            "source_hatchery", "source_supplier"))
+            "source_hatchery", "source_supplier").prefetch_related("attachments"))
         # Branch and Warehouse, for the Chicks Placement list. A transfer
         # has two ends, so a warehouse matches either of them.
         from user.services.list_filters import apply_place_filters
@@ -1791,6 +1833,9 @@ def _medicine_transfer_list_dict(header):
         "description": ", ".join(l.item.description for l in lines if l.item_id),
         "quantity": str(sum((l.quantity for l in lines), Decimal('0'))),
         "vehicle_no": header.vehicle_no, "driver_name": header.driver_name,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in header.attachments.all()],
     }
 
 
@@ -1925,6 +1970,42 @@ class MedicineTransferFormTemplateView(View):
         })
 
 
+@login_required
+def medicine_transfer_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Medicine Vaccine Transfer. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    transfer = get_object_or_404(MedicineTransfer, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in transfer.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "medicine_transfer_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [MedicineTransferAttachment.objects.create(
+            transfer=transfer, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "medicine_transfer_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(transfer.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class MedicineTransferAPI(View):
 
@@ -1933,14 +2014,14 @@ class MedicineTransferAPI(View):
             try:
                 header = MedicineTransfer.objects.select_related(
                     "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch", "paid_by"
-                ).prefetch_related("items__item").get(id=id)
+                ).prefetch_related("items__item", "attachments").get(id=id)
                 return JsonResponse(_medicine_transfer_detail_dict(header))
             except MedicineTransfer.DoesNotExist:
                 raise Http404("Medicine transfer not found")
 
         qs = _scope_transfer(request.user, MedicineTransfer.objects.select_related(
             "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch"
-        ).prefetch_related("items__item"))
+        ).prefetch_related("items__item", "attachments"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -2244,6 +2325,9 @@ def _inventory_adjustment_list_dict(header):
         "quantity": str(sum((l.quantity for l in lines), Decimal('0'))),
         "price": str(next(iter(rates))) if len(rates) == 1 else "",
         "amount": str(sum((l.amount for l in lines), Decimal('0'))),
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in header.attachments.all()],
     }
 
 
@@ -2360,6 +2444,42 @@ class InventoryAdjustmentFormTemplateView(View):
         })
 
 
+@login_required
+def inventory_adjustment_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against an Inventory Adjustment. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    adjustment = get_object_or_404(InventoryAdjustment, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in adjustment.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "inventory_adjustment_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [InventoryAdjustmentAttachment.objects.create(
+            adjustment=adjustment, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "inventory_adjustment_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(adjustment.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class InventoryAdjustmentAPI(View):
 
@@ -2367,13 +2487,14 @@ class InventoryAdjustmentAPI(View):
         if id:
             try:
                 header = InventoryAdjustment.objects.select_related(
-                    "warehouse", "farm", "batch", "chart_of_account").prefetch_related("items__item").get(id=id)
+                    "warehouse", "farm", "batch", "chart_of_account").prefetch_related(
+                    "items__item", "attachments").get(id=id)
                 return JsonResponse(_inventory_adjustment_detail_dict(header))
             except InventoryAdjustment.DoesNotExist:
                 raise Http404("Inventory adjustment not found")
 
         qs = _scope_adjustment(request.user, InventoryAdjustment.objects.select_related(
-            "warehouse", "farm", "batch", "chart_of_account").prefetch_related("items__item"))
+            "warehouse", "farm", "batch", "chart_of_account").prefetch_related("items__item", "attachments"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -2560,6 +2681,9 @@ def _stock_issue_list_dict(header):
         "price": str(next(iter(rates))) if len(rates) == 1 else "",
         "amount": str(sum((l.amount for l in lines), Decimal('0'))),
         "farm_warehouse": ", ".join(locations),
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in header.attachments.all()],
     }
 
 
@@ -2673,6 +2797,41 @@ class StockIssueFormTemplateView(View):
         })
 
 
+@login_required
+def stock_issue_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Stock Issue. Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+    issue = get_object_or_404(StockIssue, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in issue.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "stock_issue_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [StockIssueAttachment.objects.create(
+            issue=issue, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "stock_issue_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(issue.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class StockIssueAPI(View):
 
@@ -2680,14 +2839,14 @@ class StockIssueAPI(View):
         if id:
             try:
                 header = StockIssue.objects.select_related("chart_of_account").prefetch_related(
-                    "items__item", "items__warehouse", "items__farm", "items__batch").get(id=id)
+                    "items__item", "items__warehouse", "items__farm", "items__batch", "attachments").get(id=id)
                 return JsonResponse(_stock_issue_detail_dict(header))
             except StockIssue.DoesNotExist:
                 raise Http404("Stock issue not found")
 
         qs = _scope_by_items(request.user, StockIssue.objects.select_related(
             "chart_of_account").prefetch_related(
-            "items__item", "items__warehouse", "items__farm", "items__batch"))
+            "items__item", "items__warehouse", "items__farm", "items__batch", "attachments"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -2856,6 +3015,9 @@ def _stock_receive_list_dict(header):
         "price": str(next(iter(rates))) if len(rates) == 1 else "",
         "amount": str(sum((l.amount for l in lines), Decimal('0'))),
         "farm_warehouse": ", ".join(locations),
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in header.attachments.all()],
     }
 
 
@@ -2936,6 +3098,42 @@ class StockReceiveFormTemplateView(View):
         })
 
 
+@login_required
+def stock_receive_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Stock Received entry. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    receive = get_object_or_404(StockReceive, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in receive.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "stock_receive_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [StockReceiveAttachment.objects.create(
+            receive=receive, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "stock_receive_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(receive.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class StockReceiveAPI(View):
 
@@ -2943,14 +3141,14 @@ class StockReceiveAPI(View):
         if id:
             try:
                 header = StockReceive.objects.select_related("chart_of_account").prefetch_related(
-                    "items__item", "items__warehouse", "items__farm", "items__batch").get(id=id)
+                    "items__item", "items__warehouse", "items__farm", "items__batch", "attachments").get(id=id)
                 return JsonResponse(_stock_receive_detail_dict(header))
             except StockReceive.DoesNotExist:
                 raise Http404("Stock receive not found")
 
         qs = _scope_by_items(request.user, StockReceive.objects.select_related(
             "chart_of_account").prefetch_related(
-            "items__item", "items__warehouse", "items__farm", "items__batch"))
+            "items__item", "items__warehouse", "items__farm", "items__batch", "attachments"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()

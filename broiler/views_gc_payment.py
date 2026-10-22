@@ -27,7 +27,7 @@ from django.views.decorators.http import require_POST
 from user.services.scoping import farms_for, scope_any
 
 from .models import (BroilerBatch, BroilerFarm, FarmerGCPayment,
-                     FarmerGCPaymentLine, GrowingChargeSettlement)
+                     FarmerGCPaymentAttachment, FarmerGCPaymentLine, GrowingChargeSettlement)
 from .services import gc_posting
 from Hitech_BIMS.entry_dates import date_from_query
 
@@ -90,7 +90,7 @@ def farmer_gc_payment_api(request):
 
     qs = scope_any(request.user, FarmerGCPayment.objects.all(),
                    farms="lines__farm_id").prefetch_related(
-        "lines__farm__farmer", "lines__pay_account")
+        "lines__farm__farmer", "lines__pay_account", "attachments")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -105,7 +105,50 @@ def farmer_gc_payment_api(request):
         "mode": p.mode_summary,
         "method": p.method_summary,
         "amount": f"{p.total_amount:.2f}",
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in p.attachments.all()],
     } for p in qs]})
+
+
+@login_required(login_url="login")
+def farmer_gc_payment_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Farmer GC Payment voucher."""
+    from user.access import user_can
+
+    payment = get_object_or_404(FarmerGCPayment, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in payment.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "farmer_gc_payment", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [FarmerGCPaymentAttachment.objects.create(
+            payment=payment, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "farmer_gc_payment", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(payment.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 @login_required(login_url="login")

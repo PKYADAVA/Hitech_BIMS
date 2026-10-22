@@ -32,6 +32,7 @@ urlpatterns = [
          {'request_mode': True}, name='sales_invoice_request_change'),
     path('sales-invoice/<int:id>/delete/', views.delete_sales_invoice, name='sales_invoice_delete'),
     path('sales_invoice_api/', views.sales_invoice_api_list, name='sales_invoice_api_list'),
+    path('sales-invoice/<int:id>/attachments/', views.sales_invoice_attachments, name='sales_invoice_attachments'),
 
     path('customer-ledger/', views.customer_ledger_report, name='customer_ledger'),
     path('customer-balance/', views.customer_balance_report, name='customer_balance'),
@@ -46,6 +47,7 @@ urlpatterns = [
     path('sales_receipt_api/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api_list'),
     path('sales_receipt_api/<int:id>/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api'),
     path('sales-receipt/balance-lookup/', views.sales_receipt_balance_lookup, name='sales_receipt_balance_lookup'),
+    path('sales-receipt/<int:id>/attachments/', views.sales_receipt_attachments, name='sales_receipt_attachments'),
 
     path('customer-debit-note/', views.customer_debit_note_list, name='customer_debit_note_list'),
     path('customer-debit-note/add/', views.create_customer_debit_note, name='customer_debit_note_add'),
@@ -54,6 +56,7 @@ urlpatterns = [
          {'request_mode': True}, name='customer_debit_note_request_change'),
     path('customer-debit-note/<int:id>/delete/', views.delete_customer_debit_note, name='customer_debit_note_delete'),
     path('customer_debit_note_api/', views.customer_debit_note_api_list, name='customer_debit_note_api_list'),
+    path('customer-debit-note/<int:id>/attachments/', views.customer_debit_note_attachments, name='customer_debit_note_attachments'),
 
     path('customer-credit-note/', views.customer_credit_note_list, name='customer_credit_note_list'),
     path('customer-credit-note/add/', views.create_customer_credit_note, name='customer_credit_note_add'),
@@ -62,4 +65,5 @@ urlpatterns = [
          {'request_mode': True}, name='customer_credit_note_request_change'),
     path('customer-credit-note/<int:id>/delete/', views.delete_customer_credit_note, name='customer_credit_note_delete'),
     path('customer_credit_note_api/', views.customer_credit_note_api_list, name='customer_credit_note_api_list'),
+    path('customer-credit-note/<int:id>/attachments/', views.customer_credit_note_attachments, name='customer_credit_note_attachments'),
 ]

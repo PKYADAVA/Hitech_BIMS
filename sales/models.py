@@ -499,3 +499,81 @@ class CustomerCreditNote(CustomerNoteBase):
     """Credit note issued to a customer (sales return, discount allowed, etc.)
     — reduces the receivable (Credit side) in the customer ledger."""
     NOTE_PREFIX = "CCN"
+
+
+class SalesInvoiceAttachment(models.Model):
+    """Proof filed against a Sales Invoice — a signed copy, an e-way bill
+    screenshot, whatever the invoice needs on file. Image or PDF; several
+    per invoice, same pattern as broiler.BirdSaleReceiptAttachment."""
+    invoice = models.ForeignKey(SalesInvoice, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="sales_invoice/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='sales_invoice_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Sales Invoice Attachment"
+        verbose_name_plural = "Sales Invoice Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.invoice.invoice_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class SalesReceiptAttachment(models.Model):
+    """Proof filed against a Sales Receipt — a bank slip, UPI screenshot or
+    signed counterfoil. Image or PDF; several per receipt, same pattern as
+    broiler.BirdSaleReceiptAttachment."""
+    receipt = models.ForeignKey(SalesReceipt, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="sales_receipt/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='sales_receipt_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Sales Receipt Attachment"
+        verbose_name_plural = "Sales Receipt Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.receipt.receipt_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class CustomerDebitNoteAttachment(models.Model):
+    """Proof filed against a Customer Debit Note. Image or PDF; several per
+    note, same pattern as broiler.BirdSaleReceiptAttachment."""
+    note = models.ForeignKey(CustomerDebitNote, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="customer_debit_note/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='customer_debit_note_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Customer Debit Note Attachment"
+        verbose_name_plural = "Customer Debit Note Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.note.note_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class CustomerCreditNoteAttachment(models.Model):
+    """Proof filed against a Customer Credit Note. Image or PDF; several per
+    note, same pattern as broiler.BirdSaleReceiptAttachment."""
+    note = models.ForeignKey(CustomerCreditNote, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="customer_credit_note/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='customer_credit_note_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Customer Credit Note Attachment"
+        verbose_name_plural = "Customer Credit Note Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.note.note_no} — {self.file.name.rsplit('/', 1)[-1]}"

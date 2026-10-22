@@ -103,6 +103,7 @@ urlpatterns = [
     path('daily_entry_api/', views.DailyEntryAPI.as_view(), name='daily_entry_api_list'),
     path('daily_entry_api/group-delete/', views.daily_entry_group_delete, name='daily_entry_group_delete'),
     path('daily_entry_api/<int:id>/', views.DailyEntryAPI.as_view(), name='daily_entry_api'),
+    path('daily-entry/<int:id>/attachments/', views.daily_entry_attachments, name='daily_entry_attachments'),
     path('daily-entry/farm-lookup/', views.daily_entry_farm_lookup, name='daily_entry_farm_lookup'),
     path('daily-entry/stock-lookup/', views.daily_entry_stock_lookup, name='daily_entry_stock_lookup'),
 
@@ -118,6 +119,7 @@ urlpatterns = [
     path('medicine_entry_api/', views.MedicineEntryAPI.as_view(), name='medicine_entry_api_list'),
     path('medicine_entry_api/group-delete/', views.medicine_entry_group_delete, name='medicine_entry_group_delete'),
     path('medicine_entry_api/<int:id>/', views.MedicineEntryAPI.as_view(), name='medicine_entry_api'),
+    path('medicine-entry/<int:id>/attachments/', views.medicine_entry_attachments, name='medicine_entry_attachments'),
     path('medicine-entry/farm-lookup/', views.medicine_entry_farm_lookup, name='medicine_entry_farm_lookup'),
     path('medicine-entry/item-lookup/', views.medicine_entry_item_lookup, name='medicine_entry_item_lookup'),
     path('medicine-entry/stock-lookup/', views.medicine_entry_stock_lookup, name='medicine_entry_stock_lookup'),
@@ -230,6 +232,8 @@ urlpatterns = [
          name='farmer_farm_setup_request_clear_location'),
     path('farmer-farm-setup-request/<int:id>/reject/', views.farmer_farm_setup_request_reject,
          name='farmer_farm_setup_request_reject'),
+    path('farmer-farm-setup-request/<int:id>/attachments/', views.farmer_farm_setup_request_attachments,
+         name='farmer_farm_setup_request_attachments'),
 
     path('bird-category/', views.BirdCategoryTemplateView.as_view(), name='bird_category'),
     path('bird_category_list/', views.BirdCategoryAPI.as_view(), name='bird_category_list'),
@@ -278,6 +282,8 @@ urlpatterns = [
          name='farmer_gc_payment_batches'),
     path('gc_payment_gc_amount/', gc_payment.farmer_gc_payment_gc_amount,
          name='farmer_gc_payment_gc_amount'),
+    path('gc-payment/<int:id>/attachments/', gc_payment.farmer_gc_payment_attachments,
+         name='farmer_gc_payment_attachments'),
     path('farmer-ledger-report/', farmer_ledger.farmer_ledger_report,
          name='farmer_ledger_report'),
     path('farmer-reconciliation-report/', farmer_ledger.farmer_reconciliation_report,

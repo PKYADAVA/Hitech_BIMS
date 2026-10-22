@@ -16,6 +16,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 import json
 import logging
 
@@ -28,11 +29,13 @@ from sales.models import Customer, CustomerShippingAddress
 
 from Hitech_BIMS.entry_dates import reject_future_date, date_from_query
 from .models import (
-    HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
-    EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
-    DeliveryChallan, DeliveryChallanItem, TraySetting, TraySettingLine,
-    HatchEntry, HatchEntryHatcherOutput, HatchEntryVaccine, ChickSale, ChickSaleItem, ChangeRequest,
-    ChickSaleReceipt,
+    HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine, HatchSettingAttachment,
+    EggPurchase, EggPurchaseItem, EggPurchaseAttachment, EggGrading, EggGradingHatchItem, EggGradingAttachment,
+    DeliveryChallan, DeliveryChallanItem, DeliveryChallanAttachment, TraySetting, TraySettingLine,
+    TraySettingAttachment,
+    HatchEntry, HatchEntryHatcherOutput, HatchEntryVaccine, HatchEntryAttachment,
+    ChickSale, ChickSaleItem, ChangeRequest,
+    ChickSaleReceipt, ChickSaleAttachment, ChickSaleReceiptAttachment,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,6 +170,47 @@ def _hatch_setting_to_dict(hs: HatchSetting) -> dict:
     }
 
 
+@login_required
+def hatch_setting_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Hatch Setting / register entry. Image or PDF, several
+    per setting. Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    hs = get_object_or_404(HatchSetting, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in hs.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "hatchery_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [HatchSettingAttachment.objects.create(
+            hatch_setting=hs, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "hatchery_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(hs.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class HatchSettingAPI(BaseAPIView):
     """API endpoints for HatchSetting (hatch register) records, including nested rows."""
@@ -182,7 +226,7 @@ class HatchSettingAPI(BaseAPIView):
                 )
                 return JsonResponse(_hatch_setting_to_dict(hs))
 
-            hatch_settings = HatchSetting.objects.all()
+            hatch_settings = HatchSetting.objects.prefetch_related("attachments")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
@@ -204,6 +248,9 @@ class HatchSettingAPI(BaseAPIView):
                     "hatch_percent": hs.hatch_percent(),
                     "total_chicks_sold": hs.total_chicks_sold(),
                     "unsold_chicks": hs.unsold_chicks(),
+                    "attachments": [{"id": a.id, "url": a.file.url,
+                                    "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                   for a in hs.attachments.all()],
                 })
             return JsonResponse(results, safe=False)
         except Exception as e:
@@ -397,6 +444,47 @@ def _egg_purchase_to_dict(ep: EggPurchase) -> dict:
     }
 
 
+@login_required
+def egg_purchase_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against an Egg Purchase. Image or PDF, several per purchase.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    ep = get_object_or_404(EggPurchase, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in ep.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "egg_purchase_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [EggPurchaseAttachment.objects.create(
+            egg_purchase=ep, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "egg_purchase_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(ep.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class EggPurchaseAPI(BaseAPIView):
     """API endpoints for EggPurchase records, including nested item rows."""
@@ -410,7 +498,8 @@ class EggPurchaseAPI(BaseAPIView):
                 )
                 return JsonResponse(_egg_purchase_to_dict(ep))
 
-            queryset = EggPurchase.objects.select_related("supplier", "warehouse").prefetch_related("items__item")
+            queryset = EggPurchase.objects.select_related("supplier", "warehouse").prefetch_related(
+                "items__item", "attachments")
             supplier_id = request.GET.get("supplier")
             if supplier_id:
                 queryset = queryset.filter(supplier_id=supplier_id)
@@ -431,6 +520,9 @@ class EggPurchaseAPI(BaseAPIView):
                     "net_rate": str(ep.net_rate()),
                     "net_amount": str(ep.net_amount()),
                     "warehouse_name": ep.warehouse.name,
+                    "attachments": [{"id": a.id, "url": a.file.url,
+                                    "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                   for a in ep.attachments.all()],
                 })
             return JsonResponse(results, safe=False)
         except Exception as e:
@@ -584,6 +676,47 @@ def _egg_grading_to_dict(eg: EggGrading) -> dict:
     }
 
 
+@login_required
+def egg_grading_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against an Egg Grading entry. Image or PDF, several per grading.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    eg = get_object_or_404(EggGrading, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in eg.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "egg_grading_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [EggGradingAttachment.objects.create(
+            egg_grading=eg, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "egg_grading_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(eg.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class EggGradingAPI(BaseAPIView):
     """API endpoints for EggGrading records, including nested hatch item rows."""
@@ -602,7 +735,7 @@ class EggGradingAPI(BaseAPIView):
             results = []
             for eg in EggGrading.objects.select_related(
                 "storage_location", "supplier", "purchase_invoice", "item"
-            ).prefetch_related("hatch_items__hatch_item"):
+            ).prefetch_related("hatch_items__hatch_item", "attachments"):
                 hatch_egg_summary = ", ".join(
                     f"{row.hatch_item.item_code} ({row.quantity})" for row in eg.hatch_items.all()
                 )
@@ -614,6 +747,9 @@ class EggGradingAPI(BaseAPIView):
                     "quantity": str(eg.quantity),
                     "hatch_egg_summary": hatch_egg_summary,
                     "storage_location_name": eg.storage_location.name,
+                    "attachments": [{"id": a.id, "url": a.file.url,
+                                    "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                   for a in eg.attachments.all()],
                 })
             return JsonResponse(results, safe=False)
         except Exception as e:
@@ -742,6 +878,47 @@ def _delivery_challan_to_dict(challan):
     }
 
 
+@login_required
+def delivery_challan_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Delivery Challan. Image or PDF, several per challan.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    challan = get_object_or_404(DeliveryChallan, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in challan.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "delivery_challan_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [DeliveryChallanAttachment.objects.create(
+            challan=challan, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "delivery_challan_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(challan.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class DeliveryChallanAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None):
@@ -750,7 +927,7 @@ class DeliveryChallanAPI(BaseAPIView):
                 return JsonResponse(_delivery_challan_to_dict(
                     get_object_or_404(DeliveryChallan.objects.select_related("customer", "warehouse"), id=id)))
             challans = list(DeliveryChallan.objects.select_related("customer")
-                           .prefetch_related("items", "chick_sales").all())
+                           .prefetch_related("items", "chick_sales", "attachments").all())
 
             from sales.views import customer_balance_timelines, customer_balance_as_of
             timelines = customer_balance_timelines(
@@ -772,6 +949,9 @@ class DeliveryChallanAPI(BaseAPIView):
                     "ledger_balance": lb, "ledger_balance_cr_dr": lb_cr_dr,
                     "total_quantity": str(c.total_quantity()), "total_amount": str(c.total_amount()),
                     "converted_bill_no": next((cs.bill_no for cs in c.chick_sales.all()), ""),
+                    "attachments": [{"id": a.id, "url": a.file.url,
+                                    "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                   for a in c.attachments.all()],
                 })
             return JsonResponse(rows, safe=False)
         except Exception as e:
@@ -1208,6 +1388,47 @@ def _tray_setting_to_dict(ts):
     }
 
 
+@login_required
+def tray_setting_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Tray Setting. Image or PDF, several per setting.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    ts = get_object_or_404(TraySetting, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in ts.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "tray_set_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [TraySettingAttachment.objects.create(
+            tray_setting=ts, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "tray_set_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(ts.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class TraySettingAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None):
@@ -1217,7 +1438,7 @@ class TraySettingAPI(BaseAPIView):
                     TraySetting.objects.select_related("hatchery", "grading"), id=id)
                 return JsonResponse(_tray_setting_to_dict(ts))
             settings = TraySetting.objects.select_related(
-                "hatchery", "grading").prefetch_related("lines__supplier").all()
+                "hatchery", "grading").prefetch_related("lines__supplier", "attachments").all()
             return JsonResponse([{
                 "id": ts.id, "setting_no": ts.setting_no,
                 "setting_date": ts.setting_date.isoformat(), "hatch_date": ts.hatch_date.isoformat(),
@@ -1228,6 +1449,9 @@ class TraySettingAPI(BaseAPIView):
                 "setting_time": ts.setting_time.strftime("%H:%M") if ts.setting_time else "",
                 "loaded_by_name": ts.loaded_by,
                 "total_expected_chicks": str(ts.total_expected_chicks()),
+                "attachments": [{"id": a.id, "url": a.file.url,
+                                "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                               for a in ts.attachments.all()],
             } for ts in settings], safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1369,6 +1593,47 @@ def _hatch_entry_to_dict(he):
     }
 
 
+@login_required
+def hatch_entry_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Hatch Entry. Image or PDF, several per entry.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    he = get_object_or_404(HatchEntry, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in he.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "hatch_entry_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [HatchEntryAttachment.objects.create(
+            hatch_entry=he, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "hatch_entry_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(he.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class HatchEntryAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None):
@@ -1377,7 +1642,7 @@ class HatchEntryAPI(BaseAPIView):
                 he = get_object_or_404(
                     HatchEntry.objects.select_related("tray_setting__hatchery"), id=id)
                 return JsonResponse(_hatch_entry_to_dict(he))
-            entries = HatchEntry.objects.select_related("tray_setting__hatchery").all()
+            entries = HatchEntry.objects.select_related("tray_setting__hatchery").prefetch_related("attachments")
             return JsonResponse([{
                 "id": he.id, "transaction_no": he.transaction_no,
                 "setting_date": he.tray_setting.setting_date.isoformat(),
@@ -1386,6 +1651,9 @@ class HatchEntryAPI(BaseAPIView):
                 "hatchery_name": he.tray_setting.hatchery.hatchery_name,
                 "description": he.remarks, "eggs_total": str(he.eggs_total),
                 "chicks_total": str(he.chicks_total), "net_amount": str(he.net_amount),
+                "attachments": [{"id": a.id, "url": a.file.url,
+                                "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                               for a in he.attachments.all()],
             } for he in entries], safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1552,7 +1820,8 @@ class ChickSaleAPI(BaseAPIView):
                     ChickSale.objects.select_related("customer", "warehouse", "delivery_challan"), id=id)
                 return JsonResponse(_chick_sale_to_dict(cs))
             sales = list(ChickSale.objects.select_related(
-                "customer", "warehouse", "delivery_challan").prefetch_related("items__item").all())
+                "customer", "warehouse", "delivery_challan").prefetch_related(
+                "items__item", "attachments").all())
 
             from sales.views import customer_balance_timelines, customer_balance_as_of
             timelines = customer_balance_timelines(
@@ -1576,6 +1845,9 @@ class ChickSaleAPI(BaseAPIView):
                     "total_sale_qty": str(cs.total_sale_qty()), "total_net_qty": str(cs.total_net_qty()),
                     "total_free_qty": str(cs.total_free_qty()), "avg_amount": str(cs.avg_amount),
                     "final_amount": str(cs.final_amount), "warehouse_name": cs.warehouse.name,
+                    "attachments": [{"id": a.id, "url": a.file.url,
+                                    "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                   for a in cs.attachments.all()],
                 })
             return JsonResponse(rows, safe=False)
         except Exception as e:
@@ -1655,6 +1927,48 @@ class ChickSaleAPI(BaseAPIView):
             raise ValidationError("Add at least one item line.")
         cs.recalculate()
         return cs
+
+
+@login_required
+def chick_sale_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Chick Sale invoice — a weighbridge slip, a signed
+    delivery acknowledgement, a payment screenshot. Image or PDF, several
+    per sale. Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    sale = get_object_or_404(ChickSale, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in sale.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "chick_sale_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [ChickSaleAttachment.objects.create(
+            sale=sale, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "chick_sale_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(sale.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 # --------------------------------------------------------------------------
@@ -1942,6 +2256,9 @@ def _chick_sale_receipt_to_dict(row, balance_timeline=None):
         "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
                                  if row.receipt_account_id else ""),
         "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -1980,6 +2297,48 @@ class ChickSaleReceiptFormTemplateView(View):
         })
 
 
+@login_required
+def chick_sale_receipt_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) payment
+    proof filed against a Chick Sale Receipt — a bank slip, a UPI
+    screenshot, a signed counterfoil. Image or PDF, several per receipt.
+    Same pattern as bird_sale_receipt_attachments."""
+    from user.access import user_can
+
+    receipt = get_object_or_404(ChickSaleReceipt, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in receipt.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "chick_sale_receipt_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [ChickSaleReceiptAttachment.objects.create(
+            receipt=receipt, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "chick_sale_receipt_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(receipt.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class ChickSaleReceiptAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
@@ -1988,7 +2347,8 @@ class ChickSaleReceiptAPI(BaseAPIView):
                 row = ChickSaleReceipt.objects.select_related(
                     "customer", "location", "receipt_account").get(id=id)
                 return JsonResponse(_chick_sale_receipt_to_dict(row))
-            qs = ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account")
+            qs = ChickSaleReceipt.objects.select_related(
+                "customer", "location", "receipt_account").prefetch_related("attachments")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:

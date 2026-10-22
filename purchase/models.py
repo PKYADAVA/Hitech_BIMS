@@ -925,3 +925,101 @@ class CreditNote(SupplierNoteBase):
     """Credit note from a supplier — reduces the payable (Credit side) in the
     supplier ledger."""
     NOTE_PREFIX = "CN"
+
+
+class GeneralPurchaseAttachment(models.Model):
+    """Proof filed against a General Purchase — invoice copy, weighbridge
+    slip, photo etc. Several per purchase, same pattern as
+    BirdSaleReceiptAttachment."""
+    purchase = models.ForeignKey(GeneralPurchase, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="general_purchase/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='general_purchase_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "General Purchase Attachment"
+        verbose_name_plural = "General Purchase Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.purchase.purchase_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class ChicksPurchaseAttachment(models.Model):
+    """Proof filed against a Chicks Purchase — invoice copy, weighbridge
+    slip, photo etc. Several per purchase, same pattern as
+    BirdSaleReceiptAttachment."""
+    purchase = models.ForeignKey(ChicksPurchase, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="chicks_purchase/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='chicks_purchase_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Chicks Purchase Attachment"
+        verbose_name_plural = "Chicks Purchase Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.purchase.purchase_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class SupplierPaymentAttachment(models.Model):
+    """Proof filed against a Supplier Payment voucher — bank slip, UPI
+    screenshot or signed counterfoil. Several per payment, same pattern as
+    BirdSaleReceiptAttachment."""
+    payment = models.ForeignKey(SupplierPayment, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="supplier_payment/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='supplier_payment_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Supplier Payment Attachment"
+        verbose_name_plural = "Supplier Payment Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.payment.payment_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class DebitNoteAttachment(models.Model):
+    """Proof filed against a supplier Debit Note. Several per note, same
+    pattern as BirdSaleReceiptAttachment."""
+    note = models.ForeignKey(DebitNote, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="debit_note/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='debit_note_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Debit Note Attachment"
+        verbose_name_plural = "Debit Note Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.note.note_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
+class CreditNoteAttachment(models.Model):
+    """Proof filed against a supplier Credit Note. Several per note, same
+    pattern as BirdSaleReceiptAttachment."""
+    note = models.ForeignKey(CreditNote, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="credit_note/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='credit_note_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Credit Note Attachment"
+        verbose_name_plural = "Credit Note Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.note.note_no} — {self.file.name.rsplit('/', 1)[-1]}"

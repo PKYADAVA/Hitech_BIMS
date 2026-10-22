@@ -465,6 +465,9 @@ def _sales_invoice_list_dict(inv):
         "total_items": inv.total_items(),
         "amount": str(inv.net_amount),
         "is_active": inv.is_active,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in inv.attachments.all()],
     }
 
 
@@ -584,12 +587,54 @@ def sales_invoice_api_list(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     qs = scope_any(request.user, SalesInvoice.objects.filter(),
-                   sectors="branch_id").select_related("customer")
+                   sectors="branch_id").select_related("customer").prefetch_related("attachments")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
         qs = qs.filter(date__lte=date_from_query(to_date))
     return JsonResponse([_sales_invoice_list_dict(i) for i in qs.order_by("-date", "-id")], safe=False)
+
+
+@login_required
+def sales_invoice_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Sales Invoice. Image or PDF, several per invoice. Same
+    pattern as broiler's bird_sale_receipt_attachments."""
+    from user.access import user_can
+    from sales.models import SalesInvoiceAttachment
+
+    invoice = get_object_or_404(SalesInvoice, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in invoice.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "sales_invoice_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [SalesInvoiceAttachment.objects.create(
+            invoice=invoice, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "sales_invoice_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(invoice.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 @login_required(login_url="login")
@@ -1515,6 +1560,9 @@ def _sales_receipt_to_dict(row):
         "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
                                  if row.receipt_account_id else ""),
         "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -1560,7 +1608,7 @@ class SalesReceiptAPI(View):
                 return JsonResponse(_sales_receipt_to_dict(row))
             qs = scope_any(request.user, SalesReceipt.objects.filter(),
                            sectors="location_id").select_related(
-                "customer", "location", "receipt_account")
+                "customer", "location", "receipt_account").prefetch_related("attachments")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
@@ -1621,6 +1669,49 @@ class SalesReceiptAPI(View):
         instance.full_clean(exclude=["receipt_no"])
         instance.save()
         return instance
+
+
+@login_required
+def sales_receipt_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Sales Receipt — a bank slip, UPI screenshot or signed
+    counterfoil. Image or PDF, several per receipt. Same pattern as
+    broiler's bird_sale_receipt_attachments."""
+    from user.access import user_can
+    from sales.models import SalesReceiptAttachment
+
+    receipt = get_object_or_404(SalesReceipt, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in receipt.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "sales_receipt_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [SalesReceiptAttachment.objects.create(
+            receipt=receipt, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "sales_receipt_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(receipt.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 def _customer_current_balance(customer_id, exclude_sales_receipt_id=None,
@@ -1716,6 +1807,9 @@ def _customer_note_list_dict(n):
         "account_name": n.account.description if n.account_id else "",
         "sector_name": n.sector.name if n.sector_id else "",
         "amount": str(n.amount), "remarks": n.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in n.attachments.all()],
     }
 
 
@@ -1824,7 +1918,8 @@ def _customer_note_api(request, model):
     to_date = (request.GET.get("to_date") or "").strip()
     customer_id = (request.GET.get("customer") or "").strip()
     qs = scope_or_null(request.user,
-                       model.objects.select_related("customer", "account", "sector"),
+                       model.objects.select_related("customer", "account", "sector")
+                            .prefetch_related("attachments"),
                        "customer_groups", "customer__customer_group_id")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
@@ -1869,6 +1964,48 @@ def customer_debit_note_api_list(request):
     return _customer_note_api(request, CustomerDebitNote)
 
 
+@login_required
+def customer_debit_note_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Customer Debit Note. Image or PDF, several per note.
+    Same pattern as broiler's bird_sale_receipt_attachments."""
+    from user.access import user_can
+    from sales.models import CustomerDebitNoteAttachment
+
+    note = get_object_or_404(CustomerDebitNote, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in note.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "customer_debit_note_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [CustomerDebitNoteAttachment.objects.create(
+            note=note, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "customer_debit_note_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(note.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 # --- Customer Credit Note ---
 @login_required(login_url="login")
 def customer_credit_note_list(request):
@@ -1900,6 +2037,48 @@ def delete_customer_credit_note(request, id):
 @login_required
 def customer_credit_note_api_list(request):
     return _customer_note_api(request, CustomerCreditNote)
+
+
+@login_required
+def customer_credit_note_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Customer Credit Note. Image or PDF, several per note.
+    Same pattern as broiler's bird_sale_receipt_attachments."""
+    from user.access import user_can
+    from sales.models import CustomerCreditNoteAttachment
+
+    note = get_object_or_404(CustomerCreditNote, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in note.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "customer_credit_note_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [CustomerCreditNoteAttachment.objects.create(
+            note=note, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "customer_credit_note_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(note.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 # --------------------------------------------------------------------------

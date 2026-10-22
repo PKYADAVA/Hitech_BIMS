@@ -7,6 +7,18 @@
 <style>
   .bs-dr { color:#c0392b; font-weight:600; }
   .bs-cr { color:#0e8698; font-weight:600; }
+  /* Attachments as a thumbnail in their own column, same as Bird Sale Receipt's
+     payment proof: one thumbnail standing for the set, count as a corner badge. */
+  .bsr-thumbs { position:relative; display:inline-flex; padding:0; border:0;
+               background:none; vertical-align:middle; cursor:zoom-in; }
+  .bsr-thumbs img, .bsr-thumbs .bsr-thumb-pdf { width:28px; height:28px; object-fit:cover; border-radius:4px;
+                   border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .bsr-thumbs .bsr-thumb-pdf { display:inline-flex; align-items:center; justify-content:center; color:#c0392b; }
+  .bsr-thumbs:hover img, .bsr-thumbs:hover .bsr-thumb-pdf { border-color:var(--bs-primary, #2563eb); }
+  .bsr-thumbs .bsr-more { position:absolute; bottom:-5px; right:-5px; min-width:15px; height:15px;
+                        padding:0 3px; border-radius:999px; display:inline-flex; align-items:center;
+                        justify-content:center; font-size:.6rem; line-height:1; font-weight:700;
+                        color:#fff; background:#2563eb; border:1.5px solid #fff; }
 </style>
 <div class="page-header">
     <div class="page-header-main">
@@ -56,6 +68,7 @@
             <th class="ds-num">Price</th>
             <th class="ds-num">Amount</th>
             <th>Farm/Warehouse</th>
+            <th class="ds-mid text-center">Attachments</th>
             <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
@@ -74,9 +87,6 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="d-none d-print-block mb-3 print-report-header">
-          <h4 class="mb-1">CHICK SALE INVOICE</h4>
-        </div>
         <div id="view-sale-body" class="challan-view-content">
           <div class="text-center text-muted py-4">Loading...</div>
         </div>
@@ -92,28 +102,99 @@
 <!-- Hidden print-only container: used by a row's Print/Share button so printing
      and capture don't visibly open the View modal on screen first. -->
 <div id="print-only-container" class="d-none">
-  <div class="print-report-header mb-3"><h4 class="mb-1">CHICK SALE INVOICE</h4></div>
   <div id="print-sale-body" class="challan-view-content"></div>
 </div>
 
+<!-- Attachments: proof filed against this sale, view-only. -->
+<div class="modal fade" id="bsrAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-paperclip text-primary me-1"></i> Attachments
+          <span class="text-muted small" id="bsr-attach-title"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+        <div id="bsr-attach-list" class="mb-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add attachment: a separate modal, reached from the Action column's own
+     Upload button. -->
+<div class="modal fade" id="bsrUploadAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-upload text-primary me-1"></i> Add Attachment
+          <span class="text-muted small" id="bsr-upload-title"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      {% if page_perms.add %}
+      <form id="bsr-attach-form">
+        <div class="modal-body">
+          <label class="form-label small">Add file(s)</label>
+          <input type="file" name="files" class="form-control form-control-sm" accept="image/*,application/pdf" multiple required
+                 data-paste-drop>
+          <div class="form-text">Weighbridge slip, delivery acknowledgement or payment proof — more can always be added.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-upload me-1"></i>Upload</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="modal-body text-muted small">You don't have permission to add attachments.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <style>
-.challan-view-content .company-header { text-align:center; border-bottom:2px solid #333; padding-bottom:8px; margin-bottom:12px; }
-.challan-view-content .company-header h4 { margin:0 0 4px; font-size:16px; }
-.challan-view-content .company-header div { font-size:12px; }
-.challan-view-content .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid #ccc; border-bottom:1px solid #ccc; margin-bottom:12px; font-size:12.5px; }
-.challan-view-content .detail-grid > div { padding:8px 10px; }
-.challan-view-content .detail-grid > div + div { border-left:1px solid #ccc; }
-.challan-view-content table { width:100%; border-collapse:collapse; margin-bottom:12px; }
-.challan-view-content table th, .challan-view-content table td { border:1px solid #333; padding:6px 8px; font-size:12.5px; }
-.challan-view-content table th { background:#eee; }
-.challan-view-content .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 10px; background:#fbe4d5; margin-bottom:8px; }
-.challan-view-content .amount-words { font-size:12.5px; margin-bottom:4px; }
-.challan-view-content .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:16px; font-size:12.5px; }
-.challan-view-content .signature-box { text-align:right; }
-.challan-view-content .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
+/* A single outer-bordered document, GST-tax-invoice style: every section is
+   its own bordered box rather than loose rows, so the printed page reads as
+   one form instead of a stack of paragraphs. */
+.challan-view-content { border:1.5px solid #000; font-size:12px; line-height:1.35; color:#000; font-family:Arial, Helvetica, sans-serif; display:flex; flex-direction:column; }
+/* The items table grows to absorb leftover page height: the filler row's
+   cells keep the column rules running down to the summary, so a one-line
+   invoice still prints as a full ruled form instead of a blank gap. */
+.challan-view-content .items-wrap { flex:1 1 auto; display:flex; flex-direction:column; }
+.challan-view-content .items-wrap table { flex:1 1 auto; }
+.challan-view-content .items-wrap tbody td { vertical-align:top; }
+.challan-view-content .items-wrap tbody tr:not(.filler) td { height:1px; }
+.challan-view-content tr.filler td { border-top:none; border-bottom:none; height:100%; }
+.challan-view-content tr.total-row td { font-weight:700; border-top:1px solid #000; }
+.challan-view-content .company-header { text-align:center; border-bottom:1.5px solid #000; padding:10px 8px 8px; display:flex; align-items:center; justify-content:center; gap:14px; }
+.challan-view-content .company-header h4 { margin:0 0 2px; font-size:22px; font-weight:700; text-align:center; }
+.challan-view-content .company-header .co-text { text-align:center; font-size:11.5px; }
+.challan-view-content .doc-title { text-align:center; font-weight:700; font-size:16px; padding:5px; border-bottom:1.5px solid #000; }
+.challan-view-content .detail-grid { display:grid; grid-template-columns:1fr 1fr 1fr; border-bottom:1.5px solid #000; }
+.challan-view-content .detail-grid > div { padding:6px 10px; }
+.challan-view-content .detail-grid > div + div { border-left:1px solid #000; }
+.challan-view-content .detail-grid .dg-label { font-weight:700; text-decoration:underline; margin-bottom:4px; }
+.challan-view-content .kv-row { display:flex; justify-content:space-between; gap:8px; padding:0; }
+.challan-view-content .kv-row b { font-weight:700; }
+.challan-view-content .meta-row { display:flex; justify-content:space-between; gap:8px; padding:0; }
+.challan-view-content table { width:100%; border-collapse:collapse; }
+.challan-view-content table th, .challan-view-content table td { border:1px solid #000; padding:4px 6px; font-size:11.5px; }
+.challan-view-content table th { background:#eee; font-weight:700; text-align:center; }
+.challan-view-content table td.num, .challan-view-content table th.num { text-align:right; }
+.challan-view-content .summary-strip { display:grid; grid-template-columns:1.4fr 1fr; border-bottom:1.5px solid #000; }
+.challan-view-content .words-box { padding:8px 10px; border-right:1px solid #000; display:flex; flex-direction:column; justify-content:center; }
+.challan-view-content .amount-words { font-weight:700; }
+.challan-view-content .summary-box div { display:flex; justify-content:space-between; padding:3px 10px; font-size:12px; }
+.challan-view-content .summary-box div + div { border-top:1px solid #000; }
+.challan-view-content .summary-box .grand { font-weight:700; font-size:14px; background:#fbe4d5; }
+.challan-view-content .footer-grid { display:grid; grid-template-columns:1fr 1fr 1fr; }
+.challan-view-content .footer-grid > div { padding:8px 10px; }
+.challan-view-content .footer-grid > div + div { border-left:1px solid #000; }
+.challan-view-content .footer-grid .fg-label { font-weight:700; text-decoration:underline; margin-bottom:4px; }
+.challan-view-content .signature-box { text-align:center; display:flex; flex-direction:column; justify-content:space-between; }
+.challan-view-content .signature-line { margin-top:40px; border-top:1px solid #333; padding-top:4px; }
 
 @media print {
-  @page { margin: 1.5cm; }
+  @page { size: A4; margin: 1.5cm; }
   body * { visibility: hidden; }
   #viewSaleModal.show, #viewSaleModal.show *,
   #print-only-container, #print-only-container * { visibility: visible; }
@@ -129,6 +210,10 @@
   #viewSaleModal.show .modal-header .btn-close,
   #viewSaleModal.show .modal-footer { display: none !important; }
   #viewSaleModal.show .modal-body { padding: 0; }
+
+  /* Fill one A4 page when content is short, but let the box grow past
+     29.7cm and paginate normally once items push it over one page. */
+  .challan-view-content { min-height: calc(29.7cm - 3cm); }
 
   #print-only-container { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
 }
@@ -148,10 +233,6 @@ $(function () {
   $("#to-date").val(localDay());
 
   // escapeHtml() provided globally by main.js
-
-  function detailLines(pairs) {
-    return pairs.filter(([label, val]) => val).map(([label, val]) => `<b>${label}:</b> ${escapeHtml(val)}`).join("<br>");
-  }
 
   function numberToWordsIndian(num) {
     num = Math.round(Number(num) || 0); if (num === 0) return "Zero";
@@ -174,41 +255,96 @@ $(function () {
   function renderSaleViewHtml(cs) {
     const company = cs.company || {};
     const finalAmount = Number(cs.final_amount) || 0;
-    let html = `<div class="company-header" style="display:flex;align-items:flex-start;justify-content:center;gap:10px;text-align:left">
-      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:88px;height:88px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">` : ""}
-      <div>
+    const freightAmount = Number(cs.freight_amount) || 0;
+
+    let html = `<div class="company-header">
+      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:70px;height:70px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">` : ""}
+      <div class="co-text">
         <h4>${escapeHtml(company.name)}</h4>
         <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
         <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
         <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
       </div>
     </div>`;
+    html += `<div class="doc-title">Tax Invoice</div>`;
     html += `<div class="detail-grid">
-      <div><b>Bill Number:</b> ${escapeHtml(cs.bill_no)}<br><b>Bill Date:</b> ${fmtDate(cs.date)}<br>${cs.dc_no ? "<b>DC No.:</b> " + escapeHtml(cs.dc_no) + "<br>" : ""}<b>Warehouse:</b> ${escapeHtml(cs.warehouse_name)}</div>
-      <div><b>Transport Details</b><hr>${detailLines([
-        ["Vehicle", cs.vehicle],
-        ["Driver", cs.driver],
-        ["Freight", cs.freight_type],
-      ])}</div>
+      <div>
+        <div class="dg-label">Bill To,</div>
+        <div><b>${escapeHtml(cs.customer_name)}</b></div>
+        <div>${escapeHtml(cs.customer_address) || "-"}</div>
+        <div class="kv-row"><span>GSTIN</span><b>${escapeHtml(cs.customer_gstin) || "-"}</b></div>
+        <div class="kv-row"><span>Mobile</span><b>${escapeHtml(cs.customer_mobile) || "-"}</b></div>
+      </div>
+      <div>
+        <div class="dg-label">Ship To</div>
+        <div><b>${escapeHtml(cs.customer_name)}</b></div>
+        <div>${escapeHtml(cs.shipping_address || cs.customer_address) || "-"}</div>
+      </div>
+      <div>
+        ${[
+          ["Bill No.", escapeHtml(cs.bill_no)],
+          ["Date", fmtDate(cs.date)],
+          cs.dc_no ? ["DC No.", escapeHtml(cs.dc_no)] : null,
+          ["Warehouse", cs.warehouse_name],
+          ["Vehicle", cs.vehicle],
+          ["Driver", cs.driver],
+          ["Freight", cs.freight_type],
+        ].filter(Boolean).filter(([, v]) => v).map(([label, v]) =>
+          `<div class="meta-row"><span>${label}</span><b>${escapeHtml(v)}</b></div>`).join("")}
+      </div>
     </div>`;
-    html += `<div class="detail-grid">
-      <div><b>Billing Details</b><br>Name: ${escapeHtml(cs.customer_name)}<br>GSTIN: ${escapeHtml(cs.customer_gstin)} | Mobile: ${escapeHtml(cs.customer_mobile)}<br>Email: ${escapeHtml(cs.customer_email)}<br>Address: ${escapeHtml(cs.customer_address)}</div>
-      <div><b>Shipping Details</b><br>Name: ${escapeHtml(cs.customer_name)}<br>Address: ${escapeHtml(cs.shipping_address || cs.customer_address)}</div>
-    </div>`;
-    html += `<table><thead><tr><th class="ds-mid">Sr.</th><th>Item Description</th><th class="ds-num">Qty</th><th class="ds-num">Free Qty</th><th class="ds-num">Net Qty</th><th class="ds-num">Rate</th><th class="ds-num">Amount (₹)</th></tr></thead><tbody>`;
+    html += `<div class="items-wrap"><table><thead><tr><th class="ds-mid">Sr.</th><th>Item Description</th><th class="num">Qty</th><th class="num">Free Qty</th><th class="num">Net Qty</th><th class="num">Rate</th><th class="num">Amount (₹)</th></tr></thead><tbody>`;
     (cs.items || []).forEach((row, i) => {
-      html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td>${escapeHtml(row.total_qty)}</td><td>${escapeHtml(row.free_qty)}</td><td>${escapeHtml(row.net_qty)}</td><td>${escapeHtml(row.sale_rate)}</td><td>${escapeHtml(row.amount)}</td></tr>`;
+      html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td class="num">${escapeHtml(row.total_qty)}</td><td class="num">${escapeHtml(row.free_qty)}</td><td class="num">${escapeHtml(row.net_qty)}</td><td class="num">${escapeHtml(row.sale_rate)}</td><td class="num">${escapeHtml(row.amount)}</td></tr>`;
     });
-    html += `</tbody></table>`;
-    if (Number(cs.freight_amount)) html += `<div class="total-row" style="background:#f0f0f0;font-weight:500;">Freight &nbsp; ${Number(cs.freight_amount).toFixed(2)}</div>`;
-    html += `<div class="total-row">Total &nbsp; ${finalAmount.toFixed(2)}</div>`;
-    html += `<div class="amount-words">Rs. ${numberToWordsIndian(finalAmount)} Only</div>`;
+    html += `<tr class="filler">${"<td>&nbsp;</td>".repeat(7)}</tr>`;
+    const totalNetQty = (cs.items || []).reduce((s, r) => s + (Number(r.net_qty) || 0), 0);
+    html += `<tr class="total-row"><td colspan="4">Total</td><td class="num">${totalNetQty.toFixed(2)}</td><td colspan="2"></td></tr>`;
+    html += `</tbody></table></div>`;
+    html += `<div class="summary-strip">
+      <div class="words-box">
+        <div class="amount-words">Rs. ${numberToWordsIndian(finalAmount)} Only</div>
+      </div>
+      <div class="summary-box">
+        ${freightAmount ? `<div><span>Freight</span><b>${freightAmount.toFixed(2)}</b></div>` : ""}
+        <div class="grand"><span>Total</span><b>₹${finalAmount.toFixed(2)}</b></div>
+      </div>
+    </div>`;
     html += `<div class="footer-grid">
-      <div><b>Terms and Conditions</b><br>${cs.terms ? escapeHtml(cs.terms).replace(/\n/g, "<br>") : ""}${cs.remarks ? "<br><b>Remarks:</b> " + escapeHtml(cs.remarks).replace(/\n/g, "<br>") : ""}</div>
-      <div><b>Bank Details</b><br>A/c: ${escapeHtml(company.bank_account_no)}<br>Bank: ${escapeHtml(company.bank_name)}<br>IFSC: ${escapeHtml(company.ifsc_code)}<br>Branch: ${escapeHtml(company.bank_branch)}</div>
-      <div class="signature-box">For ${escapeHtml(company.name)}<div class="signature-line">Signature</div></div>
+      <div>
+        <div class="fg-label">Terms and Conditions</div>
+        ${cs.terms ? escapeHtml(cs.terms).replace(/\n/g, "<br>") : "-"}
+        ${cs.remarks ? "<br><b>Remarks:</b> " + escapeHtml(cs.remarks).replace(/\n/g, "<br>") : ""}
+      </div>
+      <div>
+        <div class="fg-label">Bank Details</div>
+        <div class="kv-row"><span>A/c No.</span><b>${escapeHtml(company.bank_account_no) || "-"}</b></div>
+        <div class="kv-row"><span>Bank</span><b>${escapeHtml(company.bank_name) || "-"}</b></div>
+        <div class="kv-row"><span>IFSC</span><b>${escapeHtml(company.ifsc_code) || "-"}</b></div>
+        <div class="kv-row"><span>Branch</span><b>${escapeHtml(company.bank_branch) || "-"}</b></div>
+      </div>
+      <div class="signature-box">
+        <div>For ${escapeHtml(company.name)}</div>
+        <div class="signature-line">Authorised Signatory</div>
+      </div>
     </div>`;
     return html;
+  }
+
+  // Attachments, as Bird Sale Receipt shows its own payment proof: one
+  // thumbnail standing for the set, with the count as a small corner badge.
+  function attachCell(row) {
+    const files = row.attachments || [];
+    if (!files.length) return '<span class="text-muted">—</span>';
+    const first = files[0];
+    const thumb = /\.pdf($|\?)/i.test(first.name)
+      ? `<span class="bsr-thumb-pdf" title="${escapeHtml(first.caption || first.name)}"><i class="fas fa-file-pdf"></i></span>`
+      : `<img src="${escapeHtml(first.url)}" alt="${escapeHtml(first.caption || first.name)}" title="${escapeHtml(first.caption || first.name)}" loading="lazy">`;
+    return `<button type="button" class="bsr-thumbs bsr-view-attach" data-id="${row.id}"
+              title="View ${files.length} attachment${files.length > 1 ? "s" : ""}">`
+      + thumb
+      + (files.length > 1 ? `<span class="bsr-more">+${files.length - 1}</span>` : "")
+      + `</button>`;
   }
 
   function renderRows(rows) {
@@ -228,6 +364,7 @@ $(function () {
         <td>${Number(row.avg_amount).toFixed(2)}</td>
         <td>${Number(row.final_amount).toFixed(2)}</td>
         <td>${escapeHtml(row.warehouse_name)}</td>
+        <td class="text-center text-nowrap">${attachCell(row)}</td>
         <td>
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>{% endif %}
@@ -241,6 +378,7 @@ $(function () {
               </ul>
             </div>
             {% endif %}
+            {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add attachment"><i class="fas fa-upload"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/chick-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/chick-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -324,6 +462,67 @@ $(function () {
       headers: { "X-CSRFToken": csrfToken },
       success: function () { loadChickSaleList(); },
       error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to delete chick sale."); },
+    });
+  });
+
+  // Attachments: proof filed against the sale (weighbridge slip, delivery
+  // acknowledgement, payment proof) — same pattern as Bird Sale Receipt.
+  let attachSaleId = null;
+  function loadAttachments(id) {
+    $.getJSON(`/chick-sale/${id}/attachments/`, function (files) {
+      const list = $("#bsr-attach-list");
+      if (!files.length) { list.html('<div class="text-muted small">No attachments filed yet.</div>'); return; }
+      list.html(`<div class="row">${files.map(f => {
+        const isPdf = /\.pdf($|\?)/i.test(f.name);
+        return `
+        <div class="col-6 col-md-4 mb-3 text-center">
+          <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">
+            ${isPdf
+              ? `<div class="d-flex align-items-center justify-content-center rounded border bg-light" style="height:180px"><i class="fas fa-file-pdf fa-3x text-danger"></i></div>`
+              : `<img src="${escapeHtml(f.url)}" class="img-fluid rounded border" style="max-height:280px;object-fit:contain;width:100%" alt="${escapeHtml(f.caption || f.name)}">`}
+          </a>
+          <div class="small text-muted mt-1">${escapeHtml(f.caption || f.name)}
+            {% if page_perms.edit %}<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 bsr-attach-del" data-attachment="${f.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </div>`;
+      }).join("")}</div>`);
+    });
+  }
+  $(document).on("click", ".bsr-view-attach", function () {
+    attachSaleId = $(this).data("id");
+    $("#bsr-attach-title").text("— " + $(this).closest("tr").find("td").eq(1).text());
+    loadAttachments(attachSaleId);
+    new bootstrap.Modal(document.getElementById("bsrAttachModal")).show();
+  });
+  $(document).on("click", ".bsr-upload-attach", function () {
+    attachSaleId = $(this).data("id");
+    $("#bsr-upload-title").text("— " + $(this).closest("tr").find("td").eq(1).text());
+    $("#bsr-attach-form")[0]?.reset();
+    new bootstrap.Modal(document.getElementById("bsrUploadAttachModal")).show();
+  });
+  $("#bsr-attach-form").on("submit", function (e) {
+    e.preventDefault();
+    if (!attachSaleId) return;
+    const btn = $(this).find("button[type=submit]").prop("disabled", true);
+    fetch(`/chick-sale/${attachSaleId}/attachments/`, {
+      method: "POST", headers: { "X-CSRFToken": csrfToken }, body: new FormData(this),
+    }).then(async r => {
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || "Upload failed.");
+      window.showToast("success", body.message);
+      bootstrap.Modal.getInstance(document.getElementById("bsrUploadAttachModal"))?.hide();
+      loadChickSaleList();
+    }).catch(err => window.showToast("danger", err.message))
+      .finally(() => btn.prop("disabled", false));
+  });
+  $(document).on("click", ".bsr-attach-del", function () {
+    if (!attachSaleId || !confirm("Delete this file?")) return;
+    const attachmentId = $(this).data("attachment");
+    $.ajax({
+      url: `/chick-sale/${attachSaleId}/attachments/?attachment=${attachmentId}`,
+      method: "DELETE", headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadAttachments(attachSaleId); loadChickSaleList(); },
+      error: xhr => alert(xhr.responseJSON?.error || "Delete failed"),
     });
   });
 

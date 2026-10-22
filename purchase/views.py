@@ -27,8 +27,10 @@ from account.services.bank_cash import bank_cash_accounts, active_payment_modes,
 from broiler.models import BroilerFarm
 from inventory.models import Item, ItemCategory, Warehouse
 from picklist.services import validate_value
-from .models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase, GeneralPurchaseItem,
-                     Supplier, SupplierPayment, SupplierPaymentLine, SupplierShippingAddress, TaxMaster)
+from .models import (ChicksPurchase, ChicksPurchaseItem, ChicksPurchaseAttachment,
+                     GeneralPurchase, GeneralPurchaseItem, GeneralPurchaseAttachment,
+                     Supplier, SupplierPayment, SupplierPaymentLine, SupplierPaymentAttachment,
+                     SupplierShippingAddress, TaxMaster)
 import json
 from Hitech_BIMS.entry_dates import date_from_query
 
@@ -449,6 +451,9 @@ def _general_purchase_list_dict(gp):
         "avg_rate": str(gp.avg_rate()), "net_amount": str(gp.net_amount),
         "farm_warehouse_names": warehouses, "batch_no": gp.batch_no,
         "vehicle_no": gp.vehicle_no, "driver_name": gp.driver_name,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in gp.attachments.all()],
     }
 
 
@@ -831,6 +836,42 @@ def general_purchase_item_rates(request):
 
 
 @login_required
+def general_purchase_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a General Purchase. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    gp = get_object_or_404(GeneralPurchase, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in gp.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "general_purchase_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [GeneralPurchaseAttachment.objects.create(
+            purchase=gp, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "general_purchase_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(gp.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
+@login_required
 def general_purchase_api_list(request):
     """JSON rows for the General Purchase register's DataTable + filter bar."""
     from_date = (request.GET.get("from_date") or "").strip()
@@ -841,7 +882,7 @@ def general_purchase_api_list(request):
     # The warehouse a purchase landed in is on its lines, so scope through them.
     qs = scope_any(request.user, GeneralPurchase.objects.filter(),
                    sectors="items__farm_warehouse_id").select_related("supplier").prefetch_related(
-        "items__item", "items__farm_warehouse")
+        "items__item", "items__farm_warehouse", "attachments")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -902,6 +943,9 @@ def _chicks_purchase_list_dict(cp):
         "item_name": cp.item.description or cp.item.item_code,
         "quantity": str(cp.total_quantity()), "avg_rate": str(cp.avg_rate()),
         "net_amount": str(cp.net_amount), "farm_warehouse_names": warehouses,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in cp.attachments.all()],
     }
 
 
@@ -1135,6 +1179,42 @@ def delete_chicks_purchase(request, id):
 
 
 @login_required
+def chicks_purchase_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Chicks Purchase. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    cp = get_object_or_404(ChicksPurchase, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in cp.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "chicks_purchase_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [ChicksPurchaseAttachment.objects.create(
+            purchase=cp, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "chicks_purchase_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(cp.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
+@login_required
 def chicks_purchase_api_list(request):
     """JSON rows for the Chicks Purchase register's DataTable + filter bar."""
     from_date = (request.GET.get("from_date") or "").strip()
@@ -1142,7 +1222,7 @@ def chicks_purchase_api_list(request):
 
     qs = scope_any(request.user, ChicksPurchase.objects.filter(),
                    sectors="items__farm_warehouse_id").select_related("supplier", "item").prefetch_related(
-        "items__farm_warehouse", "items__farm")
+        "items__farm_warehouse", "items__farm", "attachments")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -1170,6 +1250,9 @@ def _payment_list_dict(p):
         "id": p.id, "date": p.date.isoformat(), "payment_no": p.payment_no,
         "supplier_name": p.supplier_summary(), "mode": p.mode_summary(),
         "method": p.method_summary(), "amount": str(p.total_amount()),
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in p.attachments.all()],
     }
 
 
@@ -1313,6 +1396,42 @@ def delete_payment(request, id):
 
 
 @login_required
+def payment_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Supplier Payment voucher. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    payment = get_object_or_404(SupplierPayment, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in payment.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "payment_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [SupplierPaymentAttachment.objects.create(
+            payment=payment, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "payment_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(payment.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
+@login_required
 def payment_api_list(request):
     """JSON rows for the Payment register's DataTable + filter bar."""
     from_date = (request.GET.get("from_date") or "").strip()
@@ -1320,7 +1439,7 @@ def payment_api_list(request):
 
     qs = scope_any(request.user, SupplierPayment.objects.filter(),
                    sectors="location_id").prefetch_related(
-        "lines__pay_account", "lines__supplier")
+        "lines__pay_account", "lines__supplier", "attachments")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -1332,7 +1451,7 @@ def payment_api_list(request):
 # ---------------------------------------------------------------------------
 # Debit / Credit Notes (Purchase > Transactions)
 # ---------------------------------------------------------------------------
-from .models import DebitNote, CreditNote
+from .models import DebitNote, CreditNote, DebitNoteAttachment, CreditNoteAttachment
 
 
 def _note_list_dict(n):
@@ -1343,6 +1462,9 @@ def _note_list_dict(n):
         "account_name": n.account.description if n.account_id else "",
         "sector_name": n.sector.name if n.sector_id else "",
         "amount": str(n.amount), "remarks": n.remarks,
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in n.attachments.all()],
     }
 
 
@@ -1450,7 +1572,7 @@ def _note_api(request, model):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     supplier_id = (request.GET.get("supplier") or "").strip()
-    qs = model.objects.select_related("supplier", "account", "sector")
+    qs = model.objects.select_related("supplier", "account", "sector").prefetch_related("attachments")
     # Supplier.supplier_group is free text while the scope holds VendorGroup
     # rows, so there is no group id to filter on here — reuse suppliers_for,
     # which owns that matching. A note with no supplier is kept for the same
@@ -1493,6 +1615,42 @@ def delete_debit_note(request, id):
 
 
 @login_required
+def debit_note_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a supplier Debit Note. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    note = get_object_or_404(DebitNote, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in note.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "debit_note_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [DebitNoteAttachment.objects.create(
+            note=note, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "debit_note_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(note.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
+@login_required
 def debit_note_api_list(request):
     return _note_api(request, DebitNote)
 
@@ -1520,6 +1678,42 @@ def delete_credit_note(request, id):
     get_object_or_404(CreditNote, id=id).delete()
     messages.success(request, "Credit Note deleted successfully.")
     return redirect("credit_note_list")
+
+
+@login_required
+def credit_note_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a supplier Credit Note. Same pattern as
+    bird_sale_receipt_attachments."""
+    from user.access import user_can
+    note = get_object_or_404(CreditNote, id=id)
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in note.attachments.select_related("uploaded_by")], safe=False)
+    if request.method == "POST":
+        if not user_can(request.user, "credit_note_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [CreditNoteAttachment.objects.create(
+            note=note, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+    if request.method == "DELETE":
+        if not user_can(request.user, "credit_note_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(note.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+    return JsonResponse({"error": "Unsupported method."}, status=405)
 
 
 @login_required

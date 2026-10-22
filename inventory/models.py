@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from Hitech_BIMS.minting import mint_with_retry
+from Hitech_BIMS.storage_backends import private_media_storage
 from django.utils.timezone import now
 
 
@@ -616,6 +617,27 @@ class StockTransfer(models.Model):
                                  before_date, {"stock_transfer_out"}) - taken
 
 
+class StockTransferAttachment(models.Model):
+    """Proof filed against a Stock Transfer — delivery slip, photo of the
+    dispatch, etc. Image or PDF; several per transfer, same pattern as
+    BirdSaleReceiptAttachment. Shared by Chicks Placement, which is the same
+    StockTransfer model under a farm-facing UI."""
+    transfer = models.ForeignKey(StockTransfer, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="stock_transfer/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="stock_transfer_attachments")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Stock Transfer Attachment"
+        verbose_name_plural = "Stock Transfer Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.transfer_id} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class MedicineTransfer(models.Model):
     """One dispatch of medicine/vaccine items from one location to another —
     Office/Warehouse or Broiler Farm, in any combination — via Inventory >
@@ -764,6 +786,25 @@ class MedicineTransferItem(models.Model):
                                  before_date, {"medicine_transfer_out"}) - taken
 
 
+class MedicineTransferAttachment(models.Model):
+    """Proof filed against a Medicine Vaccine Transfer. Image or PDF; several
+    per transfer, same pattern as BirdSaleReceiptAttachment."""
+    transfer = models.ForeignKey(MedicineTransfer, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="medicine_transfer/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="medicine_transfer_attachments")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Medicine Transfer Attachment"
+        verbose_name_plural = "Medicine Transfer Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.transfer_id} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class InventoryAdjustment(models.Model):
     """One stock correction at a single Location — Office/Warehouse or
     Broiler Farm — Inventory > Transactions > Inventory Adjustment. A single
@@ -899,6 +940,25 @@ class InventoryAdjustmentItem(models.Model):
                                  before_date, {"adjustment"}) + applied
 
 
+class InventoryAdjustmentAttachment(models.Model):
+    """Proof filed against an Inventory Adjustment. Image or PDF; several
+    per adjustment, same pattern as BirdSaleReceiptAttachment."""
+    adjustment = models.ForeignKey(InventoryAdjustment, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="inventory_adjustment/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="inventory_adjustment_attachments")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Inventory Adjustment Attachment"
+        verbose_name_plural = "Inventory Adjustment Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.adjustment_id} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class StockIssue(models.Model):
     """One issue of stock for use/consumption — Inventory > Transactions >
     Stock Issued. A single header (one Date, one Chart of Account) can carry
@@ -999,6 +1059,25 @@ class StockIssueItem(models.Model):
         super().save(*args, **kwargs)
 
 
+class StockIssueAttachment(models.Model):
+    """Proof filed against a Stock Issue. Image or PDF; several per issue,
+    same pattern as BirdSaleReceiptAttachment."""
+    issue = models.ForeignKey(StockIssue, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="stock_issue/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="stock_issue_attachments")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Stock Issue Attachment"
+        verbose_name_plural = "Stock Issue Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.issue_id} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class StockReceive(models.Model):
     """One receipt of stock — Inventory > Transactions > Stock Received. A
     single header (one Date, one Chart of Account) can carry several item
@@ -1095,6 +1174,25 @@ class StockReceiveItem(models.Model):
     def save(self, *args, **kwargs):
         self.amount = self.quantity * self.rate
         super().save(*args, **kwargs)
+
+
+class StockReceiveAttachment(models.Model):
+    """Proof filed against a Stock Received entry. Image or PDF; several per
+    receipt, same pattern as BirdSaleReceiptAttachment."""
+    receive = models.ForeignKey(StockReceive, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="stock_receive/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="stock_receive_attachments")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Stock Receive Attachment"
+        verbose_name_plural = "Stock Receive Attachments"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.receive_id} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,

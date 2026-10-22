@@ -1452,6 +1452,27 @@ class DailyEntryPhoto(models.Model):
             DailyEntry.objects.filter(pk=self.entry_id).update(**{field: self.image.name})
 
 
+class DailyEntryAttachment(models.Model):
+    """General proof filed against a Daily Entry — several per entry, same
+    pattern as BirdSaleReceiptAttachment. Distinct from DailyEntryPhoto,
+    which is the mobile app's category-tagged mortality/cull/feed capture."""
+
+    entry = models.ForeignKey(DailyEntry, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="daily_entry/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='daily_entry_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Daily Entry Attachment")
+        verbose_name_plural = _("Daily Entry Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.entry.entry_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class MedicineVaccineEntry(models.Model):
     """A medicine/vaccine issued to one Farm/Batch on a given day, with a
     running closing-stock balance for that item at that farm (Broiler >
@@ -1538,6 +1559,26 @@ class MedicineVaccineEntry(models.Model):
                 .filter(farm_id=farm_id, item_id=item_id).filter(date_filter)
                 .aggregate(total=models.Sum("qty"))["total"] or Decimal("0"))
         return farm_medicine_balance(farm_id, item_id, before_date) - used
+
+
+class MedicineVaccineEntryAttachment(models.Model):
+    """Proof filed against a Medicine/Vaccine Entry — several per entry,
+    same pattern as BirdSaleReceiptAttachment."""
+
+    entry = models.ForeignKey(MedicineVaccineEntry, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="medicine_entry/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='medicine_entry_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Medicine/Vaccine Entry Attachment")
+        verbose_name_plural = _("Medicine/Vaccine Entry Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.entry.entry_no} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class BirdSale(models.Model):
@@ -3027,6 +3068,29 @@ class FarmerFarmSetupRequestPhoto(models.Model):
         return f"Photo for {self.request_id}"
 
 
+class FarmerFarmSetupRequestAttachment(models.Model):
+    """General proof filed against a Farmer & Farm Setup Request — several
+    per request, same pattern as BirdSaleReceiptAttachment. Distinct from
+    FarmerFarmSetupRequestPhoto (farm pictures) and the fixed KYC upload
+    slots already on the model."""
+
+    request = models.ForeignKey(FarmerFarmSetupRequest, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="farmer_farm_setup_request/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='farmer_farm_setup_request_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Farmer & Farm Setup Request Attachment")
+        verbose_name_plural = _("Farmer & Farm Setup Request Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.request.request_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class BatchOtherEntry(models.Model):
     """A cost or income the ERP has no transaction for, entered against a batch.
 
@@ -3472,6 +3536,27 @@ class FarmerGCPaymentLine(models.Model):
 
     def __str__(self):
         return f"{self.farm} — {self.amount}"
+
+
+class FarmerGCPaymentAttachment(models.Model):
+    """Proof filed against a Farmer GC Payment voucher — several per
+    voucher, same pattern as BirdSaleReceiptAttachment."""
+
+    payment = models.ForeignKey(FarmerGCPayment, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="farmer_gc_payment/attachments/%Y/%m/", storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='farmer_gc_payment_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Farmer GC Payment Attachment")
+        verbose_name_plural = _("Farmer GC Payment Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.payment.payment_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
 
 class GCPostingSettings(models.Model):
     """When growing charges and farmer payments reach the ledger.

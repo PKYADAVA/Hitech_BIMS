@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.db import models
 
 from Hitech_BIMS.minting import mint_with_retry
+from Hitech_BIMS.storage_backends import private_media_storage
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 
@@ -174,6 +175,30 @@ class HatchSetting(models.Model):
 
     def total_sales_amount(self):
         return self.sales_lines.aggregate(total=models.Sum('total_amount'))['total'] or 0
+
+
+class HatchSettingAttachment(models.Model):
+    """Proof filed against a Hatch Setting / register entry — a setter log
+    photo, a supplier egg-quality report, whatever the batch needs on
+    file. Image or PDF; several per setting, same pattern as
+    BirdSaleReceiptAttachment."""
+
+    hatch_setting = models.ForeignKey(HatchSetting, on_delete=models.CASCADE,
+                                      related_name="attachments")
+    file = models.FileField(upload_to="hatch_setting/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='hatch_setting_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Hatch Setting Attachment")
+        verbose_name_plural = _("Hatch Setting Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.hatch_setting.setting_no} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class HatchEggIntake(models.Model):
@@ -387,6 +412,29 @@ class EggPurchase(models.Model):
         return self.gross_amount()
 
 
+class EggPurchaseAttachment(models.Model):
+    """Proof filed against an Egg Purchase — a supplier invoice scan, a
+    weighbridge slip, whatever the purchase needs on file. Image or PDF;
+    several per purchase, same pattern as BirdSaleReceiptAttachment."""
+
+    egg_purchase = models.ForeignKey(EggPurchase, on_delete=models.CASCADE,
+                                     related_name="attachments")
+    file = models.FileField(upload_to="egg_purchase/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='egg_purchase_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Egg Purchase Attachment")
+        verbose_name_plural = _("Egg Purchase Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.egg_purchase.transaction_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class EggPurchaseItem(models.Model):
     """A single item row (e.g. Hatching Eggs) within an egg purchase."""
     egg_purchase = models.ForeignKey(
@@ -519,6 +567,29 @@ class EggGrading(models.Model):
         return remaining if remaining > 0 else 0
 
 
+class EggGradingAttachment(models.Model):
+    """Proof filed against an Egg Grading entry — a rejection photo, a
+    grading report, whatever needs to be on file. Image or PDF; several
+    per grading, same pattern as BirdSaleReceiptAttachment."""
+
+    egg_grading = models.ForeignKey(EggGrading, on_delete=models.CASCADE,
+                                    related_name="attachments")
+    file = models.FileField(upload_to="egg_grading/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='egg_grading_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Egg Grading Attachment")
+        verbose_name_plural = _("Egg Grading Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.egg_grading.transaction_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class EggGradingHatchItem(models.Model):
     """A hatch-item output row (e.g. Grade A / Grade B) within an egg grading."""
     egg_grading = models.ForeignKey(
@@ -620,6 +691,29 @@ class DeliveryChallan(models.Model):
         return self.total_amount() - (self.overall_discount or 0)
 
 
+class DeliveryChallanAttachment(models.Model):
+    """Proof filed against a Delivery Challan — a signed delivery slip, a
+    weighbridge ticket, an e-way bill scan. Image or PDF; several per
+    challan, same pattern as BirdSaleReceiptAttachment."""
+
+    challan = models.ForeignKey(DeliveryChallan, on_delete=models.CASCADE,
+                                related_name="attachments")
+    file = models.FileField(upload_to="delivery_challan/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='delivery_challan_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Delivery Challan Attachment")
+        verbose_name_plural = _("Delivery Challan Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.challan.challan_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class DeliveryChallanItem(models.Model):
     challan = models.ForeignKey(DeliveryChallan, on_delete=models.CASCADE, related_name="items")
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="delivery_challan_items")
@@ -701,6 +795,29 @@ class TraySetting(models.Model):
 
     def supplier_names(self):
         return ", ".join(sorted({line.supplier.name for line in self.lines.all() if line.supplier}))
+
+
+class TraySettingAttachment(models.Model):
+    """Proof filed against a Tray Setting — a setter-load photo, a loading
+    log, whatever needs to be on file. Image or PDF; several per setting,
+    same pattern as BirdSaleReceiptAttachment."""
+
+    tray_setting = models.ForeignKey(TraySetting, on_delete=models.CASCADE,
+                                     related_name="attachments")
+    file = models.FileField(upload_to="tray_setting/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='tray_setting_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Tray Setting Attachment")
+        verbose_name_plural = _("Tray Setting Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.tray_setting.setting_no} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class TraySettingLine(models.Model):
@@ -793,6 +910,29 @@ class HatchEntry(models.Model):
         self.chick_rate = self.net_rate
         self.chicks_amount = self.net_amount
         super(HatchEntry, self).save(update_fields=['net_amount', 'net_rate', 'chick_rate', 'chicks_amount'])
+
+
+class HatchEntryAttachment(models.Model):
+    """Proof filed against a Hatch Entry — a hatch-outcome photo, a chick
+    count sheet, whatever needs to be on file. Image or PDF; several per
+    entry, same pattern as BirdSaleReceiptAttachment."""
+
+    hatch_entry = models.ForeignKey(HatchEntry, on_delete=models.CASCADE,
+                                    related_name="attachments")
+    file = models.FileField(upload_to="hatch_entry/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='hatch_entry_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Hatch Entry Attachment")
+        verbose_name_plural = _("Hatch Entry Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.hatch_entry.transaction_no} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class HatchEntryHatcherOutput(models.Model):
@@ -937,6 +1077,30 @@ class ChickSale(models.Model):
             update_fields=['final_amount', 'avg_amount', 'profit_amount', 'remarks'])
 
 
+class ChickSaleAttachment(models.Model):
+    """Proof filed against a Chick Sale invoice — a weighbridge slip, a
+    signed delivery acknowledgement, a payment screenshot, whatever the
+    sale needs on file. Image or PDF; several per sale, same pattern as
+    BirdSaleReceiptAttachment."""
+
+    sale = models.ForeignKey(ChickSale, on_delete=models.CASCADE,
+                             related_name="attachments")
+    file = models.FileField(upload_to="chick_sale/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='chick_sale_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Chick Sale Attachment")
+        verbose_name_plural = _("Chick Sale Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.sale.bill_no} — {self.file.name.rsplit('/', 1)[-1]}"
+
+
 class ChickSaleItem(models.Model):
     """One item line within a chick sale.
 
@@ -1057,6 +1221,29 @@ class ChickSaleReceipt(models.Model):
             receipts = receipts.exclude(id=exclude_id)
         total_received = receipts.aggregate(total=models.Sum('amount'))['total'] or 0
         return total_sold - total_received
+
+
+class ChickSaleReceiptAttachment(models.Model):
+    """Payment proof filed against a Chick Sale Receipt — a bank transfer
+    slip, a UPI screenshot, a signed cheque counterfoil. Image or PDF;
+    several per receipt, same pattern as BirdSaleReceiptAttachment."""
+
+    receipt = models.ForeignKey(ChickSaleReceipt, on_delete=models.CASCADE,
+                                related_name="attachments")
+    file = models.FileField(upload_to="chick_sale_receipt/attachments/%Y/%m/",
+                            storage=private_media_storage)
+    caption = models.CharField(max_length=150, blank=True)
+    uploaded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='chick_sale_receipt_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Chick Sale Receipt Attachment")
+        verbose_name_plural = _("Chick Sale Receipt Attachments")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.receipt.receipt_no} — {self.file.name.rsplit('/', 1)[-1]}"
 
 
 class ChangeRequest(models.Model):

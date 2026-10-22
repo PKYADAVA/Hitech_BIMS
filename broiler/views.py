@@ -24,13 +24,14 @@ from django.core.cache import cache
 from django.conf import settings
 from .models import (
     BirdSale, BirdSalePhoto, BirdSaleReceipt, BirdSaleReceiptAttachment, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
-    BroilerFarmShed, BroilerLine, DailyEntry, DailyEntryPhoto, Farmer, FarmerGroup,
+    BroilerFarmShed, BroilerLine, DailyEntry, DailyEntryPhoto, DailyEntryAttachment, Farmer, FarmerGroup,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
-    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, GCSettlementAttachment, MedicineVaccineEntry,
+    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, GCSettlementAttachment,
+    MedicineVaccineEntry, MedicineVaccineEntryAttachment,
     Region, Supervisor, FeedPhaseMaster, FeedPhaseLine, BirdCategory,
     FarmLocationCapture, FarmCaptureFile, FarmerFarmSetupRequest, FarmerFarmSetupRequestShed,
-    FarmerFarmSetupRequestPhoto,
+    FarmerFarmSetupRequestPhoto, FarmerFarmSetupRequestAttachment,
 )
 from account.models import ChartOfAccount
 from .services import gc_posting
@@ -1579,6 +1580,47 @@ def farms_bulk_supervisor(request):
 # Farmer & Farm Setup Request (Broiler > Transactions)
 # ---------------------------------------------------------------------------
 
+@login_required
+def farmer_farm_setup_request_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Farmer & Farm Setup Request. Separate from the fixed
+    KYC upload slots and from FarmerFarmSetupRequestPhoto (farm pictures)."""
+    from user.access import user_can
+
+    req = get_object_or_404(FarmerFarmSetupRequest, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in req.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "farmer_farm_setup_request_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [FarmerFarmSetupRequestAttachment.objects.create(
+            request=req, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(req.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class FarmerFarmSetupRequestListTemplateView(View):
     """Renders the Register List page — Broiler > Transactions > Farmer &
@@ -1652,6 +1694,7 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
             if id:
                 req = (FarmerFarmSetupRequest.objects
                       .select_related("branch", "farmer_group", "submitted_by", "reviewed_by")
+                      .prefetch_related("attachments")
                       .get(id=id))
                 data = {f: getattr(req, f) for f in self.FORM_FIELDS if f not in self.FK_FIELDS}
                 data["id"] = req.id
@@ -1674,9 +1717,13 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                     for s in req.sheds.all()
                 ]
                 data["photos"] = [{"id": p.id, "url": p.photo.url} for p in req.photos.all()]
+                data["attachments"] = [{"id": a.id, "url": a.file.url,
+                                       "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                                      for a in req.attachments.all()]
                 return JsonResponse(data)
 
-            qs = FarmerFarmSetupRequest.objects.select_related("branch", "farmer_group", "submitted_by")
+            qs = (FarmerFarmSetupRequest.objects.select_related("branch", "farmer_group", "submitted_by")
+                  .prefetch_related("attachments"))
             qs = scope_multi(request.user, qs, branches="branch_id")
             qs = _apply_place_filters(request, qs, branch="branch")
             if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
@@ -1695,6 +1742,9 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                 "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
                 "review_note": r.review_note,
                 "has_location": r.latitude is not None and r.longitude is not None,
+                "attachments": [{"id": a.id, "url": a.file.url,
+                                "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                               for a in r.attachments.all()],
             } for r in qs.order_by("-created_at")]
             return JsonResponse(rows, safe=False)
         except Exception as e:
@@ -2524,6 +2574,9 @@ def _daily_entry_to_dict(row):
         "entry_by": row.entry_by.username if row.entry_by_id else "",
         "entry_time": timezone.localtime(row.entry_time).strftime("%Y-%m-%d %H:%M") if row.entry_time else "",
         "photos": _daily_entry_photos(row),
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -2722,6 +2775,49 @@ def _scope_rows(user, qs, farm_field="farm"):
                        branches=f"{farm_field}__branch_id")
 
 
+@login_required
+def daily_entry_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Daily Entry. Shared by both Daily Entry and Single Batch
+    Daily Entry — they read/write the same DailyEntry rows."""
+    from user.access import user_can
+
+    entry = get_object_or_404(DailyEntry, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in entry.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not (user_can(request.user, "daily_entry_list", "add")
+                or user_can(request.user, "daily_entry_single_list", "add")):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [DailyEntryAttachment.objects.create(
+            entry=entry, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not (user_can(request.user, "daily_entry_list", "edit")
+                or user_can(request.user, "daily_entry_single_list", "edit")):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(entry.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class DailyEntryListTemplateView(View):
     def get(self, request):
@@ -2800,7 +2896,7 @@ class DailyEntryAPI(BaseAPIView):
                 # permission, and the list below is the only thing that would
                 # otherwise have hidden it.
                 row = (_scope_rows(request.user, DailyEntry.objects.select_related(
-                    "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos"))
+                    "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos", "attachments"))
                     .filter(id=id).first())
                 # A row that is gone, or that this user may not see, is a 404.
                 # It used to raise DoesNotExist into the catch-all below and
@@ -2811,7 +2907,7 @@ class DailyEntryAPI(BaseAPIView):
                 return JsonResponse(_daily_entry_to_dict(row))
 
             qs = _scope_rows(request.user, DailyEntry.objects.select_related(
-                "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos"))
+                "farm__branch", "batch", "feed_1", "feed_2").prefetch_related("photos", "attachments"))
             qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
@@ -3498,6 +3594,9 @@ def _medicine_entry_to_dict(row):
         "is_active": row.is_batch_active,
         "entry_by": row.entry_by.username if row.entry_by_id else "",
         "entry_time": timezone.localtime(row.entry_time).strftime("%Y-%m-%d %H:%M") if row.entry_time else "",
+        "attachments": [{"id": a.id, "url": a.file.url,
+                        "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
+                       for a in row.attachments.all()],
     }
 
 
@@ -3551,6 +3650,46 @@ def _recompute_medicine_stock_chain(farm_id, item_id):
             r.save(update_fields=["stock"])
 
 
+@login_required
+def medicine_entry_attachments(request, id):
+    """List (GET) / upload (POST) / delete (DELETE ?attachment=<id>) proof
+    filed against a Medicine/Vaccine Entry."""
+    from user.access import user_can
+
+    entry = get_object_or_404(MedicineVaccineEntry, id=id)
+
+    if request.method == "GET":
+        return JsonResponse([{
+            "id": a.id, "url": a.file.url, "name": a.file.name.rsplit("/", 1)[-1],
+            "caption": a.caption,
+            "uploaded_by": a.uploaded_by.username if a.uploaded_by_id else "",
+            "uploaded_at": timezone.localtime(a.uploaded_at).strftime("%d-%b-%Y %H:%M"),
+        } for a in entry.attachments.select_related("uploaded_by")], safe=False)
+
+    if request.method == "POST":
+        if not user_can(request.user, "medicine_entry_list", "add"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        uploads = request.FILES.getlist("files")
+        if not uploads:
+            return JsonResponse({"error": "Choose at least one file."}, status=400)
+        caption = (request.POST.get("caption") or "").strip()
+        created = [MedicineVaccineEntryAttachment.objects.create(
+            entry=entry, file=upload, caption=caption, uploaded_by=request.user)
+            for upload in uploads]
+        return JsonResponse({"message": "%d file(s) uploaded." % len(created)}, status=201)
+
+    if request.method == "DELETE":
+        if not user_can(request.user, "medicine_entry_list", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+        attachment_id = request.GET.get("attachment")
+        attachment = get_object_or_404(entry.attachments, id=attachment_id)
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return JsonResponse({"message": "Attachment deleted."})
+
+    return JsonResponse({"error": "Unsupported method."}, status=405)
+
+
 @method_decorator(login_required, name="dispatch")
 class MedicineEntryListTemplateView(View):
     def get(self, request):
@@ -3577,10 +3716,12 @@ class MedicineEntryAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                row = MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item").get(id=id)
+                row = (MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item")
+                       .prefetch_related("attachments").get(id=id))
                 return JsonResponse(_medicine_entry_to_dict(row))
 
-            qs = MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item")
+            qs = (MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item")
+                  .prefetch_related("attachments"))
             qs = _apply_place_filters(request, qs, branch="farm__branch")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
