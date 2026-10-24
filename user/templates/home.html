@@ -38,6 +38,14 @@
   .home-trk-farm-label { background:#fff; border:1px solid #cbd5e1; border-radius:.35rem;
                          padding:.05rem .35rem; font-size:.7rem; font-weight:600;
                          white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,.12); }
+  .home-trk-emp-label { background:#fff; border:1px solid #93c5fd; border-radius:999px;
+                        padding:.15rem .6rem; font-size:.72rem; font-weight:600;
+                        color:#1e3a8a; white-space:nowrap;
+                        box-shadow:0 1px 3px rgba(0,0,0,.18); }
+  .home-trk-emp-label-group { border-color:#2563eb; cursor:pointer; }
+  .home-trk-emp-badge { display:inline-flex; align-items:center; justify-content:center;
+                        min-width:1.1rem; height:1.1rem; padding:0 .25rem; border-radius:999px;
+                        background:#2563eb; color:#fff; font-size:.65rem; font-weight:700; }
 </style>
 {% endif %}
 <style>
@@ -1758,7 +1766,11 @@
   L.tileLayer(BIMS_MAP.url, {
     maxZoom: BIMS_MAP.maxZoom, attribution: BIMS_MAP.attribution,
   }).addTo(map);
-  const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
+  // Not an L.markerClusterGroup: the employee count here is small, so
+  // grouping them into an anonymous numbered circle hides the one thing a
+  // manager actually wants at a glance — who is where. Every employee
+  // always shows as its own pin with a name label; see drawEmployeePins.
+  const cluster = L.layerGroup();
   map.addLayer(cluster);
   const routeLayer = L.layerGroup();
   const farmLayer = L.layerGroup();
@@ -1767,10 +1779,17 @@
 
   // A click on open map (not a pin) offers that exact point in Google Maps —
   // same link style as the pin popups, for a spot nothing is pinned to yet.
+  // It also collapses any group the viewer had expanded by clicking its
+  // badge — Leaflet markers stop click propagation, so this only fires for
+  // genuine empty-map clicks, never for a click that landed on a pin/label.
   map.on("click", event => {
     L.popup().setLatLng(event.latlng)
       .setContent(gmapsLink(event.latlng.lat.toFixed(6), event.latlng.lng.toFixed(6)))
       .openOn(map);
+    if (expandedGroups.size) {
+      expandedGroups.clear();
+      drawEmployeePins(lastEmployees);
+    }
   });
   let routeMode = null; // {employeeId} while viewing a route instead of live positions
 
@@ -1785,6 +1804,88 @@
       '<circle cx="14" cy="14" r="5" fill="#fff"/></svg>';
     return L.divIcon({ className: "home-trk-farm-pin", html: svg, iconSize: [18, 24], iconAnchor: [9, 24] });
   }
+
+  // Employees are grouped by SCREEN distance, not GPS distance: two people
+  // a few metres apart still read as "same spot" at a zoomed-out view where
+  // their pins visually collide, but separate out once zoomed in enough to
+  // tell them apart. Re-run on every zoom change, not just each data
+  // refresh. Mirrors tracking_dashboard.html's drawEmployeePins exactly.
+  const PIN_GROUP_PIXELS = 28;
+  let lastEmployees = [];
+  const expandedGroups = new Set();
+
+  function employeePopup(e) {
+    return "<strong>" + esc(e.name) + "</strong><br><small>" + esc(e.designation) +
+      (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
+      "<br><small>Updated " + esc(agoLabel(e.last_seen || e.recorded_at)) + "</small>";
+  }
+
+  function groupKey(group) {
+    return group.map(e => e.employee_id).sort((a, b) => a - b).join(",");
+  }
+
+  function drawEmployeePins(employees) {
+    cluster.clearLayers();
+    if (!employees.length) return;
+
+    const points = employees.map(e => ({
+      employee: e, px: map.latLngToContainerPoint([e.latitude, e.longitude]),
+    }));
+    const groups = [];
+    points.forEach(point => {
+      const target = groups.find(group =>
+        group.some(member => member.px.distanceTo(point.px) <= PIN_GROUP_PIXELS)
+      );
+      if (target) target.push(point); else groups.push([point]);
+    });
+
+    groups.forEach(points => {
+      const group = points.map(p => p.employee);
+      const key = groupKey(group);
+      const expanded = group.length > 1 && expandedGroups.has(key);
+      const subGroups = expanded ? group.map(e => [e]) : [group];
+      const FAN_RADIUS_PX = 22;
+
+      subGroups.forEach((subGroup, index) => {
+        const [lat, lng] = [subGroup[0].latitude, subGroup[0].longitude];
+        const marker = L.marker([lat, lng]);
+        marker.bindPopup(
+          subGroup.map(employeePopup).join("<hr class='my-1'>") + gmapsLink(lat, lng)
+        );
+        cluster.addLayer(marker);
+
+        const isBadge = !expanded && subGroup.length > 1;
+        let anchor = [-16, 29];
+        if (expanded) {
+          const angle = -Math.PI / 2 + (2 * Math.PI * index) / subGroups.length;
+          anchor = [-FAN_RADIUS_PX * Math.cos(angle) - 16,
+                    -FAN_RADIUS_PX * Math.sin(angle) + 29];
+        }
+        const labelMarker = L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: "", html: '<span class="home-trk-emp-label' +
+              (isBadge ? " home-trk-emp-label-group" : "") + '">' +
+              (isBadge
+                ? '<span class="home-trk-emp-badge">' + subGroup.length + '</span> ' +
+                  esc(subGroup[0].name) + " +" + (subGroup.length - 1)
+                : esc(subGroup[0].name)) +
+              "</span>",
+            iconSize: [0, 0], iconAnchor: anchor,
+          }),
+          interactive: isBadge,
+        });
+        if (isBadge) {
+          labelMarker.on("click", () => {
+            expandedGroups.add(key);
+            drawEmployeePins(lastEmployees);
+          });
+        }
+        cluster.addLayer(labelMarker);
+      });
+    });
+  }
+
+  map.on("zoomend", () => drawEmployeePins(lastEmployees));
 
   let farmStatusLoaded = null;
   function loadFarms() {
@@ -1870,18 +1971,11 @@
       if (el) el.textContent = value;
     });
 
-    cluster.clearLayers();
+    lastEmployees = data.employees;
+    drawEmployeePins(data.employees);
     const bounds = [];
     const rows = data.employees.map(e => {
       bounds.push([e.latitude, e.longitude]);
-      const marker = L.marker([e.latitude, e.longitude]);
-      marker.bindPopup(
-        "<strong>" + esc(e.name) + "</strong><br><small>" + esc(e.designation) +
-        (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
-        "<br><small>Updated " + esc(agoLabel(e.last_seen || e.recorded_at)) + "</small>" +
-        gmapsLink(e.latitude, e.longitude)
-      );
-      cluster.addLayer(marker);
 
       const initial = esc((e.name || "?").charAt(0).toUpperCase());
       const isActive = routeMode && routeMode.employeeId === e.employee_id;
