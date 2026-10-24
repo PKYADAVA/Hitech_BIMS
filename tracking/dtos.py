@@ -89,6 +89,27 @@ class VisitRecord:
 
 
 @dataclass(frozen=True)
+class ExpenseRecord:
+    """A field-expense claim reported by the vendor.
+
+    Read-only on the ERP side — not linked to account.PettyExpense. The
+    vendor's exact field names are unconfirmed (no real record seen yet on
+    the live account; this account has none logged), so the adapter parses
+    tolerantly and this DTO stays deliberately generic.
+    """
+
+    external_id: str
+    external_employee_id: str
+    amount: Optional[Decimal] = None
+    category: str = ""
+    expense_date: Optional[datetime] = None
+    description: str = ""
+    receipt_url: str = ""
+    status: str = ""
+    raw: Optional[dict] = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
 class AttendanceEvent:
     """A GPS check-in/check-out event."""
 

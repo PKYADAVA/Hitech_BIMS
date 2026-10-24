@@ -998,6 +998,9 @@ layouts open it from the account menu.
               {% if 'tracking_visits' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_visits' %}">
                 <i class="fas fa-handshake"></i>Customer Visits
               </a></li>{% endif %}
+              {% if 'tracking_expenses' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_expenses' %}">
+                <i class="fas fa-receipt"></i>Expense Claims
+              </a></li>{% endif %}
               {% if 'supervisor_trip_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supervisor_trip_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-car-side"></i>Supervisor Daily Trip
               </a></li>{% endif %}

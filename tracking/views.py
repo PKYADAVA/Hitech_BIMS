@@ -63,6 +63,20 @@ def tracking_visits(request):
 
 
 @login_required(login_url="login")
+def tracking_expenses(request):
+    """Read-only review of expense claims synced from the tracking provider."""
+    settings_row = TrackingSettings.get_solo()
+    employees = (
+        Employee.objects.exclude(relieve=True)
+        .order_by("full_name").values("id", "full_name", "employee_id")
+    )
+    return render(request, "tracking_expenses.html", {
+        "tracking_enabled": settings_row.enabled,
+        "employees": list(employees),
+    })
+
+
+@login_required(login_url="login")
 def tracking_routes(request):
     """Route history replay with the day's chronological timeline."""
     employees = (

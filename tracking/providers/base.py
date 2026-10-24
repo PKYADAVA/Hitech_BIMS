@@ -20,6 +20,7 @@ from typing import List, Optional
 from ..dtos import (
     AttendanceEvent,
     ConnectionTestResult,
+    ExpenseRecord,
     GeofenceRecord,
     HistoryPoint,
     LivePosition,
@@ -30,7 +31,7 @@ from ..dtos import (
 
 #: Every data kind the sync engine knows how to ask for.
 ALL_CAPABILITIES = frozenset(
-    {"employees", "live", "history", "visits", "attendance", "geofences"}
+    {"employees", "live", "history", "visits", "attendance", "geofences", "expenses"}
 )
 
 
@@ -100,6 +101,14 @@ class TrackingProviderAdapter(ABC):
     @abstractmethod
     def fetch_geofences(self) -> List[GeofenceRecord]:
         """Geofences defined on the vendor side."""
+
+    @abstractmethod
+    def fetch_expenses(self) -> List[ExpenseRecord]:
+        """Field-expense claims. Not windowed — see TrackWick's adapter
+
+        docstring for why: the vendor's confirmed working param shape is
+        plain pagination (``pt``/``pn``), not a date range.
+        """
 
     def fetch_punch_status(self, external_employee_id: str) -> PunchStatusResult:
         """Vendor's current punch-in/out answer for one employee, on demand.

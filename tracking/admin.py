@@ -11,6 +11,7 @@ from django.contrib import admin
 
 from .models import (
     EmployeeCustomerVisit,
+    EmployeeExpenseClaim,
     EmployeeGeofence,
     EmployeeGpsAttendance,
     EmployeeLiveLocation,
@@ -140,6 +141,14 @@ class EmployeeCustomerVisitAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("employee__full_name", "customer__name")
     date_hierarchy = "visit_date"
+
+
+@admin.register(EmployeeExpenseClaim)
+class EmployeeExpenseClaimAdmin(admin.ModelAdmin):
+    list_display = ("employee", "amount", "category", "expense_date", "status")
+    list_filter = ("status", "category")
+    search_fields = ("employee__full_name", "external_id")
+    date_hierarchy = "expense_date"
 
 
 @admin.register(EmployeeGpsAttendance)

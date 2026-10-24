@@ -42,6 +42,7 @@ from sales.models import Customer
 from .exceptions import TrackingConfigurationError, TrackingProviderError
 from .models import (
     EmployeeCustomerVisit,
+    EmployeeExpenseClaim,
     EmployeeGeofence,
     EmployeeGpsAttendance,
     EmployeeLiveLocation,
@@ -847,6 +848,74 @@ class VisitsAPI(View):
             "follow_ups_due": visits.filter(
                 next_follow_up__isnull=False,
                 next_follow_up__lte=timezone.localdate()).count(),
+        }
+
+
+@method_decorator(login_required, name="dispatch")
+class ExpensesAPI(View):
+    """Read-only list of synced TrackWick expense claims, for manual review.
+
+    Not linked to account.PettyExpense — this is informational only, nothing
+    here posts to the ledger.
+    """
+
+    MAX_PAGE_SIZE = 200
+
+    def get(self, request):
+        claims = (
+            EmployeeExpenseClaim.objects
+            .select_related("employee")
+            .order_by("-expense_date", "-created_at")
+        )
+        claims = self._apply_filters(claims, request)
+
+        try:
+            page_size = min(int(request.GET.get("page_size", 50)), self.MAX_PAGE_SIZE)
+            page = max(int(request.GET.get("page", 1)), 1)
+        except ValueError:
+            page_size, page = 50, 1
+        total = claims.count()
+        rows = [self._row(c) for c in claims[(page - 1) * page_size: page * page_size]]
+
+        return JsonResponse({
+            "claims": rows,
+            "page": page, "page_size": page_size, "total": total,
+        })
+
+    @staticmethod
+    def _apply_filters(claims, request):
+        get = request.GET
+        for param, field in (("from", "expense_date__gte"), ("to", "expense_date__lte")):
+            value = get.get(param)
+            if value:
+                try:
+                    claims = claims.filter(**{
+                        field: timezone.datetime.strptime(value, "%Y-%m-%d").date()
+                    })
+                except ValueError:
+                    pass
+        employee = get.get("employee")
+        if employee and employee.isdigit():
+            claims = claims.filter(employee_id=int(employee))
+        status = get.get("status")
+        if status:
+            claims = claims.filter(status=status)
+        return claims
+
+    @staticmethod
+    def _row(claim):
+        return {
+            "id": claim.pk,
+            "employee_id": claim.employee_id,
+            "employee": claim.employee.full_name or "",
+            "employee_code": claim.employee.employee_id,
+            "amount": float(claim.amount) if claim.amount is not None else None,
+            "category": claim.category,
+            "expense_date": claim.expense_date.isoformat() if claim.expense_date else None,
+            "description": claim.description,
+            "receipt_url": claim.receipt_url,
+            "status": claim.status,
+            "synced_at": claim.synced_at.isoformat(),
         }
 
 

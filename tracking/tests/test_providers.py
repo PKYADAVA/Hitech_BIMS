@@ -18,7 +18,7 @@ from tracking.exceptions import (
 from tracking.models import TrackingProvider
 from tracking.providers import ADAPTERS, get_adapter
 from tracking.providers.mock import MockProviderAdapter
-from tracking.providers.trackwick import TrackWickProviderAdapter
+from tracking.providers.trackwick import ASSET_LIST_PAGE_SIZE, TrackWickProviderAdapter
 
 
 def make_provider(**kwargs):
@@ -342,6 +342,46 @@ class TrackWickParsingTests(TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].event, "check_in")
 
+    def test_expenses_parsed_with_alias_keys(self):
+        body = [{"id": "EXP-1", "eid": 101, "amount": "250.00",
+                 "category": "Fuel", "date": 1752650000000,
+                 "remarks": "Fuel claim", "receipt": "https://x.test/r1.jpg",
+                 "status": "pending"}]
+        expenses = self._adapter(body).fetch_expenses()
+        self.assertEqual(len(expenses), 1)
+        self.assertEqual(expenses[0].external_id, "EXP-1")
+        self.assertEqual(expenses[0].external_employee_id, "101")
+        self.assertEqual(expenses[0].amount, Decimal("250.00"))
+        self.assertEqual(expenses[0].category, "Fuel")
+        self.assertEqual(expenses[0].status, "pending")
+
+    def test_expenses_skip_records_missing_id_or_employee(self):
+        # No expenseId -> skipped (no external id to key on). No eid/employeeId
+        # at all -> skipped too, same as every other kind's _external_employee_id
+        # fallback-to-"id" behavior, which only applies when no dedicated
+        # employee-id field is present.
+        body = [{"eid": 101, "amount": "10.00"}, {"amount": "20.00"}]
+        expenses = self._adapter(body).fetch_expenses()
+        self.assertEqual(expenses, [])
+
+    def test_expenses_paginates_with_pt_pn(self):
+        session = mock.Mock()
+        full_page = [{"id": f"EXP-{i}", "eid": 101, "amount": "1.00"}
+                     for i in range(ASSET_LIST_PAGE_SIZE)]
+        short_page = [{"id": "EXP-last", "eid": 101, "amount": "2.00"}]
+        responses = [
+            FakeResponse(body={"s": True, "d": full_page}),
+            FakeResponse(body={"s": True, "d": short_page}),
+        ]
+        session.get.side_effect = responses
+        adapter = TrackWickProviderAdapter(make_provider(), session=session)
+        expenses = adapter.fetch_expenses()
+        self.assertEqual(len(expenses), ASSET_LIST_PAGE_SIZE + 1)
+        self.assertEqual(session.get.call_count, 2)
+        first_params = session.get.call_args_list[0].kwargs["params"]
+        self.assertEqual(first_params["pt"], ASSET_LIST_PAGE_SIZE)
+        self.assertEqual(first_params["pn"], 0)
+
 
 class TrackWickPunchStatusTests(TestCase):
     def _adapter_with_responses(self, punchin_body, punchout_body):
@@ -415,3 +455,4 @@ class MockAdapterTests(TestCase):
         self.assertEqual(len(adapter.fetch_visits(start, end)), 1)
         self.assertEqual(len(adapter.fetch_attendance_events(start, end)), 2)
         self.assertEqual(len(adapter.fetch_geofences()), 1)
+        self.assertEqual(len(adapter.fetch_expenses()), 2)

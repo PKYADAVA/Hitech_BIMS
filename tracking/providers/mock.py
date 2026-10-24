@@ -13,6 +13,7 @@ from typing import List, Optional
 from ..dtos import (
     AttendanceEvent,
     ConnectionTestResult,
+    ExpenseRecord,
     GeofenceRecord,
     HistoryPoint,
     LivePosition,
@@ -116,3 +117,19 @@ class MockProviderAdapter(TrackingProviderAdapter):
             external_id="GEO-1", name="Mock Office",
             latitude=BASE_LAT, longitude=BASE_LNG, radius_m=250, geofence_type="office",
         )]
+
+    def fetch_expenses(self) -> List[ExpenseRecord]:
+        now = datetime.now(tz=timezone.utc)
+        return [
+            ExpenseRecord(
+                external_id="EXP-1", external_employee_id="EXT-1",
+                amount=Decimal("250.00"), category="Fuel",
+                expense_date=now, description="Mock fuel claim",
+                receipt_url="https://mock.invalid/receipts/exp-1.jpg", status="pending",
+            ),
+            ExpenseRecord(
+                external_id="EXP-2", external_employee_id="EXT-2",
+                amount=Decimal("120.50"), category="Food",
+                expense_date=now, description="Mock food claim", status="approved",
+            ),
+        ]

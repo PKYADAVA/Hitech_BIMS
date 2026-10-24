@@ -41,6 +41,7 @@ from ..exceptions import (
     TrackingProviderError,
 )
 from ..models import (
+    EmployeeExpenseClaim,
     EmployeeGeofence,
     EmployeeLiveLocation,
     EmployeeLocationHistory,
@@ -59,7 +60,7 @@ from .route_service import RouteBuilder
 logger = logging.getLogger("tracking.sync")
 
 #: Sync order: identity mapping first, then data kinds that depend on it.
-DEFAULT_KINDS = ("employees", "live", "history", "visits", "attendance", "geofences")
+DEFAULT_KINDS = ("employees", "live", "history", "visits", "attendance", "geofences", "expenses")
 #: Kinds fetched with a from/to window and a stored cursor.
 WINDOWED_KINDS = frozenset({"history", "visits", "attendance"})
 #: First-ever sync looks back this far.
@@ -215,6 +216,8 @@ class SyncService:
             return adapter.fetch_visits(run.window_start, run.window_end)
         if kind == "attendance":
             return adapter.fetch_attendance_events(run.window_start, run.window_end)
+        if kind == "expenses":
+            return adapter.fetch_expenses()
         return adapter.fetch_geofences()
 
     def _write(self, provider, kind, fetched):
@@ -225,6 +228,7 @@ class SyncService:
             "visits": self._write_visits,
             "attendance": self._write_attendance,
             "geofences": self._write_geofences,
+            "expenses": self._write_expenses,
         }[kind]
         return writer(provider, fetched)
 
@@ -531,6 +535,30 @@ class SyncService:
                         timezone.localtime(visit.next_follow_up).date()
                         if visit.next_follow_up else None
                     ),
+                },
+            )
+            created += 1 if was_created else 0
+            updated += 0 if was_created else 1
+        return {"created": created, "updated": updated, "skipped": skipped}
+
+    def _write_expenses(self, provider, expenses):
+        mappings = self._mappings(provider)
+        created = updated = skipped = 0
+        for expense in expenses:
+            employee_id = mappings.get(expense.external_employee_id)
+            if employee_id is None or not expense.external_id:
+                skipped += 1
+                continue
+            _obj, was_created = EmployeeExpenseClaim.objects.update_or_create(
+                provider=provider, external_id=expense.external_id,
+                defaults={
+                    "employee_id": employee_id,
+                    "amount": expense.amount,
+                    "category": expense.category[:100],
+                    "expense_date": expense.expense_date,
+                    "description": expense.description,
+                    "receipt_url": expense.receipt_url[:500],
+                    "status": expense.status[:50],
                 },
             )
             created += 1 if was_created else 0

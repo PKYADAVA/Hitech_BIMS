@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Expense Claims{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:.6rem; }
+  .trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.55rem .75rem; background:var(--bs-body-bg, #fff); }
+  .trk-tile .trk-num { font-size:1.3rem; font-weight:600; }
+  .trk-tile .trk-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; opacity:.7; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_expenses' %}
+ {% csrf_token %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-receipt"></i> Expense Claims</div>
+      <div class="page-header-subtitle">
+        Field-expense claims synced from the tracking provider, for review — informational only,
+        not posted to accounting.
+      </div>
+    </div>
+</div>
+
+<div class="trk-tiles mb-3">
+  <div class="trk-tile"><div class="trk-num" data-tile="total">–</div><div class="trk-lbl">Claims</div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label mb-0">From</label>
+        <input type="date" id="exp-from" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">To</label>
+        <input type="date" id="exp-to" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Employee</label>
+        <select id="exp-employee" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} (#{{ e.employee_id }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Status</label>
+        <input type="text" id="exp-status" class="form-control form-control-sm" placeholder="e.g. pending" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-list-check"></i> Expense Register <span class="badge bg-secondary" id="exp-count">0</span></span>
+    <span id="exp-pager" class="small"></span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0 ds-grid">
+        <thead>
+          <tr>
+            <th class="ds-mid">Date</th><th>Employee</th><th class="ds-num">Amount</th>
+            <th>Category</th><th>Description</th><th>Receipt</th><th class="ds-mid">Status</th>
+          </tr>
+        </thead>
+        <tbody id="exp-rows">
+          <tr><td colspan="7" class="text-center py-4 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_expenses' %}";
+  let page = 1;
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+
+  function params() {
+    const search = new URLSearchParams();
+    search.set("page", page);
+    const fields = [["exp-from","from"],["exp-to","to"],["exp-employee","employee"],["exp-status","status"]];
+    fields.forEach(([id, key]) => {
+      const value = document.getElementById(id).value.trim();
+      if (value) search.set(key, value);
+    });
+    return search;
+  }
+
+  function load() {
+    fetch(API + "?" + params(), { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("exp-count").textContent = data.total;
+        const el = document.querySelector('[data-tile="total"]');
+        if (el) el.textContent = data.total;
+        const pages = Math.max(Math.ceil(data.total / data.page_size), 1);
+        document.getElementById("exp-pager").innerHTML =
+          '<button class="btn btn-sm btn-outline-secondary" id="exp-prev" ' + (data.page <= 1 ? "disabled" : "") + ">&laquo;</button> " +
+          " page " + data.page + " / " + pages + " " +
+          '<button class="btn btn-sm btn-outline-secondary" id="exp-next" ' + (data.page >= pages ? "disabled" : "") + ">&raquo;</button>";
+        document.getElementById("exp-prev").onclick = () => { page = Math.max(page - 1, 1); load(); };
+        document.getElementById("exp-next").onclick = () => { page += 1; load(); };
+
+        const rows = data.claims.map(claim => "<tr>" +
+          "<td>" + esc(claim.expense_date || "–") + "</td>" +
+          "<td>" + esc(claim.employee) + "<br><small class='text-muted'>#" + esc(claim.employee_code) + "</small></td>" +
+          "<td class='text-end'>" + (claim.amount != null ? claim.amount.toFixed(2) : "–") + "</td>" +
+          "<td>" + esc(claim.category || "–") + "</td>" +
+          "<td><small>" + esc(claim.description || "–") + "</small></td>" +
+          "<td>" + (claim.receipt_url ? '<a href="' + esc(claim.receipt_url) + '" target="_blank" rel="noopener"><i class="fas fa-file-image"></i></a>' : "–") + "</td>" +
+          "<td>" + (claim.status ? '<span class="badge bg-secondary">' + esc(claim.status) + '</span>' : "–") + "</td>" +
+          "</tr>"
+        );
+        document.getElementById("exp-rows").innerHTML = rows.length
+          ? rows.join("")
+          : '<tr><td colspan="7" class="text-center py-4 text-muted">No expense claims match the filters.</td></tr>';
+      });
+  }
+
+  const today = new Date();
+  const monthAgo = new Date(today.getTime() - 29 * 86400000);
+  document.getElementById("exp-to").value = localDay(today);
+  document.getElementById("exp-from").value = localDay(monthAgo);
+
+  ["exp-from","exp-to","exp-employee","exp-status"].forEach(id =>
+    document.getElementById(id).addEventListener("change", () => { page = 1; load(); }));
+
+  load();
+})();
+</script>
+{% endblock %}

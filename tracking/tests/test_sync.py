@@ -16,6 +16,7 @@ from tracking.dtos import ConnectionTestResult
 from tracking.exceptions import TrackingAuthError, TrackingTransientError
 from tracking.models import (
     EmployeeCustomerVisit,
+    EmployeeExpenseClaim,
     EmployeeGeofence,
     EmployeeLiveLocation,
     EmployeeLocationHistory,
@@ -78,6 +79,7 @@ class SyncEngineTests(TestCase):
         self.assertGreater(EmployeeLocationHistory.objects.count(), 0)
         self.assertEqual(EmployeeGeofence.objects.count(), 1)
         self.assertEqual(EmployeeCustomerVisit.objects.count(), 1)
+        self.assertEqual(EmployeeExpenseClaim.objects.count(), 2)
 
         # Route summaries were rebuilt from the ingested pings. Routes bucket
         # by *local* day, and the mock emits a 55-minute ping run starting at
@@ -133,6 +135,26 @@ class SyncEngineTests(TestCase):
         visit = EmployeeCustomerVisit.objects.get()
         self.assertIsNone(visit.customer)
         self.assertEqual(visit.external_customer_name, "Mock Customer")
+
+    def test_expenses_mapped_to_employees(self):
+        self.service.sync_provider(self.provider, kinds=["employees", "expenses"])
+        claims = {c.employee_id: c for c in EmployeeExpenseClaim.objects.all()}
+        self.assertEqual(len(claims), 2)
+        self.assertEqual(claims[self.employee_one.pk].category, "Fuel")
+        self.assertEqual(claims[self.employee_two.pk].category, "Food")
+
+    def test_expense_unmapped_employee_is_skipped_not_crashed(self):
+        self.employee_two.delete()
+        runs = self.service.sync_provider(self.provider, kinds=["employees", "expenses"])
+        expense_run = next(r for r in runs if r.sync_type == "expenses")
+        self.assertEqual(expense_run.records_skipped, 1)
+        self.assertEqual(EmployeeExpenseClaim.objects.count(), 1)
+
+    def test_expense_resync_upserts_not_duplicates(self):
+        self.service.sync_provider(self.provider, kinds=["employees", "expenses"])
+        count = EmployeeExpenseClaim.objects.count()
+        self.service.sync_provider(self.provider, kinds=["expenses"])
+        self.assertEqual(EmployeeExpenseClaim.objects.count(), count)
 
 
 class SyncFailureTests(TestCase):

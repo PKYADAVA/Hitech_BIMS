@@ -39,6 +39,7 @@ import requests
 from ..dtos import (
     AttendanceEvent,
     ConnectionTestResult,
+    ExpenseRecord,
     GeofenceRecord,
     HistoryPoint,
     LivePosition,
@@ -105,6 +106,15 @@ DEFAULT_ENDPOINTS = {
     "visits": {"path": "", "method": "GET"},       # no bulk endpoint — see above
     "attendance": {"path": "", "method": "GET"},   # no bulk endpoint — see above
     "geofences": {"path": "", "method": "GET"},    # none known
+    # Confirmed real and licensed on the live account (2026-10-24): returns
+    # {"s":true,"msg":"No Expense Found","data":[],"count":0} when empty —
+    # the account has logged no expense claims yet, so no real record's
+    # field names have been observed. Tried from/to, startDate/endDate and
+    # start_time/end_time window params against the live account — the
+    # response was identical in every case, so this is treated as an
+    # UNWINDOWED, paginated-only fetch (pt/pn, same as asset/list), not a
+    # dated fetch like history/visits/attendance.
+    "expenses": {"path": "cust/1/api/expense/list", "method": "GET"},
     # Single-employee, no-history punch check (not a sync-engine capability —
     # fetch_punch_status is called on demand, never from SyncService). Confirmed
     # from the account's API document: type=punchin|punchout, id=employee's
@@ -669,6 +679,41 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
                 raw=record,
             ))
         return fences
+
+    def fetch_expenses(self) -> List[ExpenseRecord]:
+        """Field-expense claims — paginated (pt/pn), not date-windowed.
+
+        No real record has been observed yet (the account has none logged),
+        so parsing is alias-tolerant, same approach as fetch_visits before
+        it was ever seen live.
+        """
+        records: List[dict] = []
+        for page in range(ASSET_LIST_MAX_PAGES):
+            params = {"pt": ASSET_LIST_PAGE_SIZE, "pn": page}
+            page_records = self._as_records(self._request("expenses", params))
+            records.extend(page_records)
+            if len(page_records) < ASSET_LIST_PAGE_SIZE:
+                break
+
+        expenses = []
+        for record in records:
+            external_id = str(_first(record, "id", "expenseId", "_id", default=""))
+            eid = self._external_employee_id(record)
+            if not external_id or not eid:
+                continue
+            expenses.append(ExpenseRecord(
+                external_id=external_id,
+                external_employee_id=eid,
+                amount=_to_decimal(_first(record, "amount", "expenseAmount", "value")),
+                category=str(_first(record, "category", "type", "expenseType", default="")),
+                expense_date=_to_datetime(_first(record, "date", "expenseDate", "time")),
+                description=str(_first(record, "remarks", "description", "note", default="")),
+                receipt_url=str(_first(record, "receipt", "receiptUrl", "photo",
+                                       "billUrl", default="")),
+                status=str(_first(record, "status", "approvalStatus", "state", default="")),
+                raw=record,
+            ))
+        return expenses
 
     def fetch_punch_status(self, external_employee_id: str) -> PunchStatusResult:
         """Current punch-in/out state of one employee, right now — not a

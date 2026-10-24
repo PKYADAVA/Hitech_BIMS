@@ -459,6 +459,9 @@ MODULE_REGISTRY = [
                     ("tracking_visits", "Customer Visits", (
                         "api_tracking_visits", "api_tracking_visit_link",
                     )),
+                    ("tracking_expenses", "Expense Claims", (
+                        "api_tracking_expenses",
+                    )),
                     ("supervisor_trip_report", "Supervisor Daily Trip"),
                     ("tracking_routes", "Route History", (
                         "api_tracking_route",

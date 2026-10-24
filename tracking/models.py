@@ -559,6 +559,49 @@ class EmployeeCustomerVisit(models.Model):
         return f"{self.employee} → {self.customer} on {self.visit_date}"
 
 
+class EmployeeExpenseClaim(models.Model):
+    """A field-expense claim synced in from the tracking provider, read-only.
+
+    Informational only — NOT linked to account.PettyExpense. The vendor's
+    field shape was unconfirmed when this was built (the live account had
+    no claims logged), so this is a flat review table for someone to look
+    at and manually re-enter as a PettyExpense if approved, not an
+    accounting feed.
+    """
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="expense_claims")
+    provider = models.ForeignKey(
+        TrackingProvider, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    external_id = models.CharField(max_length=100, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    category = models.CharField(max_length=100, blank=True)
+    expense_date = models.DateTimeField(null=True, blank=True)
+    description = models.TextField(blank=True)
+    receipt_url = models.URLField(max_length=500, blank=True)
+    status = models.CharField(max_length=50, blank=True)
+    synced_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "employee_expense_claim"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "external_id"],
+                condition=~models.Q(external_id=""),
+                name="uq_expense_provider_external",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["employee", "-expense_date"], name="ix_expense_employee_date"),
+        ]
+        ordering = ("-expense_date", "-created_at")
+        verbose_name = "Expense Claim"
+
+    def __str__(self):
+        return f"{self.employee} — {self.amount} ({self.category})"
+
+
 class EmployeeGeofence(AuditModel):
     """A circular geographic fence around a business location.
 
