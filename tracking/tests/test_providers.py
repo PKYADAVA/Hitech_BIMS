@@ -343,6 +343,63 @@ class TrackWickParsingTests(TestCase):
         self.assertEqual(events[0].event, "check_in")
 
 
+class TrackWickPunchStatusTests(TestCase):
+    def _adapter_with_responses(self, punchin_body, punchout_body):
+        session = mock.Mock()
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            body = punchin_body if params.get("type") == "punchin" else punchout_body
+            return FakeResponse(body=body)
+
+        session.get.side_effect = fake_get
+        return TrackWickProviderAdapter(make_provider(), session=session), session
+
+    def test_punched_in_true_when_punchin_true(self):
+        adapter, _ = self._adapter_with_responses(
+            punchin_body=True, punchout_body=False)
+        result = adapter.fetch_punch_status("EM0001")
+        self.assertIs(result.punched_in, True)
+        self.assertEqual(result.external_employee_id, "EM0001")
+
+    def test_punched_out_when_punchout_true(self):
+        adapter, _ = self._adapter_with_responses(
+            punchin_body=False, punchout_body=True)
+        result = adapter.fetch_punch_status("EM0001")
+        self.assertIs(result.punched_in, False)
+
+    def test_both_false_reports_punched_out(self):
+        adapter, _ = self._adapter_with_responses(
+            punchin_body=False, punchout_body=False)
+        result = adapter.fetch_punch_status("EM0001")
+        self.assertIs(result.punched_in, False)
+
+    def test_vendor_error_on_both_reports_unknown(self):
+        adapter, _ = self._adapter_with_responses(
+            punchin_body={"s": False, "ed": "Access Error!!"},
+            punchout_body={"s": False, "ed": "Access Error!!"},
+        )
+        result = adapter.fetch_punch_status("EM0001")
+        self.assertIsNone(result.punched_in)
+
+    def test_sends_required_params(self):
+        adapter, session = self._adapter_with_responses(
+            punchin_body=True, punchout_body=False)
+        adapter.fetch_punch_status("EM0001")
+        calls = session.get.call_args_list
+        self.assertEqual(len(calls), 2)
+        types_sent = {call.kwargs["params"]["type"] for call in calls}
+        self.assertEqual(types_sent, {"punchin", "punchout"})
+        for call in calls:
+            self.assertEqual(call.kwargs["params"]["id"], "EM0001")
+            self.assertIn("source", call.kwargs["params"])
+
+    def test_base_adapter_default_is_unsupported(self):
+        provider = make_provider(name="Mock", provider_type="mock")
+        adapter = get_adapter(provider)
+        result = adapter.fetch_punch_status("EXT-1")
+        self.assertIsNone(result.punched_in)
+
+
 class MockAdapterTests(TestCase):
     def test_mock_supplies_every_capability(self):
         provider = make_provider(name="Mock", provider_type="mock")

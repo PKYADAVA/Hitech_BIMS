@@ -24,6 +24,7 @@ from ..dtos import (
     HistoryPoint,
     LivePosition,
     ProviderEmployee,
+    PunchStatusResult,
     VisitRecord,
 )
 
@@ -99,3 +100,13 @@ class TrackingProviderAdapter(ABC):
     @abstractmethod
     def fetch_geofences(self) -> List[GeofenceRecord]:
         """Geofences defined on the vendor side."""
+
+    def fetch_punch_status(self, external_employee_id: str) -> PunchStatusResult:
+        """Vendor's current punch-in/out answer for one employee, on demand.
+
+        Default no-op (``punched_in=None``) rather than abstract — not every
+        vendor exposes this, and unlike the fetch_* methods above the sync
+        engine never calls it, so there is no capability to skip. Override
+        only if the vendor has a real single-employee status check.
+        """
+        return PunchStatusResult(external_employee_id=external_employee_id)

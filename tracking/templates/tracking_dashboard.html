@@ -146,11 +146,11 @@
             <th></th><th>Employee</th><th>Designation</th><th>Branch</th><th class="ds-mid">Status</th>
             <th>Speed</th><th>Battery</th><th>Network</th><th>Customer</th>
             <th class="text-end">Km Today</th><th class="text-end">Visits</th>
-            <th>Address</th><th>Last Update</th>
+            <th>Address</th><th>Last Update</th><th>Vendor Punch</th>
           </tr>
         </thead>
         <tbody id="trk-rows">
-          <tr><td colspan="13" class="text-center py-4 text-muted">Loading…</td></tr>
+          <tr><td colspan="14" class="text-center py-4 text-muted">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -165,6 +165,7 @@
 (function () {
   "use strict";
   const API_URL = "{% url 'api_tracking_live' %}";
+  const PUNCH_STATUS_URL = "{% url 'api_tracking_punch_status' %}";
   const SYNC_URL = "{% url 'api_tracking_sync_now' %}";
   const FARM_DATA_URL = "{% url 'farm_map_data' %}";
   const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
@@ -277,6 +278,41 @@
     return '<span class="badge trk-status-badge bg-' + (STATUS_BADGE[status] || "secondary") + '">' + esc(status) + "</span>";
   }
 
+  function punchCell(employeeId) {
+    return '<button type="button" class="btn btn-outline-secondary btn-sm trk-punch-check" ' +
+      'data-employee="' + employeeId + '">Check</button> ' +
+      '<span class="trk-punch-result" data-employee="' + employeeId + '"></span>';
+  }
+
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".trk-punch-check");
+    if (!btn) return;
+    const employeeId = btn.dataset.employee;
+    const result = document.querySelector('.trk-punch-result[data-employee="' + employeeId + '"]');
+    btn.disabled = true;
+    result.textContent = "";
+    fetch(PUNCH_STATUS_URL + "?employee=" + encodeURIComponent(employeeId), { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        btn.disabled = false;
+        if (data.error) {
+          result.innerHTML = '<span class="text-muted" title="' + esc(data.error) + '">n/a</span>';
+          return;
+        }
+        if (data.punched_in === true) {
+          result.innerHTML = '<span class="badge bg-success">Punched In</span>';
+        } else if (data.punched_in === false) {
+          result.innerHTML = '<span class="badge bg-secondary">Punched Out</span>';
+        } else {
+          result.innerHTML = '<span class="text-muted">Unknown</span>';
+        }
+      })
+      .catch(() => {
+        btn.disabled = false;
+        result.innerHTML = '<span class="text-muted">Failed</span>';
+      });
+  });
+
   function filters() {
     const params = new URLSearchParams();
     const q = document.getElementById("trk-q").value.trim();
@@ -333,11 +369,12 @@
         "<td><small>" + esc(agoLabel(e.last_seen || e.recorded_at)) +
           (e.last_seen && e.last_seen !== e.recorded_at
             ? "<br>GPS fix " + esc(agoLabel(e.recorded_at)) : "") + "</small></td>" +
+        "<td>" + punchCell(e.employee_id) + "</td>" +
         "</tr>";
     });
     document.getElementById("trk-rows").innerHTML = rows.length
       ? rows.join("")
-      : '<tr><td colspan="13" class="text-center py-4 text-muted">No live locations match the current filters.</td></tr>';
+      : '<tr><td colspan="14" class="text-center py-4 text-muted">No live locations match the current filters.</td></tr>';
 
     if (!fitted && bounds.length) {
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });

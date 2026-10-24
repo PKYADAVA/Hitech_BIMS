@@ -266,6 +266,54 @@ class LiveDashboardAPI(View):
         }
 
 
+@method_decorator(login_required, name="dispatch")
+class PunchStatusAPI(View):
+    """On-demand vendor punch-in/out check for one employee.
+
+    Distinct from the dashboard's existing ``is_checked_in`` flag, which is
+    the ERP's own GPS-geofence inference — this calls the provider's actual
+    punch API. Single-employee only (the vendor has no bulk call), so it is
+    never part of the background sync; the dashboard calls it per row on
+    click, not on every poll.
+    """
+
+    def get(self, request):
+        try:
+            employee_id = int(request.GET.get("employee"))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "A valid employee id is required."}, status=400)
+
+        mapping = (
+            EmployeeProviderMapping.objects
+            .filter(employee_id=employee_id, provider__is_active=True)
+            .select_related("provider")
+            .first()
+        )
+        if mapping is None:
+            return JsonResponse(
+                {"error": "This employee has no active tracking-provider mapping."},
+                status=404,
+            )
+
+        try:
+            adapter = get_adapter(mapping.provider)
+        except TrackingConfigurationError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        try:
+            result = adapter.fetch_punch_status(mapping.external_id)
+        except TrackingProviderError as exc:
+            return JsonResponse({"error": str(exc)}, status=502)
+        finally:
+            adapter.close()
+
+        return JsonResponse({
+            "employee_id": employee_id,
+            "punched_in": result.punched_in,
+            "checked_at": result.checked_at.isoformat() if result.checked_at else None,
+        })
+
+
 # ----------------------------------------------------------------- settings
 
 @method_decorator(login_required, name="dispatch")

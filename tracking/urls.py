@@ -22,6 +22,8 @@ urlpatterns = [
     # JSON APIs
     path("api/tracking/live/", api_views.LiveDashboardAPI.as_view(),
          name="api_tracking_live"),
+    path("api/tracking/punch-status/", api_views.PunchStatusAPI.as_view(),
+         name="api_tracking_punch_status"),
     path("api/tracking/settings/", api_views.TrackingSettingsAPI.as_view(),
          name="api_tracking_settings"),
     path("api/tracking/providers/", api_views.TrackingProviderAPI.as_view(),

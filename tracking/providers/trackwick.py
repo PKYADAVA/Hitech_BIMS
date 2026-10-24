@@ -43,6 +43,7 @@ from ..dtos import (
     HistoryPoint,
     LivePosition,
     ProviderEmployee,
+    PunchStatusResult,
     VisitRecord,
 )
 from ..exceptions import (
@@ -104,6 +105,11 @@ DEFAULT_ENDPOINTS = {
     "visits": {"path": "", "method": "GET"},       # no bulk endpoint — see above
     "attendance": {"path": "", "method": "GET"},   # no bulk endpoint — see above
     "geofences": {"path": "", "method": "GET"},    # none known
+    # Single-employee, no-history punch check (not a sync-engine capability —
+    # fetch_punch_status is called on demand, never from SyncService). Confirmed
+    # from the account's API document: type=punchin|punchout, id=employee's
+    # empId code, source is a mandatory "attendance source" tag.
+    "punch_status": {"path": "integration/api/get", "method": "GET"},
 }
 
 #: Confirmed history query params (start_time/end_time epoch ms, asset_id).
@@ -327,7 +333,7 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         Generic ``success/status`` + ``data/result/...`` shapes are also
         accepted for tolerance.
         """
-        if isinstance(body, list):
+        if isinstance(body, (list, bool)):
             return body
         if isinstance(body, dict):
             flag = _first(body, "s", "success", "status")
@@ -663,3 +669,50 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
                 raw=record,
             ))
         return fences
+
+    def fetch_punch_status(self, external_employee_id: str) -> PunchStatusResult:
+        """Current punch-in/out state of one employee, right now — not a
+        bulk/dated fetch, called on demand from the dashboard only.
+
+        Confirmed params (account's API document): type=punchin|punchout,
+        id=the employee's empId code (same identifier as mappings use
+        everywhere else — NOT asset/history's raw Mongo id), source is a
+        mandatory attendance-source tag. The vendor answers each type
+        separately, so this makes two calls and reports whichever came back
+        true, or False if both explicitly said no, or None if neither call
+        could be trusted (vendor error on both).
+        """
+        in_result = self._punch_check(external_employee_id, "punchin")
+        out_result = self._punch_check(external_employee_id, "punchout")
+        if in_result is True:
+            punched_in = True
+        elif out_result is True:
+            punched_in = False
+        elif in_result is False and out_result is False:
+            punched_in = False
+        else:
+            punched_in = None
+        return PunchStatusResult(
+            external_employee_id=external_employee_id,
+            punched_in=punched_in,
+            checked_at=datetime.now(dt_timezone.utc),
+            raw={"punchin": in_result, "punchout": out_result},
+        )
+
+    def _punch_check(self, external_employee_id: str, punch_type: str) -> Optional[bool]:
+        """One type=punchin|punchout call; True/False, or None on vendor error."""
+        try:
+            data = self._request("punch_status", {
+                "type": punch_type,
+                "id": external_employee_id,
+                "source": "WEB",
+            })
+        except (TrackingTransientError, TrackingPermanentError, TrackingAuthError):
+            return None
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, dict):
+            value = _first(data, punch_type, "status", "result", "value")
+            if isinstance(value, bool):
+                return value
+        return None

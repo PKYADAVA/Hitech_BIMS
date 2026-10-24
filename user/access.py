@@ -451,6 +451,7 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("tracking_dashboard", "Live Dashboard", (
                         "api_tracking_live", "api_tracking_sync_now",
+                        "api_tracking_punch_status",
                     )),
                     ("tracking_attendance", "Attendance Map", (
                         "api_tracking_attendance", "api_tracking_attendance_approve",

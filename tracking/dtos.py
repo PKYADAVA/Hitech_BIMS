@@ -119,6 +119,22 @@ class GeofenceRecord:
 
 
 @dataclass(frozen=True)
+class PunchStatusResult:
+    """Vendor's current punch-in/out answer for one employee, right now.
+
+    Unlike every other DTO in this module this is not part of a bulk/dated
+    fetch — some vendors (TrackWick) only expose a single-employee,
+    no-history "is this person punched in right now" check, so the sync
+    engine never calls this; it is invoked on demand from the dashboard.
+    """
+
+    external_employee_id: str
+    punched_in: Optional[bool] = None  # None when the vendor couldn't answer
+    checked_at: Optional[datetime] = None
+    raw: Optional[dict] = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
 class ConnectionTestResult:
     """Outcome of a provider connectivity/credential test."""
 
