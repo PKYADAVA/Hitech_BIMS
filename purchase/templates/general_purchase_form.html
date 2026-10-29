@@ -450,6 +450,9 @@ function itemRow(row = {}) {
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
   get('item-table').tBodies[0].append(tr);
+  // A row loaded from a saved purchase already has its real Rcv Qty —
+  // never let a later edit to Sent Qty silently overwrite it.
+  if (row.rcv_qty !== undefined) tr.dataset.rcvQtyTouched = '1';
   if (row.item) tr.querySelector('.item').value = row.item;
   const destSel = tr.querySelector('.destination');
   if (row.destination) destSel.value = row.destination;
@@ -519,6 +522,16 @@ function totals() {
 
 get('item-table').addEventListener('input', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
+  // Received usually matches what was sent — autofill Rcv Qty from Sent Qty
+  // so the common case needs only one entry, not two. Stops once the user
+  // has typed into Rcv Qty themselves (a short delivery), so their edit is
+  // never silently overwritten by a later change to Sent Qty.
+  if (e.target.classList.contains('sent-qty') && !tr.dataset.rcvQtyTouched) {
+    tr.querySelector('.rcv-qty').value = e.target.value;
+  }
+  if (e.target.classList.contains('rcv-qty')) {
+    tr.dataset.rcvQtyTouched = '1';
+  }
   calcRow(tr);
 });
 get('item-table').addEventListener('change', e => {
