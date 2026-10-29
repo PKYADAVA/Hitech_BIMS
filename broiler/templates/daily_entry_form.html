@@ -631,10 +631,10 @@ function daysBetween(fromISO, toISO) {
 }
 
 // Rows whose flock has gone more than two days without a weighing, as of
-// this row's own entry date, and carry none on this entry either — the same
-// rule the app enforces (see mobile's adviseDailyEntry). Missing data, not a
-// judgement call the office can defend the way an off-standard weight can, so
-// it is refused rather than merely warned about.
+// this row's own entry date, and carry none on this entry either. Flagged
+// with a confirm-to-proceed prompt at save time rather than refused — a 0
+// weight is a legitimate entry (e.g. weighing skipped that day), not an
+// error, so the office can choose to save past it.
 function staleWeightRows() {
   const bad = [];
   entryRows().forEach((tr, i) => {
@@ -648,7 +648,7 @@ function staleWeightRows() {
     const entryDate = tr.querySelector('.date').value || TODAY;
     if (daysBetween(lastDate, entryDate) > 2) {
       bad.push(`${farm}: Body weight hasn't been recorded in over 2 days `
-                + `(last: ${lastDate}) — enter this entry's Avg. Weight before saving`);
+                + `(last: ${lastDate}) — consider entering this entry's Avg. Weight`);
     }
   });
   return bad;
@@ -1034,8 +1034,8 @@ get('daily-entry-form').addEventListener('submit', function (e) {
     return;
   }
   const staleWeights = staleWeightRows();
-  if (staleWeights.length) {
-    alert("Can't save yet:\n\n" + staleWeights.join('\n'));
+  if (staleWeights.length
+      && !confirm("Warning:\n\n" + staleWeights.join('\n') + '\n\nSave anyway?')) {
     return;
   }
   // A farm with two open flocks leaves this blank on purpose — saving anyway
