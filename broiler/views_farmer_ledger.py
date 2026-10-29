@@ -228,10 +228,9 @@ def farmer_reconciliation_report(request):
     upto = parse_date(as_on) if as_on else None
     only_diff = (request.GET.get("only_diff") or "") == "1"
 
-    company = CompanyProfile.objects.filter(pk=1).first()
-    payable = (ChartOfAccount.objects.filter(company=company,
-                                             system_role="FARMER_PAYABLE").first()
-               if company else None)
+    company = CompanyProfile.get_solo()
+    payable = ChartOfAccount.objects.filter(company=company,
+                                            system_role="FARMER_PAYABLE").first()
 
     rows, totals = [], {"operational": Decimal("0"), "posted": Decimal("0"),
                         "difference": Decimal("0")}

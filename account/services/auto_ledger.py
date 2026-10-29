@@ -33,8 +33,8 @@ def sync_ledger(instance, name, anchor_roles, company=None):
     ledger bookkeeping.
     """
     try:
-        company = company or CompanyProfile.objects.filter(pk=1).first()
-        if company is None or not name:
+        company = company or CompanyProfile.get_solo()
+        if not name:
             return []
         ct = ContentType.objects.get_for_model(type(instance))
         codegen = AccountCodeGenerator(company)
@@ -107,9 +107,7 @@ def sync_branch_organization_centre(branch, company=None):
     from inventory.models import Sector
 
     try:
-        company = company or CompanyProfile.objects.filter(pk=1).first()
-        if company is None:
-            return None
+        company = company or CompanyProfile.get_solo()
         centre = OrganizationCentre.objects.filter(branch=branch).first()
         if centre:
             return centre

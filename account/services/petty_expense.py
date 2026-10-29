@@ -29,10 +29,7 @@ class PettyExpenseError(Exception):
 
 
 def company():
-    profile = CompanyProfile.objects.filter(pk=1).first()
-    if profile is None:
-        raise PettyExpenseError("No company profile; the chart of accounts has no owner.")
-    return profile
+    return CompanyProfile.get_solo()
 
 
 # --------------------------------------------------------------------------

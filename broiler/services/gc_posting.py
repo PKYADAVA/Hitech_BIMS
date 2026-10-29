@@ -53,10 +53,7 @@ class PostingError(ValidationError):
 
 
 def _company():
-    company = CompanyProfile.objects.filter(pk=1).first()
-    if company is None:
-        raise PostingError("No company profile; the chart of accounts has no owner.")
-    return company
+    return CompanyProfile.get_solo()
 
 
 def _by_role(company, role, label):

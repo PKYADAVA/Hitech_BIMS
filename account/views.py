@@ -319,7 +319,7 @@ class PaymentModeAPI(View):
 # ---------------------------------------------------------------------------
 
 def _default_company():
-    return CompanyProfile.objects.filter(pk=1).first()
+    return CompanyProfile.get_solo()
 
 
 @login_required

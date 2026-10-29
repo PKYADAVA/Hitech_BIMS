@@ -33,10 +33,7 @@ class DuplicateChargeError(TransferChargeError):
 
 
 def company():
-    profile = CompanyProfile.objects.filter(pk=1).first()
-    if profile is None:
-        raise TransferChargeError("No company profile; the chart of accounts has no owner.")
-    return profile
+    return CompanyProfile.get_solo()
 
 
 def payable_accounts(profile=None):

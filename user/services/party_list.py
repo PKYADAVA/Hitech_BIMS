@@ -163,7 +163,7 @@ def party_list_report(request, *, kind, model, queryset, group_label,
         "columns": columns,
         "rows": rows,
         "totals": totals,
-        "company": CompanyProfile.objects.filter(pk=1).first(),
+        "company": CompanyProfile.get_solo(),
         "today": timezone.localdate(),
     })
 
