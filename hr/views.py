@@ -1066,8 +1066,18 @@ class EmployeePayrollDashboardView(View):
         attendance_records = Attendance.objects.filter(
             employee=employee, date__range=(start_date, end_date)
         )
+        # Approved only, and paid only. Both were missing: a Pending — or
+        # even Rejected — request was counted as a day worked and paid for,
+        # and every leave was treated as paid because there was no category
+        # saying otherwise. A request with no category predates leave types
+        # and stays paid, which is what it was implicitly granted then.
         leave_records = LeaveSelectedDate.objects.filter(
-            leave_request__employee=employee, date__range=(start_date, end_date)
+            leave_request__employee=employee,
+            leave_request__status="Approved",
+            date__range=(start_date, end_date),
+        ).filter(
+            Q(leave_request__leave_category__isnull=True)
+            | Q(leave_request__leave_category__is_paid=True)
         )
 
         # Initialize working days counter

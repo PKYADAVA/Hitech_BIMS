@@ -256,9 +256,20 @@ class EmployeeLeave(models.Model):
         blank=True,
     )
     reason = models.CharField(max_length=500, null=True, blank=True)
+    # How much of a day each selected date covers. Named before there was
+    # any notion of a leave category; kept as it is so existing requests
+    # and the screens reading it are untouched. The category lives on
+    # ``leave_category`` below.
     leave_type = models.CharField(
         max_length=15, choices=LEAVE_TYPE_CHOICES, default="Full Day"
     )
+    # Nullable on purpose: requests raised before leave types existed have
+    # none, and payroll treats a missing category as paid, which is what
+    # those requests were implicitly granted at the time.
+    leave_category = models.ForeignKey(
+        "LeaveType", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="leave_requests",
+        help_text="Casual / Sick / Earned / Without Pay")
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
@@ -913,3 +924,56 @@ class EmployeeAdvanceRecovery(models.Model):
 
     def __str__(self):
         return f"{self.advance.advance_no} — {self.amount}"
+
+
+class LeaveType(models.Model):
+    """A category of leave — Casual, Sick, Earned, Leave Without Pay.
+
+    Distinct from ``EmployeeLeave.leave_type``, which says how much of a day
+    a request covers (full/first half/second half) and is kept as it is.
+    This says what kind of leave it is, and — the part payroll needs —
+    whether a day off against it is paid.
+    """
+
+    code = models.CharField(
+        max_length=20, unique=True, editable=False, blank=True,
+        help_text="Auto-generated code, e.g. LT-0001")
+    name = models.CharField(max_length=100, unique=True)
+    is_paid = models.BooleanField(
+        default=True,
+        help_text="Paid leave counts as a working day in payroll. Unpaid "
+                  "leave (e.g. Leave Without Pay) does not.")
+    annual_entitlement = models.DecimalField(
+        max_digits=6, decimal_places=1, default=0,
+        help_text="Days granted per year. Zero means no fixed entitlement — "
+                  "the type is still usable, it just has no balance to track.")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Leave Type"
+        verbose_name_plural = "Leave Types"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = self._next_code()
+            mint_with_retry(
+                lambda: super(LeaveType, self).save(update_fields=["code"]),
+                lambda: setattr(self, "code", self._next_code()),
+                label="leave type code")
+
+    @classmethod
+    def _next_code(cls):
+        max_num = 0
+        for existing in cls.objects.values_list("code", flat=True):
+            match = re.match(r"^LT-(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"LT-{max_num + 1:04d}"
