@@ -20,6 +20,8 @@ from hr.views import (
     EmployeeAttendance,
     DesignationTemplateView,
     DesignationAPI,
+    LeaveTypeTemplateView,
+    LeaveTypeAPI,
     EmployeeGroupTemplateView,
     EmployeeGroupAPI,
     leave_calendar_holidays,
@@ -80,6 +82,13 @@ urlpatterns = [
     path("designation-create/", DesignationAPI.as_view(), name="designation_create"),
     path("designation/<int:id>/update/", DesignationAPI.as_view(), name="designation_update"),
     path("designation/<int:id>/delete/", DesignationAPI.as_view(), name="designation_delete"),
+
+    path("leave-type/", LeaveTypeTemplateView.as_view(), name="leave_type"),
+    path("leave_type_list/", LeaveTypeAPI.as_view(), name="leave_type_list"),
+    path("leave-type/<int:id>/", LeaveTypeAPI.as_view(), name="leave_type_detail"),
+    path("leave-type-create/", LeaveTypeAPI.as_view(), name="leave_type_create"),
+    path("leave-type/<int:id>/update/", LeaveTypeAPI.as_view(), name="leave_type_update"),
+    path("leave-type/<int:id>/delete/", LeaveTypeAPI.as_view(), name="leave_type_delete"),
 
     path("employee-group/", EmployeeGroupTemplateView.as_view(), name="employee_group"),
     path("employee_group_list/", EmployeeGroupAPI.as_view(), name="employee_group_list"),

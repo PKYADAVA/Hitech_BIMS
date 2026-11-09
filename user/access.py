@@ -434,6 +434,11 @@ MODULE_REGISTRY = [
                         "leave_calendar_holidays",
                     )),
                     ("employee_leave_details", "Leave Details"),
+                    ("leave_type", "Leave Type", (
+                        "leave_type_list", "leave_type_detail",
+                        "leave_type_create", "leave_type_update",
+                        "leave_type_delete",
+                    )),
                     ("employee_attendance", "Attendance"),
                 ],
             },

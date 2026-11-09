@@ -102,6 +102,76 @@
         </div>
     </div>
     
+    <!-- Leave Balance -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-scale-balanced"></i>
+            Leave Balance
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end mb-0">
+                <div class="col-md-4">
+                    <label for="balance_employee" class="form-label">Employee</label>
+                    <select name="balance_employee" id="balance_employee" class="form-select">
+                        <option value="">Select employee</option>
+                        {% for e in balance_employees %}
+                          <option value="{{ e.id }}" {% if balance_employee.id == e.id %}selected{% endif %}>
+                            {{ e.full_name }} ({{ e.employee_id }})
+                          </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="balance_year" class="form-label">Year</label>
+                    <select name="balance_year" id="balance_year" class="form-select">
+                        {% for y in balance_years %}
+                          <option value="{{ y }}" {% if balance_year == y %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-magnifying-glass"></i> Show
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% if balance_employee %}
+        <div class="card-body p-0 border-top">
+            <div class="table-responsive">
+                <table class="table table-bordered mb-0 ds-grid">
+                    <thead>
+                        <tr>
+                            <th>Leave Type</th>
+                            <th class="ds-num">Entitled</th>
+                            <th class="ds-num">Taken</th>
+                            <th class="ds-num">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in balances %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td class="text-end">{{ row.entitled }}</td>
+                            <td class="text-end">{{ row.taken }}</td>
+                            <td class="text-end {% if row.balance < 0 %}text-danger fw-bold{% endif %}">
+                              {{ row.balance }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                          <td colspan="4" class="text-center text-muted py-3">
+                            No leave type grants an annual entitlement yet.
+                          </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Leave Applications Table -->
     <div class="card">
         <div class="card-header">

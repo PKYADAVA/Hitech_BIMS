@@ -14,6 +14,7 @@ from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from datetime import datetime
 from django.contrib import messages
 from django.utils import timezone
@@ -38,6 +39,7 @@ from hr.models import (
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
+    LeaveType,
     Payroll,
     Shift,
 )
@@ -720,11 +722,36 @@ class EmployeeLeaveDashboard(View):
                 created_date__month=current_date.month,
             ).count()
 
+            # Entitlement against leave taken, for one employee at a time —
+            # a balance is a per-person figure, so it only appears once the
+            # page is asked about somebody.
+            from hr.services.leave_balance import leave_balance
+
+            balance_employee_id = request.GET.get("balance_employee")
+            balance_year = request.GET.get("balance_year") or current_date.year
+            try:
+                balance_year = int(balance_year)
+            except (TypeError, ValueError):
+                balance_year = current_date.year
+
+            balance_employee, balances = None, []
+            if balance_employee_id:
+                balance_employee = Employee.objects.filter(
+                    id=balance_employee_id).first()
+                if balance_employee:
+                    balances = leave_balance(balance_employee, balance_year)
+
             context = {
                 "leave_details": employee_leave_details,
                 "total_pending_leaves": total_pending_leaves,
                 "total_approved_leaves": total_approved_leaves,
                 "total_employees": Employee.objects.filter(relieve=False).count(),
+                "balance_employees": Employee.objects.filter(relieve=False)
+                                             .order_by("full_name"),
+                "balance_employee": balance_employee,
+                "balance_year": balance_year,
+                "balance_years": range(current_date.year, current_date.year - 5, -1),
+                "balances": balances,
             }
 
             return render(request, "employee_leave_details.html", context)
@@ -1284,6 +1311,96 @@ class DesignationAPI(View):
                 )
             designation.delete()
             return JsonResponse({"message": "Designation deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+# ---------------------------------------------------------------------------
+# Leave Type (HR > Attendance)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class LeaveTypeTemplateView(View):
+    """Renders the leave type master page."""
+
+    def get(self, request):
+        return render(request, "leave_type.html")
+
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class LeaveTypeAPI(View):
+    """CRUD for the Leave Type master (Casual / Sick / Earned / Without Pay)."""
+
+    def handle_exception(self, e):
+        logger.error(f"Error in {self.__class__.__name__}: {str(e)}", exc_info=True)
+        if isinstance(e, ValidationError):
+            if hasattr(e, "message_dict"):
+                message = "; ".join(
+                    f"{field}: {' '.join(msgs)}" for field, msgs in e.message_dict.items()
+                )
+            else:
+                message = "; ".join(e.messages)
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+    def _to_dict(self, leave_type):
+        return {
+            "id": leave_type.id,
+            "code": leave_type.code,
+            "name": leave_type.name,
+            "is_paid": leave_type.is_paid,
+            "annual_entitlement": str(leave_type.annual_entitlement),
+            "is_active": leave_type.is_active,
+            "request_count": leave_type.leave_requests.count(),
+        }
+
+    def get(self, request, id=None):
+        try:
+            if id:
+                return JsonResponse(self._to_dict(LeaveType.objects.get(id=id)))
+            types = LeaveType.objects.all().order_by("name")
+            return JsonResponse([self._to_dict(t) for t in types], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id=None):
+        try:
+            data = request.POST
+            with transaction.atomic():
+                leave_type = LeaveType.objects.get(id=id) if id else LeaveType()
+                leave_type.name = data.get("name", "").strip()
+                # An unticked checkbox posts nothing at all, so absence is
+                # what "no" looks like here rather than a missing value.
+                leave_type.is_paid = data.get("is_paid") in ("true", "True", "on", "1")
+                leave_type.is_active = data.get("is_active") in ("true", "True", "on", "1")
+                leave_type.annual_entitlement = data.get("annual_entitlement") or 0
+                leave_type.full_clean()
+                leave_type.save()
+            return JsonResponse(
+                {"message": "Leave type updated" if id else "Leave type created",
+                 "id": leave_type.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            leave_type = LeaveType.objects.get(id=id)
+            try:
+                leave_type.delete()
+            except ProtectedError as e:
+                # leave_category is PROTECT: a type any request points at
+                # cannot go, or those requests would lose the one field that
+                # says whether payroll should have paid for them.
+                count = len(e.protected_objects)
+                return JsonResponse(
+                    {"error": f"This leave type is used by {count} leave "
+                              f"request(s) and cannot be deleted; deactivate "
+                              f"it instead."},
+                    status=400,
+                )
+            return JsonResponse({"message": "Leave type deleted"})
         except Exception as e:
             return self.handle_exception(e)
 
