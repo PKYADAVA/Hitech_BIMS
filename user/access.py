@@ -441,6 +441,10 @@ MODULE_REGISTRY = [
                 "label": "Payroll",
                 "tabs": [
                     ("payroll", "Payroll"),
+                    ("employee_payment_list", "Employee Payment", (
+                        "employee_payment_add", "employee_payment_edit",
+                        "employee_payment_delete", "employee_payment_api_list",
+                    )),
                 ],
             },
             {

@@ -213,6 +213,7 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'employee_leave_details' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_leave_details' %}active{% endif %} activate" href="{% url 'employee_leave_details' %}"><i class="fas fa-list-alt me-1"></i>Leave Details</a></li>{% endif %}
       {% elif module == 'hr_payroll' %}
         {% if 'payroll' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'payroll' %}active{% endif %} activate" href="{% url 'payroll' %}"><i class="fas fa-money-bill-wave me-1"></i>Payroll</a></li>{% endif %}
+        {% if 'employee_payment_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_payment_list' %}active{% endif %} activate" href="{% url 'employee_payment_list' %}"><i class="fas fa-hand-holding-dollar me-1"></i>Employee Payment</a></li>{% endif %}
       {% endif %}
     </ul>
   </div>

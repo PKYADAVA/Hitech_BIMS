@@ -3,6 +3,7 @@
 """models configuration for HR Management"""
 
 import random
+import re
 from datetime import date
 from django.db import models
 
@@ -634,3 +635,157 @@ class SupervisorTripVisit(models.Model):
         else:
             self.duration_minutes = 0
         super().save(*args, **kwargs)
+
+
+class EmployeePayment(models.Model):
+    """Header for a salary payment voucher — one or more allocation lines,
+    each paying a different employee, against a single date/location
+    (HR > Payroll > Employee Payment).
+
+    Mirrors ``purchase.SupplierPayment``: the money leaves once, but what it
+    discharges is per-line, so one bank transfer covering a dozen salaries is
+    one document rather than a dozen.
+    """
+
+    payment_no = models.CharField(
+        max_length=30, unique=True, editable=False, blank=True,
+        help_text="Auto-generated transaction number, e.g. EMP-2627-0001")
+    date = models.DateField(default=date.today)
+    location = models.ForeignKey(
+        "inventory.Warehouse", on_delete=models.PROTECT,
+        related_name="employee_payments")
+    narration = models.CharField(max_length=255, blank=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_payments")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Employee Payment"
+        verbose_name_plural = "Employee Payments"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.payment_no
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.payment_no:
+            self.payment_no = self._next_payment_no(self.date)
+            # Issued off the current highest, so another save can take it
+            # between that read and this write. Reissued and tried again
+            # rather than refused.
+            mint_with_retry(
+                lambda: super(EmployeePayment, self).save(update_fields=["payment_no"]),
+                lambda: setattr(self, "payment_no", self._next_payment_no(self.date)),
+                label="employee payment number")
+
+    @classmethod
+    def _next_payment_no(cls, on_date=None):
+        current_date = on_date or date.today()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"EMP-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(
+                payment_no__startswith=prefix).values_list("payment_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    def total_amount(self):
+        return self.lines.aggregate(total=models.Sum("amount"))["total"] or 0
+
+    def total_bank_charges(self):
+        return self.lines.aggregate(total=models.Sum("bank_charges"))["total"] or 0
+
+    def employee_summary(self):
+        names = [n for n in dict.fromkeys(
+            self.lines.values_list("employee__full_name", flat=True)) if n]
+        if not names:
+            return ""
+        return names[0] if len(names) == 1 else "Multiple"
+
+    def compose_narration(self):
+        who = self.employee_summary() or "employees"
+        return f"Salary payment to {who} — {self.payment_no}"
+
+
+class EmployeePaymentLine(models.Model):
+    """One allocation line within an employee payment voucher."""
+
+    payment = models.ForeignKey(
+        EmployeePayment, on_delete=models.CASCADE, related_name="lines")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.PROTECT, related_name="payment_lines")
+    # A plain name from the Payment Mode master, the same way
+    # SupplierPaymentLine carries it — the master owns the list, the
+    # transaction just records which one was chosen.
+    mode = models.CharField(max_length=100, default="Cash")
+    pay_account = models.ForeignKey(
+        "account.ChartOfAccount", on_delete=models.PROTECT,
+        related_name="employee_payment_lines",
+        help_text="The bank/cash ledger the money left")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Our cost, not the employee's, so it never touches Salary Payable —
+    # the same rule gc_posting follows for farmer payments.
+    bank_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    reference_no = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.employee} — {self.amount}"
+
+
+class PayrollPostingSettings(models.Model):
+    """When payroll and employee payments reach the ledger.
+
+    Off by default, and deliberately so — the same reasoning as
+    ``broiler.GCPostingSettings``. The accrual and the payment have to start
+    posting together: wiring only the payment would debit Salary Payable
+    against nothing and put the Trial Balance out in a way nobody could
+    trace. The day that switch is thrown is a decision about the books.
+
+    ``cutoff_date`` is the other half. Payroll exists on record from before
+    any of this, and posting it retrospectively would write into financial
+    years that may be closed, which ``post_voucher`` refuses by design.
+    """
+
+    enabled = models.BooleanField(
+        default=False,
+        help_text="Post payroll accruals and employee payments to the ledger. "
+                  "While this is off they are recorded but never reach the "
+                  "Chart of Accounts.")
+    cutoff_date = models.DateField(
+        null=True, blank=True,
+        help_text="Only documents dated on or after this post. Earlier ones "
+                  "are left alone — many sit in financial years that are "
+                  "closed, and posting refuses to write into those.")
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payroll Posting Settings"
+        verbose_name_plural = "Payroll Posting Settings"
+
+    def __str__(self):
+        return "Payroll Posting Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def posts_on(self, on_date):
+        """Whether a document of this date should reach the ledger."""
+        if not self.enabled:
+            return False
+        if self.cutoff_date and on_date and on_date < self.cutoff_date:
+            return False
+        return True

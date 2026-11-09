@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if payment %}Edit{% else %}Add{% endif %} Employee Payment — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block content %}
+{% include '_hr_payroll_subnavbar.html' with active_tab='employee_payment_list' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-hand-holding-dollar"></i> {% if payment %}Edit{% else %}Add{% endif %} Employee Payment</div>
+  <div class="page-header-right"><a href="{% url 'employee_payment_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+{% if messages %}
+<div class="mx-auto mb-3" style="max-width:1100px">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<style>
+  /* Compact, matching the Supplier Payment form: every control sizes from
+     --ds-control-h, so one override shortens the boxes and dropdowns
+     together; the Payment Lines grid keeps its own entry height. */
+  #payment-form { --ds-control-h: 31px; }
+  #payment-form > .card { margin-bottom: .75rem !important; }
+  #payment-form .card-header { padding-top: .55rem; padding-bottom: .55rem; }
+  #payment-form .card-body:not(.p-0) { padding: .65rem 1rem .8rem; }
+  #payment-form .card-body > .row { --bs-gutter-x: .75rem; --bs-gutter-y: .6rem; }
+  #payment-form .form-label { margin-bottom: 2px; }
+  #payment-form .form-text { margin-top: 2px; }
+  #payment-form .select2-container--bootstrap-5 .select2-selection--single { padding-top: 0; padding-bottom: 0; }
+  #payment-form .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-left: 0; }
+  #line-table thead th:first-child { width: 2.75rem; min-width: 2.75rem; }
+  /* Select2's hidden select anchored to its cell, inside the grid's scroll box. */
+  #line-table td { position: relative; }
+</style>
+
+<form method="post" id="payment-form">
+  {% csrf_token %}
+
+  <div class="card mb-3">
+    <div class="card-header">Payment Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" name="date" value="{{ payment.date|date:'Y-m-d'|default:today }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Location <span class="text-danger">*</span></label>
+          <select class="form-select" name="location" required>
+            <option value="">select</option>
+            {% for w in locations %}<option value="{{ w.id }}" {% if payment.location_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Payment No.</label>
+          <input type="text" class="form-control bg-light" readonly value="{{ payment.payment_no|default:next_payment_no }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Narration</label>
+          <input type="text" class="form-control" name="narration" maxlength="255" value="{{ payment.narration|default:'' }}">
+        </div>
+      </div>
+      <div class="form-text mt-2">Each payment line below can pay a different employee.</div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fas fa-list-ol me-1"></i><strong>Payment Lines</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 ds-entry" id="line-table">
+          <thead class="table-light">
+            <tr>
+              <th class="c-fit m-short ds-mid">Sr.</th>
+              <th class="c-fit m-mid">Employee <span class="text-danger">*</span></th>
+              <th class="c-fit m-short">Mode <span class="text-danger">*</span></th>
+              <th class="c-fit m-short">Code <span class="text-danger">*</span></th>
+              <th class="c-num m-num ds-num">Amount <span class="text-danger">*</span></th>
+              <th class="c-fit m-short">Bank Charges</th>
+              <th class="c-fit m-short">Reference No</th>
+              <th class="c-fit m-mid">Remarks</th>
+              <th class="c-fit"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="4" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit m-short" id="total_bank_charges">0.00</th><th class="c-fit" colspan="3"></th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <input type="hidden" name="lines_json" id="lines_json">
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if payment %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'employee_payment_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const existingLines = {{ existing_lines_json|safe }};
+const employeeOptions = `<option value="">select</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.full_name|escapejs }} - {{ e.employee_id|escapejs }}</option>{% endfor %}`;
+const accountOptions = `<option value="">select</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code|escapejs }} - {{ a.description|escapejs }}</option>{% endfor %}`;
+const modeOptions = `{% for m in payment_modes %}<option value="{{ m|escapejs }}">{{ m|escapejs }}</option>{% endfor %}`;
+const MODE_MAP = {{ payment_mode_map_json|safe }};
+// Choosing a payment mode narrows the account list to its mapped Bank/Cash accounts.
+function applyPaymentMode(tr) {
+  const modeEl = tr && tr.querySelector('.mode');
+  const acc = tr && tr.querySelector('.pay-account');
+  if (!modeEl || !acc) return;
+  const mapped = (MODE_MAP[modeEl.value] || []).map(String);
+  // Narrow the account list to the mode's mapped Bank/Cash accounts (all when
+  // the mode has no mapping); auto-select when exactly one is mapped.
+  const full = document.createElement('select'); full.innerHTML = accountOptions;
+  const keep = [...full.options].filter(o => !o.value || mapped.length === 0 || mapped.includes(o.value));
+  acc.innerHTML = keep.map(o => o.outerHTML).join('');
+  acc.value = (mapped.length === 1) ? mapped[0] : '';
+  if (window.jQuery) jQuery(acc).trigger('change.select2');
+}
+document.addEventListener('change', function (e) {
+  if (e.target.classList && e.target.classList.contains('mode')) applyPaymentMode(e.target.closest('tr'));
+});
+const get = id => document.getElementById(id);
+
+function lineRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="sr text-center"></td>
+    <td><select class="form-select employee" required>${employeeOptions}</select></td>
+    <td><select class="form-select mode">${modeOptions}</select></td>
+    <td><select class="form-select pay-account" required>${accountOptions}</select></td>
+    <td><input class="form-control amount" type="number" min="0" step=".01" value="${row.amount || 0}"></td>
+    <td><input class="form-control bank-charges" type="number" min="0" step=".01" value="${row.bank_charges || 0}"></td>
+    <td><input class="form-control reference-no" value="${row.reference_no || ''}"></td>
+    <td><input class="form-control remarks" value="${row.remarks || ''}"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('line-table').tBodies[0].append(tr);
+  if (row.employee) tr.querySelector('.employee').value = row.employee;
+  if (row.mode) tr.querySelector('.mode').value = row.mode;
+  if (row.pay_account) tr.querySelector('.pay-account').value = row.pay_account;
+  renumberRows();
+  refreshRowAddButtons();
+  totals();
+}
+
+function renumberRows() {
+  document.querySelectorAll('#line-table tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// With no header Add button, the sole remaining row can't be deleted either
+// — there'd be no "+" left anywhere to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#line-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+function totals() {
+  let amount = 0, bankCharges = 0;
+  document.querySelectorAll('#line-table tbody tr').forEach(tr => {
+    amount += Number(tr.querySelector('.amount').value) || 0;
+    bankCharges += Number(tr.querySelector('.bank-charges').value) || 0;
+  });
+  get('total_amount').textContent = amount.toFixed(2);
+  get('total_bank_charges').textContent = bankCharges.toFixed(2);
+}
+
+get('line-table').addEventListener('input', totals);
+get('line-table').addEventListener('click', e => {
+  if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
+    e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals();
+  }
+  if (e.target.closest('.add-row-inline')) { lineRow(); }
+});
+
+get('payment-form').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#line-table tbody tr')].map(tr => ({
+    employee: tr.querySelector('.employee').value, mode: tr.querySelector('.mode').value,
+    pay_account: tr.querySelector('.pay-account').value,
+    amount: tr.querySelector('.amount').value, bank_charges: tr.querySelector('.bank-charges').value,
+    reference_no: tr.querySelector('.reference-no').value, remarks: tr.querySelector('.remarks').value,
+  }));
+  if (!rows.length || rows.some(r => !r.employee || !r.pay_account || !r.amount)) {
+    e.preventDefault();
+    alert('Add at least one payment line with Employee, Code and Amount filled.');
+    return;
+  }
+  get('lines_json').value = JSON.stringify(rows);
+});
+
+(existingLines.length ? existingLines : [{}]).forEach(lineRow);
+</script>
+{% endblock %}

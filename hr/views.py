@@ -26,6 +26,7 @@ from django.utils.decorators import method_decorator
 from django.db.models import Count
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from calendar import monthrange
 from hr.models import (
     Attendance,
@@ -38,6 +39,7 @@ from hr.models import (
     Payroll,
     Shift,
 )
+from hr.services import payroll_posting
 from hr.validation import validate_employee_data
 from inventory.models import Warehouse
 from Hitech_BIMS.entry_dates import date_from_query
@@ -1015,7 +1017,7 @@ class EmployeePayrollDashboardView(View):
 
         try:
             employee = Employee.objects.get(id=employee_id)
-            payroll = self.generate_payroll(employee, year, month)
+            payroll = self.generate_payroll(employee, year, month, user=request.user)
 
             return JsonResponse(
                 {
@@ -1043,7 +1045,7 @@ class EmployeePayrollDashboardView(View):
                 {"success": False, "message": "An error occurred"}, status=500
             )
 
-    def generate_payroll(self, employee, year, month):
+    def generate_payroll(self, employee, year, month, user=None):
         """
         Generate payroll for an employee based on attendance and leave records.
         If the employee has no attendance or leave in the given month, set working days to 0.
@@ -1116,6 +1118,11 @@ class EmployeePayrollDashboardView(View):
                 "payable_salary": payable_salary,
             },
         )
+
+        # Raise the wage cost and what is owed for it, if the books are
+        # taking it yet. Re-generating a month cancels the previous accrual
+        # and posts the new figure rather than adding a second one.
+        payroll_posting.post_payroll_if_enabled(payroll, user=user)
 
         return payroll
 
@@ -1912,3 +1919,182 @@ def _trip_has_evidence(trip):
     return bool(trip.start_photo and trip.end_photo
                 and trip.start_odometer is not None
                 and trip.end_odometer is not None)
+
+
+# ---------------------------------------------------------------------------
+# Employee Payment (HR > Payroll)
+#
+# Mirrors purchase.SupplierPayment: the money leaves once, but what it
+# discharges is per-line, so one bank transfer covering a dozen salaries is
+# one document. Posting goes through hr.services.payroll_posting, which is
+# off by default — see PayrollPostingSettings.
+# ---------------------------------------------------------------------------
+
+def _employee_pay_accounts():
+    """Chart-of-Account ledgers backed by a Bank/Cash Master entry — the only
+    accounts the money should be picked from. Same source the supplier
+    payment form uses."""
+    from account.models import BankCashMaster, ChartOfAccount
+    from django.contrib.contenttypes.models import ContentType
+    ct = ContentType.objects.get_for_model(BankCashMaster)
+    return (ChartOfAccount.objects
+            .filter(source_content_type=ct,
+                    source_object_id__in=BankCashMaster.objects.values("id"))
+            .order_by("code"))
+
+
+def _employee_payment_to_line_dict(row):
+    return {
+        "employee": row.employee_id, "mode": row.mode,
+        "pay_account": row.pay_account_id,
+        "amount": str(row.amount), "bank_charges": str(row.bank_charges),
+        "reference_no": row.reference_no, "remarks": row.remarks,
+    }
+
+
+def _employee_payment_list_dict(p):
+    return {
+        "id": p.id, "date": p.date.isoformat(), "payment_no": p.payment_no,
+        "employee_name": p.employee_summary(),
+        "location_name": p.location.name if p.location_id else "",
+        "amount": str(p.total_amount()),
+        "bank_charges": str(p.total_bank_charges()),
+    }
+
+
+def _employee_payment_form_context(p=None):
+    from account.services.bank_cash import active_payment_modes, payment_mode_map
+    from hr.models import EmployeePayment
+    return {
+        "payment": p,
+        "next_payment_no": EmployeePayment._next_payment_no() if not p else None,
+        "employees": Employee.objects.exclude(relieve=True).order_by("full_name"),
+        "locations": Warehouse.objects.order_by("name"),
+        "accounts": _employee_pay_accounts(),
+        "today": timezone.localdate().isoformat(),
+        "payment_modes": active_payment_modes("payment"),
+        "payment_mode_map_json": json.dumps(payment_mode_map("payment")),
+        "existing_lines_json": json.dumps(
+            [_employee_payment_to_line_dict(row)
+             for row in p.lines.select_related("pay_account", "employee")]
+        ) if p else "[]",
+    }
+
+
+def _apply_posted_employee_payment_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.location_id = request.POST.get("location") or None
+    instance.narration = (request.POST.get("narration") or "").strip()
+
+
+def _save_employee_payment_lines(instance, request):
+    from hr.models import EmployeePaymentLine
+    try:
+        rows = json.loads(request.POST.get("lines_json") or "[]")
+    except json.JSONDecodeError:
+        rows = []
+    instance.lines.all().delete()
+    for row in rows:
+        if not row.get("employee") or not row.get("pay_account") or not row.get("amount"):
+            continue
+        EmployeePaymentLine.objects.create(
+            payment=instance, employee_id=row["employee"],
+            mode=row.get("mode") or "Cash",
+            pay_account_id=row["pay_account"],
+            amount=Decimal(str(row.get("amount") or 0)),
+            bank_charges=Decimal(str(row.get("bank_charges") or 0)),
+            reference_no=row.get("reference_no") or "",
+            remarks=row.get("remarks") or "",
+        )
+
+
+@login_required(login_url="login")
+def employee_payment_list(request):
+    return render(request, "employee_payment_list.html")
+
+
+@login_required(login_url="login")
+def create_employee_payment(request):
+    """Add a new Employee Payment voucher."""
+    from hr.models import EmployeePayment
+    if request.method == "POST":
+        instance = EmployeePayment()
+        try:
+            _apply_posted_employee_payment_fields(instance, request)
+            instance.created_by = request.user
+            instance.full_clean(exclude=["payment_no", "created_by"])
+            with transaction.atomic():
+                instance.save()
+                _save_employee_payment_lines(instance, request)
+                if not instance.lines.exists():
+                    raise ValidationError("Add at least one payment line.")
+                # Inside the transaction: a payment that exists without its
+                # voucher is the silent divergence posting exists to prevent.
+                payroll_posting.post_payment_if_enabled(instance, user=request.user)
+            messages.success(request, "Employee payment added successfully.")
+            return redirect("employee_payment_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "employee_payment_form.html",
+                  _employee_payment_form_context())
+
+
+@login_required(login_url="login")
+def edit_employee_payment(request, id):
+    """Edit an existing Employee Payment voucher."""
+    from hr.models import EmployeePayment
+    instance = get_object_or_404(EmployeePayment, id=id)
+
+    if request.method == "POST":
+        try:
+            _apply_posted_employee_payment_fields(instance, request)
+            instance.full_clean(exclude=["payment_no", "created_by"])
+            with transaction.atomic():
+                instance.save()
+                _save_employee_payment_lines(instance, request)
+                if not instance.lines.exists():
+                    raise ValidationError("Add at least one payment line.")
+                # Re-posting cancels the previous voucher rather than
+                # adding a second one.
+                payroll_posting.post_payment_if_enabled(instance, user=request.user)
+            messages.success(request, "Employee payment updated successfully.")
+            return redirect("employee_payment_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "employee_payment_form.html",
+                  _employee_payment_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_employee_payment(request, id):
+    """Delete an Employee Payment voucher, cancelling whatever it posted."""
+    from hr.models import EmployeePayment
+    instance = get_object_or_404(EmployeePayment, id=id)
+    with transaction.atomic():
+        # Before the delete: the voucher links to its source by generic FK,
+        # so a deleted payment would leave a posting nothing points at.
+        payroll_posting.reverse(instance, user=request.user,
+                                reason="Payment deleted")
+        instance.delete()
+    messages.success(request, "Employee payment deleted successfully.")
+    return redirect("employee_payment_list")
+
+
+@login_required(login_url="login")
+def employee_payment_api_list(request):
+    """JSON rows for the Employee Payment register's DataTable + filter bar."""
+    from hr.models import EmployeePayment
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+
+    qs = EmployeePayment.objects.prefetch_related(
+        "lines__pay_account", "lines__employee").select_related("location")
+    if from_date:
+        qs = qs.filter(date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(date__lte=date_from_query(to_date))
+    qs = qs.order_by("-date", "-id")
+    return JsonResponse([_employee_payment_list_dict(p) for p in qs], safe=False)
