@@ -789,3 +789,127 @@ class PayrollPostingSettings(models.Model):
         if self.cutoff_date and on_date and on_date < self.cutoff_date:
             return False
         return True
+
+
+class EmployeeAdvance(models.Model):
+    """Money handed to an employee ahead of their wages, and what is left of it.
+
+    The flat ``Employee.advance`` field this sits beside is a standing figure
+    with no date, no history and no ledger movement — payroll deducted the
+    same number every month forever and it never fell. An advance is an
+    event: it happens on a day, it reaches the Employee Advances ledger, and
+    it is recovered over following months until nothing is outstanding.
+
+    ``recovered`` is maintained by the payroll run (see
+    ``EmployeeAdvanceRecovery``), never edited directly — the recoveries are
+    the record, and this is their running total.
+    """
+
+    advance_no = models.CharField(
+        max_length=30, unique=True, editable=False, blank=True,
+        help_text="Auto-generated transaction number, e.g. ADV-2627-0001")
+    date = models.DateField(default=date.today)
+    employee = models.ForeignKey(
+        Employee, on_delete=models.PROTECT, related_name="advances")
+    location = models.ForeignKey(
+        "inventory.Warehouse", on_delete=models.PROTECT,
+        related_name="employee_advances")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Kept in step by the recovery rows rather than typed. A stored total
+    # beats summing the children on every balance check, and payroll asks
+    # for the outstanding figure on every employee it touches.
+    recovered = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mode = models.CharField(max_length=100, default="Cash")
+    pay_account = models.ForeignKey(
+        "account.ChartOfAccount", on_delete=models.PROTECT,
+        related_name="employee_advance_lines",
+        help_text="The bank/cash ledger the money left")
+    reference_no = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_advances")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Employee Advance"
+        verbose_name_plural = "Employee Advances"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.advance_no
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.advance_no:
+            self.advance_no = self._next_advance_no(self.date)
+            mint_with_retry(
+                lambda: super(EmployeeAdvance, self).save(update_fields=["advance_no"]),
+                lambda: setattr(self, "advance_no", self._next_advance_no(self.date)),
+                label="employee advance number")
+
+    @classmethod
+    def _next_advance_no(cls, on_date=None):
+        current_date = on_date or date.today()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"ADV-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(
+                advance_no__startswith=prefix).values_list("advance_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    @property
+    def outstanding(self):
+        """What is still owed on this advance."""
+        return max((self.amount or 0) - (self.recovered or 0), 0)
+
+    @property
+    def is_cleared(self):
+        return self.outstanding <= 0
+
+    @classmethod
+    def outstanding_for(cls, employee):
+        """Total still owed by this employee across every advance."""
+        total = 0
+        for row in cls.objects.filter(employee=employee):
+            total += row.outstanding
+        return total
+
+
+class EmployeeAdvanceRecovery(models.Model):
+    """One month's recovery of one advance, taken out of a payroll run.
+
+    Deleting the payroll releases the recovery with it (CASCADE), and the
+    advance's ``recovered`` total is rebuilt from whatever rows remain — so
+    re-running a month cannot leave a recovery behind that nothing claims.
+    """
+
+    advance = models.ForeignKey(
+        EmployeeAdvance, on_delete=models.CASCADE, related_name="recoveries")
+    payroll = models.ForeignKey(
+        "Payroll", on_delete=models.CASCADE, related_name="advance_recoveries")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Employee Advance Recovery"
+        verbose_name_plural = "Employee Advance Recoveries"
+        ordering = ["id"]
+        constraints = [
+            # One row per advance per payroll: a second recovery of the same
+            # advance in the same month is the re-run writing twice, which is
+            # what the rebuild in payroll is there to prevent.
+            models.UniqueConstraint(
+                fields=["advance", "payroll"],
+                name="uq_advance_recovery_per_payroll"),
+        ]
+
+    def __str__(self):
+        return f"{self.advance.advance_no} — {self.amount}"

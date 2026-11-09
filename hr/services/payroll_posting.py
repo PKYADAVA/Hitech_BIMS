@@ -35,7 +35,7 @@ from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import models, transaction
 
 from account.models import ChartOfAccount, CompanyProfile, Voucher
 from account.services import journal
@@ -125,12 +125,27 @@ def post_payroll(payroll, user=None):
     ledger = salary_payable_ledger(payroll.employee, company)
     expense = _by_role(company, "SALARY_EXPENSE", "Salaries & Wages")
     period = f"{payroll.month:02d}/{payroll.year}"
+
+    # An advance recovered this month was already paid out — it is settled
+    # against the Employee Advances asset rather than becoming cash owed.
+    # The wage cost is the full earned figure either way; only the credit
+    # side splits.
+    recovered = Decimal(str(payroll.advance_recoveries.aggregate(
+        t=models.Sum("amount"))["t"] or 0))
+    owed = payable - recovered
+
     rows = [
         {"account": expense.id, "debit": payable, "credit": 0,
          "narration": f"Salary {period} — {payroll.employee.full_name}"},
-        {"account": ledger.id, "debit": 0, "credit": payable,
-         "narration": f"Salary {period} — {payroll.employee.full_name}"},
     ]
+    if owed > 0:
+        rows.append({"account": ledger.id, "debit": 0, "credit": owed,
+                     "narration": f"Salary {period} — {payroll.employee.full_name}"})
+    if recovered > 0:
+        advance_ledger = employee_advance_ledger(payroll.employee, company)
+        rows.append({"account": advance_ledger.id, "debit": 0, "credit": recovered,
+                     "narration": f"Advance recovered {period} — "
+                                  f"{payroll.employee.full_name}"})
 
     voucher = journal.create_voucher(
         company, _accrual_date(payroll), rows,
@@ -148,6 +163,57 @@ def _accrual_date(payroll):
     from datetime import date as _date
     return _date(payroll.year, payroll.month,
                  monthrange(payroll.year, payroll.month)[1])
+
+
+def employee_advance_ledger(employee, company=None):
+    """The named employee's own ledger under Employee Advances."""
+    company = company or _company()
+    anchor = _by_role(company, "EMPLOYEE_ADVANCE", "Employee Advances")
+    ct = ContentType.objects.get_for_model(type(employee))
+    ledger = ChartOfAccount.objects.filter(
+        company=company, parent=anchor,
+        source_content_type=ct, source_object_id=employee.pk).first()
+    if ledger is None:
+        raise PostingError(
+            f"{employee.full_name} has no ledger under Employee Advances. "
+            f"Re-save the employee to have one created, then try again.")
+    return ledger
+
+
+@transaction.atomic
+def post_advance(advance, user=None):
+    """Hand money over ahead of wages: an asset, not an expense.
+
+        Dr  Employee Advances / <employee>   amount
+            Cr  <the line's pay account>     amount
+
+    Recovery is not posted here. It happens inside the payroll accrual,
+    which already credits Salary Payable for the full earned figure — the
+    recovery moves part of that to Employee Advances instead of to cash.
+    """
+    amount = Decimal(str(advance.amount or 0))
+    if amount <= 0:
+        return None
+
+    company = _company()
+    reverse(advance, user=user, reason="Advance re-posted")
+
+    ledger = employee_advance_ledger(advance.employee, company)
+    rows = [
+        {"account": ledger.id, "debit": amount, "credit": 0,
+         "narration": f"Advance — {advance.employee.full_name}"},
+        {"account": advance.pay_account_id, "debit": 0, "credit": amount,
+         "narration": advance.reference_no or advance.advance_no},
+    ]
+
+    voucher = journal.create_voucher(
+        company, advance.date, rows,
+        user=user, voucher_type="Payment", manual=False, system_generated=True,
+        reference=advance.advance_no,
+        narration=f"Salary advance to {advance.employee.full_name} — {advance.advance_no}",
+        post=True,
+    )
+    return _link(voucher, advance)
 
 
 @transaction.atomic
@@ -222,3 +288,10 @@ def post_payment_if_enabled(payment, user=None):
     if not posting_enabled(payment.date):
         return None
     return post_payment(payment, user=user)
+
+
+def post_advance_if_enabled(advance, user=None):
+    """Post an advance, or don't, according to the switch."""
+    if not posting_enabled(advance.date):
+        return None
+    return post_advance(advance, user=user)

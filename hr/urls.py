@@ -39,6 +39,11 @@ from hr.views import (
     edit_employee_payment,
     delete_employee_payment,
     employee_payment_api_list,
+    employee_advance_list,
+    create_employee_advance,
+    edit_employee_advance,
+    delete_employee_advance,
+    employee_advance_api_list,
 )
 
 
@@ -104,6 +109,14 @@ urlpatterns = [
          name="employee_payment_delete"),
     path("employee_payment_api/", employee_payment_api_list,
          name="employee_payment_api_list"),
+    path("employee-advance/", employee_advance_list, name="employee_advance_list"),
+    path("employee-advance/add/", create_employee_advance, name="employee_advance_add"),
+    path("employee-advance/<int:id>/edit/", edit_employee_advance,
+         name="employee_advance_edit"),
+    path("employee-advance/<int:id>/delete/", delete_employee_advance,
+         name="employee_advance_delete"),
+    path("employee_advance_api/", employee_advance_api_list,
+         name="employee_advance_api_list"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

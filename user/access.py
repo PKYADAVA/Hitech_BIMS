@@ -445,6 +445,10 @@ MODULE_REGISTRY = [
                         "employee_payment_add", "employee_payment_edit",
                         "employee_payment_delete", "employee_payment_api_list",
                     )),
+                    ("employee_advance_list", "Employee Advance", (
+                        "employee_advance_add", "employee_advance_edit",
+                        "employee_advance_delete", "employee_advance_api_list",
+                    )),
                 ],
             },
             {

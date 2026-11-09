@@ -981,6 +981,9 @@ layouts open it from the account menu.
               {% if 'employee_payment_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_payment_list' %}">
                 <i class="fas fa-hand-holding-dollar"></i>Employee Payment
               </a></li>{% endif %}
+              {% if 'employee_advance_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_advance_list' %}">
+                <i class="fas fa-sack-dollar"></i>Employee Advance
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

@@ -29,13 +29,18 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="yearSelect" class="form-label">Year</label>
                 <select id="yearSelect" class="form-select"></select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="monthSelect" class="form-label">Month</label>
                 <select id="monthSelect" class="form-select"></select>
+            </div>
+            <div class="col-md-2">
+                <label for="advanceRecovery" class="form-label">Advance Recovery</label>
+                <input type="number" step="0.01" min="0" class="form-control text-end"
+                       id="advanceRecovery" value="0">
             </div>
             <div class="col-md-2">
                 <button class="btn btn-primary w-100" id="generatepayroll">
@@ -62,8 +67,9 @@
                         <th class="ds-num">Total Days Worked</th>
                         <th>Payable Salary</th>
                         <th>Gross Pay</th>
-                        <th>Deductions</th>
+                        <th>Advance Recovered</th>
                         <th>Net Salary</th>
+                        <th>Advance Outstanding</th>
                     </tr>
                 </thead>
                 <tbody id="payrollResults">

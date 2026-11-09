@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Employee Advance - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hr' %}{% endblock %}
+{% block content %}
+{% include '_hr_payroll_subnavbar.html' with active_tab='employee_advance' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-sack-dollar"></i> Employee Advance</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Money advanced against wages, and what is left to recover</div>
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'employee_advance_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label for="from-date" class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label for="to-date" class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-list"></i> Employee Advance Register</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="advance-table">
+        <thead class="table-dark">
+          <tr>
+            <th class="ds-mid">Date</th><th>Trnum</th><th>Employee</th>
+            <th class="ds-num">Amount</th><th class="ds-num">Recovered</th>
+            <th class="ds-num">Outstanding</th>
+            <th>Mode</th><th>Reference</th>
+            <th class="ds-mid text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this advance? Anything it posted to the ledger is cancelled.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form id="confirmDeleteForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  let table = null;
+
+  const today = localDay();
+  // Advances are recovered over months, so a week's window would hide most
+  // of what is still open. Ninety days back by default.
+  $("#from-date").val(localDay(new Date(Date.now() - 89 * 86400000)));
+  $("#to-date").val(today);
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function renderRows(rows) {
+    if (table) { table.destroy(); }
+    const tbody = $("#advance-table tbody");
+    tbody.empty();
+    rows.forEach(function (row) {
+      // A cleared advance is history; an open one is money still owed, and
+      // that is the figure somebody scanning this page is looking for.
+      const cleared = row.is_cleared;
+      const outstandingCell = cleared
+        ? `<span class="badge bg-success">Cleared</span>`
+        : `<strong class="text-danger">${Number(row.outstanding).toFixed(2)}</strong>`;
+      tbody.append(`<tr class="${cleared ? 'text-muted' : ''}">
+        <td>${fmtDate(row.date)}</td>
+        <td>${escapeHtml(row.advance_no)}</td>
+        <td>${escapeHtml(row.employee_name) || "-"}</td>
+        <td class="text-end">${Number(row.amount).toFixed(2)}</td>
+        <td class="text-end">${Number(row.recovered).toFixed(2)}</td>
+        <td class="text-end">${outstandingCell}</td>
+        <td>${escapeHtml(row.mode) || "-"}</td>
+        <td>${escapeHtml(row.reference_no) || "-"}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/employee-advance/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+    table = $("#advance-table").DataTable({
+      responsive: true, order: [[0, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: [-1] }],
+      language: { emptyTable: "No data available in table" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'employee_advance_api_list' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+    }, function (rows) {
+      renderRows(rows);
+    }).fail(function () {
+      alert("Failed to load employee advances.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+
+  $(document).on("click", ".delete-button", function () {
+    const id = $(this).data("id");
+    $("#confirmDeleteForm").attr("action", `/employee-advance/${id}/delete/`);
+    $("#deleteConfirmationModal").modal("show");
+  });
+
+  loadRows();
+});
+</script>
+{% endblock %}

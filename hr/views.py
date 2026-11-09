@@ -23,7 +23,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -33,6 +33,8 @@ from hr.models import (
     Department,
     Designation,
     Employee,
+    EmployeeAdvance,
+    EmployeeAdvanceRecovery,
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
@@ -1014,10 +1016,13 @@ class EmployeePayrollDashboardView(View):
         employee_id = request.POST.get("employee_id")
         year = int(request.POST.get("year"))
         month = int(request.POST.get("month"))
+        advance_recovery = request.POST.get("advance_recovery") or 0
 
         try:
             employee = Employee.objects.get(id=employee_id)
-            payroll = self.generate_payroll(employee, year, month, user=request.user)
+            payroll = self.generate_payroll(
+                employee, year, month, user=request.user,
+                advance_recovery=advance_recovery)
 
             return JsonResponse(
                 {
@@ -1030,6 +1035,8 @@ class EmployeePayrollDashboardView(View):
                     "gross_salary": payroll.gross_salary,
                     "deductions": round(payroll.deductions, 2),
                     "net_salary": round(payroll.net_salary, 2),
+                    "advance_outstanding": round(
+                        EmployeeAdvance.outstanding_for(employee), 2),
                 },
                 status=200,
             )
@@ -1045,7 +1052,7 @@ class EmployeePayrollDashboardView(View):
                 {"success": False, "message": "An error occurred"}, status=500
             )
 
-    def generate_payroll(self, employee, year, month, user=None):
+    def generate_payroll(self, employee, year, month, user=None, advance_recovery=0):
         """
         Generate payroll for an employee based on attendance and leave records.
         If the employee has no attendance or leave in the given month, set working days to 0.
@@ -1096,14 +1103,20 @@ class EmployeePayrollDashboardView(View):
         payable_salary = (Decimal(str(working_days)) * Decimal(str(employee.daily_wage))
                           if working_days > 0 else Decimal("0"))
 
-        # Recovered this month: the standing advance against the employee.
-        deductions = Decimal(str(employee.advance or 0))
-        # Net is what actually gets paid out. Deductions were being recorded
-        # and then ignored here, so an employee carrying an advance was shown
-        # — and would have been paid — their full earned salary. Never below
-        # zero: an advance larger than the month's earnings is recovered over
-        # following months, not clawed back as a negative payslip.
-        net_salary = max(payable_salary - deductions, Decimal("0"))
+        # Release anything this month already recovered before asking what is
+        # outstanding, or a re-run would see its own earlier recovery as money
+        # already repaid and cap itself too low.
+        _release_advance_recovery(employee, year, month)
+
+        # How much of the outstanding advance to take back this month. The
+        # operator decides — a recovery is a conversation with the employee,
+        # not a rule — but never more than is owed, and never more than the
+        # month earned: an advance bigger than the wages is recovered over
+        # following months rather than clawed back as a negative payslip.
+        outstanding = Decimal(str(EmployeeAdvance.outstanding_for(employee)))
+        requested = Decimal(str(advance_recovery or 0))
+        deductions = max(min(requested, outstanding, payable_salary), Decimal("0"))
+        net_salary = payable_salary - deductions
 
         # Save or update payroll record
         payroll, created = Payroll.objects.update_or_create(
@@ -1119,12 +1132,71 @@ class EmployeePayrollDashboardView(View):
             },
         )
 
+        # Rebuild this month's recoveries from scratch, so re-running a month
+        # replaces what it took rather than taking it twice.
+        _allocate_advance_recovery(payroll, employee, deductions)
+
         # Raise the wage cost and what is owed for it, if the books are
         # taking it yet. Re-generating a month cancels the previous accrual
         # and posts the new figure rather than adding a second one.
         payroll_posting.post_payroll_if_enabled(payroll, user=user)
 
         return payroll
+
+
+def _allocate_advance_recovery(payroll, employee, total):
+    """Spread this month's recovery across the employee's open advances.
+
+    Oldest first, so the longest-standing debt clears before a newer one.
+    The month's recoveries are rebuilt each run — a re-generated payroll
+    replaces what it took rather than recovering the same money twice — and
+    every touched advance's running total is recomputed from the rows that
+    survive, so nothing drifts.
+    """
+    touched = set()
+    remaining = Decimal(str(total or 0))
+    for advance in (EmployeeAdvance.objects
+                    .filter(employee=employee)
+                    .order_by("date", "id")):
+        if remaining <= 0:
+            break
+        take = min(Decimal(str(advance.outstanding)), remaining)
+        if take <= 0:
+            continue
+        EmployeeAdvanceRecovery.objects.create(
+            advance=advance, payroll=payroll, amount=take)
+        remaining -= take
+        touched.add(advance.id)
+
+    _resync_recovered(touched)
+
+
+def _release_advance_recovery(employee, year, month):
+    """Undo whatever a previous run of this month recovered.
+
+    Called before the month is recalculated, so the figures it works from
+    are what was outstanding *going into* the month rather than what its own
+    earlier attempt left behind.
+    """
+    payroll = Payroll.objects.filter(
+        employee=employee, year=year, month=month).first()
+    if payroll is None:
+        return
+    touched = set(payroll.advance_recoveries.values_list("advance_id", flat=True))
+    payroll.advance_recoveries.all().delete()
+    _resync_recovered(touched)
+
+
+def _resync_recovered(advance_ids):
+    """Rebuild each advance's running total from the recovery rows it has.
+
+    The total is stored rather than summed on read, so it has to be put
+    back in step whenever rows are added or removed.
+    """
+    for advance in EmployeeAdvance.objects.filter(id__in=advance_ids):
+        advance.recovered = (advance.recoveries.aggregate(
+            t=Sum("amount"))["t"] or Decimal("0"))
+        advance.save(update_fields=["recovered"])
 
 
 # ---------------------------------------------------------------------------
@@ -2098,3 +2170,161 @@ def employee_payment_api_list(request):
         qs = qs.filter(date__lte=date_from_query(to_date))
     qs = qs.order_by("-date", "-id")
     return JsonResponse([_employee_payment_list_dict(p) for p in qs], safe=False)
+
+
+# ---------------------------------------------------------------------------
+# Employee Advance (HR > Payroll)
+# ---------------------------------------------------------------------------
+
+def _employee_advance_list_dict(a):
+    return {
+        "id": a.id, "date": a.date.isoformat(), "advance_no": a.advance_no,
+        "employee_name": a.employee.full_name or "",
+        "location_name": a.location.name if a.location_id else "",
+        "amount": str(a.amount),
+        "recovered": str(a.recovered),
+        "outstanding": str(a.outstanding),
+        "is_cleared": a.is_cleared,
+        "mode": a.mode,
+        "reference_no": a.reference_no,
+    }
+
+
+def _employee_advance_form_context(a=None):
+    from account.services.bank_cash import active_payment_modes, payment_mode_map
+    from hr.models import EmployeeAdvance
+    return {
+        "advance": a,
+        "next_advance_no": EmployeeAdvance._next_advance_no() if not a else None,
+        "employees": Employee.objects.exclude(relieve=True).order_by("full_name"),
+        "locations": Warehouse.objects.order_by("name"),
+        "accounts": _employee_pay_accounts(),
+        "today": timezone.localdate().isoformat(),
+        "payment_modes": active_payment_modes("payment"),
+        "payment_mode_map_json": json.dumps(payment_mode_map("payment")),
+    }
+
+
+def _apply_posted_employee_advance_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.employee_id = request.POST.get("employee") or None
+    instance.location_id = request.POST.get("location") or None
+    instance.mode = (request.POST.get("mode") or "Cash").strip() or "Cash"
+    instance.pay_account_id = request.POST.get("pay_account") or None
+    instance.amount = Decimal(str(request.POST.get("amount") or 0))
+    instance.reference_no = (request.POST.get("reference_no") or "").strip()
+    instance.remarks = (request.POST.get("remarks") or "").strip()
+
+
+def _recovered_block(advance):
+    """The refusal an advance already recovered against has to give.
+
+    Editing the amount or deleting the row would leave the recovery rows
+    payroll wrote pointing at a parent that has changed underneath them, or
+    at nothing at all. The recoveries are the record of money actually taken
+    back, so the payroll runs that made them are what has to be undone first.
+    """
+    if (advance.recovered or 0) <= 0:
+        return None
+    return (f"Rs {advance.recovered} has already been recovered against this "
+            f"advance through payroll; reverse those payroll runs first.")
+
+
+@login_required(login_url="login")
+def employee_advance_list(request):
+    return render(request, "employee_advance_list.html")
+
+
+@login_required(login_url="login")
+def create_employee_advance(request):
+    """Add a new Employee Advance."""
+    from hr.models import EmployeeAdvance
+    if request.method == "POST":
+        instance = EmployeeAdvance()
+        try:
+            _apply_posted_employee_advance_fields(instance, request)
+            instance.created_by = request.user
+            instance.full_clean(exclude=["advance_no", "created_by"])
+            if instance.amount <= 0:
+                raise ValidationError("Amount must be more than zero.")
+            with transaction.atomic():
+                instance.save()
+                # Inside the transaction: an advance that exists without its
+                # voucher is the silent divergence posting exists to prevent.
+                payroll_posting.post_advance_if_enabled(instance, user=request.user)
+            messages.success(request, "Employee advance added successfully.")
+            return redirect("employee_advance_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "employee_advance_form.html",
+                  _employee_advance_form_context())
+
+
+@login_required(login_url="login")
+def edit_employee_advance(request, id):
+    """Edit an Employee Advance that payroll has not yet recovered against."""
+    from hr.models import EmployeeAdvance
+    instance = get_object_or_404(EmployeeAdvance, id=id)
+
+    blocked = _recovered_block(instance)
+    if blocked:
+        messages.error(request, blocked)
+        return redirect("employee_advance_list")
+
+    if request.method == "POST":
+        try:
+            _apply_posted_employee_advance_fields(instance, request)
+            instance.full_clean(exclude=["advance_no", "created_by"])
+            if instance.amount <= 0:
+                raise ValidationError("Amount must be more than zero.")
+            with transaction.atomic():
+                instance.save()
+                # Re-posting cancels the previous voucher rather than
+                # adding a second one.
+                payroll_posting.post_advance_if_enabled(instance, user=request.user)
+            messages.success(request, "Employee advance updated successfully.")
+            return redirect("employee_advance_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "employee_advance_form.html",
+                  _employee_advance_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_employee_advance(request, id):
+    """Delete an Employee Advance, cancelling whatever it posted."""
+    from hr.models import EmployeeAdvance
+    instance = get_object_or_404(EmployeeAdvance, id=id)
+
+    blocked = _recovered_block(instance)
+    if blocked:
+        messages.error(request, blocked)
+        return redirect("employee_advance_list")
+
+    with transaction.atomic():
+        # Before the delete: the voucher links to its source by generic FK,
+        # so a deleted advance would leave a posting nothing points at.
+        payroll_posting.reverse(instance, user=request.user,
+                                reason="Advance deleted")
+        instance.delete()
+    messages.success(request, "Employee advance deleted successfully.")
+    return redirect("employee_advance_list")
+
+
+@login_required(login_url="login")
+def employee_advance_api_list(request):
+    """JSON rows for the Employee Advance register's DataTable + filter bar."""
+    from hr.models import EmployeeAdvance
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+
+    qs = EmployeeAdvance.objects.select_related("employee", "location")
+    if from_date:
+        qs = qs.filter(date__gte=date_from_query(from_date))
+    if to_date:
+        qs = qs.filter(date__lte=date_from_query(to_date))
+    qs = qs.order_by("-date", "-id")
+    return JsonResponse([_employee_advance_list_dict(a) for a in qs], safe=False)

@@ -3,6 +3,7 @@ $(document).ready(function() {
         const employee = document.getElementById('employeeSelect');
         const year = document.getElementById('yearSelect');
         const month = document.getElementById('monthSelect');
+        const advanceRecovery = document.getElementById('advanceRecovery');
     
         // Basic validation
         if (!employee.value || !year.value || !month.value) {
@@ -16,7 +17,8 @@ $(document).ready(function() {
             data: {
                 employee_id: employee.value,
                 year: year.value,
-                month: month.value
+                month: month.value,
+                advance_recovery: advanceRecovery ? (advanceRecovery.value || 0) : 0
             },
             success: function(response) {
                 dynamicloadtable(response);
@@ -31,7 +33,7 @@ $(document).ready(function() {
     function dynamicloadtable(response) {
         // Extract data from the response
         const { employee, year, month, total_working_days, payable_salary,
-                gross_salary, deductions, net_salary } = response;
+                gross_salary, deductions, net_salary, advance_outstanding } = response;
 
         // Create a new table row with the data
         const newRow = `
@@ -44,6 +46,7 @@ $(document).ready(function() {
                 <td>${gross_salary}</td>
                 <td>${deductions}</td>
                 <td><strong>${net_salary}</strong></td>
+                <td>${advance_outstanding}</td>
             </tr>
         `;
     
