@@ -3,8 +3,7 @@
 """models configuration for HR Management"""
 
 import random
-from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date
 from django.db import models
 
 from Hitech_BIMS.minting import mint_with_retry
@@ -368,46 +367,6 @@ class Payroll(models.Model):
     def __str__(self):
         """Returns a string representation of this object with the given fields."""
         return f"{self.employee.full_name} - {self.month}/{self.year}"
-
-    def calculate_total_working_days(self):
-        """Calculate total working days for the payroll month."""
-        # Get the number of days in the month
-        days_in_month = monthrange(self.year, self.month)[1]
-        start_date = date(self.year, self.month, 1)
-        end_date = date(self.year, self.month, days_in_month)
-
-        # Count total weekdays (Monday-Friday) as working days
-        total_workable_days = sum(
-            1
-            for single_day in (
-                start_date + timedelta(days=i) for i in range(days_in_month)
-            )
-            if single_day.weekday() < 5  # 0-4 are Monday to Friday
-        )
-
-        # Fetch attendance records
-        attendance_records = Attendance.objects.filter(
-            employee=self.employee, date__range=(start_date, end_date)
-        )
-
-        # Fetch approved leave records
-        approved_leaves = LeaveSelectedDate.objects.filter(
-            leave_request__employee=self.employee,
-            leave_request__status="Approved",
-            date__range=(start_date, end_date),
-        )
-
-        # Count attendance details
-        present_days = attendance_records.filter(status="Present").count()
-        first_half_days = attendance_records.filter(status="First Half").count() * 0.5
-        second_half_days = attendance_records.filter(status="Second Half").count() * 0.5
-        leave_days = approved_leaves.count()  # Only approved leaves count
-
-        # Calculate total working days
-        total_working_days = (
-            total_workable_days - leave_days + first_half_days + second_half_days
-        )
-        return max(0, total_working_days)  # Ensure it doesn't go negative
 
 
 class EmployeeVehicle(models.Model):

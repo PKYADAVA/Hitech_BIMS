@@ -149,6 +149,32 @@
             </div>
             
           
+            <!-- Department Dropdown -->
+            <div class="col-md-4">
+              <label for="department">Department</label>
+              <select class="form-control" id="department" name="department">
+                <option value="" {% if not employee.department_id %}selected{% endif %}>Select Department</option>
+                {% for department in department_detail %}
+                  <option value="{{ department.id }}" {% if employee.department_id == department.id %}selected{% endif %}>
+                    {{ department.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Shift Dropdown -->
+            <div class="col-md-4">
+              <label for="shift">Shift</label>
+              <select class="form-control" id="shift" name="shift">
+                <option value="" {% if not employee.shift_id %}selected{% endif %}>Select Shift</option>
+                {% for shift in shift_detail %}
+                  <option value="{{ shift.id }}" {% if employee.shift_id == shift.id %}selected{% endif %}>
+                    {{ shift.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
             <div class="col-md-4">
               <label for="salary_type">Salary Type</label>
               <select class="form-control" id="salary_type" name="salary_type">

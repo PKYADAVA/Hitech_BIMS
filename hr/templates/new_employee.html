@@ -126,6 +126,24 @@
           </select>
         </div>
         <div class="col-md-4">
+          <label class="form-label" for="department">Department</label>
+          <select class="form-select" id="department" name="department">
+            <option value="" selected>Select Department</option>
+            {% for department in department_detail %}
+              <option value="{{ department.id }}">{{ department.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="shift">Shift</label>
+          <select class="form-select" id="shift" name="shift">
+            <option value="" selected>Select Shift</option>
+            {% for shift in shift_detail %}
+              <option value="{{ shift.id }}">{{ shift.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
           <label class="form-label" for="salary_type">Salary Type</label>
           <select class="form-select" id="salary_type" name="salary_type">
             <option value="Monthly">Monthly</option>

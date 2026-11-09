@@ -30,8 +30,9 @@ $(document).ready(function() {
 
     function dynamicloadtable(response) {
         // Extract data from the response
-        const { employee, year, month, total_working_days, payable_salary, gross_salary } = response;
-    
+        const { employee, year, month, total_working_days, payable_salary,
+                gross_salary, deductions, net_salary } = response;
+
         // Create a new table row with the data
         const newRow = `
             <tr>
@@ -41,6 +42,8 @@ $(document).ready(function() {
                 <td>${total_working_days}</td>
                 <td>${payable_salary}</td>
                 <td>${gross_salary}</td>
+                <td>${deductions}</td>
+                <td><strong>${net_salary}</strong></td>
             </tr>
         `;
     

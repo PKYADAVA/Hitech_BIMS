@@ -7,6 +7,7 @@ import json
 import logging
 from calendar import monthrange
 from datetime import date, timedelta
+from decimal import Decimal
 import requests
 from django.conf import settings
 from django.forms import ValidationError
@@ -99,6 +100,8 @@ def create_new_employee(request):
             correspondence_address = request.POST.get("correspondence_address")
             warehouse_id = request.POST.get("warehouse")
             group_id = request.POST.get("group")
+            department_id = request.POST.get("department")
+            shift_id = request.POST.get("shift")
             salary_type = request.POST.get("salary_type")
             advance = request.POST.get("advance")
             bank_name = request.POST.get("bank_name")
@@ -157,6 +160,10 @@ def create_new_employee(request):
                          if str(warehouse_id or "").isdigit() else None)
             group = (Group.objects.filter(id=group_id).first()
                      if str(group_id or "").isdigit() else None)
+            department = (Department.objects.filter(id=department_id).first()
+                          if str(department_id or "").isdigit() else None)
+            shift = (Shift.objects.filter(id=shift_id).first()
+                     if str(shift_id or "").isdigit() else None)
 
             employee = Employee(
                 full_name=full_name,
@@ -177,6 +184,8 @@ def create_new_employee(request):
                 correspondence_address=correspondence_address,
                 warehouse=warehouse,
                 group=group,
+                department=department,
+                shift=shift,
                 salary=int(salary) if salary else 0,
                 salary_type=salary_type,
                 advance=int(advance) if advance else 0,
@@ -209,6 +218,8 @@ def create_new_employee(request):
         "designation_detail": designations_details,
         "group_detail": Group.objects.all(),
         "warehouse_detail": Warehouse.objects.all(),
+        "department_detail": Department.objects.filter(is_active=True).order_by("name"),
+        "shift_detail": Shift.objects.filter(is_active=True).order_by("name"),
         "login_detail": available_logins(),
     }
     return render(request, "new_employee.html", context)
@@ -275,6 +286,15 @@ def edit_employee(request, pk):
                     employee.group = (
                         Group.objects.filter(id=group_id).first() if group_id else None
                     )
+                    department_id = request.POST.get("department")
+                    employee.department = (
+                        Department.objects.filter(id=department_id).first()
+                        if department_id else None
+                    )
+                    shift_id = request.POST.get("shift")
+                    employee.shift = (
+                        Shift.objects.filter(id=shift_id).first() if shift_id else None
+                    )
 
                     if request.POST.get("salary"):
                         employee.salary = float(request.POST.get("salary"))
@@ -336,6 +356,8 @@ def edit_employee(request, pk):
             "designation_detail": Designation.objects.all(),
             "group_detail": Group.objects.all(),
             "warehouse_detail": Warehouse.objects.all(),
+            "department_detail": Department.objects.filter(is_active=True).order_by("name"),
+            "shift_detail": Shift.objects.filter(is_active=True).order_by("name"),
             "login_detail": available_logins(employee),
         }
 
@@ -1004,6 +1026,8 @@ class EmployeePayrollDashboardView(View):
                     "total_working_days": payroll.total_working_days,
                     "payable_salary": round(payroll.payable_salary, 2),
                     "gross_salary": payroll.gross_salary,
+                    "deductions": round(payroll.deductions, 2),
+                    "net_salary": round(payroll.net_salary, 2),
                 },
                 status=200,
             )
@@ -1064,8 +1088,20 @@ class EmployeePayrollDashboardView(View):
         if not attendance_records.exists() and not leave_records.exists():
             working_days = 0
 
-        # Calculate payable salary based on working days
-        payable_salary = working_days * employee.daily_wage if working_days > 0 else 0
+        # What the days worked earn, before anything is taken off. Decimal
+        # throughout: working_days carries half-days as floats, and
+        # float * Decimal is a TypeError.
+        payable_salary = (Decimal(str(working_days)) * Decimal(str(employee.daily_wage))
+                          if working_days > 0 else Decimal("0"))
+
+        # Recovered this month: the standing advance against the employee.
+        deductions = Decimal(str(employee.advance or 0))
+        # Net is what actually gets paid out. Deductions were being recorded
+        # and then ignored here, so an employee carrying an advance was shown
+        # — and would have been paid — their full earned salary. Never below
+        # zero: an advance larger than the month's earnings is recovered over
+        # following months, not clawed back as a negative payslip.
+        net_salary = max(payable_salary - deductions, Decimal("0"))
 
         # Save or update payroll record
         payroll, created = Payroll.objects.update_or_create(
@@ -1074,8 +1110,8 @@ class EmployeePayrollDashboardView(View):
             year=year,
             defaults={
                 "gross_salary": employee.salary,
-                "deductions": employee.advance,  # Modify as needed
-                "net_salary": payable_salary,  # Assuming net salary is based on working days
+                "deductions": deductions,
+                "net_salary": net_salary,
                 "total_working_days": working_days,
                 "payable_salary": payable_salary,
             },
