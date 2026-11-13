@@ -1056,6 +1056,7 @@ class EmployeePayrollDashboardView(View):
             return JsonResponse(
                 {
                     "success": True,
+                    "payroll_id": payroll.id,
                     "employee": employee.full_name,
                     "month": month,
                     "year": year,
@@ -1392,6 +1393,72 @@ def payroll_period_status(request):
     return JsonResponse({
         "year": year, "month": month,
         "locked": PayrollPeriod.is_locked(year, month),
+    })
+
+
+@login_required(login_url="login")
+def payslip(request, payroll_id):
+    """One employee's payslip for one month, laid out to print.
+
+    The per-component breakdown is not stored on Payroll — only the totals
+    are — so it is recomputed here from the employee's structure, using the
+    same earned ratio and the same ``date(year, month, 1)`` reading of that
+    structure that ``generate_payroll`` used. An employee with no structure
+    has nothing to break down, and their whole pay is the one Basic line
+    the flat path actually pays them.
+    """
+    from account.models import company_for_warehouse
+    from calendar import monthrange as _monthrange
+
+    payroll = get_object_or_404(
+        Payroll.objects.select_related(
+            "employee", "employee__designation", "employee__department",
+            "employee__warehouse"),
+        id=payroll_id)
+    employee = payroll.employee
+    on_date = date(payroll.year, payroll.month, 1)
+
+    _, total_days = _monthrange(payroll.year, payroll.month)
+    payable_days = sum(
+        1 for day in range(1, total_days + 1)
+        if date(payroll.year, payroll.month, day).weekday() not in (5, 6)
+    )
+    worked = Decimal(str(payroll.total_working_days or 0))
+    earned_ratio = (worked / Decimal(str(payable_days))
+                    if payable_days else Decimal("0"))
+
+    earnings, deductions = salary_structure.breakdown_for_month(
+        employee, on_date, earned_ratio)
+    if not earnings:
+        # No structure: the flat path pays the whole thing as basic salary,
+        # so that is what the slip shows rather than an empty table.
+        earnings = [{"component": None, "name": "Basic Salary",
+                     "amount": Decimal(str(payroll.payable_salary or 0))}]
+
+    # Advances recovered this month are a deduction like any other, but they
+    # name the advance they came off so the employee can follow the balance.
+    recoveries = list(payroll.advance_recoveries.select_related("advance"))
+    deduction_rows = [{"name": d["name"], "amount": d["amount"]} for d in deductions]
+    for recovery in recoveries:
+        deduction_rows.append({
+            "name": f"Advance Recovery ({recovery.advance.advance_no})",
+            "amount": Decimal(str(recovery.amount or 0)),
+        })
+
+    total_earnings = sum((e["amount"] for e in earnings), Decimal("0"))
+    total_deductions = sum((d["amount"] for d in deduction_rows), Decimal("0"))
+
+    return render(request, "payslip.html", {
+        "payroll": payroll,
+        "employee": employee,
+        "company": company_for_warehouse(employee.warehouse),
+        "period": date(payroll.year, payroll.month, 1),
+        "payable_days": payable_days,
+        "earnings": earnings,
+        "deductions": deduction_rows,
+        "total_earnings": total_earnings,
+        "total_deductions": total_deductions,
+        "net_pay": payroll.net_salary,
     })
 
 
@@ -2701,3 +2768,173 @@ def employee_advance_api_list(request):
         qs = qs.filter(date__lte=date_from_query(to_date))
     qs = qs.order_by("-date", "-id")
     return JsonResponse([_employee_advance_list_dict(a) for a in qs], safe=False)
+
+
+# ---------------------------------------------------------------------------
+# HR > Reports
+#
+# Read-only throughout. Figures are read off what payroll and attendance
+# actually stored rather than recomputed, so a report cannot disagree with
+# the run it is reporting on.
+# ---------------------------------------------------------------------------
+
+def _report_month(request):
+    """The month a report is looking at, defaulting to the current one."""
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get("year") or today.year)
+        month = int(request.GET.get("month") or today.month)
+    except (TypeError, ValueError):
+        year, month = today.year, today.month
+    if not 1 <= month <= 12:
+        month = today.month
+    return year, month
+
+
+def _report_employees(request):
+    """Employees in scope, filtered by the report's own pickers."""
+    from hr.services import reports as rpt
+
+    include_relieved = request.GET.get("include_relieved") == "1"
+    qs = rpt.active_employees(include_relieved=include_relieved)
+    for param, field in (("department", "department_id"),
+                         ("designation", "designation_id"),
+                         ("warehouse", "warehouse_id"),
+                         ("employee", "id")):
+        value = (request.GET.get(param) or "").strip()
+        if value.isdigit():
+            qs = qs.filter(**{field: int(value)})
+    return qs
+
+
+def _report_filter_context(request):
+    """The option lists every HR report's filter bar offers."""
+    return {
+        "departments": Department.objects.filter(is_active=True).order_by("name"),
+        "designations": Designation.objects.all().order_by("title"),
+        "warehouses": Warehouse.objects.all().order_by("name"),
+        "employees_all": Employee.objects.exclude(relieve=True).order_by("full_name"),
+        "f_department": request.GET.get("department", ""),
+        "f_designation": request.GET.get("designation", ""),
+        "f_warehouse": request.GET.get("warehouse", ""),
+        "f_employee": request.GET.get("employee", ""),
+        "include_relieved": request.GET.get("include_relieved") == "1",
+        "year_choices": range(timezone.localdate().year - 5,
+                              timezone.localdate().year + 1),
+        "month_choices": [(i, date(2000, i, 1).strftime("%B")) for i in range(1, 13)],
+    }
+
+
+@login_required(login_url="login")
+def hr_attendance_report(request):
+    """HR > Reports > Attendance Register — employee x day for a month."""
+    from account.models import CompanyProfile
+    from hr.services import reports as rpt
+
+    year, month = _report_month(request)
+    employees = list(_report_employees(request))
+    days, rows = rpt.attendance_register(year, month, employees)
+
+    totals = {
+        "present": sum((r["present_days"] for r in rows), Decimal("0")),
+        "leave": sum((r["leave_days"] for r in rows), Decimal("0")),
+        "worked_hours": round(sum(r["worked_hours"] for r in rows), 1),
+        "ot_hours": round(sum(r["ot_hours"] for r in rows), 1),
+    }
+    context = {
+        "days": days, "rows": rows, "totals": totals,
+        "year": year, "month": month,
+        "month_name": date(year, month, 1).strftime("%B %Y"),
+        "criteria": f"{date(year, month, 1):%B %Y}   {len(rows)} employee(s)",
+        "company": CompanyProfile.get_solo(),
+    }
+    context.update(_report_filter_context(request))
+    return render(request, "hr_attendance_report.html", context)
+
+
+@login_required(login_url="login")
+def hr_leave_report(request):
+    """HR > Reports > Leave Register — requests in a window, plus balances."""
+    from account.models import CompanyProfile
+    from hr.services import reports as rpt
+    from hr.services.leave_balance import leave_balance
+
+    today = timezone.localdate()
+    from_raw = (request.GET.get("from_date") or "").strip()
+    to_raw = (request.GET.get("to_date") or "").strip()
+    if not from_raw and not to_raw:
+        from_raw = date(today.year, 1, 1).isoformat()
+        to_raw = date(today.year, 12, 31).isoformat()
+    from_date = date_from_query(from_raw)
+    to_date = date_from_query(to_raw)
+    status = (request.GET.get("status") or "").strip()
+
+    employees = list(_report_employees(request))
+    rows = rpt.leave_register(from_date, to_date, employees, status=status)
+
+    # Balance is a per-employee, per-year figure, so it only means
+    # something once the report is narrowed to one person.
+    balance_rows, balance_employee = [], None
+    if len(employees) == 1:
+        balance_employee = employees[0]
+        balance_rows = leave_balance(balance_employee,
+                                     (to_date or today).year)
+
+    context = {
+        "rows": rows, "from_date": from_raw, "to_date": to_raw,
+        "status": status,
+        "balance_rows": balance_rows, "balance_employee": balance_employee,
+        "balance_year": (to_date or today).year,
+        "total_days": sum(r["day_count"] for r in rows),
+        "criteria": f"From: {from_raw or 'Beginning'}   To: {to_raw or 'Date'}"
+                    f"   {len(rows)} request(s)",
+        "company": CompanyProfile.get_solo(),
+    }
+    context.update(_report_filter_context(request))
+    return render(request, "hr_leave_report.html", context)
+
+
+@login_required(login_url="login")
+def hr_payroll_report(request):
+    """HR > Reports > Payroll Register — what a month actually paid."""
+    from account.models import CompanyProfile
+    from hr.models import PayrollPeriod
+    from hr.services import reports as rpt
+
+    year, month = _report_month(request)
+    employees = list(_report_employees(request))
+    rows = rpt.payroll_register(year, month, employees)
+    totals = rpt.sum_rows(rows, "gross", "payable", "deductions",
+                          "net", "recovered")
+    totals["days"] = sum((Decimal(str(r["days"] or 0)) for r in rows),
+                         Decimal("0"))
+
+    context = {
+        "rows": rows, "totals": totals, "year": year, "month": month,
+        "month_name": date(year, month, 1).strftime("%B %Y"),
+        "locked": PayrollPeriod.is_locked(year, month),
+        "criteria": f"{date(year, month, 1):%B %Y}   {len(rows)} payroll row(s)",
+        "company": CompanyProfile.get_solo(),
+    }
+    context.update(_report_filter_context(request))
+    return render(request, "hr_payroll_report.html", context)
+
+
+@login_required(login_url="login")
+def hr_employee_report(request):
+    """HR > Reports > Employee Master — the staff list, as a report."""
+    from account.models import CompanyProfile
+
+    employees = list(_report_employees(request))
+    active = sum(1 for e in employees if not e.relieve)
+    context = {
+        "rows": employees,
+        "active_count": active,
+        "relieved_count": len(employees) - active,
+        "total_salary": sum((Decimal(str(e.salary or 0)) for e in employees),
+                            Decimal("0")),
+        "criteria": f"{len(employees)} employee(s)",
+        "company": CompanyProfile.get_solo(),
+    }
+    context.update(_report_filter_context(request))
+    return render(request, "hr_employee_report.html", context)

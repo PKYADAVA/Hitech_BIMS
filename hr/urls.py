@@ -26,6 +26,7 @@ from hr.views import (
     payroll_period_lock,
     payroll_period_status,
     payroll_run_all,
+    payslip,
     LeaveTypeAPI,
     EmployeeGroupTemplateView,
     EmployeeGroupAPI,
@@ -51,6 +52,10 @@ from hr.views import (
     edit_employee_advance,
     delete_employee_advance,
     employee_advance_api_list,
+    hr_attendance_report,
+    hr_employee_report,
+    hr_leave_report,
+    hr_payroll_report,
 )
 
 
@@ -85,6 +90,7 @@ urlpatterns = [
     path("payroll/period/lock/", payroll_period_lock, name="payroll_period_lock"),
     path("payroll/period/status/", payroll_period_status,
          name="payroll_period_status"),
+    path("payslip/<int:payroll_id>/", payslip, name="payslip"),
     path("salary-component/", SalaryComponentTemplateView.as_view(),
          name="salary_component"),
     path("salary_component_list/", SalaryComponentAPI.as_view(),
@@ -147,6 +153,13 @@ urlpatterns = [
          name="employee_advance_delete"),
     path("employee_advance_api/", employee_advance_api_list,
          name="employee_advance_api_list"),
+    # HR > Reports (read-only)
+    path("hr-reports/attendance/", hr_attendance_report,
+         name="hr_attendance_report"),
+    path("hr-reports/leave/", hr_leave_report, name="hr_leave_report"),
+    path("hr-reports/payroll/", hr_payroll_report, name="hr_payroll_report"),
+    path("hr-reports/employees/", hr_employee_report,
+         name="hr_employee_report"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

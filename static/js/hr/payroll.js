@@ -32,7 +32,7 @@ $(document).ready(function() {
 
     function dynamicloadtable(response) {
         // Extract data from the response
-        const { employee, year, month, total_working_days, payable_salary,
+        const { payroll_id, employee, year, month, total_working_days, payable_salary,
                 gross_salary, deductions, net_salary, advance_outstanding } = response;
 
         // Create a new table row with the data
@@ -47,6 +47,12 @@ $(document).ready(function() {
                 <td>${deductions}</td>
                 <td><strong>${net_salary}</strong></td>
                 <td>${advance_outstanding}</td>
+                <td>
+                    <a class="btn btn-sm btn-outline-primary" target="_blank"
+                       href="/payslip/${payroll_id}/" title="Open payslip">
+                        <i class="fas fa-file-invoice-dollar"></i> Payslip
+                    </a>
+                </td>
             </tr>
         `;
     
