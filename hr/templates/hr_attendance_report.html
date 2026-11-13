@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Attendance Register — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_hr_report_subnavbar.html' with active_tab='hr_attendance_report' %}
+
+<style>
+  .ar-table { font-size:.72rem; }
+  .ar-table th, .ar-table td { white-space:nowrap; vertical-align:middle; padding:.3rem .35rem; text-align:center; }
+  .ar-table thead th { background-color:#1b3a6b !important; color:#fff !important; font-weight:600;
+                       border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .ar-table td.name, .ar-table th.name { text-align:left; min-width:190px; position:sticky; left:0;
+                                         background:#fff; z-index:1; }
+  .ar-table thead th.name { z-index:3; background-color:#1b3a6b !important; }
+  .ar-table td.num, .ar-table th.num { text-align:right; }
+  .ar-table tbody tr:hover td { background:#f4f8fc; }
+  .ar-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+  .ar-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  /* Weekends are skipped by payroll, so they read as shaded rather than as
+     a day somebody failed to turn up for. */
+  .ar-we { background:#f1f3f7 !important; color:#aeb6c4; }
+  .ar-p { color:#178a53; font-weight:700; }
+  .ar-a { color:#c0392b; font-weight:700; }
+  .ar-l { color:#2b62c9; font-weight:700; }
+  .ar-h { color:#d8862a; font-weight:700; }
+  .ar-legend { font-size:.7rem; color:#6c757d; margin:.35rem 0 .5rem; }
+  .ar-legend .leg { margin-right:1.1rem; white-space:nowrap; }
+</style>
+
+{% include '_report_letterhead.html' with title='Attendance Register' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label">Year</label>
+      <select name="year" class="form-select form-select-sm">
+        {% for y in year_choices %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Month</label>
+      <select name="month" class="form-select form-select-sm">
+        {% for num, label in month_choices %}<option value="{{ num }}" {% if num == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if f_department == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Designation</label>
+      <select name="designation" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in designations %}<option value="{{ d.id }}" {% if f_designation == d.id|stringformat:"s" %}selected{% endif %}>{{ d.title }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Branch</label>
+      <select name="warehouse" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if f_warehouse == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">&nbsp;</label>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="include_relieved" value="1"
+               id="incRel" {% if include_relieved %}checked{% endif %}>
+        <label class="form-check-label" for="incRel" style="font-size:.7rem;">Include relieved</label>
+      </div></div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'hr_attendance_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="ar-legend">
+  <span class="leg"><span class="ar-p">P</span> Present</span>
+  <span class="leg"><span class="ar-a">A</span> Absent</span>
+  <span class="leg"><span class="ar-l">L</span> On Leave</span>
+  <span class="leg"><span class="ar-h">F / S / H</span> Half day</span>
+  <span class="leg"><span style="color:#aeb6c4;">Shaded</span> Weekend (not counted by payroll)</span>
+</div>
+
+{% if rows %}
+<div class="ar-scroll">
+  <table class="table table-bordered table-sm ar-table mb-0">
+    <thead>
+      <tr>
+        <th class="name">Employee</th>
+        {% for d in days %}<th class="{% if d.is_weekend %}ar-we{% endif %}">{{ d.day }}</th>{% endfor %}
+        <th class="num">Present</th>
+        <th class="num">Leave</th>
+        <th class="num">Worked Hrs</th>
+        <th class="num">OT Hrs</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="name">{{ r.employee.full_name }}<br>
+          <small class="text-muted">#{{ r.employee.employee_id }}</small></td>
+        {% for c in r.cells %}
+        <td class="{% if c.is_weekend %}ar-we{% endif %}" title="{{ c.label }}">
+          {% if c.code == 'P' %}<span class="ar-p">P</span>
+          {% elif c.code == 'A' %}<span class="ar-a">A</span>
+          {% elif c.code == 'L' %}<span class="ar-l">L</span>
+          {% elif c.code %}<span class="ar-h">{{ c.code }}</span>
+          {% else %}&mdash;{% endif %}
+        </td>
+        {% endfor %}
+        <td class="num">{{ r.present_days }}</td>
+        <td class="num">{{ r.leave_days }}</td>
+        <td class="num">{{ r.worked_hours }}</td>
+        <td class="num">{{ r.ot_hours }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="name">Total</td>
+        <td colspan="{{ days|length }}"></td>
+        <td class="num">{{ totals.present }}</td>
+        <td class="num">{{ totals.leave }}</td>
+        <td class="num">{{ totals.worked_hours }}</td>
+        <td class="num">{{ totals.ot_hours }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No employees match these filters.</div>
+{% endif %}
+
+{% endblock content %}

@@ -445,7 +445,10 @@ MODULE_REGISTRY = [
             {
                 "label": "Payroll",
                 "tabs": [
-                    ("payroll", "Payroll"),
+                    ("payroll", "Payroll", (
+                        "payslip", "payroll_run_all",
+                        "payroll_period_lock", "payroll_period_status",
+                    )),
                     ("employee_payment_list", "Employee Payment", (
                         "employee_payment_add", "employee_payment_edit",
                         "employee_payment_delete", "employee_payment_api_list",
@@ -459,6 +462,15 @@ MODULE_REGISTRY = [
                         "salary_component_create", "salary_component_update",
                         "salary_component_delete",
                     )),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("hr_attendance_report", "Attendance Register"),
+                    ("hr_leave_report", "Leave Register"),
+                    ("hr_payroll_report", "Payroll Register"),
+                    ("hr_employee_report", "Employee Master"),
                 ],
             },
             {

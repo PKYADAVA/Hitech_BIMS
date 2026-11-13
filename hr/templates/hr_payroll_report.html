@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Payroll Register — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_hr_report_subnavbar.html' with active_tab='hr_payroll_report' %}
+
+<style>
+  .pr-table { font-size:.75rem; }
+  .pr-table th, .pr-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
+  .pr-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center;
+                       font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .pr-table td.num, .pr-table th.num { text-align:right; }
+  .pr-table tbody tr:hover td { background:#f4f8fc; }
+  .pr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+  .pr-scroll { max-height:70vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .pr-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:.5rem; margin-bottom:.6rem; }
+  @media (max-width:1100px){ .pr-kpis { grid-template-columns:repeat(3,1fr); } }
+  .pr-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem; padding:.5rem .6rem;
+            display:flex; align-items:center; gap:.55rem; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .pr-kpi .k-label { font-size:.63rem; color:#6c757d; font-weight:600; white-space:nowrap; }
+  .pr-kpi .k-num { font-size:1rem; font-weight:800; line-height:1.1; white-space:nowrap; color:#1b3a6b; }
+  .pr-kpi .k-ico { flex:0 0 auto; width:2.4rem; height:2.4rem; border-radius:.5rem; display:flex;
+                   align-items:center; justify-content:center; font-size:1.1rem;
+                   background:#e7f0ff; color:#3b6fd4; }
+  .rec-note { font-size:.66rem; color:#6c757d; }
+</style>
+
+{% include '_report_letterhead.html' with title='Payroll Register' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label">Year</label>
+      <select name="year" class="form-select form-select-sm">
+        {% for y in year_choices %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Month</label>
+      <select name="month" class="form-select form-select-sm">
+        {% for num, label in month_choices %}<option value="{{ num }}" {% if num == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if f_department == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Branch</label>
+      <select name="warehouse" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if f_warehouse == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'hr_payroll_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+{% if locked %}
+<div class="alert alert-secondary py-2" style="font-size:.78rem;">
+  <i class="fas fa-lock me-1"></i>{{ month_name }} is locked — these figures are final.
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="pr-kpis">
+  <div class="pr-kpi"><div class="k-ico"><i class="fas fa-users"></i></div>
+    <div><div class="k-label">Employees Paid</div><div class="k-num">{{ rows|length }}</div></div></div>
+  <div class="pr-kpi"><div class="k-ico"><i class="fas fa-calendar-check"></i></div>
+    <div><div class="k-label">Total Days</div><div class="k-num">{{ totals.days }}</div></div></div>
+  <div class="pr-kpi"><div class="k-ico"><i class="fas fa-sack-dollar"></i></div>
+    <div><div class="k-label">Payable</div><div class="k-num">₹ {{ totals.payable|indian_currency }}</div></div></div>
+  <div class="pr-kpi"><div class="k-ico"><i class="fas fa-arrow-down"></i></div>
+    <div><div class="k-label">Advance Recovered</div><div class="k-num">₹ {{ totals.recovered|indian_currency }}</div></div></div>
+  <div class="pr-kpi"><div class="k-ico"><i class="fas fa-hand-holding-dollar"></i></div>
+    <div><div class="k-label">Net Paid</div><div class="k-num">₹ {{ totals.net|indian_currency }}</div></div></div>
+</div>
+
+<div class="pr-scroll">
+  <table class="table table-bordered table-sm pr-table mb-0">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th class="num">Days Worked</th>
+        <th class="num">Gross</th>
+        <th class="num">Payable</th>
+        <th class="num">Deductions</th>
+        <th>Advance Recovery</th>
+        <th class="num">Net Pay</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.employee.full_name }}<br><small class="text-muted">#{{ r.employee.employee_id }}</small></td>
+        <td class="num">{{ r.days }}</td>
+        <td class="num">{{ r.gross|indian_currency }}</td>
+        <td class="num">{{ r.payable|indian_currency }}</td>
+        <td class="num">{{ r.deductions|indian_currency }}</td>
+        <td>
+          {% for rec in r.recoveries %}
+            <div class="rec-note">{{ rec.advance_no }} — ₹{{ rec.amount|indian_currency }}</div>
+          {% empty %}—{% endfor %}
+        </td>
+        <td class="num"><strong>{{ r.net|indian_currency }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Total</td>
+        <td class="num">{{ totals.days }}</td>
+        <td class="num">{{ totals.gross|indian_currency }}</td>
+        <td class="num">{{ totals.payable|indian_currency }}</td>
+        <td class="num">{{ totals.deductions|indian_currency }}</td>
+        <td class="num">{{ totals.recovered|indian_currency }}</td>
+        <td class="num">{{ totals.net|indian_currency }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">
+  No payroll has been processed for {{ month_name }}.
+</div>
+{% endif %}
+
+{% endblock content %}

@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Leave Register — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_hr_report_subnavbar.html' with active_tab='hr_leave_report' %}
+
+<style>
+  .lr-table { font-size:.75rem; }
+  .lr-table th, .lr-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
+  .lr-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center;
+                       font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .lr-table td.num, .lr-table th.num { text-align:right; }
+  .lr-table td.wrap { white-space:normal; max-width:280px; }
+  .lr-table tbody tr:hover td { background:#f4f8fc; }
+  .lr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+  .lr-scroll { max-height:60vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .bal-card { background:#fff; border:1px solid #eef0f4; border-radius:.55rem; padding:.6rem .8rem;
+              margin-bottom:.7rem; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .bal-card h6 { font-size:.8rem; font-weight:700; margin-bottom:.45rem; }
+  .bal-table { font-size:.74rem; margin-bottom:0; }
+  .bal-table th { background:#eef1f6; font-weight:600; }
+  .bal-table td.num, .bal-table th.num { text-align:right; }
+  .neg { color:#c0392b; font-weight:700; }
+</style>
+
+{% include '_report_letterhead.html' with title='Leave Register' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label">Employee</label>
+      <select name="employee" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for e in employees_all %}<option value="{{ e.id }}" {% if f_employee == e.id|stringformat:"s" %}selected{% endif %}>{{ e.full_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if f_department == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        <option value="Approved" {% if status == 'Approved' %}selected{% endif %}>Approved</option>
+        <option value="Pending" {% if status == 'Pending' %}selected{% endif %}>Pending</option>
+        <option value="Rejected" {% if status == 'Rejected' %}selected{% endif %}>Rejected</option>
+      </select></div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'hr_leave_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+{% if balance_rows %}
+<div class="bal-card">
+  <h6><i class="fas fa-scale-balanced me-1"></i>Leave Balance — {{ balance_employee.full_name }} ({{ balance_year }})</h6>
+  <table class="table table-bordered table-sm bal-table">
+    <thead>
+      <tr><th>Leave Type</th><th class="num">Entitled</th><th class="num">Taken</th><th class="num">Balance</th></tr>
+    </thead>
+    <tbody>
+      {% for b in balance_rows %}
+      <tr>
+        <td>{{ b.name }}</td>
+        <td class="num">{{ b.entitled }}</td>
+        <td class="num">{{ b.taken }}</td>
+        <td class="num {% if b.balance < 0 %}neg{% endif %}">{{ b.balance }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif not balance_employee %}
+<div class="alert alert-light border py-2 no-print" style="font-size:.76rem;">
+  Pick a single employee to see their leave balance — a balance is per person.
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="lr-scroll">
+  <table class="table table-bordered table-sm lr-table mb-0">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Leave Type</th>
+        <th>Duration</th>
+        <th>Dates</th>
+        <th class="num">Days</th>
+        <th>Status</th>
+        <th>Paid?</th>
+        <th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.employee.full_name }}<br><small class="text-muted">#{{ r.employee.employee_id }}</small></td>
+        <td>{{ r.category }}</td>
+        <td>{{ r.duration }}</td>
+        <td class="wrap">{% for d in r.dates %}{{ d|date:"d M" }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td class="num">{{ r.day_count }}</td>
+        <td>
+          {% if r.status == 'Approved' %}<span class="badge bg-success">Approved</span>
+          {% elif r.status == 'Rejected' %}<span class="badge bg-danger">Rejected</span>
+          {% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}
+        </td>
+        <td>
+          {% if r.counts_paid %}<span class="badge bg-success">Paid</span>
+          {% else %}<span class="badge bg-secondary">Unpaid</span>{% endif %}
+        </td>
+        <td class="wrap">{{ r.reason|default:"—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Total</td>
+        <td class="num">{{ total_days }}</td>
+        <td colspan="3"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No leave requests in this window.</div>
+{% endif %}
+
+{% endblock content %}

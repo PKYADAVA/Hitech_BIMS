@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Employee Master — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_hr_report_subnavbar.html' with active_tab='hr_employee_report' %}
+
+<style>
+  .em-table { font-size:.75rem; }
+  .em-table th, .em-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
+  .em-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center;
+                       font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .em-table td.num, .em-table th.num { text-align:right; }
+  .em-table tbody tr:hover td { background:#f4f8fc; }
+  .em-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+  .em-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .em-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin-bottom:.6rem; }
+  @media (max-width:900px){ .em-kpis { grid-template-columns:repeat(2,1fr); } }
+  .em-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem; padding:.5rem .6rem;
+            display:flex; align-items:center; gap:.55rem; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .em-kpi .k-label { font-size:.63rem; color:#6c757d; font-weight:600; white-space:nowrap; }
+  .em-kpi .k-num { font-size:1rem; font-weight:800; line-height:1.1; color:#1b3a6b; }
+  .em-kpi .k-ico { flex:0 0 auto; width:2.4rem; height:2.4rem; border-radius:.5rem; display:flex;
+                   align-items:center; justify-content:center; font-size:1.1rem;
+                   background:#e7f0ff; color:#3b6fd4; }
+</style>
+
+{% include '_report_letterhead.html' with title='Employee Master' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if f_department == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Designation</label>
+      <select name="designation" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for d in designations %}<option value="{{ d.id }}" {% if f_designation == d.id|stringformat:"s" %}selected{% endif %}>{{ d.title }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">Branch</label>
+      <select name="warehouse" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if f_warehouse == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto"><label class="form-label">&nbsp;</label>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="include_relieved" value="1"
+               id="incRel" {% if include_relieved %}checked{% endif %}>
+        <label class="form-check-label" for="incRel" style="font-size:.7rem;">Include relieved</label>
+      </div></div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'hr_employee_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+{% if rows %}
+<div class="em-kpis">
+  <div class="em-kpi"><div class="k-ico"><i class="fas fa-users"></i></div>
+    <div><div class="k-label">Employees</div><div class="k-num">{{ rows|length }}</div></div></div>
+  <div class="em-kpi"><div class="k-ico"><i class="fas fa-user-check"></i></div>
+    <div><div class="k-label">Active</div><div class="k-num">{{ active_count }}</div></div></div>
+  <div class="em-kpi"><div class="k-ico"><i class="fas fa-user-xmark"></i></div>
+    <div><div class="k-label">Relieved</div><div class="k-num">{{ relieved_count }}</div></div></div>
+  <div class="em-kpi"><div class="k-ico"><i class="fas fa-sack-dollar"></i></div>
+    <div><div class="k-label">Monthly Salary Bill</div><div class="k-num">₹ {{ total_salary|indian_currency }}</div></div></div>
+</div>
+
+<div class="em-scroll">
+  <table class="table table-bordered table-sm em-table mb-0">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Designation</th>
+        <th>Department</th>
+        <th>Shift</th>
+        <th>Branch</th>
+        <th>Date of Joining</th>
+        <th class="num">Salary</th>
+        <th>Type</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in rows %}
+      <tr>
+        <td>#{{ e.employee_id }}</td>
+        <td>{{ e.full_name }}</td>
+        <td>{{ e.designation.title|default:"—" }}</td>
+        <td>{{ e.department.name|default:"—" }}</td>
+        <td>{{ e.shift.name|default:"—" }}</td>
+        <td>{{ e.warehouse.name|default:"—" }}</td>
+        <td>{{ e.date_of_joining|date:"d M Y"|default:"—" }}</td>
+        <td class="num">{{ e.salary|indian_currency }}</td>
+        <td>{{ e.salary_type|default:"—" }}</td>
+        <td>
+          {% if e.relieve %}<span class="badge bg-secondary">Relieved</span>
+          {% else %}<span class="badge bg-success">Active</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="7">Total</td>
+        <td class="num">{{ total_salary|indian_currency }}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No employees match these filters.</div>
+{% endif %}
+
+{% endblock content %}

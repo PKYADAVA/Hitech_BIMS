@@ -994,6 +994,29 @@ layouts open it from the account menu.
           </li>
           {% endif %}
 
+          <!-- HR Reports Submenu -->
+          {% if 'hr_reports' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="hrReportsDd">
+              <i class="fas fa-chart-column"></i>Reports
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'hr_attendance_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hr_attendance_report' %}">
+                <i class="fas fa-calendar-check"></i>Attendance Register
+              </a></li>{% endif %}
+              {% if 'hr_leave_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hr_leave_report' %}">
+                <i class="fas fa-plane-departure"></i>Leave Register
+              </a></li>{% endif %}
+              {% if 'hr_payroll_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hr_payroll_report' %}">
+                <i class="fas fa-money-check-dollar"></i>Payroll Register
+              </a></li>{% endif %}
+              {% if 'hr_employee_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hr_employee_report' %}">
+                <i class="fas fa-address-book"></i>Employee Master
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+
           <!-- Employee Trip And Route Submenu -->
           {% if 'hr_employee_trip_and_route' in allowed_sections %}
           <li class="dropdown-submenu">
