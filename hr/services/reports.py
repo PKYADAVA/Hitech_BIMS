@@ -205,3 +205,193 @@ def sum_rows(rows, *keys):
     """Column totals for a report's footer."""
     return {key: sum((Decimal(str(row.get(key) or 0)) for row in rows), ZERO)
             for key in keys}
+
+
+# ---------------------------------------------------------------------------
+# Excel export
+#
+# Same shape as purchase's _ledger_excel: company name, report title, the
+# criteria line the screen shows, a blank row, then a styled header row, the
+# data, and a totals row. Numbers go in as numbers — a workbook whose figures
+# are text cannot be summed, which is most of why anyone exports one.
+# ---------------------------------------------------------------------------
+XLSX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+HEADER_FILL = "1B3A6B"
+WEEKEND_FILL = "EEF1F5"
+
+
+def _num(value):
+    """A number openpyxl will store as one, or the value unchanged."""
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _start_sheet(title, company, report_title, criteria, headers):
+    """A workbook opened at a styled header row, ready for data."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = title[:31]          # Excel's own limit on a sheet name
+    ws.append([company.name if company else ""])
+    ws.append([report_title])
+    ws.append([criteria or ""])
+    ws.append([])
+    ws.append(headers)
+    for column in range(1, len(headers) + 1):
+        cell = ws.cell(ws.max_row, column)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=HEADER_FILL)
+        cell.alignment = Alignment(horizontal="center")
+    return wb, ws
+
+
+def _finish(wb, ws, headers, filename, widths=None):
+    from django.http import HttpResponse
+    from openpyxl.utils import get_column_letter
+
+    for index in range(1, len(headers) + 1):
+        letter = get_column_letter(index)
+        ws.column_dimensions[letter].width = (
+            widths.get(index, 15) if widths else 15)
+
+    response = HttpResponse(content_type=XLSX_CONTENT_TYPE)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
+
+
+def attendance_excel(company, criteria, month_name, days, rows, totals):
+    from openpyxl.styles import PatternFill
+
+    headers = (["Employee", "Code"]
+               + [str(slot["date"].day) for slot in days]
+               + ["Present Days", "Leave Days", "Worked Hours", "OT Hours"])
+    wb, ws = _start_sheet("Attendance Register", company,
+                          f"Attendance Register - {month_name}",
+                          criteria, headers)
+    header_row = ws.max_row
+
+    for row in rows:
+        employee = row["employee"]
+        ws.append([employee.full_name or "", employee.employee_id or ""]
+                  + [cell["code"] for cell in row["cells"]]
+                  + [_num(row["present_days"]), _num(row["leave_days"]),
+                     _num(row["worked_hours"]), _num(row["ot_hours"])])
+
+    ws.append(["Total", ""] + [""] * len(days)
+              + [_num(totals["present"]), _num(totals["leave"]),
+                 _num(totals["worked_hours"]), _num(totals["ot_hours"])])
+
+    # Shade the weekend columns, header included, so the grid reads the
+    # same way it does on screen rather than looking like absences.
+    shade = PatternFill("solid", fgColor=WEEKEND_FILL)
+    for index, slot in enumerate(days):
+        if not slot["is_weekend"]:
+            continue
+        column = index + 3
+        for row_index in range(header_row, ws.max_row + 1):
+            ws.cell(row_index, column).fill = shade
+
+    widths = {1: 26, 2: 10}
+    for column in range(3, 3 + len(days)):
+        widths[column] = 4
+    return _finish(wb, ws, headers, "attendance_register.xlsx", widths)
+
+
+def leave_excel(company, criteria, rows, balance_rows, balance_employee,
+                balance_year):
+    headers = ["Employee", "Code", "Category", "Duration", "Dates", "Days",
+               "Status", "Counts as Paid", "Reason"]
+    wb, ws = _start_sheet("Leave Register", company, "Leave Register",
+                          criteria, headers)
+
+    for row in rows:
+        employee = row["employee"]
+        ws.append([
+            employee.full_name or "", employee.employee_id or "",
+            row["category"], row["duration"],
+            ", ".join(d.strftime("%d-%m-%Y") for d in row["dates"]),
+            _num(row["day_count"]), row["status"],
+            "Yes" if row["counts_paid"] else "No",
+            row["reason"],
+        ])
+    ws.append(["Total", "", "", "", "",
+               _num(sum(r["day_count"] for r in rows)), "", "", ""])
+
+    # The balance only exists when the report is down to one person, which
+    # is the only scope a balance means anything in.
+    if balance_rows and balance_employee:
+        ws.append([])
+        ws.append([f"Leave balance - {balance_employee.full_name} "
+                   f"({balance_year})"])
+        ws.append(["Type", "Entitled", "Taken", "Balance"])
+        for balance in balance_rows:
+            ws.append([balance["name"], _num(balance["entitled"]),
+                       _num(balance["taken"]), _num(balance["balance"])])
+
+    return _finish(wb, ws, headers, "leave_register.xlsx",
+                   {1: 26, 3: 18, 4: 14, 5: 34, 9: 40})
+
+
+def payroll_excel(company, criteria, month_name, rows, totals):
+    headers = ["Employee", "Code", "Days", "Gross", "Payable", "Deductions",
+               "Net", "Advance Recovered", "Recovered Against"]
+    wb, ws = _start_sheet("Payroll Register", company,
+                          f"Payroll Register - {month_name}",
+                          criteria, headers)
+
+    for row in rows:
+        employee = row["employee"]
+        # One cell listing every advance this month took from, rather than
+        # a row per recovery — the register is one line per payroll.
+        against = "; ".join(f"{rec['advance_no']} - {rec['amount']}"
+                            for rec in row["recoveries"])
+        ws.append([
+            employee.full_name or "", employee.employee_id or "",
+            _num(row["days"]), _num(row["gross"]), _num(row["payable"]),
+            _num(row["deductions"]), _num(row["net"]),
+            _num(row["recovered"]), against,
+        ])
+
+    ws.append(["Total", "", _num(totals.get("days")),
+               _num(totals.get("gross")), _num(totals.get("payable")),
+               _num(totals.get("deductions")), _num(totals.get("net")),
+               _num(totals.get("recovered")), ""])
+
+    return _finish(wb, ws, headers, "payroll_register.xlsx", {1: 26, 9: 38})
+
+
+def employee_excel(company, criteria, employees, active_count,
+                   relieved_count, total_salary):
+    headers = ["Code", "Name", "Designation", "Department", "Shift",
+               "Branch", "Date of Joining", "Salary", "Salary Type", "Status"]
+    wb, ws = _start_sheet("Employee Master", company, "Employee Master",
+                          criteria, headers)
+
+    for employee in employees:
+        ws.append([
+            employee.employee_id or "",
+            employee.full_name or "",
+            employee.designation.title if employee.designation_id else "",
+            employee.department.name if employee.department_id else "",
+            employee.shift.name if employee.shift_id else "",
+            employee.warehouse.name if employee.warehouse_id else "",
+            employee.date_of_joining.strftime("%d-%m-%Y")
+            if employee.date_of_joining else "",
+            _num(employee.salary), employee.salary_type or "",
+            "Relieved" if employee.relieve else "Active",
+        ])
+
+    ws.append([])
+    ws.append([f"Active: {active_count}", f"Relieved: {relieved_count}",
+               "", "", "", "", "Total Salary", _num(total_salary)])
+
+    return _finish(wb, ws, headers, "employee_master.xlsx",
+                   {1: 10, 2: 26, 3: 20, 4: 18, 5: 14, 6: 20, 7: 16})

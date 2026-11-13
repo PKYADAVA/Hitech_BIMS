@@ -2778,6 +2778,16 @@ def employee_advance_api_list(request):
 # the run it is reporting on.
 # ---------------------------------------------------------------------------
 
+def _wants_excel(request):
+    """Whether this request is for the workbook rather than the page.
+
+    Same `?export=excel` switch the purchase reports use, so a report
+    exports exactly what is on screen — the filters are already applied
+    by the time this is asked.
+    """
+    return (request.GET.get("export") or "").strip().lower() == "excel"
+
+
 def _report_month(request):
     """The month a report is looking at, defaulting to the current one."""
     today = timezone.localdate()
@@ -2841,12 +2851,20 @@ def hr_attendance_report(request):
         "worked_hours": round(sum(r["worked_hours"] for r in rows), 1),
         "ot_hours": round(sum(r["ot_hours"] for r in rows), 1),
     }
+    month_name = date(year, month, 1).strftime("%B %Y")
+    criteria = f"{month_name}   {len(rows)} employee(s)"
+    company = CompanyProfile.get_solo()
+
+    if _wants_excel(request):
+        return rpt.attendance_excel(company, criteria, month_name,
+                                    days, rows, totals)
+
     context = {
         "days": days, "rows": rows, "totals": totals,
         "year": year, "month": month,
-        "month_name": date(year, month, 1).strftime("%B %Y"),
-        "criteria": f"{date(year, month, 1):%B %Y}   {len(rows)} employee(s)",
-        "company": CompanyProfile.get_solo(),
+        "month_name": month_name,
+        "criteria": criteria,
+        "company": company,
     }
     context.update(_report_filter_context(request))
     return render(request, "hr_attendance_report.html", context)
@@ -2880,15 +2898,23 @@ def hr_leave_report(request):
         balance_rows = leave_balance(balance_employee,
                                      (to_date or today).year)
 
+    balance_year = (to_date or today).year
+    criteria = (f"From: {from_raw or 'Beginning'}   To: {to_raw or 'Date'}"
+                f"   {len(rows)} request(s)")
+    company = CompanyProfile.get_solo()
+
+    if _wants_excel(request):
+        return rpt.leave_excel(company, criteria, rows, balance_rows,
+                               balance_employee, balance_year)
+
     context = {
         "rows": rows, "from_date": from_raw, "to_date": to_raw,
         "status": status,
         "balance_rows": balance_rows, "balance_employee": balance_employee,
-        "balance_year": (to_date or today).year,
+        "balance_year": balance_year,
         "total_days": sum(r["day_count"] for r in rows),
-        "criteria": f"From: {from_raw or 'Beginning'}   To: {to_raw or 'Date'}"
-                    f"   {len(rows)} request(s)",
-        "company": CompanyProfile.get_solo(),
+        "criteria": criteria,
+        "company": company,
     }
     context.update(_report_filter_context(request))
     return render(request, "hr_leave_report.html", context)
@@ -2909,12 +2935,19 @@ def hr_payroll_report(request):
     totals["days"] = sum((Decimal(str(r["days"] or 0)) for r in rows),
                          Decimal("0"))
 
+    month_name = date(year, month, 1).strftime("%B %Y")
+    criteria = f"{month_name}   {len(rows)} payroll row(s)"
+    company = CompanyProfile.get_solo()
+
+    if _wants_excel(request):
+        return rpt.payroll_excel(company, criteria, month_name, rows, totals)
+
     context = {
         "rows": rows, "totals": totals, "year": year, "month": month,
-        "month_name": date(year, month, 1).strftime("%B %Y"),
+        "month_name": month_name,
         "locked": PayrollPeriod.is_locked(year, month),
-        "criteria": f"{date(year, month, 1):%B %Y}   {len(rows)} payroll row(s)",
-        "company": CompanyProfile.get_solo(),
+        "criteria": criteria,
+        "company": company,
     }
     context.update(_report_filter_context(request))
     return render(request, "hr_payroll_report.html", context)
@@ -2925,16 +2958,27 @@ def hr_employee_report(request):
     """HR > Reports > Employee Master — the staff list, as a report."""
     from account.models import CompanyProfile
 
+    from hr.services import reports as rpt
+
     employees = list(_report_employees(request))
     active = sum(1 for e in employees if not e.relieve)
+    relieved = len(employees) - active
+    total_salary = sum((Decimal(str(e.salary or 0)) for e in employees),
+                       Decimal("0"))
+    criteria = f"{len(employees)} employee(s)"
+    company = CompanyProfile.get_solo()
+
+    if _wants_excel(request):
+        return rpt.employee_excel(company, criteria, employees, active,
+                                  relieved, total_salary)
+
     context = {
         "rows": employees,
         "active_count": active,
-        "relieved_count": len(employees) - active,
-        "total_salary": sum((Decimal(str(e.salary or 0)) for e in employees),
-                            Decimal("0")),
-        "criteria": f"{len(employees)} employee(s)",
-        "company": CompanyProfile.get_solo(),
+        "relieved_count": relieved,
+        "total_salary": total_salary,
+        "criteria": criteria,
+        "company": company,
     }
     context.update(_report_filter_context(request))
     return render(request, "hr_employee_report.html", context)
