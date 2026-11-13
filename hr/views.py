@@ -41,9 +41,11 @@ from hr.models import (
     LeaveSelectedDate,
     LeaveType,
     Payroll,
+    PayrollPeriod,
+    SalaryComponent,
     Shift,
 )
-from hr.services import payroll_posting
+from hr.services import payroll_posting, salary_structure
 from hr.validation import validate_employee_data
 from inventory.models import Warehouse
 from Hitech_BIMS.entry_dates import date_from_query
@@ -1084,6 +1086,14 @@ class EmployeePayrollDashboardView(View):
         Generate payroll for an employee based on attendance and leave records.
         If the employee has no attendance or leave in the given month, set working days to 0.
         """
+        # A locked month has been paid out. Re-running it would restate
+        # figures somebody has already acted on, so it is refused rather
+        # than quietly overwritten.
+        if PayrollPeriod.is_locked(year, month):
+            raise ValidationError(
+                f"Payroll for {month:02d}/{year} is locked and cannot be "
+                f"processed. Unlock the period first.")
+
         # Get the number of days in the month
         _, total_days = monthrange(year, month)
         start_date = date(year, month, 1)
@@ -1134,11 +1144,31 @@ class EmployeePayrollDashboardView(View):
         if not attendance_records.exists() and not leave_records.exists():
             working_days = 0
 
+        # Days that could have been worked — weekdays, the same ones the
+        # loop above counts. The denominator for pro-rating a structure.
+        payable_days = sum(
+            1 for day in range(1, total_days + 1)
+            if date(year, month, day).weekday() not in (5, 6)
+        )
+
         # What the days worked earn, before anything is taken off. Decimal
         # throughout: working_days carries half-days as floats, and
         # float * Decimal is a TypeError.
-        payable_salary = (Decimal(str(working_days)) * Decimal(str(employee.daily_wage))
-                          if working_days > 0 else Decimal("0"))
+        #
+        # An employee with a salary structure is paid from it, pro-rated for
+        # the days worked. One without is paid exactly as before — the flat
+        # daily wage — so filling in no structure changes nobody's pay.
+        earned_ratio = (Decimal(str(working_days)) / Decimal(str(payable_days))
+                        if payable_days else Decimal("0"))
+        structured_gross, used_structure = salary_structure.compute_gross(
+            employee, date(year, month, 1), earned_ratio)
+
+        if used_structure:
+            payable_salary = structured_gross
+        else:
+            payable_salary = (
+                Decimal(str(working_days)) * Decimal(str(employee.daily_wage))
+                if working_days > 0 else Decimal("0"))
 
         # Release anything this month already recovered before asking what is
         # outstanding, or a re-run would see its own earlier recovery as money
@@ -1161,7 +1191,8 @@ class EmployeePayrollDashboardView(View):
             month=month,
             year=year,
             defaults={
-                "gross_salary": employee.salary,
+                "gross_salary": salary_structure.full_month_gross(
+                    employee, date(year, month, 1)),
                 "deductions": deductions,
                 "net_salary": net_salary,
                 "total_working_days": working_days,
@@ -1234,6 +1265,221 @@ def _resync_recovered(advance_ids):
         advance.recovered = (advance.recoveries.aggregate(
             t=Sum("amount"))["t"] or Decimal("0"))
         advance.save(update_fields=["recovered"])
+
+
+def run_payroll_for_month(year, month, user=None, employee_ids=None):
+    """Process a whole month for every active employee, or a named subset.
+
+    Each employee is its own transaction. One of them failing — a missing
+    ledger, a bad structure — must not take the other forty down with it,
+    so the failure is recorded against that name and the run carries on.
+    Reuses generate_payroll rather than reimplementing it: there is one
+    definition of what a month pays, and this is not a second one.
+    """
+    view = EmployeePayrollDashboardView()
+    employees = Employee.objects.exclude(relieve=True).order_by("full_name")
+    if employee_ids:
+        employees = employees.filter(id__in=employee_ids)
+
+    processed, skipped, failed = [], [], []
+    for employee in employees:
+        try:
+            with transaction.atomic():
+                payroll = view.generate_payroll(employee, year, month, user=user)
+            if payroll.total_working_days:
+                processed.append({"employee": employee.full_name,
+                                  "payable": str(payroll.payable_salary),
+                                  "net": str(payroll.net_salary)})
+            else:
+                # Nothing attended and no paid leave: a real outcome, not a
+                # failure, but worth separating from a month actually worked.
+                skipped.append({"employee": employee.full_name,
+                                "reason": "No attendance or paid leave"})
+        except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+            logger.error("Payroll failed for %s (%s/%s): %s",
+                         employee.full_name, month, year, exc)
+            message = (" ".join(exc.messages)
+                       if hasattr(exc, "messages") else str(exc))
+            failed.append({"employee": employee.full_name, "reason": message})
+
+    return {"processed": processed, "skipped": skipped, "failed": failed}
+
+
+@login_required(login_url="login")
+@require_POST
+def payroll_run_all(request):
+    """Process every active employee for one month."""
+    try:
+        year = int(request.POST.get("year"))
+        month = int(request.POST.get("month"))
+    except (TypeError, ValueError):
+        return JsonResponse({"success": False,
+                             "message": "Choose a year and a month."}, status=400)
+
+    if PayrollPeriod.is_locked(year, month):
+        return JsonResponse(
+            {"success": False,
+             "message": f"Payroll for {month:02d}/{year} is locked. "
+                        f"Unlock the period first."}, status=400)
+
+    result = run_payroll_for_month(year, month, user=request.user)
+    return JsonResponse({
+        "success": True, "year": year, "month": month,
+        "processed_count": len(result["processed"]),
+        "skipped_count": len(result["skipped"]),
+        "failed_count": len(result["failed"]),
+        **result,
+    })
+
+
+@login_required(login_url="login")
+@require_POST
+def payroll_period_lock(request):
+    """Lock or unlock a payroll month.
+
+    Gated on the payroll tab's own edit right: deciding a month is closed
+    is a statement about the books, not something viewing payroll confers.
+    """
+    from user.access import user_can
+
+    if not user_can(request.user, "payroll", "edit"):
+        return JsonResponse(
+            {"success": False,
+             "message": "You are not allowed to lock or unlock payroll periods."},
+            status=403)
+
+    try:
+        year = int(request.POST.get("year"))
+        month = int(request.POST.get("month"))
+    except (TypeError, ValueError):
+        return JsonResponse({"success": False,
+                             "message": "Choose a year and a month."}, status=400)
+
+    lock = request.POST.get("lock") in ("true", "True", "on", "1")
+    period, _created = PayrollPeriod.objects.get_or_create(year=year, month=month)
+
+    warning = None
+    if lock:
+        # Locking a month nobody has processed closes it against work that
+        # was never done, which is almost always a mistake worth naming.
+        if not Payroll.objects.filter(year=year, month=month).exists():
+            warning = (f"No payroll has been processed for {month:02d}/{year}. "
+                       f"The period is locked, but there is nothing in it.")
+        period.status = "Locked"
+        period.locked_by = request.user
+        period.locked_at = timezone.now()
+    else:
+        period.status = "Open"
+        period.locked_by = None
+        period.locked_at = None
+    period.save()
+
+    return JsonResponse({
+        "success": True, "status": period.status,
+        "year": year, "month": month, "warning": warning,
+        "message": f"Payroll for {month:02d}/{year} is now {period.status.lower()}.",
+    })
+
+
+@login_required(login_url="login")
+def payroll_period_status(request):
+    """Whether a given month is open or locked, for the screen to show."""
+    try:
+        year = int(request.GET.get("year"))
+        month = int(request.GET.get("month"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Choose a year and a month."}, status=400)
+    return JsonResponse({
+        "year": year, "month": month,
+        "locked": PayrollPeriod.is_locked(year, month),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Salary Component master (HR > Payroll)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class SalaryComponentTemplateView(View):
+    """Renders the salary component master page."""
+
+    def get(self, request):
+        return render(request, "salary_component.html")
+
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class SalaryComponentAPI(View):
+    """CRUD for the Salary Component master (Basic, HRA, allowances)."""
+
+    def handle_exception(self, e):
+        logger.error(f"Error in {self.__class__.__name__}: {str(e)}", exc_info=True)
+        if isinstance(e, ValidationError):
+            if hasattr(e, "message_dict"):
+                message = "; ".join(
+                    f"{field}: {' '.join(msgs)}" for field, msgs in e.message_dict.items()
+                )
+            else:
+                message = "; ".join(e.messages)
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+    def _to_dict(self, component):
+        return {
+            "id": component.id,
+            "code": component.code,
+            "name": component.name,
+            "component_type": component.component_type,
+            "calculation": component.calculation,
+            "is_active": component.is_active,
+            "structure_count": component.structures.count(),
+        }
+
+    def get(self, request, id=None):
+        try:
+            if id:
+                return JsonResponse(self._to_dict(SalaryComponent.objects.get(id=id)))
+            rows = SalaryComponent.objects.all().order_by("name")
+            return JsonResponse([self._to_dict(c) for c in rows], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id=None):
+        try:
+            data = request.POST
+            with transaction.atomic():
+                component = SalaryComponent.objects.get(id=id) if id else SalaryComponent()
+                component.name = data.get("name", "").strip()
+                component.component_type = data.get("component_type") or "Earning"
+                component.calculation = data.get("calculation") or "Fixed"
+                # An unticked checkbox posts nothing at all, so absence is
+                # what "no" looks like here rather than a missing value.
+                component.is_active = data.get("is_active") in ("true", "True", "on", "1")
+                component.full_clean()
+                component.save()
+            return JsonResponse(
+                {"message": "Salary component updated" if id else "Salary component created",
+                 "id": component.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            component = SalaryComponent.objects.get(id=id)
+            try:
+                component.delete()
+            except ProtectedError:
+                used = component.structures.count()
+                return JsonResponse(
+                    {"error": f"This component is used by {used} salary "
+                              f"structure row(s) and cannot be deleted; "
+                              f"deactivate it instead."}, status=400)
+            return JsonResponse({"message": "Salary component deleted"})
+        except SalaryComponent.DoesNotExist:
+            return JsonResponse({"error": "Salary component not found"}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
 
 
 # ---------------------------------------------------------------------------

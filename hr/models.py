@@ -977,3 +977,147 @@ class LeaveType(models.Model):
             if match:
                 max_num = max(max_num, int(match.group(1)))
         return f"LT-{max_num + 1:04d}"
+
+
+class SalaryComponent(models.Model):
+    """A named part of a salary — Basic, HRA, Conveyance, and so on.
+
+    The master only says what a component *is*. What any particular
+    employee gets is ``EmployeeSalaryStructure``, so changing a rule here
+    never silently restates somebody's pay.
+
+    Statutory deductions (PF/ESI/TDS) are deliberately out of scope: they
+    need chart-of-accounts anchors this system does not have, and rates
+    that belong in law rather than in a guess.
+    """
+
+    COMPONENT_TYPE_CHOICES = [
+        ("Earning", "Earning"),
+        ("Deduction", "Deduction"),
+    ]
+    CALCULATION_CHOICES = [
+        ("Fixed", "Fixed Amount"),
+        ("Percent of Basic", "Percent of Basic"),
+    ]
+
+    code = models.CharField(
+        max_length=20, unique=True, editable=False, blank=True,
+        help_text="Auto-generated code, e.g. SC-0001")
+    name = models.CharField(max_length=100, unique=True)
+    component_type = models.CharField(
+        max_length=10, choices=COMPONENT_TYPE_CHOICES, default="Earning")
+    calculation = models.CharField(
+        max_length=20, choices=CALCULATION_CHOICES, default="Fixed",
+        help_text="Fixed amount, or a percentage of the employee's Basic")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Salary Component"
+        verbose_name_plural = "Salary Components"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_basic(self):
+        """Whether this is the Basic that percentage components build on.
+
+        Matched by name rather than a flag: "Basic" is what every payroll
+        calls it, and a second flag would only be another thing to get out
+        of step with the name.
+        """
+        return (self.name or "").strip().lower() in {"basic", "basic salary"}
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = self._next_code()
+            mint_with_retry(
+                lambda: super(SalaryComponent, self).save(update_fields=["code"]),
+                lambda: setattr(self, "code", self._next_code()),
+                label="salary component code")
+
+    @classmethod
+    def _next_code(cls):
+        max_num = 0
+        for existing in cls.objects.values_list("code", flat=True):
+            match = re.match(r"^SC-(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"SC-{max_num + 1:04d}"
+
+
+class EmployeeSalaryStructure(models.Model):
+    """What one employee is paid for one component, from one date.
+
+    Dated rather than edited in place: a raise is a new row from the month
+    it takes effect, so a payroll re-run for an earlier month still reads
+    the figure that applied then.
+    """
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="salary_structure")
+    component = models.ForeignKey(
+        SalaryComponent, on_delete=models.PROTECT, related_name="structures")
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="A rupee amount, or a percentage when the component is "
+                  "calculated as a Percent of Basic")
+    effective_from = models.DateField(default=date.today)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Employee Salary Structure"
+        verbose_name_plural = "Employee Salary Structures"
+        ordering = ["employee_id", "component__name", "-effective_from"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employee", "component", "effective_from"],
+                name="uq_salary_structure_employee_component_date"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} — {self.component} ({self.amount})"
+
+
+class PayrollPeriod(models.Model):
+    """Whether a month is still open to payroll processing.
+
+    Locking is what stops a month that has been paid out from being
+    quietly re-run into different figures. It is a statement about the
+    books, so the lock records who made it and when.
+    """
+
+    STATUS_CHOICES = [("Open", "Open"), ("Locked", "Locked")]
+
+    year = models.IntegerField()
+    month = models.IntegerField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="Open")
+    locked_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="locked_payroll_periods")
+    locked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payroll Period"
+        verbose_name_plural = "Payroll Periods"
+        ordering = ["-year", "-month"]
+        constraints = [
+            models.UniqueConstraint(fields=["year", "month"],
+                                    name="uq_payroll_period_year_month"),
+        ]
+
+    def __str__(self):
+        return f"{self.month:02d}/{self.year} — {self.status}"
+
+    @classmethod
+    def is_locked(cls, year, month):
+        return cls.objects.filter(year=year, month=month, status="Locked").exists()

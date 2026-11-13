@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Manage Salary Components — BIMS{% endblock %}
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
+{% block body %}
+{% include '_hr_payroll_subnavbar.html' with active_tab='salary_component' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-sliders"></i>Manage Salary Components</div>
+      <div class="page-header-subtitle">Basic, HRA and the other parts a salary is made of</div>
+    </div>
+    <div class="page-header-right">
+        {% if page_perms.add %}<button id="add-component-btn" class="btn btn-primary"
+            data-bs-toggle="modal" data-bs-target="#componentFormModal">
+        <i class="fas fa-plus"></i> Add New Component
+        </button>{% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Modal Structure -->
+    <div class="modal fade" id="componentFormModal" tabindex="-1" aria-labelledby="componentFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="componentFormModalLabel">Add New Component</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="component-form">
+                        {% csrf_token %}
+                        <input type="hidden" id="component_id" />
+                        <div class="mb-3">
+                            <label for="component_code" class="form-label">Code</label>
+                            <input type="text" id="component_code" class="form-control bg-light" readonly placeholder="Auto-generated" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="component_name" class="form-label">Name<span class="text-danger">*</span></label>
+                            <input type="text" id="component_name" class="form-control" placeholder="e.g. HRA" required />
+                            <div class="form-text">
+                                Name a component <strong>Basic</strong> for percentage components to
+                                build on it — that is the name they look for.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="component_type" class="form-label">Type<span class="text-danger">*</span></label>
+                            <select id="component_type" class="form-select">
+                                <option value="Earning">Earning</option>
+                                <option value="Deduction">Deduction</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="component_calculation" class="form-label">Calculation<span class="text-danger">*</span></label>
+                            <select id="component_calculation" class="form-select">
+                                <option value="Fixed">Fixed Amount</option>
+                                <option value="Percent of Basic">Percent of Basic</option>
+                            </select>
+                            <div class="form-text">
+                                The amount entered against an employee is rupees for a fixed
+                                component, and a percentage for a percent-of-Basic one.
+                            </div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="component_is_active" checked />
+                            <label class="form-check-label" for="component_is_active">Active</label>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" id="component-submit-btn" class="btn btn-primary">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- List Section -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Salary Component List</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0 ds-grid" id="component-table">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th class="ds-mid">Type</th>
+                                <th>Calculation</th>
+                                <th class="ds-mid">Active</th>
+                                <th class="ds-num">In Use</th>
+                                <th class="ds-mid">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        function loadComponentList() {
+            $.ajax({
+                url: "{% url 'salary_component_list' %}",
+                type: "GET",
+                success: function (response) {
+                    const table = $("#component-table");
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+                    let rows = "";
+                    response.forEach(function (item) {
+                        const type = item.component_type === "Deduction"
+                            ? '<span class="badge bg-danger">Deduction</span>'
+                            : '<span class="badge bg-success">Earning</span>';
+                        const active = item.is_active
+                            ? '<span class="badge bg-success">Active</span>'
+                            : '<span class="badge bg-secondary">Inactive</span>';
+                        rows += `
+                        <tr>
+                            <td>${item.code || ""}</td>
+                            <td>${item.name || ""}</td>
+                            <td>${type}</td>
+                            <td>${item.calculation || ""}</td>
+                            <td>${active}</td>
+                            <td class="text-end">${item.structure_count}</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
+                                        data-id="${item.id}"><i class="fas fa-pen"></i></button>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button"
+                                        data-id="${item.id}"><i class="fas fa-trash"></i></button>{% endif %}
+                                </div>
+                            </td>
+                        </tr>`;
+                    });
+                    table.find("tbody").html(rows);
+                    table.DataTable({
+                        destroy: true,
+                        responsive: true,
+                        paging: true,
+                        searching: true,
+                        info: true,
+                        lengthChange: true,
+                        columnDefs: [
+                            { orderable: false, targets: -1 }
+                        ]
+                    });
+                },
+                error: function () {
+                    window.showToast('danger', "Error loading salary components. Please try again.");
+                }
+            });
+        }
+
+        loadComponentList();
+
+        function resetComponentForm() {
+            $("#component-form").trigger("reset");
+            $("#component_id").val("");
+            $("#component_code").val("");
+            $("#component_is_active").prop("checked", true);
+        }
+
+        $("#add-component-btn").on("click", function () {
+            resetComponentForm();
+            $("#componentFormModalLabel").text("Add New Component");
+            $("#component-submit-btn").text("Save");
+        });
+
+        $("#component-form").on("submit", function (e) {
+            e.preventDefault();
+            const id = $("#component_id").val();
+            const formData = new FormData();
+            formData.append("name", $("#component_name").val());
+            formData.append("component_type", $("#component_type").val());
+            formData.append("calculation", $("#component_calculation").val());
+            // Only sent when ticked — an absent key is what "no" looks like,
+            // which is how the view reads it.
+            if ($("#component_is_active").is(":checked")) formData.append("is_active", "true");
+            formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
+
+            $.ajax({
+                url: id ? `/salary-component/${id}/update/` : "{% url 'salary_component_create' %}",
+                type: "POST",
+                processData: false,
+                contentType: false,
+                data: formData,
+                success: function () {
+                    $("#componentFormModal").modal("hide");
+                    resetComponentForm();
+                    loadComponentList();
+                    window.showToast("success", id ? "Salary component updated successfully!" : "Salary component added successfully!");
+                },
+                error: function (xhr) {
+                    const serverError = xhr.responseJSON && xhr.responseJSON.error;
+                    window.showToast('danger', serverError || "Error saving salary component. Please check your input.");
+                }
+            });
+        });
+
+        $(document).on("click", ".edit-button", function () {
+            const id = $(this).data("id");
+            $.ajax({
+                url: `/salary-component/${id}/`,
+                type: "GET",
+                success: function (item) {
+                    $("#component_id").val(item.id);
+                    $("#component_code").val(item.code);
+                    $("#component_name").val(item.name);
+                    $("#component_type").val(item.component_type);
+                    $("#component_calculation").val(item.calculation);
+                    $("#component_is_active").prop("checked", item.is_active);
+                    $("#componentFormModalLabel").text("Edit Component");
+                    $("#component-submit-btn").text("Update");
+                    $("#componentFormModal").modal("show");
+                },
+                error: function () {
+                    window.showToast('danger', "Error loading component details.");
+                }
+            });
+        });
+
+        $(document).on("click", ".delete-button", function () {
+            const id = $(this).data("id");
+            window.bimsConfirm("Are you sure you want to delete this salary component?", {
+                title: "Delete salary component", confirmText: "Delete"
+            }).then(function (ok) {
+                if (!ok) return;
+                $.ajax({
+                    url: `/salary-component/${id}/delete/`,
+                    type: "DELETE",
+                    headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                    success: function () {
+                        window.showToast("success", "Salary component deleted successfully!");
+                        loadComponentList();
+                    },
+                    error: function (xhr) {
+                        const serverError = xhr.responseJSON && xhr.responseJSON.error;
+                        window.showToast("danger", serverError || "An error occurred while deleting the component.");
+                    },
+                });
+            });
+        });
+    });
+</script>
+
+{% endblock body %}

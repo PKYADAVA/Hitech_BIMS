@@ -454,6 +454,11 @@ MODULE_REGISTRY = [
                         "employee_advance_add", "employee_advance_edit",
                         "employee_advance_delete", "employee_advance_api_list",
                     )),
+                    ("salary_component", "Salary Component", (
+                        "salary_component_list", "salary_component_detail",
+                        "salary_component_create", "salary_component_update",
+                        "salary_component_delete",
+                    )),
                 ],
             },
             {
