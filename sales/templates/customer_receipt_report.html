@@ -64,16 +64,22 @@
   .rpt-table .rcpt-freeze-cust { left: 116px;  min-width: 178px; max-width: 178px; width: 178px; }
   /* A width cap alone does not hold the text: a table cell's content
      overflows visibly by default, and the names here are long enough
-     ("Bablu Traders - Ambedkar Nagar") that they ran straight across the
-     frozen edge and sat on top of DC No. Clipping to an ellipsis is what
-     actually keeps a frozen column inside its own width. The full name is
-     on the title attribute, so nothing is lost to a hover. */
+     ("M/S Mohd Akeel Ahmad - Mau Nizamabad") that they ran straight across
+     the frozen edge and sat on top of DC No.
+
+     The name wraps rather than being cut. Clipping to an ellipsis also kept
+     the column inside its width, but a customer name is what identifies the
+     row -- "Bablu Traders - Ambed..." against three similar traders is not
+     something a reader should have to hover to resolve. Two lines of a
+     frozen column cost less than a name nobody can read. */
   .rpt-table td.rcpt-freeze-cust,
-  .rpt-table th.rcpt-freeze-cust,
-  .rpt-table td.rcpt-freeze-date,
-  .rpt-table th.rcpt-freeze-date {
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .rpt-table th.rcpt-freeze-cust {
+    overflow: hidden; white-space: normal; overflow-wrap: break-word;
+    line-height: 1.25;
   }
+  /* The date is one short token that must never wrap or clip. */
+  .rpt-table td.rcpt-freeze-date,
+  .rpt-table th.rcpt-freeze-date { overflow: hidden; white-space: nowrap; }
   /* Body cells need an opaque background or the scrolling columns show
      through them. Hover has its own colour, so it must be repeated here. */
   .rpt-table tbody td.rcpt-freeze-date,
