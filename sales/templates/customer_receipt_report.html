@@ -55,8 +55,25 @@
      records. */
   .rpt-table .rcpt-freeze-date,
   .rpt-table .rcpt-freeze-cust { position: sticky; z-index: 2; }
-  .rpt-table .rcpt-freeze-date { left: 0;      min-width: 92px;  max-width: 92px;  width: 92px; }
-  .rpt-table .rcpt-freeze-cust { left: 92px;   min-width: 150px; max-width: 150px; width: 150px; }
+  /* Wide enough for "22-08-2026" plus the cell's own padding -- at 92px the
+     date itself was being clipped to an ellipsis, which is worse than any
+     column it was making room for. */
+  .rpt-table .rcpt-freeze-date { left: 0;      min-width: 116px; max-width: 116px; width: 116px; }
+  /* left must equal the Date column's width exactly, or the two frozen cells
+     overlap each other as the table scrolls. */
+  .rpt-table .rcpt-freeze-cust { left: 116px;  min-width: 178px; max-width: 178px; width: 178px; }
+  /* A width cap alone does not hold the text: a table cell's content
+     overflows visibly by default, and the names here are long enough
+     ("Bablu Traders - Ambedkar Nagar") that they ran straight across the
+     frozen edge and sat on top of DC No. Clipping to an ellipsis is what
+     actually keeps a frozen column inside its own width. The full name is
+     on the title attribute, so nothing is lost to a hover. */
+  .rpt-table td.rcpt-freeze-cust,
+  .rpt-table th.rcpt-freeze-cust,
+  .rpt-table td.rcpt-freeze-date,
+  .rpt-table th.rcpt-freeze-date {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   /* Body cells need an opaque background or the scrolling columns show
      through them. Hover has its own colour, so it must be repeated here. */
   .rpt-table tbody td.rcpt-freeze-date,
@@ -178,7 +195,7 @@
           <td class="rcpt-freeze-date">{{ r.date|date:"d-m-Y" }}</td>
           <td class="rpt-link">{{ r.receipt_no }}</td>
           <td class="rpt-type">{{ r.source }}</td>
-          <td class="rpt-loc rcpt-freeze-cust">{{ r.party_name }}</td>
+          <td class="rpt-loc rcpt-freeze-cust" title="{{ r.party_name }}">{{ r.party_name }}</td>
           <td>{{ r.dc_no }}</td>
           <td>{{ r.mode }}</td>
           <td>{{ r.account.code }} - {{ r.account.description }}</td>
