@@ -1327,13 +1327,28 @@ def customer_balance_report(request):
 
 def _receipt_report_row(obj, source_label, party, mode_field="mode",
                         account_field="receipt_account", added_by_field="created_by",
-                        added_time_field="created_at"):
+                        added_time_field="created_at", attach_url=""):
     """One row of the Customer Receipt Report, normalised out of whichever of
     the three receipt models it came from — SalesReceipt, BirdSaleReceipt and
     ChickSaleReceipt carry the same handful of fields under two different
     naming conventions (created_by/created_at vs entry_by/entry_time)."""
     added_by = getattr(obj, added_by_field)
+    # The proof filed against the receipt, so the report can show it rather
+    # than only say a number. All three models name the relation
+    # "attachments" and the view prefetches it, so this costs no query per
+    # row. `url` is read here rather than in the template because the files
+    # live on private storage, where .url signs a link.
+    attachments = [{
+        "id": a.id, "url": a.file.url,
+        "name": a.file.name.rsplit("/", 1)[-1],
+        "caption": a.caption,
+    } for a in obj.attachments.all()]
     return {
+        "attachments": attachments,
+        "attachment_count": len(attachments),
+        # Which endpoint serves this row's files: the report unifies three
+        # modules and each keeps its own.
+        "attach_url": attach_url,
         "date": obj.date, "receipt_no": obj.receipt_no, "dc_no": obj.reference_no,
         "customer": party, "party_name": party.name,
         "mode": getattr(obj, mode_field),
@@ -1366,6 +1381,7 @@ def customer_receipt_report(request):
     outstanding balance", not the settlement of a particular document).
     """
     from account.services.bank_cash import active_payment_modes
+    from datetime import timedelta
     from decimal import Decimal
     from django.contrib.auth import get_user_model
     from django.utils.dateparse import parse_date
@@ -1386,6 +1402,20 @@ def customer_receipt_report(request):
     location_id = (request.GET.get("location") or "").strip()
     added_by_id = (request.GET.get("added_by") or "").strip()
     source = (request.GET.get("source") or "").strip()
+
+    # A fresh visit opens on the last 7 days rather than on every receipt ever
+    # taken (days=6, because today is one of the seven).
+    #
+    # Clear has to stay able to mean "all of it". It links to the bare URL, so
+    # a cleared filter and a fresh visit look identical on the querystring —
+    # the Purchase Register's version of this default has the same shape and
+    # re-applies itself on Clear, which leaves no way to ask for the full
+    # history. Clear here carries all=1 to say the range was emptied
+    # deliberately.
+    if not from_date and not to_date and request.GET.get("all") != "1":
+        today = timezone.localdate()
+        from_date = (today - timedelta(days=6)).isoformat()
+        to_date = today.isoformat()
 
     fd = date_from_query(from_date)
     td = date_from_query(to_date)
@@ -1413,25 +1443,31 @@ def customer_receipt_report(request):
 
     rows = []
     if not source or source == "sales":
-        qs = scoped(SalesReceipt.objects.select_related("customer", "location", "receipt_account", "created_by"))
+        qs = scoped(SalesReceipt.objects.select_related("customer", "location", "receipt_account", "created_by")
+                    .prefetch_related("attachments"))
         if added_by_id.isdigit():
             qs = qs.filter(created_by_id=added_by_id)
-        rows += [_receipt_report_row(r, "Sales Receipt", allowed_customers[r.customer_id])
+        rows += [_receipt_report_row(r, "Sales Receipt", allowed_customers[r.customer_id],
+                                     attach_url=f"/sales-receipt/{r.id}/attachments/")
                 for r in qs]
     if not source or source == "bird_sale":
         qs = scoped(BirdSaleReceipt.objects.filter(sale_type="customer")
-                    .select_related("customer", "location", "receipt_account", "entry_by"))
+                    .select_related("customer", "location", "receipt_account", "entry_by")
+                    .prefetch_related("attachments"))
         if added_by_id.isdigit():
             qs = qs.filter(entry_by_id=added_by_id)
         rows += [_receipt_report_row(r, "Bird Sale Receipt", allowed_customers[r.customer_id],
-                                     added_by_field="entry_by", added_time_field="entry_time")
+                                     added_by_field="entry_by", added_time_field="entry_time",
+                                     attach_url=f"/bird-sale-receipt/{r.id}/attachments/")
                 for r in qs]
     if not source or source == "chick_sale":
-        qs = scoped(ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account", "entry_by"))
+        qs = scoped(ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account", "entry_by")
+                    .prefetch_related("attachments"))
         if added_by_id.isdigit():
             qs = qs.filter(entry_by_id=added_by_id)
         rows += [_receipt_report_row(r, "Chick Sale Receipt", allowed_customers[r.customer_id],
-                                     added_by_field="entry_by", added_time_field="entry_time")
+                                     added_by_field="entry_by", added_time_field="entry_time",
+                                     attach_url=f"/chick-sale-receipt/{r.id}/attachments/")
                 for r in qs]
 
     # "Balance" is the customer's outstanding position as of this receipt's

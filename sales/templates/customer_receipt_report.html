@@ -12,6 +12,81 @@
      opting out of the grid's own responsive column-count breakpoints. */
   .rpt-filter .rpt-grid .form-control-sm,
   .rpt-filter .rpt-grid .form-select-sm { min-width: 150px; }
+
+  /* Payment proof as a thumbnail, the same cell the three receipt list pages
+     show (.bsr-thumbs there). Copied rather than shared because those live in
+     each module's own list template; the sizes and the count badge match so a
+     reader moving between them sees one control, not two. */
+  .rcpt-thumbs { position:relative; display:inline-flex; padding:0; border:0;
+                 background:none; vertical-align:middle; cursor:zoom-in; }
+  .rcpt-thumbs img, .rcpt-thumbs .rcpt-thumb-pdf {
+                 width:28px; height:28px; object-fit:cover; border-radius:4px;
+                 border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .rcpt-thumbs .rcpt-thumb-pdf { display:inline-flex; align-items:center;
+                 justify-content:center; color:#c0392b; }
+  .rcpt-thumbs:hover img, .rcpt-thumbs:hover .rcpt-thumb-pdf { border-color:var(--bs-primary, #2563eb); }
+  .rcpt-thumbs .rcpt-more { position:absolute; bottom:-5px; right:-5px; min-width:15px; height:15px;
+                 padding:0 3px; border-radius:999px; display:inline-flex; align-items:center;
+                 justify-content:center; font-size:.6rem; line-height:1; font-weight:700;
+                 color:#fff; background:#2563eb; border:1.5px solid #fff; }
+  .rcpt-none { color:#cbd5e1; }
+  /* The cell holds a 28px thumbnail, so the heading is the widest thing in
+     this column, and ".ds table.ds-grid thead th { white-space: nowrap }"
+     kept "Attachments" on one line inside a 6.5rem cap -- it was clipped to
+     "ATTACHMENT". That rule is three selectors deep, so this one matches the
+     same ancestors to outrank it.
+
+     The heading is given room for the whole word rather than being allowed to
+     break anywhere: at this column's width `overflow-wrap: anywhere` split it
+     at every letter and stacked it vertically, one character per line. */
+  .ds table.rpt-table.rpt-wrap-head thead th.rcpt-head,
+  .rpt-table.rpt-wrap-head thead th.rcpt-head {
+    white-space: normal; overflow-wrap: normal; word-break: normal;
+    min-width: 104px; max-width: none; width: 104px;
+  }
+
+  /* Date and Customer stay put while the rest scrolls sideways: this table is
+     14 columns wide and a receipt row means nothing once you can no longer
+     see whose it is. The shared .freeze-1/.freeze-2 helpers pin columns 1 and
+     2; Customer is column 4 here, so the offsets are set for this table.
+     Widths are fixed rather than measured so the two line up exactly -- a
+     frozen column that is wider than its offset slides over its neighbour and
+     cuts text off, which is the failure the shared helper's own comment
+     records. */
+  .rpt-table .rcpt-freeze-date,
+  .rpt-table .rcpt-freeze-cust { position: sticky; z-index: 2; }
+  .rpt-table .rcpt-freeze-date { left: 0;      min-width: 92px;  max-width: 92px;  width: 92px; }
+  .rpt-table .rcpt-freeze-cust { left: 92px;   min-width: 150px; max-width: 150px; width: 150px; }
+  /* Body cells need an opaque background or the scrolling columns show
+     through them. Hover has its own colour, so it must be repeated here. */
+  .rpt-table tbody td.rcpt-freeze-date,
+  .rpt-table tbody td.rcpt-freeze-cust { background: #fff; }
+  .rpt-table tbody tr:hover td.rcpt-freeze-date,
+  .rpt-table tbody tr:hover td.rcpt-freeze-cust { background: #f4f8fc; }
+  .rpt-table tfoot td.rcpt-freeze-date,
+  .rpt-table tfoot td.rcpt-freeze-cust { background: #eaf0f8; }
+  /* A frozen heading is sticky both ways, so it must outrank both the other
+     headings (z-index 3) and the frozen body cells. */
+  .rpt-scroll .rpt-table thead th.rcpt-freeze-date,
+  .rpt-scroll .rpt-table thead th.rcpt-freeze-cust { z-index: 5; }
+  /* A hairline marking where the frozen pair ends, so a reader can see that
+     the columns beside it are the ones moving. */
+  .rpt-table .rcpt-freeze-cust { box-shadow: inset -1px 0 0 #dbe3ec; }
+  html[data-theme="dark"] .rpt-table tbody td.rcpt-freeze-date,
+  html[data-theme="dark"] .rpt-table tbody td.rcpt-freeze-cust {
+    background: var(--surface, #16181c);
+  }
+  @media print {
+    /* Nothing scrolls on paper; sticky cells only risk overlap there. */
+    .rpt-table .rcpt-freeze-date, .rpt-table .rcpt-freeze-cust {
+      position: static; box-shadow: none; max-width: none; }
+  }
+  /* A thumbnail is a link to look at, not something a printed sheet can
+     use — the count stays, the image goes. */
+  @media print {
+    .rcpt-thumbs img, .rcpt-thumbs .rcpt-thumb-pdf { display:none; }
+    .rcpt-thumbs .rcpt-more { position:static; border:0; background:none; color:#000; }
+  }
 </style>
 {% include '_sales_report_subnavbar.html' with active_tab='customer_receipt_report' %}
 
@@ -75,7 +150,12 @@
       </select></div>
     <div class="rpt-actions">
       <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-filter me-1"></i>Filter</button>
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'customer_receipt_report' %}"><i class="fas fa-xmark me-1"></i>Clear</a>
+      {% comment %}
+      all=1 tells the view the dates were emptied on purpose. Without it a
+      cleared filter is indistinguishable from a fresh visit and the 7-day
+      default comes straight back, so Clear could never reach the full history.
+      {% endcomment %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'customer_receipt_report' %}?all=1"><i class="fas fa-xmark me-1"></i>Clear</a>
     </div>
   </form>
 </div>
@@ -85,18 +165,20 @@
   <div class="rpt-scroll">
     <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0 ds-grid">
       <thead><tr>
-        <th class="ds-mid">Date</th><th>Receipt No.</th><th>Source</th><th>Customer</th><th>DC No.</th>
+        <th class="ds-mid rcpt-freeze-date">Date</th><th>Receipt No.</th><th>Source</th>
+        <th class="rcpt-freeze-cust">Customer</th><th>DC No.</th>
         <th>Mode</th><th>Payment Method</th><th class="ds-num num">Amount</th>
         <th>Location</th><th class="ds-num num">Balance</th><th>Remarks</th>
+        <th class="ds-mid rcpt-head">Attachments</th>
         <th>Added By</th><th>Added Time</th>
       </tr></thead>
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.date|date:"d-m-Y" }}</td>
+          <td class="rcpt-freeze-date">{{ r.date|date:"d-m-Y" }}</td>
           <td class="rpt-link">{{ r.receipt_no }}</td>
           <td class="rpt-type">{{ r.source }}</td>
-          <td class="rpt-loc">{{ r.party_name }}</td>
+          <td class="rpt-loc rcpt-freeze-cust">{{ r.party_name }}</td>
           <td>{{ r.dc_no }}</td>
           <td>{{ r.mode }}</td>
           <td>{{ r.account.code }} - {{ r.account.description }}</td>
@@ -104,15 +186,39 @@
           <td>{{ r.location }}</td>
           <td class="num {% if r.balance_cr_dr == 'Cr' %}rpt-neg{% endif %}">{{ r.balance|indian_currency }} {{ r.balance_cr_dr }}</td>
           <td>{{ r.remarks }}</td>
+          <td class="ds-mid text-center">
+            {% with a=r.attachments.0 %}
+            {% if a %}
+            <button type="button" class="rcpt-thumbs rcpt-view"
+                    data-url="{{ r.attach_url }}" data-title="{{ r.receipt_no }} — {{ r.party_name }}"
+                    title="{{ r.attachment_count }} file(s) — click to view">
+              {% if a.name|lower|slice:"-4:" == ".pdf" %}
+              <span class="rcpt-thumb-pdf"><i class="fas fa-file-pdf"></i></span>
+              {% else %}
+              <img src="{{ a.url }}" alt="">
+              {% endif %}
+              {% if r.attachment_count > 1 %}<span class="rcpt-more">{{ r.attachment_count }}</span>{% endif %}
+            </button>
+            {% else %}<span class="rcpt-none">&mdash;</span>{% endif %}
+            {% endwith %}
+          </td>
           <td>{{ r.added_by }}</td>
           <td>{{ r.added_time|date:"d-m-Y h:i A" }}</td>
         </tr>
         {% endfor %}
       </tbody>
+      {% comment %}
+      The Total row used to span columns 1-7 in one cell. A merged cell cannot
+      freeze with the two columns under it, so the frozen pair is split out
+      here and the span covers only what is left (3-7). Same 14 columns.
+      {% endcomment %}
       <tfoot><tr>
-        <td colspan="7" class="text-center">Total</td>
+        <td class="rcpt-freeze-date text-center">Total</td>
+        <td></td><td></td>
+        <td class="rcpt-freeze-cust"></td>
+        <td colspan="3"></td>
         <td class="num rpt-amount">{{ total_amount|indian_currency }}</td>
-        <td colspan="5"></td>
+        <td colspan="6"></td>
       </tr></tfoot>
     </table>
   </div>
@@ -121,6 +227,7 @@
     Unifies every customer-facing receipt across Sales, Bird Sale and Chick Sale — Source shows which one raised the
     row. Balance is that customer's outstanding position as of the receipt's own date, the same figure Customer
     Balance reads; a negative (Cr) balance means the customer was in advance, not owing.
+    Attachments shows the proof filed against the receipt — click a thumbnail to see every file on it.
   </div>
   {% else %}
   <div class="rpt-empty">
@@ -129,4 +236,72 @@
   </div>
   {% endif %}
 </div></div>
+
+{% comment %}
+Viewer for the Document column. Read-only on purpose: this is a report, and
+uploading or deleting proof belongs on the receipt's own screen where the
+permission for it is checked. The files come from each module's existing
+attachments endpoint, so nothing new serves them.
+{% endcomment %}
+<div class="modal fade no-print" id="rcptAttachModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-paperclip me-1"></i><span id="rcptAttachTitle"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body"><div class="row g-2" id="rcptAttachList"></div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  document.addEventListener("click", function (ev) {
+    const btn = ev.target.closest(".rcpt-view");
+    if (!btn) return;
+    const list = document.getElementById("rcptAttachList");
+    document.getElementById("rcptAttachTitle").textContent = btn.dataset.title || "Attachments";
+    list.innerHTML = '<div class="col-12 text-muted">Loading…</div>';
+    new bootstrap.Modal(document.getElementById("rcptAttachModal")).show();
+
+    fetch(btn.dataset.url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
+      .then(function (atts) {
+        if (!atts.length) {
+          list.innerHTML = '<div class="col-12 text-muted">No attachments on this receipt.</div>';
+          return;
+        }
+        list.innerHTML = atts.map(function (a) {
+          const isImg = /\.(png|jpe?g|gif|webp)$/i.test(a.name || "");
+          const body = isImg
+            ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">'
+              + '<img src="' + esc(a.url) + '" class="img-fluid rounded border" alt=""></a>'
+            : '<a href="' + esc(a.url) + '" target="_blank" rel="noopener"'
+              + ' class="btn btn-outline-secondary w-100 text-truncate">'
+              + '<i class="fas fa-file-pdf me-1"></i>' + esc(a.name) + '</a>';
+          return '<div class="col-md-4"><div class="border rounded p-2 text-center">'
+            + body
+            + '<div class="small text-muted mt-1">' + esc(a.caption || "") + '</div>'
+            + '<div class="small text-muted">' + esc(a.uploaded_by || "") + " "
+            + esc(a.uploaded_at || "") + '</div></div></div>';
+        }).join("");
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="col-12 text-danger">Could not load the attachments.</div>';
+      });
+  });
+})();
+</script>
 {% endblock %}
