@@ -526,8 +526,17 @@ body.ds-sb-collapsed .ds-sb-logo img { width: 30px; object-fit: cover; object-po
   border-radius: 7px; text-decoration: none; cursor: pointer; text-align: left;
 }
 .ds-sb-item > i:first-child { width: 18px; font-size: 14px; text-align: center; flex: 0 0 18px; }
-.ds-sb-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.ds-sb-item.is-active { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 600; }
+/* .10, not .06: on this rail's #123524 a 6% veil measures 1.19:1, under the
+   ~1.25:1 where a highlight starts to read, and weaker than the active state
+   it sits beside. .10 matches the module bar's hover, which measures 1.33:1
+   and is the one highlight on the chrome nobody has had to squint at. */
+.ds-sb-item:hover { background: rgba(255, 255, 255, .10); color: #fff; }
+/* .16, not .12: hover above had to come up to be seen at all, and at .12 the
+   active item was only 1.06:1 away from it -- the current page and the one
+   under the pointer looked the same. Raising this keeps the two a step apart
+   (1.21:1) now that hover carries weight. The green is-active states below
+   sit at .22 and stay ahead of both. */
+.ds-sb-item.is-active { background: rgba(255, 255, 255, .16); color: #fff; font-weight: 600; }
 /* The Dashboard entry is a page, not a module, so it takes the page accent. */
 a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3px 0 0 #22c55e; }
 .ds-sb-caret { margin-left: auto; font-size: 9px; transition: transform .16s ease; opacity: .6; }
@@ -543,7 +552,7 @@ a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3
   text-transform: uppercase; color: rgba(255, 255, 255, .45);
   border-radius: 6px; transition: color .15s ease, background .15s ease;
 }
-.ds-sb-section:hover { color: rgba(255, 255, 255, .8); background: rgba(255, 255, 255, .05); }
+.ds-sb-section:hover { color: rgba(255, 255, 255, .8); background: rgba(255, 255, 255, .09); }
 .ds-sb-sec-icon { width: 13px; flex: 0 0 13px; text-align: center; font-size: 10.5px; opacity: .8; }
 .ds-sb-sec-caret { margin-left: auto; font-size: 9px; opacity: .7; transition: transform .16s ease; }
 .ds-sb-sec.is-open > .ds-sb-section {
@@ -574,7 +583,7 @@ a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3
   font-size: 11.5px; opacity: .75;
 }
 .ds-sb-link.is-active > i { opacity: 1; }
-.ds-sb-link:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.ds-sb-link:hover { background: rgba(255, 255, 255, .10); color: #fff; }
 .ds-sb-link.is-active {
   color: #fff; background: rgba(22, 163, 74, .22); font-weight: 600;
   box-shadow: inset 3px 0 0 #22c55e;

@@ -242,11 +242,25 @@ html[data-theme="dark"] .running-empty { color: var(--text-secondary); }
 
 /* A sub-nav tab under the pointer. The brand tint reads on this ground where
    a lift of surface does not -- #1b1e23 on #141619 is no change at all to
-   look at, which is how a hovered tab came to look like every other one. */
+   look at, which is how a hovered tab came to look like every other one.
+
+   Set outright rather than via --primary-subtle: that token is #15202f here,
+   which measured against the strip it sits on is 1.00:1 -- the same colour,
+   so the tab the pointer was on looked like every other one anyway. #1e3a5f
+   is 1.47:1 on #141619, which reads.
+
+   The active tab below is the other half: white on --primary (#3b82f6) is
+   3.68:1, under the 4.5:1 floor, and it has to stay distinguishable from
+   this hover rather than merely louder than it. */
 html[data-theme="dark"] .module-subnav .subnav-tab a:hover {
-  background: var(--primary-subtle);
+  background: #1e3a5f;
   color: var(--primary-light);
   border-color: var(--primary-dark);
+}
+html[data-theme="dark"] .module-subnav .subnav-tab a.active {
+  background: #1d4ed8;
+  color: #ffffff;
+  border-color: transparent;
 }
 
 /* The filter strip's own cells. */

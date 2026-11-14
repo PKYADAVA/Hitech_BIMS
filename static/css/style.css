@@ -1036,9 +1036,16 @@ footer { margin-top: auto; }
 /* Hover says which tab the pointer is on, so it has to be seen at a glance.
    A step of surface does not do that here: the strip is already a card, and
    #f8fafc on white (or the dark theme's equivalent) is a 3% shift nobody
-   notices. A tint of the brand colour, which the active tab also speaks. */
+   notices. A tint of the brand colour, which the active tab also speaks.
+
+   The tint is set here rather than taken from --primary-subtle. That token is
+   #eff6ff, which against this strip's white is 1.09:1 -- a 9% shift, barely
+   past the 3% this comment rejects, and the dark theme redefines it to the
+   card's own colour (1.00:1, no highlight at all). A hover that has to be
+   seen cannot be left to a token two themes move. #cfe2ff is 1.31:1 on
+   white, where a highlight starts to read. */
 .module-subnav .subnav-tab a:hover {
-  background: var(--primary-subtle);
+  background: #cfe2ff;
   color: var(--primary-dark);
   border-color: var(--primary-light);
 }
