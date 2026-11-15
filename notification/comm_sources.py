@@ -102,14 +102,48 @@ def _mobile(*candidates):
 
 
 def _base_row(*, doc_id, date, party_type, party_id, party_name, mobile,
-              doc_no, amount, context):
+              doc_no, amount, context, location_id=None):
+    """One row of the transaction grid.
+
+    ``location_id`` is where the document belongs, as a typed key -- "w:16"
+    for a Warehouse, "b:2" for a Branch, "h:2" for a Hatchery. It is carried
+    on the row rather than filtered inside each builder because the twenty
+    sources spell their location eight different ways, and three of them
+    file against a master that is not a Warehouse at all.
+
+    The type prefix is what lets those three join the same filter. Branch,
+    Hatchery and Warehouse are separate masters with no keys between them --
+    they overlap only by name, and not completely -- so a bare integer would
+    make Branch 2 and Warehouse 2 indistinguishable and quietly mis-file
+    rows. Prefixing keeps each master's ids in their own namespace, and the
+    dropdown offers them as separate labelled groups.
+
+    A source with no location at all passes None, which ``LOCATION_SOURCES``
+    below is what actually decides on.
+    """
     return {
         "doc_id": doc_id, "date": date.isoformat(),
         "party_type": party_type, "party_id": party_id,
         "party_name": party_name, "mobile": mobile or "",
         "doc_no": doc_no, "amount": str(amount),
+        "location_id": location_id,
         "context": {**DEFAULT_CONTEXT, **context},
     }
+
+
+def _wh(pk):
+    """Typed key for a Warehouse id, or None."""
+    return f"w:{pk}" if pk else None
+
+
+def _branch(pk):
+    """Typed key for a Branch id, or None."""
+    return f"b:{pk}" if pk else None
+
+
+def _hatchery(pk):
+    """Typed key for a Hatchery id, or None."""
+    return f"h:{pk}" if pk else None
 
 
 def _chick_sale_rows(from_date, to_date, party_id):
@@ -123,6 +157,7 @@ def _chick_sale_rows(from_date, to_date, party_id):
     rows = []
     for cs in qs.order_by("-date", "-id"):
         rows.append(_base_row(
+            location_id=_wh(cs.warehouse_id),
             doc_id=cs.id, date=cs.date, party_type="customer",
             party_id=cs.customer_id, party_name=cs.customer.name,
             mobile=cs.customer.mobile, doc_no=cs.bill_no, amount=cs.final_amount,
@@ -156,6 +191,7 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
         amount = r.amount or 0
         due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
+            location_id=_wh(r.location_id),
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
             mobile=_mobile(r.customer.mobile, r.customer.mobile_2),
@@ -188,6 +224,7 @@ def _delivery_challan_rows(from_date, to_date, party_id):
         # item's effective rate).
         rate = (sum((i.amount or 0) for i in dc.items.all()) / qty) if qty else 0
         rows.append(_base_row(
+            location_id=_wh(dc.warehouse_id),
             doc_id=dc.id, date=dc.date, party_type="customer",
             party_id=dc.customer_id, party_name=dc.customer.name,
             mobile=dc.customer.mobile, doc_no=dc.challan_no, amount=dc.grand_total(),
@@ -215,6 +252,7 @@ def _egg_purchase_rows(from_date, to_date, party_id):
     rows = []
     for ep in qs.order_by("-date", "-id"):
         rows.append(_base_row(
+            location_id=_wh(ep.warehouse_id),
             doc_id=ep.id, date=ep.date, party_type="supplier",
             party_id=ep.supplier_id, party_name=ep.supplier.name,
             mobile=ep.supplier.mobile, doc_no=ep.transaction_no, amount=ep.net_amount(),
@@ -238,6 +276,7 @@ def _egg_grading_rows(from_date, to_date, party_id):
     rows = []
     for eg in qs.order_by("-date", "-id"):
         rows.append(_base_row(
+            location_id=_wh(eg.storage_location_id),
             doc_id=eg.id, date=eg.date, party_type="supplier",
             party_id=eg.supplier_id, party_name=eg.supplier.name,
             mobile=_mobile(eg.supplier.mobile, eg.supplier.mobile_2),
@@ -259,7 +298,7 @@ def _tray_setting_rows(from_date, to_date, party_id):
     header is what carries one party's own message, the same shape
     ``_supplier_payment_rows`` already uses for a multi-party voucher."""
     qs = (TraySettingLine.objects.filter(supplier__isnull=False)
-          .select_related("tray_setting", "supplier"))
+          .select_related("tray_setting__grading", "supplier"))
     qs = _between(qs, from_date, to_date, field="tray_setting__setting_date")
     if party_id:
         qs = qs.filter(supplier_id=party_id)
@@ -267,6 +306,9 @@ def _tray_setting_rows(from_date, to_date, party_id):
     for line in qs.order_by("-tray_setting__setting_date", "-id"):
         ts = line.tray_setting
         rows.append(_base_row(
+            # A tray setting has no warehouse of its own; it takes the one
+            # the eggs were graded into, which is where the trays are.
+            location_id=_wh(ts.grading.storage_location_id if ts.grading_id else None),
             doc_id=line.id, date=ts.setting_date, party_type="supplier",
             party_id=line.supplier_id, party_name=line.supplier.name,
             mobile=_mobile(line.supplier.mobile, line.supplier.mobile_2),
@@ -301,6 +343,10 @@ def _bird_sale_rows(from_date, to_date, party_id):
         weight = bs.net_weight or 0
         doc_no = bs.sale_no or bs.doc_no or ""
         rows.append(_base_row(
+            # A bird sale happens at a farm, and a farm belongs to a Branch
+            # rather than to a Warehouse -- so it filters by its Branch, in
+            # the dropdown's Branches group.
+            location_id=_branch(bs.farm.branch_id if bs.farm_id else None),
             doc_id=bs.id, date=bs.date, party_type="customer",
             party_id=bs.customer_id, party_name=bs.customer.name,
             mobile=_mobile(bs.customer.mobile, bs.customer.mobile_2),
@@ -345,6 +391,7 @@ def _bird_receipt_rows(from_date, to_date, party_id):
         amount = r.amount or 0
         due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
+            location_id=_wh(r.location_id),
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
             mobile=_mobile(r.customer.mobile, r.customer.mobile_2),
@@ -379,6 +426,7 @@ def _broiler_batch_rows(from_date, to_date, party_id):
             continue
         doc_no = b.batch_name or b.lot_no or ""
         rows.append(_base_row(
+            location_id=_branch(farm.branch_id if farm else None),
             doc_id=b.id, date=b.start_date, party_type="farmer",
             party_id=farmer.id, party_name=farmer.farmer_name,
             mobile=_mobile(farmer.mobile_no, farmer.mobile_2, farmer.phone_no),
@@ -409,6 +457,7 @@ def _sales_invoice_rows(from_date, to_date, party_id):
         qty = inv.total_quantity() or 0
         net = inv.net_amount or 0
         rows.append(_base_row(
+            location_id=_wh(inv.branch_id),
             doc_id=inv.id, date=inv.date, party_type="customer",
             party_id=inv.customer_id, party_name=inv.customer.name,
             mobile=_mobile(inv.customer.mobile, inv.customer.mobile_2),
@@ -443,6 +492,7 @@ def _sales_receipt_rows(from_date, to_date, party_id):
         amount = r.amount or 0
         due = customer_balance_as_of(timelines[r.customer_id], r.date)["debit"]
         rows.append(_base_row(
+            location_id=_wh(r.location_id),
             doc_id=r.id, date=r.date, party_type="customer",
             party_id=r.customer_id, party_name=r.customer.name,
             mobile=_mobile(r.customer.mobile, r.customer.mobile_2),
@@ -505,14 +555,22 @@ def _customer_due_rows(from_date, to_date, party_id):
 def _general_purchase_rows(from_date, to_date, party_id):
     from purchase.models import GeneralPurchase
 
-    qs = GeneralPurchase.objects.select_related("supplier")
+    qs = GeneralPurchase.objects.select_related("supplier").prefetch_related("items")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(supplier_id=party_id)
     rows = []
     for gp in qs.order_by("-date", "-id"):
         net = gp.net_amount or 0
+        # The warehouse lives on the lines, not the header. A purchase whose
+        # lines land in more than one takes none: a single branch value
+        # cannot honestly stand for a document that went to two, and the
+        # filter would otherwise claim it belongs to whichever line came
+        # first. Prefetched above, so this reads no extra query per row.
+        line_warehouses = {i.farm_warehouse_id for i in gp.items.all()
+                           if i.farm_warehouse_id}
         rows.append(_base_row(
+            location_id=_wh(line_warehouses.pop() if len(line_warehouses) == 1 else None),
             doc_id=gp.id, date=gp.date, party_type="supplier",
             party_id=gp.supplier_id, party_name=gp.supplier.name,
             mobile=_mobile(gp.supplier.mobile, gp.supplier.mobile_2),
@@ -531,7 +589,7 @@ def _general_purchase_rows(from_date, to_date, party_id):
 def _chicks_purchase_rows(from_date, to_date, party_id):
     from purchase.models import ChicksPurchase
 
-    qs = ChicksPurchase.objects.select_related("supplier")
+    qs = ChicksPurchase.objects.select_related("supplier", "hatchery")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(supplier_id=party_id)
@@ -539,6 +597,8 @@ def _chicks_purchase_rows(from_date, to_date, party_id):
     for cp in qs.order_by("-date", "-id"):
         net = cp.net_amount or 0
         rows.append(_base_row(
+            # Chicks are bought into a hatchery, its own master again.
+            location_id=_hatchery(cp.hatchery_id),
             doc_id=cp.id, date=cp.date, party_type="supplier",
             party_id=cp.supplier_id, party_name=cp.supplier.name,
             mobile=_mobile(cp.supplier.mobile, cp.supplier.mobile_2),
@@ -565,7 +625,7 @@ def _supplier_payment_rows(from_date, to_date, party_id):
     """
     from purchase.models import SupplierPaymentLine
 
-    qs = SupplierPaymentLine.objects.select_related("payment", "supplier")
+    qs = SupplierPaymentLine.objects.select_related("payment__location", "supplier")
     qs = _between(qs, from_date, to_date, field="payment__date")
     if party_id:
         qs = qs.filter(supplier_id=party_id)
@@ -573,6 +633,7 @@ def _supplier_payment_rows(from_date, to_date, party_id):
     for line in qs.order_by("-payment__date", "-id"):
         pay, amount = line.payment, line.amount or 0
         rows.append(_base_row(
+            location_id=_wh(pay.location_id),
             doc_id=line.id, date=pay.date, party_type="supplier",
             party_id=line.supplier_id, party_name=line.supplier.name,
             mobile=_mobile(line.supplier.mobile, line.supplier.mobile_2),
@@ -647,6 +708,11 @@ def _stock_transfer_rows(from_date, to_date, party_id):
         rate = st.rate or st.purchase_rate or 0
         doc_no = st.trnum or st.dc_no or ""
         rows.append(_base_row(
+            # These rows are warehouse-to-farm by definition (the queryset
+            # filters to_location_type="farm"), so the warehouse end is the
+            # only one a branch filter can match on -- "either end" has just
+            # the one end here.
+            location_id=_wh(st.from_warehouse_id),
             doc_id=st.id, date=st.date, party_type="farmer",
             party_id=farmer.id, party_name=farmer.farmer_name,
             mobile=_mobile(farmer.mobile_no, farmer.mobile_2, farmer.phone_no),
@@ -676,6 +742,9 @@ def _employee_row(*, doc_id, date, employee, doc_no, amount, extra=None):
         party_id=employee.id, party_name=name,
         mobile=_mobile(employee.personal_contact, employee.emergency_contact),
         doc_no=doc_no, amount=amount,
+        # Attendance, Leave and Payroll have no branch of their own; the
+        # person does. Set once here, since all three go through this helper.
+        location_id=_wh(employee.warehouse_id),
         context={
             "EmployeeName": name, "InvoiceNo": doc_no,
             "InvoiceDate": date.strftime("%d-%m-%Y"),
@@ -688,7 +757,7 @@ def _employee_row(*, doc_id, date, employee, doc_no, amount, extra=None):
 def _attendance_rows(from_date, to_date, party_id):
     from hr.models import Attendance
 
-    qs = Attendance.objects.select_related("employee")
+    qs = Attendance.objects.select_related("employee__warehouse")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(employee_id=party_id)
@@ -701,7 +770,7 @@ def _attendance_rows(from_date, to_date, party_id):
 def _leave_rows(from_date, to_date, party_id):
     from hr.models import EmployeeLeave
 
-    qs = EmployeeLeave.objects.select_related("employee").prefetch_related("dates")
+    qs = EmployeeLeave.objects.select_related("employee__warehouse").prefetch_related("dates")
     qs = _between(qs, from_date, to_date, field="created_date__date")
     if party_id:
         qs = qs.filter(employee_id=party_id)
@@ -723,7 +792,7 @@ def _payroll_rows(from_date, to_date, party_id):
 
     from hr.models import Payroll
 
-    qs = Payroll.objects.select_related("employee")
+    qs = Payroll.objects.select_related("employee__warehouse")
     if party_id:
         qs = qs.filter(employee_id=party_id)
     lo, hi = _parse_date(from_date), _parse_date(to_date)
@@ -882,6 +951,79 @@ PARTY_TYPES = {
     "farmer": "Farmer",
     "employee": "Employee",
 }
+
+
+# The sources that can answer a Branch/Location filter, i.e. whose rows
+# resolve to a Warehouse. The field is spelled five different ways across
+# them, which is why the resolution happens in each builder and lands on the
+# row as ``location_id`` rather than being derived here.
+#
+# The page greys the filter out for anything not named here, rather than
+# offering a control that quietly changes nothing: a filter that appears to
+# work and does not is worse than one that is plainly unavailable.
+#
+# Not here, and why: customer_due and supplier_due are a balance as at a
+# date rather than a document, so there is no one place they happened.
+# Everything else resolves, including the three that file against a master
+# other than Warehouse -- they take their own master's ids under a different
+# type prefix instead of being translated into a warehouse they have no key
+# to.
+LOCATION_SOURCES = frozenset({
+    "sales",            # Chick Sale       -> warehouse
+    "chick_receipt",    # Chick Receipt    -> location
+    "dispatch",         # Delivery Challan -> warehouse
+    "purchase",         # Egg Purchase     -> warehouse
+    "bird_receipt",     # Bird Receipt     -> location
+    "sale_invoice",     # Sale Invoice     -> branch
+    "sales_receipt",    # Sales Receipt    -> location
+    "egg_grading",      # Egg Grading      -> storage_location
+    "stock_transfer",   # Stock Transfer   -> from_warehouse (always farm-bound)
+    "hr_attendance",    # Attendance       -> employee.warehouse
+    "hr_leave",         # Leave            -> employee.warehouse
+    "hr_payroll",       # Payroll          -> employee.warehouse
+    "tray_set",         # Tray Set         -> grading.storage_location
+    "purchase_invoice", # General Purchase -> items.farm_warehouse (if one)
+    "supplier_payment", # Supplier Payment -> payment.location
+    "bird_sale",        # Bird Sale        -> farm.branch        (Branch)
+    "broiler_batch",    # Broiler Batch    -> farm.branch        (Branch)
+    "chicks_purchase",  # Chicks Purchase  -> hatchery           (Hatchery)
+})
+
+
+def location_choices():
+    """The Branch/Location filter's options, as [(group label, [(key, name)])].
+
+    Three masters, kept apart rather than merged: Warehouse, Branch (what a
+    broiler farm belongs to) and Hatchery. They carry no keys to each other
+    and overlap only by name -- "AKBARPUR BRANCH" exists as both a Branch and
+    a Warehouse as separate records, while VARANASI BRANCH has no warehouse
+    at all -- so translating between them would mis-file rows the first time
+    one is renamed. The keys are typed ("w:16", "b:2", "h:2") so each
+    master's ids stay in their own namespace.
+    """
+    from broiler.models import Branch, BroilerFarm
+    from hatchery_master.models import Hatchery
+    from inventory.models import Warehouse
+
+    groups = [("Warehouses", [(f"w:{i}", n) for i, n in
+                              Warehouse.objects.order_by("name")
+                              .values_list("id", "name")])]
+
+    # Only the branches that actually have a farm: a branch with none can
+    # never match a row, and an option that always returns nothing reads as
+    # a broken filter.
+    farm_branches = set(BroilerFarm.objects.filter(branch__isnull=False)
+                        .values_list("branch_id", flat=True))
+    branches = [(f"b:{b.pk}", str(b)) for b in Branch.objects.order_by("branch_name")
+                if b.pk in farm_branches]
+    if branches:
+        groups.append(("Branches (farms)", branches))
+
+    hatcheries = [(f"h:{h.pk}", str(h))
+                  for h in Hatchery.objects.order_by("hatchery_name")]
+    if hatcheries:
+        groups.append(("Hatcheries", hatcheries))
+    return groups
 
 
 def party_choices(user=None):

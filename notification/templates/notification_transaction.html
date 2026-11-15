@@ -35,8 +35,20 @@
      taller than its siblings — the filter grid aligns every field to a
      shared baseline (align-items:end), and an in-flow hint would break that
      for Party Name alone. */
-  #party-name-hint { position:absolute; top:100%; left:0; right:0; margin-top:.2rem;
+  #party-name-hint, #location-hint {
+                     position:absolute; top:100%; left:0; right:0; margin-top:.2rem;
                      font-size:.72rem; line-height:1.2; color:var(--text-muted,#65727e); }
+  /* Branch/Location greys out for a module whose documents have no branch,
+     the same treatment Party Name gets when it cannot apply. Select2 may or
+     may not have upgraded this one, so both the bare select and the Select2
+     face are covered. */
+  #location-filter:disabled {
+    background:var(--bg-subtle,#eef0f2) !important; cursor:not-allowed !important;
+  }
+  #location-filter:disabled + .select2-container .select2-selection {
+    background:var(--bg-subtle,#eef0f2) !important; cursor:not-allowed !important;
+  }
+  #location-filter:disabled + .select2-container { cursor:not-allowed; }
 
   .ntx-filter-grid { display:flex; flex-wrap:nowrap; gap:.4rem; align-items:end; }
   .ntx-filter-grid > div { flex:1 1 0; min-width:0; position:relative; }
@@ -126,6 +138,31 @@
         </select>
         {% endfor %}
         <div id="party-name-hint" class="d-none">Pick a Module to filter by a specific party</div>
+      </div>
+      {% comment %}
+      Branch/Location. Only the modules in LOCATION_SOURCES file their
+      documents against a Warehouse; the rest have no location at all, so the
+      control disables itself for those rather than sitting there appearing
+      to filter and changing nothing.
+      {% endcomment %}
+      <div>
+        <label class="form-label" id="location-label">Branch / Location</label>
+        <select class="form-select" id="location-filter"
+                data-location-sources="{{ location_sources }}">
+          <option value="">-All-</option>
+          {% comment %}
+          Grouped, because these are three separate masters: most documents
+          sit in a Warehouse, a broiler farm's belong to a Branch, and chick
+          purchases to a Hatchery. The values are typed ("w:16", "b:2") so
+          ids from different masters cannot collide.
+          {% endcomment %}
+          {% for group_label, options in location_choices %}
+          <optgroup label="{{ group_label }}">
+            {% for key, name in options %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+        <div id="location-hint" class="d-none">This module has no branch</div>
       </div>
       <div>
         <label class="form-label">Template <span class="text-danger">*</span></label>
@@ -277,6 +314,32 @@ $(function () {
     return $("#party-" + partyType()).val() || "";
   }
 
+  // The modules whose documents carry a Warehouse. Anything else has no
+  // branch to filter by, so the control disables rather than appearing to
+  // work. "All" keeps it enabled: it then narrows the sources that do have
+  // a branch and leaves the others untouched, which is what the server does.
+  const LOCATION_SOURCES = new Set(
+    ($("#location-filter").data("location-sources") || "").split(",").filter(Boolean));
+
+  function locationSupported() {
+    return isAllModules() || LOCATION_SOURCES.has($("#module").val());
+  }
+
+  function locationValue() {
+    if (!locationSupported()) return "";
+    return $("#location-filter").val() || "";
+  }
+
+  function syncLocationSelect() {
+    const ok = locationSupported();
+    const $sel = $("#location-filter");
+    if (!ok) $sel.val("");
+    $sel.prop("disabled", !ok);
+    // Same Select2 caveat as the party selects above.
+    if ($sel.hasClass("select2-hidden-accessible")) $sel.trigger("change.select2");
+    $("#location-hint").toggleClass("d-none", ok);
+  }
+
   // Rebuild the Template <select> for the current channel + chosen module.
   // ``preferScope`` ("module/transaction") carries the previously selected
   // template's scope across a channel switch, so picking "Broiler Sale" on
@@ -331,10 +394,12 @@ $(function () {
 
   $("#module").on("change", function () {
     syncPartySelects();
+    syncLocationSelect();
     refreshTemplateOptions();
     loadRows();
   });
   $(document).on("change", ".party-select", loadRows);
+  $("#location-filter").on("change", loadRows);
 
   function selectedTemplate() {
     const id = $("#template").val();
@@ -488,6 +553,10 @@ $(function () {
     if (!isAllModules() && partyValue()) {
       chips.push(["party", "Party: " + $("#party-" + partyType() + " option:selected").text()]);
     }
+    if (locationValue()) {
+      chips.push(["location-filter",
+                  "Branch: " + $("#location-filter option:selected").text()]);
+    }
     const tpl = selectedTemplate();
     if (tpl) chips.push(["template", "Template: " + tpl.name]);
     chips.forEach(function (c) {
@@ -500,7 +569,9 @@ $(function () {
     else if (field === "module") { $("#module").val("").trigger("change"); }
     else { $("#" + field).val(""); }
     renderActiveFilters();
-    if (field === "module" || field === "party") loadRows();
+    // Branch is applied server side, so clearing its chip has to re-fetch
+    // rather than just re-render what is already in hand.
+    if (field === "module" || field === "party" || field === "location-filter") loadRows();
     else if (rows.length) renderRows();
   });
 
@@ -542,6 +613,7 @@ $(function () {
     $.getJSON(CHANNEL_URLS[channel].source, {
       module: $("#module").val(), from_date: $("#from-date").val(),
       to_date: $("#to-date").val(), party: partyValue(),
+      location: locationValue(),
     }, function (resp) {
       rows = resp.rows || [];
       renderRows();
@@ -593,6 +665,7 @@ $(function () {
   $("#clear-btn").on("click", function () {
     $("#from-date").val(sevenDaysAgo); $("#to-date").val(today);
     $("#template").val(""); $("#party-type-filter").val("");
+    $("#location-filter").val("");
     markActiveQuickRange();
     $("#module").val("").trigger("change");
   });

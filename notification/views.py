@@ -265,6 +265,7 @@ def sms_transaction_source(request):
     from_date = (request.GET.get("from_date") or "").strip() or None
     to_date = (request.GET.get("to_date") or "").strip() or None
     party_id = (request.GET.get("party") or "").strip() or None
+    location_id = (request.GET.get("location") or "").strip() or None
 
     if module:
         source = DOC_SOURCES.get(module)
@@ -282,6 +283,16 @@ def sms_transaction_source(request):
         for r in DOC_SOURCES[key]["rows"](from_date, to_date, party_id):
             r["module"] = key
             rows.append(r)
+    # Branch/Location. The value is a typed key ("w:16" warehouse, "b:2"
+    # branch, "h:2" hatchery) so the three masters -- which carry no keys to
+    # each other -- stay in separate namespaces and cannot be confused by id.
+    # A row from a source with no location at all reads None and is left
+    # alone: the page greys the control out for those, and dropping their
+    # rows here would empty the grid for a filter it never offered.
+    if location_id:
+        rows = [r for r in rows
+                if r.get("location_id") is None
+                or r["location_id"] == location_id]
     rows.sort(key=lambda r: (r["date"], r["doc_id"]), reverse=True)
 
     # Stamp each row with its successful-send history (per template), so the
@@ -975,6 +986,7 @@ def whatsapp_transaction_source(request):
     from_date = (request.GET.get("from_date") or "").strip() or None
     to_date = (request.GET.get("to_date") or "").strip() or None
     party_id = (request.GET.get("party") or "").strip() or None
+    location_id = (request.GET.get("location") or "").strip() or None
 
     if module:
         source = DOC_SOURCES.get(module)
@@ -992,6 +1004,16 @@ def whatsapp_transaction_source(request):
         for r in DOC_SOURCES[key]["rows"](from_date, to_date, party_id):
             r["module"] = key
             rows.append(r)
+    # Branch/Location. The value is a typed key ("w:16" warehouse, "b:2"
+    # branch, "h:2" hatchery) so the three masters -- which carry no keys to
+    # each other -- stay in separate namespaces and cannot be confused by id.
+    # A row from a source with no location at all reads None and is left
+    # alone: the page greys the control out for those, and dropping their
+    # rows here would empty the grid for a filter it never offered.
+    if location_id:
+        rows = [r for r in rows
+                if r.get("location_id") is None
+                or r["location_id"] == location_id]
     rows.sort(key=lambda r: (r["date"], r["doc_id"]), reverse=True)
 
     doc_nos = {r["doc_no"] for r in rows}
@@ -1516,7 +1538,8 @@ class NotificationTransactionPageView(View):
     def get(self, request):
         from account.models import CompanyProfile
 
-        from .comm_sources import PARTY_TYPES, party_choices
+        from .comm_sources import (LOCATION_SOURCES, PARTY_TYPES,
+                                   location_choices, party_choices)
 
         can_sms = user_can(request.user, "sms_transaction", "view")
         can_whatsapp = user_can(request.user, "whatsapp_transaction", "view")
@@ -1549,6 +1572,10 @@ class NotificationTransactionPageView(View):
                 for t in wa_templates
             ]),
             "company_name": CompanyProfile.get_solo().name,
+            "location_choices": location_choices(),
+            # The page enables Branch/Location only for these modules; the
+            # rest have no branch on the document to filter by.
+            "location_sources": ",".join(sorted(LOCATION_SOURCES)),
         })
 
 
