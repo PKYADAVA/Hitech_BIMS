@@ -6,6 +6,39 @@
 {% block content %}
 {% include '_subnav.html' with module='broiler_farmer_gc' active_tab='farmer_gc_payment' %}
 
+<style>
+  /* The grid is fourteen columns and scrolls sideways below about 1900px, so
+     Sr. and Trans No would slide out of view on a laptop -- and a number you
+     cannot see is no use as a label for the row you are filling in. They stay
+     put instead, which is also why their widths are fixed: the second one's
+     offset has to be the first one's width exactly. */
+  #line-table th.gcp-fz-sr, #line-table td.gcp-fz-sr,
+  #line-table th.gcp-fz-no, #line-table td.gcp-fz-no {
+    position: sticky; z-index: 3; background-color: #fff;
+  }
+  #line-table th.gcp-fz-sr, #line-table td.gcp-fz-sr {
+    left: 0; min-width: 44px; max-width: 44px; width: 44px;
+  }
+  #line-table th.gcp-fz-no, #line-table td.gcp-fz-no {
+    left: 44px; min-width: 132px; max-width: 132px; width: 132px;
+    box-shadow: inset -1px 0 0 var(--ds-border, #e5e7eb);
+  }
+  /* The heading row keeps its own tint, and must outrank the body cells. */
+  #line-table thead th.gcp-fz-sr, #line-table thead th.gcp-fz-no {
+    z-index: 5; background-color: #f7f9fb;
+  }
+  #line-table tfoot td.gcp-fz-sr, #line-table tfoot td.gcp-fz-no,
+  #line-table tfoot th.gcp-fz-sr, #line-table tfoot th.gcp-fz-no {
+    z-index: 4; background-color: #f7f9fb;
+  }
+  /* The Trans No box reads as a label, not a field somebody should try to
+     type in: no border, and the number itself carried in the cell. */
+  #line-table .trans-no {
+    border: 0; background: transparent; font-size: .78rem;
+    font-weight: 600; color: var(--ds-muted, #64748b); padding: 0;
+  }
+</style>
+
 <div class="page-header">
   <div class="page-header-main">
     <div class="page-header-title">
@@ -33,17 +66,16 @@
           <input type="date" class="form-control" name="date" id="date" required
                  value="{% if payment %}{{ payment.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Trnum</label>
-          <input type="text" class="form-control bg-light" readonly
-                 value="{% if payment %}{{ payment.payment_no }}{% else %}{{ next_payment_no }}{% endif %}">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Narration</label>
-          <input type="text" class="form-control" name="narration" id="narration"
-                 placeholder="Written for you from the lines if left blank"
-                 value="{{ payment.narration|default:'' }}">
-        </div>
+        {% comment %}
+        The voucher number moved into the grid, one per row. A single box here
+        showed the first row's number above a form that creates several, which
+        read as the number for all of them.
+        {% endcomment %}
+        {% comment %}
+        Narration moved into the grid, one per row. Each row saves as its own
+        payment with its own voucher, so a single box here would have put the
+        same sentence on all of them.
+        {% endcomment %}
       </div>
     </div>
   </div>
@@ -55,7 +87,14 @@
         <table class="table table-bordered mb-0 ds-entry" id="line-table">
           <thead class="table-light">
             <tr>
-              <th class="c-fit m-short ds-mid">Sr.</th>
+              <th class="c-fit m-short ds-mid gcp-fz-sr">Sr.</th>
+              {% comment %}
+              Each row saves as its own payment, so each shows the number it
+              will be given. A preview on an unsaved row -- the server issues
+              the real number on save, and another user saving first can take
+              one, so this says what it will be rather than promising it.
+              {% endcomment %}
+              <th class="c-fit m-mid ds-mid gcp-fz-no">Trans No</th>
               <th class="c-grow m-long">Farm <span class="text-danger">*</span></th>
               <th class="c-fit m-mid">Batch</th>
               <th class="c-fit m-mid">Pay Type <span class="text-danger">*</span></th>
@@ -66,16 +105,23 @@
               <th class="c-num m-num ds-num">Bank Charges</th>
               <th class="c-fit m-mid">Reference No</th>
               <th class="c-grow m-long">Remarks</th>
+              {% comment %}
+              Each row is saved as its own payment, so each carries its own
+              narration -- the sentence that row's voucher goes to the ledger
+              with. Left blank it is written from the row itself, naming that
+              farmer and amount.
+              {% endcomment %}
+              <th class="c-grow m-long">Narration</th>
               <th class="c-fit"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
             <tr>
-              <th colspan="7" class="ds-num text-end">Total</th>
+              <th class="gcp-fz-sr"></th><th class="gcp-fz-no"></th><th colspan="6" class="ds-num text-end">Total</th>
               <th class="ds-num text-end" id="total_amount">0.00</th>
               <th class="ds-num text-end" id="total_charges">0.00</th>
-              <th colspan="3"></th>
+              <th colspan="4"></th>
             </tr>
           </tfoot>
         </table>
@@ -94,6 +140,9 @@
 <script>
 const existingLines = {{ existing_lines_json|safe }};
 const editingId = {% if payment %}{{ payment.id }}{% else %}null{% endif %};
+// The number the next payment would be given. Rows added below it preview the
+// ones after. Blank while editing the first row, which already has its own.
+const NEXT_PAYMENT_NO = "{{ next_payment_no|default:'' }}";
 
 // The farm, by its own name. It used to carry its farmer's name after it --
 // "Green Valley Farm - Test Farmer" -- which read as the same party twice in
@@ -132,7 +181,9 @@ document.addEventListener('change', function (e) {
 
 function lineRow(row = {}) {
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td class="sr text-center"></td>
+  tr.innerHTML = `<td class="sr text-center gcp-fz-sr"></td>
+    <td class="gcp-fz-no"><input class="trans-no text-center w-100" readonly tabindex="-1"
+               value="${row.payment_no || ''}"></td>
     <td><select class="form-select farm" required>${farmOptions}</select></td>
     <td><select class="form-select batch"><option value="">select</option></select></td>
     <td><select class="form-select pay-type">${payTypeOptions}</select></td>
@@ -143,11 +194,17 @@ function lineRow(row = {}) {
     <td><input class="form-control bank-charges" type="number" min="0" step=".01" value="${row.bank_charges || 0}"></td>
     <td><input class="form-control reference-no" value="${row.reference_no || ''}"></td>
     <td><input class="form-control remarks" value="${row.remarks || ''}"></td>
+    <td><input class="form-control narration" placeholder="Written from this row if blank"
+               value="${row.narration || ''}"></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
   get('line-table').tBodies[0].append(tr);
+
+  // A row loaded from a saved payment already has its number; renumber() must
+  // leave it alone rather than overwrite it with a preview of the next one.
+  if (row.payment_no) tr.querySelector('.trans-no').dataset.issued = '1';
 
   if (row.farm) tr.querySelector('.farm').value = row.farm;
   if (row.pay_type) tr.querySelector('.pay-type').value = row.pay_type;
@@ -199,9 +256,26 @@ async function loadGcAmount(tr) {
   }
 }
 
+// The number the Nth new row will be given: the server's next number with its
+// counter advanced by N. A row that already has one (editing) keeps it -- its
+// number was issued when it was saved and must not be re-guessed.
+function previewTransNo(offset) {
+  const base = NEXT_PAYMENT_NO;            // e.g. "FGP-2627-0007", "" when editing
+  if (!base) return '';
+  const cut = base.lastIndexOf('-');
+  const seq = parseInt(base.slice(cut + 1), 10);
+  if (isNaN(seq)) return '';
+  return base.slice(0, cut + 1) + String(seq + offset).padStart(4, '0');
+}
+
 function renumber() {
+  let newRow = 0;
   document.querySelectorAll('#line-table tbody tr').forEach((tr, i) => {
     tr.querySelector('.sr').textContent = i + 1;
+    const cell = tr.querySelector('.trans-no');
+    if (cell && !cell.dataset.issued) {
+      cell.value = previewTransNo(newRow++);
+    }
   });
   const rows = document.querySelectorAll('#line-table tbody tr');
   // The last row offers "+"; with one row left it cannot be deleted either, or
@@ -242,6 +316,7 @@ get('gcp-form').addEventListener('submit', e => {
     bank_charges: tr.querySelector('.bank-charges').value || 0,
     reference_no: tr.querySelector('.reference-no').value,
     remarks: tr.querySelector('.remarks').value,
+    narration: tr.querySelector('.narration').value,
   })).filter(r => r.farm && r.pay_account);
 
   if (!rows.length) {

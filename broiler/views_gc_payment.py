@@ -35,6 +35,9 @@ from Hitech_BIMS.entry_dates import date_from_query
 def _line_dict(line):
     return {
         "id": line.id,
+        # The number this row already carries, so the grid shows the real one
+        # rather than a preview of the next.
+        "payment_no": line.payment.payment_no,
         "farm": line.farm_id,
         "farm_name": line.farm.farm_name,
         "batch": line.batch_id,
@@ -47,6 +50,13 @@ def _line_dict(line):
         "bank_charges": str(line.bank_charges),
         "reference_no": line.reference_no,
         "remarks": line.remarks,
+        # The narration belongs to the payment, and a payment now holds one
+        # line, so the row carries its own payment's sentence back to the
+        # grid. An auto-written one is left out: showing it in the box would
+        # turn it into a hand-typed narration on the next save, and those are
+        # never rewritten when the amounts behind them change.
+        "narration": ("" if line.payment.narration == line.payment.compose_narration()
+                      else line.payment.narration),
     }
 
 
@@ -56,7 +66,9 @@ def _context(user, payment=None):
                                             payment_mode_map)
     return {
         "payment": payment,
-        "next_payment_no": FarmerGCPayment._next_payment_no() if not payment else None,
+        # Always supplied, not only when adding: editing can add rows too, and
+        # each of those becomes a payment of its own needing a number.
+        "next_payment_no": FarmerGCPayment._next_payment_no(),
         "farms": farms_for(user, BroilerFarm.objects.select_related("farmer")
                            .order_by("farm_name")),
         # Only real cash and bank ledgers. Money cannot leave through a sales
@@ -72,7 +84,8 @@ def _context(user, payment=None):
         "today": timezone.localdate().isoformat(),
         "existing_lines_json": json.dumps(
             [_line_dict(r) for r in payment.lines.select_related(
-                "farm", "batch", "pay_account")] if payment else []),
+                "farm__farmer", "batch", "pay_account",
+                "payment")] if payment else []),
     }
 
 
@@ -200,49 +213,83 @@ def farmer_gc_payment_gc_amount(request):
     })
 
 
-def _save_lines(payment, request):
+def _rows_from(request):
+    """The entry grid's rows, with the unusable ones dropped."""
     try:
         rows = json.loads(request.POST.get("lines_json") or "[]")
     except json.JSONDecodeError:
         rows = []
+    return [r for r in rows if r.get("farm") and r.get("pay_account")]
+
+
+def _apply_line(payment, row):
+    """Replace this payment's single line with ``row``."""
     payment.lines.all().delete()
-    for row in rows:
-        if not row.get("farm") or not row.get("pay_account"):
-            continue
-        FarmerGCPaymentLine.objects.create(
-            payment=payment,
-            farm_id=row["farm"],
-            batch_id=row.get("batch") or None,
-            pay_type=row.get("pay_type") or "GC Pay",
-            mode=row.get("mode") or "Cash",
-            pay_account_id=row["pay_account"],
-            gc_amount=Decimal(str(row.get("gc_amount") or 0)),
-            amount=Decimal(str(row.get("amount") or 0)),
-            bank_charges=Decimal(str(row.get("bank_charges") or 0)),
-            reference_no=row.get("reference_no") or "",
-            remarks=row.get("remarks") or "",
-        )
+    FarmerGCPaymentLine.objects.create(
+        payment=payment,
+        farm_id=row["farm"],
+        batch_id=row.get("batch") or None,
+        pay_type=row.get("pay_type") or "GC Pay",
+        mode=row.get("mode") or "Cash",
+        pay_account_id=row["pay_account"],
+        gc_amount=Decimal(str(row.get("gc_amount") or 0)),
+        amount=Decimal(str(row.get("amount") or 0)),
+        bank_charges=Decimal(str(row.get("bank_charges") or 0)),
+        reference_no=row.get("reference_no") or "",
+        remarks=row.get("remarks") or "",
+    )
+
+
+def _finish(payment, request):
+    """Narration and posting, once a payment has its line."""
+    # Left empty by the form, the voucher still needs a sentence an
+    # accountant can read. Typed by hand, it is never overwritten.
+    if not payment.narration:
+        payment.narration = payment.compose_narration()
+        payment.save(update_fields=["narration"])
+    # Inside the same transaction as the save, so a posting failure takes
+    # the voucher down with it rather than leaving money recorded as paid
+    # with nothing on the books to say where it went.
+    gc_posting.post_payment_if_enabled(payment, user=request.user)
 
 
 def _save(request, payment):
-    """Shared by add and edit: the two differ only in which record they hold."""
-    payment.date = request.POST.get("date") or timezone.localdate()
-    payment.narration = (request.POST.get("narration") or "").strip()
-    payment.full_clean(exclude=["payment_no"])
+    """Save the entry grid.
+
+    One payment per row, each with its own payment number, rather than one
+    voucher carrying every row: each row pays a different farm, and a farmer
+    asking which payment settled their charges has to be able to be told a
+    number that means only theirs. The lines table is kept -- the posting
+    service and the register both read through it -- but a payment now holds
+    exactly one line.
+
+    Adding returns the payments created; editing keeps the record the user
+    opened and applies the first row to it, so a payment number already
+    quoted to a farmer does not change underneath them. Extra rows added
+    while editing become payments of their own.
+    """
+    date = request.POST.get("date") or timezone.localdate()
+    # Kept as a fallback for anything still posting one narration for the
+    # whole form; the grid now carries one per row.
+    fallback = (request.POST.get("narration") or "").strip()
+    rows = _rows_from(request)
+    if not rows:
+        raise ValidationError("Add at least one payment line.")
+
+    saved = []
     with transaction.atomic():
-        payment.save()
-        _save_lines(payment, request)
-        if not payment.lines.exists():
-            raise ValidationError("Add at least one payment line.")
-        # Left empty by the form, the voucher still needs a sentence an
-        # accountant can read. Typed by hand, it is never overwritten.
-        if not payment.narration:
-            payment.narration = payment.compose_narration()
-            payment.save(update_fields=["narration"])
-        # Inside the same transaction as the save, so a posting failure takes
-        # the voucher down with it rather than leaving money recorded as paid
-        # with nothing on the books to say where it went.
-        gc_posting.post_payment_if_enabled(payment, user=request.user)
+        for index, row in enumerate(rows):
+            # The record being edited takes the first row; everything else is
+            # new, including every row when adding.
+            current = payment if (index == 0 and payment.pk) else FarmerGCPayment()
+            current.date = date
+            current.narration = (row.get("narration") or "").strip() or fallback
+            current.full_clean(exclude=["payment_no"])
+            current.save()
+            _apply_line(current, row)
+            _finish(current, request)
+            saved.append(current)
+    return saved
 
 
 @login_required(login_url="login")
@@ -250,8 +297,17 @@ def farmer_gc_payment_add(request):
     if request.method == "POST":
         payment = FarmerGCPayment()
         try:
-            _save(request, payment)
-            messages.success(request, "Farmer payment added successfully.")
+            saved = _save(request, payment)
+            # Named rather than counted: the numbers are the point of saving
+            # each row separately, so the user leaves knowing what they are.
+            if len(saved) == 1:
+                messages.success(
+                    request, f"Farmer payment {saved[0].payment_no} added.")
+            else:
+                messages.success(
+                    request,
+                    "%d farmer payments added: %s."
+                    % (len(saved), ", ".join(p.payment_no for p in saved)))
             return redirect("farmer_gc_payment")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages)
@@ -264,8 +320,16 @@ def farmer_gc_payment_edit(request, id):
     payment = get_object_or_404(FarmerGCPayment, id=id)
     if request.method == "POST":
         try:
-            _save(request, payment)
-            messages.success(request, "Farmer payment updated successfully.")
+            saved = _save(request, payment)
+            extra = [p for p in saved if p.pk != payment.pk]
+            if extra:
+                messages.success(
+                    request,
+                    "Farmer payment %s updated; %s added."
+                    % (payment.payment_no, ", ".join(p.payment_no for p in extra)))
+            else:
+                messages.success(
+                    request, f"Farmer payment {payment.payment_no} updated.")
             return redirect("farmer_gc_payment")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages)

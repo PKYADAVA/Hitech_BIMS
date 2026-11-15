@@ -93,15 +93,46 @@ class FarmerGCPaymentTests(TestCase):
 
     # -- summaries ---------------------------------------------------------
 
-    def test_one_farmer_reads_by_name_and_several_read_multiple(self):
+    def test_each_row_becomes_its_own_numbered_payment(self):
+        """Two rows are two payments, not one voucher covering both: a farmer
+        asking which payment settled their charges has to be able to be told a
+        number that means only theirs."""
         self.post([self.line(), self.line(farm=self.other_farm.id, batch=None)])
+
+        payments = list(FarmerGCPayment.objects.order_by("id"))
+        self.assertEqual(len(payments), 2)
+        self.assertEqual(len({p.payment_no for p in payments}), 2,
+                         "each payment needs its own number")
+        for payment in payments:
+            self.assertEqual(payment.lines.count(), 1)
+            # One line means the summaries name that farm rather than
+            # reading "Multiple".
+            self.assertNotEqual(payment.farmer_summary, "Multiple")
+            self.assertEqual(payment.total_amount, Decimal("2000"))
+
+        # The two farms belong to different farmers, which is the whole point:
+        # each now has a payment number that names only them.
+        self.assertEqual({p.farmer_summary for p in payments},
+                         {"Abhishek Kumar Singh", "Ram Prasad"})
+
+    def test_several_lines_on_one_payment_still_summarise(self):
+        """The summaries stay able to describe a multi-line payment: the
+        lines table is unchanged, and historic records may hold more than one.
+        """
+        self.post([self.line()])
         payment = FarmerGCPayment.objects.get()
+        self.assertEqual(payment.farmer_summary, "Abhishek Kumar Singh")
+
+        # A second line, as a record saved before the split would have.
+        line = payment.lines.first()
+        line.pk = None
+        line.farm = self.other_farm
+        line.batch = None
+        line.save()
+        payment.refresh_from_db()
         self.assertEqual(payment.farmer_summary, "Multiple")
         self.assertEqual(payment.mode_summary, "Cash")      # both lines agree
         self.assertEqual(payment.total_amount, Decimal("4000"))
-
-        payment.lines.filter(farm=self.other_farm).delete()
-        self.assertEqual(payment.farmer_summary, "Abhishek Kumar Singh")
 
     # -- narration ---------------------------------------------------------
 
