@@ -92,7 +92,15 @@ def _context(user, payment=None):
 @login_required(login_url="login")
 def farmer_gc_payment(request):
     """The register: a date range, and the vouchers written in it."""
-    return render(request, "farmer_gc_payment_list.html")
+    from broiler.models import Branch
+
+    return render(request, "farmer_gc_payment_list.html", {
+        # Only the branches the user may see, and only those with a farm:
+        # a branch that can never match anything reads as a broken filter.
+        "branches": scope_any(request.user, Branch.objects.all(), branches="id")
+        .filter(broiler_farms__isnull=False).distinct().order_by("branch_name"),
+        "years": range(timezone.localdate().year, timezone.localdate().year - 6, -1),
+    })
 
 
 @login_required(login_url="login")
@@ -100,6 +108,9 @@ def farmer_gc_payment_api(request):
     """JSON rows for the register's DataTable."""
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
+    month = (request.GET.get("month") or "").strip()
+    year = (request.GET.get("year") or "").strip()
+    branch = (request.GET.get("branch") or "").strip()
 
     qs = scope_any(request.user, FarmerGCPayment.objects.all(),
                    farms="lines__farm_id").prefetch_related(
@@ -108,15 +119,26 @@ def farmer_gc_payment_api(request):
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
         qs = qs.filter(date__lte=date_from_query(to_date))
+    # Month and year narrow within whatever the dates already allow, so
+    # picking a month does not silently widen a chosen range.
+    if year.isdigit():
+        qs = qs.filter(date__year=int(year))
+    if month.isdigit():
+        qs = qs.filter(date__month=int(month))
+    if branch.isdigit():
+        # Through the line's farm: a payment has no branch of its own. distinct
+        # because the join can repeat a payment that has several lines.
+        qs = qs.filter(lines__farm__branch_id=int(branch)).distinct()
 
     return JsonResponse({"data": [{
         "id": p.id,
         "date": p.date.strftime("%d-%m-%Y"),
         "trnum": p.payment_no,
         "farm": p.farm_summary,
-        "farmer": p.farmer_summary,
+        "pay_type": p.pay_type_summary,
         "mode": p.mode_summary,
         "method": p.method_summary,
+        "reference": p.reference_summary,
         "amount": f"{p.total_amount:.2f}",
         "attachments": [{"id": a.id, "url": a.file.url,
                         "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}

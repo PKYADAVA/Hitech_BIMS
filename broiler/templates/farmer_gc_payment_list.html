@@ -42,8 +42,41 @@
         <label for="to-date" class="form-label">To Date:</label>
         <input type="date" class="form-control" id="to-date">
       </div>
+      {% comment %}
+      Month, Year and Branch narrow within whatever the dates already allow,
+      rather than replacing them -- picking a month never silently widens a
+      range somebody typed. Branch reads through the line's farm, since a
+      payment has no branch of its own.
+      {% endcomment %}
+      <div class="col-md-2">
+        <label for="f-month" class="form-label">Month:</label>
+        <select class="form-select" id="f-month">
+          <option value="">-All-</option>
+          <option value="1">January</option><option value="2">February</option>
+          <option value="3">March</option><option value="4">April</option>
+          <option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option>
+          <option value="9">September</option><option value="10">October</option>
+          <option value="11">November</option><option value="12">December</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label for="f-year" class="form-label">Year:</label>
+        <select class="form-select" id="f-year">
+          <option value="">-All-</option>
+          {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label for="f-branch" class="form-label">Branch:</label>
+        <select class="form-select" id="f-branch">
+          <option value="">-All-</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
       <div class="col-md-2">
         <button class="btn btn-primary" id="filter-submit">Submit</button>
+        <button class="btn btn-outline-secondary ms-1" id="filter-clear">Clear</button>
       </div>
     </div>
   </div>
@@ -56,8 +89,14 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="gcp-table">
         <thead class="table-dark">
           <tr>
-            <th class="ds-mid">Date</th><th>Trnum</th><th>Farm</th><th>Farmer</th>
-            <th>Mode</th><th>Method</th>
+            {% comment %}
+            Farmer is not shown: a payment carries one farm, and the farm
+            names its farmer -- the two columns read as the same party twice.
+            Pay Type and Reference take the room instead, which say what the
+            money was for and what it moved under.
+            {% endcomment %}
+            <th class="ds-mid">Date</th><th>Trnum</th><th>Farm</th>
+            <th>Pay Type</th><th>Mode</th><th>Method</th><th>Reference</th>
             <th class="ds-num">Amount</th><th class="ds-mid text-center">Attachments</th><th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
@@ -231,15 +270,19 @@ $(function () {
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.farm) || "-"}</td>
-        <td>${escapeHtml(row.farmer) || "-"}</td>
+        <td>${escapeHtml(row.pay_type) || "-"}</td>
         <td>${escapeHtml(row.mode) || "-"}</td>
         <td>${escapeHtml(row.method) || "-"}</td>
+        <td>${escapeHtml(row.reference) || "-"}</td>
         <td class="text-end">${Number(row.amount).toFixed(2)}</td>
-        <td class="text-center text-nowrap">${attachCell(row)}
-          {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach ms-1" data-id="${row.id}" title="Add attachment"><i class="fas fa-upload"></i></button>{% endif %}
-        </td>
+        {% comment %}
+        Attachments shows what is filed; uploading is an action, so its button
+        sits with Edit and Delete rather than alone in the column it fills.
+        {% endcomment %}
+        <td class="text-center text-nowrap">${attachCell(row)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add attachment"><i class="fas fa-upload"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/gc-payment/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
           </div>
@@ -257,6 +300,8 @@ $(function () {
   function loadRows() {
     $.getJSON("{% url 'farmer_gc_payment_api' %}", {
       from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      month: $("#f-month").val(), year: $("#f-year").val(),
+      branch: $("#f-branch").val(),
     }, function (d) {
       renderRows(d.data || []);
     }).fail(function () {
@@ -265,6 +310,12 @@ $(function () {
   }
 
   $("#filter-submit").on("click", loadRows);
+  $("#filter-clear").on("click", function () {
+    $("#from-date, #to-date, #f-month, #f-year, #f-branch").val("");
+    // Select2 upgrades these, and it does not notice a .val("") on its own.
+    $("#f-month, #f-year, #f-branch").trigger("change.select2");
+    loadRows();
+  });
 
   $(document).on("click", ".delete-button", function () {
     pendingDelete = $(this).data("id");

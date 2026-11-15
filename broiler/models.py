@@ -3471,6 +3471,16 @@ class FarmerGCPayment(models.Model):
         """Which cash or bank account the money actually left."""
         return self._summary(self.lines.values_list("pay_account__description", flat=True))
 
+    @property
+    def reference_summary(self):
+        """The bank or cheque reference the money moved under."""
+        return self._summary(self.lines.values_list("reference_no", flat=True))
+
+    @property
+    def pay_type_summary(self):
+        """Against a settled growing charge, ahead of one, or on top of one."""
+        return self._summary(self.lines.values_list("pay_type", flat=True))
+
     def compose_narration(self):
         """The sentence this voucher would carry, from its own lines."""
         from account.services.narration import compose_narration
