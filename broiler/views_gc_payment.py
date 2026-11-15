@@ -92,14 +92,27 @@ def _context(user, payment=None):
 @login_required(login_url="login")
 def farmer_gc_payment(request):
     """The register: a date range, and the vouchers written in it."""
+    from django.db.models.functions import ExtractYear
+
     from broiler.models import Branch
+
+    # The years payments were actually written in, scoped the same way the
+    # register itself is -- a rolling "this year and the five before it" both
+    # offered years that return nothing and hid any payment dated ahead of
+    # today, which nothing stops somebody entering. The current year is kept
+    # as a floor so an empty register still offers something to pick.
+    years = set(
+        scope_any(request.user, FarmerGCPayment.objects.all(), farms="lines__farm_id")
+        .annotate(y=ExtractYear("date")).values_list("y", flat=True))
+    years.discard(None)
+    years.add(timezone.localdate().year)
 
     return render(request, "farmer_gc_payment_list.html", {
         # Only the branches the user may see, and only those with a farm:
         # a branch that can never match anything reads as a broken filter.
         "branches": scope_any(request.user, Branch.objects.all(), branches="id")
         .filter(broiler_farms__isnull=False).distinct().order_by("branch_name"),
-        "years": range(timezone.localdate().year, timezone.localdate().year - 6, -1),
+        "years": sorted(years, reverse=True),
     })
 
 
