@@ -8165,6 +8165,18 @@ def lifting_report(request):
     supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
     sale_type = (request.GET.get("type") or "").strip()
+
+    # A fresh visit opens on the last 7 days rather than on every lifting ever
+    # recorded (days=6, because today is one of the seven).
+    #
+    # Reset has to stay able to mean "all of it". It links to the bare URL, so
+    # a cleared range and a fresh visit look identical on the querystring --
+    # it carries all=1 to say the dates were emptied deliberately.
+    if not from_date and not to_date and request.GET.get("all") != "1":
+        _today = timezone.localdate()
+        from_date = (_today - timedelta(days=6)).isoformat()
+        to_date = _today.isoformat()
+
     fd = date_from_query(from_date)
     td = date_from_query(to_date)
 

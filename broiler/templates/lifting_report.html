@@ -151,7 +151,12 @@
       </select></div>
     <div class="col-md-3 col-12 d-flex gap-1 flex-wrap">
       <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'lifting_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      {% comment %}
+      all=1 tells the view the dates were emptied on purpose. Without it a
+      cleared filter is indistinguishable from a fresh visit and the 7-day
+      default comes straight back, so Reset could never reach the full history.
+      {% endcomment %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'lifting_report' %}?all=1"><i class="fas fa-rotate-left me-1"></i>Reset</a>
       <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
     </div>
   </form>
