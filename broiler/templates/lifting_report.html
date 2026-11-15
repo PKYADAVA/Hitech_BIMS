@@ -25,6 +25,84 @@
   .lr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
   .lr-scroll { max-height:74vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
   .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
+
+  /* Date, Farm and Customer stay put while everything else scrolls. They are
+     the three that say which lifting a row is, and twenty columns of figures
+     mean nothing once they have slid away. Every other column still shows --
+     Branch, Line, Batch and Cust Code sit between them and scroll underneath
+     as normal.
+
+     Because the three are not adjacent, each one's `left` is the sum of the
+     *frozen* widths before it, not of all the columns before it: a sticky
+     column parks at its own offset once the columns between have scrolled
+     past, so the three come to rest side by side at the left edge. Their
+     widths are fixed so those offsets can be stated exactly -- a frozen
+     column wider than the next one's offset would slide over it. */
+  /* One rule set for all three cell types. The widths and offsets must match
+     exactly across thead/tbody/tfoot -- stating them separately is what left
+     gaps where a heading's width did not match its column's. */
+  .lr-scroll .lr-table th.lr-fz,
+  .lr-scroll .lr-table td.lr-fz,
+  .ds .lr-scroll table.lr-table th.lr-fz,
+  .ds .lr-scroll table.lr-table td.lr-fz {
+    position:sticky !important; z-index:6;
+  }
+  .lr-scroll .lr-table th.lr-fz-date, .lr-scroll .lr-table td.lr-fz-date,
+  .ds .lr-scroll table.lr-table th.lr-fz-date,
+  .ds .lr-scroll table.lr-table td.lr-fz-date {
+    left:0 !important; min-width:96px; max-width:96px; width:96px;
+  }
+  .lr-scroll .lr-table th.lr-fz-farm, .lr-scroll .lr-table td.lr-fz-farm,
+  .ds .lr-scroll table.lr-table th.lr-fz-farm,
+  .ds .lr-scroll table.lr-table td.lr-fz-farm {
+    left:96px !important; min-width:150px; max-width:150px; width:150px;
+  }
+  .lr-scroll .lr-table th.lr-fz-cust, .lr-scroll .lr-table td.lr-fz-cust,
+  .ds .lr-scroll table.lr-table th.lr-fz-cust,
+  .ds .lr-scroll table.lr-table td.lr-fz-cust {
+    left:246px !important; min-width:170px; max-width:170px; width:170px;
+    box-shadow:inset -1px 0 0 #cdd9e0;
+  }
+  /* Opaque backgrounds, or the scrolling columns show through. Each cell type
+     keeps its own: navy heading, white row, tinted totals. */
+  .lr-scroll .lr-table tbody td.lr-fz,
+  .ds .lr-scroll table.lr-table tbody td.lr-fz { background-color:#fff; }
+  .lr-scroll .lr-table tbody tr:hover td.lr-fz,
+  .ds .lr-scroll table.lr-table tbody tr:hover td.lr-fz { background-color:#f4f8fc; }
+  .lr-scroll .lr-table tfoot td.lr-fz,
+  .ds .lr-scroll table.lr-table tfoot td.lr-fz {
+    background-color:#eaf0f8; bottom:0; z-index:6;
+  }
+  /* A frozen heading sticks both ways and must outrank every other heading,
+     which the base rule pins at z-index 2-3. */
+  .lr-scroll .lr-table thead th.lr-fz,
+  .ds .lr-scroll table.lr-table thead th.lr-fz {
+    top:0; z-index:8; background-color:#1b3a6b !important;
+  }
+  /* The scrolling columns pass under the frozen ones, never over. */
+  .lr-scroll .lr-table tbody td:not(.lr-fz),
+  .lr-scroll .lr-table tfoot td:not(.lr-fz) { z-index:0; }
+  /* A name identifies the row, so it wraps rather than being cut. */
+  .lr-scroll .lr-table th.lr-fz-farm, .lr-scroll .lr-table td.lr-fz-farm,
+  .lr-scroll .lr-table th.lr-fz-cust, .lr-scroll .lr-table td.lr-fz-cust {
+    white-space:normal; overflow-wrap:break-word; line-height:1.25;
+  }
+
+  /* Evidence thumbnails, the same cell the receipt screens show. */
+  .lr-thumbs { position:relative; display:inline-flex; padding:0; border:0;
+               background:none; vertical-align:middle; cursor:zoom-in; }
+  .lr-thumbs img { width:28px; height:28px; object-fit:cover; border-radius:4px;
+                   border:1px solid #cdd9e0; background:#f1f5f9; }
+  .lr-thumbs:hover img { border-color:#2563eb; }
+  .lr-thumbs .lr-more { position:absolute; bottom:-5px; right:-5px; min-width:15px;
+                        height:15px; padding:0 3px; border-radius:999px; display:inline-flex;
+                        align-items:center; justify-content:center; font-size:.6rem;
+                        line-height:1; font-weight:700; color:#fff; background:#2563eb;
+                        border:1.5px solid #fff; }
+  @media print {
+    /* Nothing scrolls on paper; sticky cells only risk overlapping there. */
+    .lr-table .lr-fz { position:static; box-shadow:none; max-width:none; }
+  }
 </style>
 
 {% include '_report_letterhead.html' with title='Lifting Report' %}
@@ -86,9 +164,9 @@
   <div class="lr-scroll">
     <table class="table table-bordered table-hover lr-table mb-0 rpt-table ds-grid" style="width:auto; min-width:100%; table-layout:auto;">
       <thead><tr>
-        <th class="ds-mid">Date</th><th>Branch</th><th>Line</th>
-        <th>Farm</th><th>Batch</th><th>Cust Code</th>
-        <th>Customer</th><th>Invoice</th><th>Dc No.</th>
+        <th class="ds-mid lr-fz lr-fz-date">Date</th><th>Branch</th><th>Line</th>
+        <th class="lr-fz lr-fz-farm">Farm</th><th>Batch</th><th>Cust Code</th>
+        <th class="lr-fz lr-fz-cust">Customer</th><th>Invoice</th><th>Dc No.</th>
         <th class="num">Mean Age</th><th class="num">Birds</th>
         <th class="ds-num num">Weight</th><th class="num">Avg Wt</th>
         <th class="ds-num num">Rate</th><th class="ds-num num">Amount</th>
@@ -101,13 +179,13 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.date|date:"d-m-Y" }}</td>
+          <td class="lr-fz lr-fz-date">{{ r.date|date:"d-m-Y" }}</td>
           <td title="{{ r.branch }}">{{ r.branch }}</td>
           <td title="{{ r.line }}">{{ r.line }}</td>
-          <td title="{{ r.farm }}">{{ r.farm }}</td>
+          <td class="lr-fz lr-fz-farm" title="{{ r.farm }}">{{ r.farm }}</td>
           <td title="{{ r.batch }}">{{ r.batch }}</td>
           <td>{{ r.code }}</td>
-          <td class="cust" title="{{ r.customer }}">{% if r.customer_id %}<a href="{% url 'customer_ledger' %}?customer={{ r.customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.customer }}</a>{% else %}{{ r.customer }}{% endif %}</td>
+          <td class="cust lr-fz lr-fz-cust" title="{{ r.customer }}">{% if r.customer_id %}<a href="{% url 'customer_ledger' %}?customer={{ r.customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.customer }}</a>{% else %}{{ r.customer }}{% endif %}</td>
           <td title="{{ r.invoice }}">{{ r.invoice }}</td>
           <td>{{ r.dc_no }}</td>
           <td class="num">{{ r.mean_age }}</td>
@@ -144,12 +222,17 @@
               {% comment %} Paired pipe-joined lists rather than JSON: a media
                  URL never contains a pipe, and this needs no escaping dance in
                  a data attribute. {% endcomment %}
-              <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 lr-photos"
+              {% comment %} The first photo itself, not a camera icon: the desk
+                 is checking a slip against what the phone saw, and a thumbnail
+                 answers at a glance what a count does not. Clicking still opens
+                 the full set. {% endcomment %}
+              <button type="button" class="lr-thumbs lr-photos"
                       data-urls="{% for p in r.photos %}{{ p.url }}{% if not forloop.last %}|{% endif %}{% endfor %}"
                       data-labels="{% for p in r.photos %}{{ p.label }}{% if not forloop.last %}|{% endif %}{% endfor %}"
                       data-title="{{ r.farm }} - {{ r.date|date:'d.m.Y' }}"
                       title="View {{ r.photos|length }} photo{{ r.photos|length|pluralize }}">
-                <i class="fas fa-camera"></i> {{ r.photos|length }}
+                <img src="{{ r.photos.0.url }}" alt="" loading="lazy">
+                {% if r.photos|length > 1 %}<span class="lr-more">{{ r.photos|length }}</span>{% endif %}
               </button>
             {% endif %}
             {% if not r.photos and r.lift_latitude == None %}
@@ -163,7 +246,17 @@
       </tbody>
       {% if rows %}
       <tfoot><tr>
-        <td colspan="10" class="text-center">Total</td>
+        {% comment %}
+        The frozen columns are split out of the Total row's merged cell: a
+        cell spanning them cannot stay pinned with the columns beneath it,
+        so Total would slide away with the figures. Same 20 columns.
+        {% endcomment %}
+        <td class="lr-fz lr-fz-date text-center">Total</td>
+        <td colspan="2"></td>
+        <td class="lr-fz lr-fz-farm"></td>
+        <td colspan="2"></td>
+        <td class="lr-fz lr-fz-cust"></td>
+        <td colspan="3"></td>
         <td class="num">{{ totals.birds }}</td>
         <td class="num">{{ totals.weight|floatformat:2 }}</td>
         <td class="num">{{ totals.avg_wt|floatformat:2 }}</td>
