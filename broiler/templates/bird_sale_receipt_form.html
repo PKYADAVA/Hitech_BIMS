@@ -15,6 +15,25 @@
   #row-table .form-control, #row-table .form-select {
     padding: .15rem .4rem; font-size: .8rem; min-height: 28px; height: 28px;
   }
+  /* Payment proof picked on the Add sheet, before the receipt exists to
+     attach it to. One thumbnail stands for the set with the count on its
+     corner -- the same shape the register uses -- and clicking it reopens
+     the dialog where the whole set can be seen and pruned. */
+  .row-thumbs { display:inline-flex; vertical-align:middle; align-items:center; }
+  .row-thumbs .row-thumb { position:relative; display:inline-block; line-height:0;
+                    cursor:pointer; }
+  .row-thumbs img, .row-thumbs .row-thumb-pdf {
+                    width:26px; height:26px; object-fit:cover; border-radius:3px;
+                    border:1px solid var(--bs-border-color, #dee2e6); background:#f1f5f9; }
+  .row-thumbs .row-thumb-pdf { display:inline-flex; align-items:center;
+                    justify-content:center; color:#c0392b; font-size:12px; }
+  .row-thumbs .row-thumb:hover img,
+  .row-thumbs .row-thumb:hover .row-thumb-pdf { border-color:var(--bs-primary, #2563eb); }
+  .row-thumbs .row-count { position:absolute; bottom:-5px; right:-5px; min-width:15px;
+                    height:15px; padding:0 3px; border-radius:999px; display:flex;
+                    align-items:center; justify-content:center; font-size:.6rem;
+                    line-height:1; font-weight:700; color:#fff; background:#2563eb;
+                    border:1.5px solid #fff; }
 </style>
 
 <div class="page-header">
@@ -82,6 +101,44 @@
     <a href="{% url 'bird_sale_receipt_list' %}" class="btn btn-danger">Cancel</a>
   </div>
 </form>
+
+{% comment %}
+The same dialog the register uses to attach payment proof, so a slip is
+filed the same way from either screen. The difference here is that the
+receipt does not exist yet: the files are held against their row and go up
+once saving returns an id.
+{% endcomment %}
+<div class="modal fade" id="rowProofModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-upload me-1"></i>Attach Payment Proof</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Caption <span class="text-muted small">(optional)</span></label>
+          <input type="text" id="row-proof-caption" class="form-control"
+                 maxlength="150" placeholder="e.g. NEFT advice, cheque counterfoil">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">File(s)</label>
+          <input type="file" id="row-proof-files" class="form-control"
+                 accept="image/*,application/pdf" multiple data-paste-drop>
+          <div class="form-text">Images or PDF — a bank slip, UPI screenshot or signed counterfoil.</div>
+        </div>
+        <hr class="my-3">
+        <div class="small fw-semibold mb-2">On this row</div>
+        <div class="row g-2" id="row-proof-current"></div>
+        <div class="text-muted small" id="row-proof-none">Nothing attached yet.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Done</button>
+        <button type="button" class="btn btn-sm btn-primary" id="row-proof-add">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block js %}
@@ -133,7 +190,10 @@ function row() {
     <td><input class="form-control form-control-sm remarks"></td>
     <td class="text-nowrap px-1">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
-      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove me-1" title="Delete"><i class="fas fa-trash"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-success upload-proof me-1"
+              title="Attach payment proof"><i class="fas fa-upload"></i></button>
+      <span class="row-thumbs"></span>
     </td>`;
   get('row-table').tBodies[0].append(tr);
   applySaleTypeToRow(tr);
@@ -274,9 +334,166 @@ get('receipt-form').addEventListener('submit', function (e) {
     body: JSON.stringify(isEdit ? rows[0] : { rows: rows }),
   }).then(async r => {
     if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+    // The receipt has an id only now, so any proof picked on the sheet goes
+    // up after it. The API answers with the new ids in row order, which is
+    // how each row's files reach their own receipt.
+    const body = await r.json().catch(() => ({}));
+    await uploadPendingProof(isEdit ? [INSTANCE_ID] : (body.ids || []));
     window.location.href = "{% url 'bird_sale_receipt_list' %}";
   }).catch(err => alert(err.message));
 });
+
+/* Payment proof attached while the receipt is still being typed.
+ *
+ * The attachments endpoint takes a receipt id, and on the Add sheet there is
+ * not one yet -- so the files are held against their row here and posted once
+ * the save comes back with ids. A failed upload is reported but does not undo
+ * the receipt: the figures are what the office needs saved, and a slip can be
+ * put up again from the register.
+ */
+const pendingProof = new WeakMap();   // <tr> -> [{file, caption}]
+let proofRow = null;
+
+function isPdf(file) {
+  return /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+}
+
+function renderRowProof(tr) {
+  const host = tr.querySelector('.row-thumbs');
+  if (!host) return;
+  const files = pendingProof.get(tr) || [];
+  host.innerHTML = '';
+  if (!files.length) return;
+
+  const wrap = document.createElement('span');
+  wrap.className = 'row-thumb';
+  wrap.title = files.length === 1
+    ? files[0].file.name + ' — click to review'
+    : files.length + ' files on this row — click to review';
+  if (isPdf(files[0].file)) {
+    const pdf = document.createElement('span');
+    pdf.className = 'row-thumb-pdf';
+    pdf.innerHTML = '<i class="fas fa-file-pdf"></i>';
+    wrap.append(pdf);
+  } else {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(files[0].file);
+    img.onload = () => URL.revokeObjectURL(img.src);
+    wrap.append(img);
+  }
+  if (files.length > 1) {
+    const count = document.createElement('span');
+    count.className = 'row-count';
+    count.textContent = files.length;
+    wrap.append(count);
+  }
+  wrap.addEventListener('click', () => openProofDialog(tr));
+  host.append(wrap);
+}
+
+function renderProofList() {
+  const host = get('row-proof-current');
+  const files = proofRow ? (pendingProof.get(proofRow) || []) : [];
+  host.innerHTML = '';
+  get('row-proof-none').classList.toggle('d-none', files.length > 0);
+  files.forEach((entry, i) => {
+    const col = document.createElement('div');
+    col.className = 'col-4 text-center';
+    if (isPdf(entry.file)) {
+      const box = document.createElement('div');
+      box.className = 'border rounded py-3 text-danger';
+      box.innerHTML = '<i class="fas fa-file-pdf fa-2x"></i>';
+      col.append(box);
+    } else {
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(entry.file);
+      img.className = 'img-fluid rounded border';
+      img.onload = () => URL.revokeObjectURL(img.src);
+      col.append(img);
+    }
+    const label = document.createElement('div');
+    label.className = 'small text-muted text-truncate';
+    label.textContent = entry.caption || entry.file.name;
+    const drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'btn btn-outline-danger btn-sm mt-1 py-0 px-1';
+    drop.innerHTML = '<i class="fas fa-trash"></i>';
+    drop.title = 'Remove ' + entry.file.name;
+    drop.addEventListener('click', () => {
+      const list = pendingProof.get(proofRow) || [];
+      list.splice(i, 1);
+      pendingProof.set(proofRow, list);
+      renderProofList();
+      renderRowProof(proofRow);
+    });
+    col.append(label, drop);
+    host.append(col);
+  });
+}
+
+/* Empty the picker and let its drag-and-paste panel know -- `value = ''`
+ * fires nothing, so the panel would keep showing a file already added. */
+function clearProofPicker() {
+  const input = get('row-proof-files');
+  input.files = new DataTransfer().files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function openProofDialog(tr) {
+  proofRow = tr;
+  clearProofPicker();
+  renderProofList();
+  new bootstrap.Modal(get('rowProofModal')).show();
+}
+
+get('row-table').addEventListener('click', e => {
+  const btn = e.target.closest('.upload-proof');
+  if (btn) openProofDialog(btn.closest('tr'));
+});
+
+get('row-proof-add').addEventListener('click', () => {
+  const input = get('row-proof-files');
+  const caption = get('row-proof-caption').value.trim();
+  const picked = Array.from(input.files || []);
+  if (!proofRow || !picked.length) {
+    alert('Choose at least one file.');
+    return;
+  }
+  const tagged = picked.map(file => ({ file, caption }));
+  pendingProof.set(proofRow, (pendingProof.get(proofRow) || []).concat(tagged));
+  renderRowProof(proofRow);
+  renderProofList();
+  clearProofPicker();
+});
+
+async function uploadPendingProof(ids) {
+  const trs = Array.from(get('row-table').tBodies[0].rows);
+  const failures = [];
+  for (let i = 0; i < trs.length; i++) {
+    const entries = pendingProof.get(trs[i]) || [];
+    const receiptId = ids[i];
+    if (!entries.length || !receiptId) continue;
+    // Grouped by caption, since the endpoint takes one caption per request.
+    const byCaption = {};
+    entries.forEach(e => { (byCaption[e.caption] = byCaption[e.caption] || []).push(e.file); });
+    for (const caption of Object.keys(byCaption)) {
+      const form = new FormData();
+      form.append('caption', caption);
+      byCaption[caption].forEach(f => form.append('files', f));
+      try {
+        const r = await fetch(`/bird-sale-receipt/${receiptId}/attachments/`, {
+          method: 'POST', body: form,
+          headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        });
+        if (!r.ok) byCaption[caption].forEach(f => failures.push(f.name));
+      } catch (err) { byCaption[caption].forEach(f => failures.push(f.name)); }
+    }
+  }
+  if (failures.length) {
+    window.alert('The receipt was saved, but these files did not upload:\n'
+      + failures.join('\n') + '\n\nAttach them from the register.');
+  }
+}
 
 {% if instance %}
 (function prefillEdit() {

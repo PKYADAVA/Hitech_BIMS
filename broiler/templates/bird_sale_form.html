@@ -18,6 +18,25 @@
      and Batch keep their search and stop standing proud of the line. See
      `.ds table.ds-entry` in design-system.css. */
   #row-table { --ds-entry-h: 28px; --ds-entry-fs: .8rem; }
+  /* Evidence picked on the Add sheet, before the sale exists to attach it
+     to. The thumbnails are of files still in the browser; they go up once
+     the sale has an id. Sized to the row so the sheet does not grow. */
+  /* One thumbnail stands for the set, with the count on its corner -- the
+     same shape the register uses, and the reason is the same: a row of
+     thumbnails competes for width this sheet does not have. Clicking it
+     opens the dialog, where the whole set can be seen and pruned. */
+  .row-thumbs { display:inline-flex; vertical-align:middle; align-items:center; }
+  .row-thumbs .row-thumb { position:relative; display:inline-block; line-height:0;
+                    cursor:pointer; }
+  .row-thumbs img { width:26px; height:26px; object-fit:cover; border-radius:3px;
+                    border:1px solid var(--bs-border-color, #dee2e6); }
+  .row-thumbs .row-thumb:hover img { border-color:var(--bs-primary, #2563eb); }
+  /* The count rides on the corner, as it does on the register's rows. */
+  .row-thumbs .row-count { position:absolute; bottom:-5px; right:-5px; min-width:15px;
+                    height:15px; padding:0 3px; border-radius:999px; display:flex;
+                    align-items:center; justify-content:center; font-size:.6rem;
+                    line-height:1; font-weight:700; color:#fff; background:#2563eb;
+                    border:1.5px solid #fff; }
   #row-table th, #row-table td { padding: .25rem .35rem; white-space: nowrap; }
   /* Fixed columns: each keeps its width whatever is typed into it (they used
      to widen as a remark or a driver's name was entered, shifting the row),
@@ -43,7 +62,10 @@
   #row-table thead th:nth-child(14) { width: 115px; }  /* Vehicle */
   #row-table thead th:nth-child(15) { width: 130px; }  /* Driver */
   #row-table thead th:nth-child(16) { width: 170px; }  /* Remarks */
-  #row-table thead th:nth-child(17) { width: 80px; }   /* row buttons */
+  /* Row buttons, now three of them plus any evidence thumbnails. At the old
+     80px -- sized for just Add and Delete -- the extra content ran past the
+     cell and was clipped by the table's fixed layout. */
+  #row-table thead th:nth-child(17) { width: 155px; }  /* row buttons */
   #row-table .form-control { width: 100%; min-width: 0; }
   /* Headers break between words, never inside one ("ROUNDOF F"). */
   #row-table thead th { overflow-wrap: normal; word-break: normal; }
@@ -232,6 +254,52 @@
     <a href="{% url 'bird_sale_list' %}" class="btn btn-danger">Cancel</a>
   </div>
 </form>
+
+{% comment %}
+The same dialog the register uses to add evidence, so a photo is attached the
+same way from either screen -- the photo type matters (the cap is five per
+type, not five per lifting), and data-paste-drop lets a slip be pasted
+straight from the clipboard. The difference here is that the sale does not
+exist yet: the files are held against their row and go up once saving returns
+an id.
+{% endcomment %}
+<div class="modal fade" id="rowEvidenceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-upload me-1"></i>Add Evidence Photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Photo type</label>
+          <select id="row-evidence-kind" class="form-select">
+            {% for value, label in photo_kinds %}<option value="{{ value }}"{% if value == "weighbridge" %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Photo(s)</label>
+          <input type="file" id="row-evidence-files" class="form-control"
+                 accept="image/*" multiple data-paste-drop>
+          <div class="form-text">Up to 5 photos per type for this lifting.</div>
+        </div>
+        {% comment %}
+        What is already on this row. The sheet shows one thumbnail with a
+        count -- a row of them would cost width the form has not got -- so
+        this is where the whole set is seen and pruned.
+        {% endcomment %}
+        <hr class="my-3">
+        <div class="small fw-semibold mb-2">On this row</div>
+        <div class="row g-2" id="row-evidence-current"></div>
+        <div class="text-muted small" id="row-evidence-none">Nothing attached yet.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Done</button>
+        <button type="button" class="btn btn-sm btn-primary" id="row-evidence-add">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block js %}
@@ -309,9 +377,17 @@ function row() {
     <td><input class="form-control form-control-sm vehicle"></td>
     <td><input class="form-control form-control-sm driver"></td>
     <td><input class="form-control form-control-sm remarks"></td>
+    {% comment %}
+    Add and Delete first, then the evidence controls. The row buttons sit in
+    the same place on every row whether or not a photograph is attached;
+    leading with the upload moved them along as soon as one was.
+    {% endcomment %}
     <td class="text-nowrap px-1">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
-      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove me-1" title="Delete"><i class="fas fa-trash"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-success upload-evidence me-1"
+              title="Add evidence photo"><i class="fas fa-upload"></i></button>
+      <span class="row-thumbs"></span>
     </td>`;
   // A new row starts on the date of the row above it, not on today. A sheet
   // is nearly always one day's liftings, so seeding today made every row after
@@ -514,9 +590,170 @@ get('bird-sale-form').addEventListener('submit', function (e) {
     body: JSON.stringify(isEdit ? rows[0] : { rows: rows }),
   }).then(async r => {
     if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+    // The sale has an id only now, so any evidence picked on the sheet goes
+    // up after it. The API answers with the new ids in row order, which is
+    // how each row's photographs reach their own sale.
+    const body = await r.json().catch(() => ({}));
+    await uploadPendingEvidence(isEdit ? [INSTANCE_ID] : (body.ids || []));
     window.location.href = "{% url 'bird_sale_list' %}";
   }).catch(err => alert(err.message));
 });
+
+/* Evidence attached while the sale is still being typed.
+ *
+ * The photographs API takes a sale id, and on the Add sheet there is not one
+ * yet -- so the files are held against their row here and posted once the
+ * save comes back with ids. A failed upload is reported but does not undo the
+ * sale: the figures are what the office needs saved, and a picture can be put
+ * up again from the edit screen.
+ */
+const pendingEvidence = new WeakMap();   // <tr> -> [File]
+
+function renderRowThumbs(tr) {
+  const host = tr.querySelector('.row-thumbs');
+  if (!host) return;
+  const files = pendingEvidence.get(tr) || [];
+  host.innerHTML = '';
+  if (!files.length) return;
+
+  // The first picture stands for the set; the dialog behind it holds the
+  // rest. Nothing is lost -- clicking the thumbnail reopens it with every
+  // photo listed and removable.
+  const wrap = document.createElement('span');
+  wrap.className = 'row-thumb';
+  wrap.title = files.length === 1
+    ? files[0].file.name + ' — click to review'
+    : files.length + ' photos on this row — click to review';
+  const img = document.createElement('img');
+  img.src = URL.createObjectURL(files[0].file);
+  // Revoked once painted, or every re-render leaks another object URL.
+  img.onload = () => URL.revokeObjectURL(img.src);
+  wrap.append(img);
+  if (files.length > 1) {
+    const count = document.createElement('span');
+    count.className = 'row-count';
+    count.textContent = files.length;
+    wrap.append(count);
+  }
+  wrap.addEventListener('click', () => openEvidenceDialog(tr));
+  host.append(wrap);
+}
+
+let evidenceRow = null;      // the <tr> the dialog is adding to
+
+function renderEvidenceList() {
+  const host = get('row-evidence-current');
+  const files = evidenceRow ? (pendingEvidence.get(evidenceRow) || []) : [];
+  host.innerHTML = '';
+  get('row-evidence-none').classList.toggle('d-none', files.length > 0);
+  files.forEach((entry, i) => {
+    const col = document.createElement('div');
+    col.className = 'col-4 text-center';
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(entry.file);
+    img.className = 'img-fluid rounded border';
+    img.onload = () => URL.revokeObjectURL(img.src);
+    const label = document.createElement('div');
+    label.className = 'small text-muted text-truncate';
+    label.textContent = entry.kind;
+    const drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'btn btn-outline-danger btn-sm mt-1 py-0 px-1';
+    drop.innerHTML = '<i class="fas fa-trash"></i>';
+    drop.title = 'Remove ' + entry.file.name;
+    drop.addEventListener('click', () => {
+      const list = pendingEvidence.get(evidenceRow) || [];
+      list.splice(i, 1);
+      pendingEvidence.set(evidenceRow, list);
+      renderEvidenceList();
+      renderRowThumbs(evidenceRow);
+    });
+    col.append(img, label, drop);
+    host.append(col);
+  });
+}
+
+/* Empty the picker and let its drag-and-paste panel know.
+ *
+ * `input.value = ''` empties the input but fires nothing, so the panel's
+ * thumbnails kept showing the file that had already been added -- reopening
+ * the dialog looked as though it were queued again, and pressing Add a
+ * second time would have attached a duplicate. Clearing the FileList and
+ * dispatching `change` is how the panel itself clears (see `clearAll` in
+ * main.js), so it redraws empty.
+ */
+function clearEvidencePicker() {
+  const input = get('row-evidence-files');
+  input.files = new DataTransfer().files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function openEvidenceDialog(tr) {
+  evidenceRow = tr;
+  clearEvidencePicker();
+  renderEvidenceList();
+  new bootstrap.Modal(get('rowEvidenceModal')).show();
+}
+
+get('row-table').addEventListener('click', e => {
+  const btn = e.target.closest('.upload-evidence');
+  if (!btn) return;
+  openEvidenceDialog(btn.closest('tr'));
+});
+
+get('row-evidence-add').addEventListener('click', () => {
+  const input = get('row-evidence-files');
+  const kind = get('row-evidence-kind').value;
+  const picked = Array.from(input.files || []);
+  if (!evidenceRow || !picked.length) {
+    window.alert('Choose at least one photo.');
+    return;
+  }
+  // The type travels with each file: the cap is five per type, so the kind
+  // chosen now is the one this set must be posted under later.
+  const tagged = picked.map(file => ({ file, kind }));
+  pendingEvidence.set(evidenceRow,
+    (pendingEvidence.get(evidenceRow) || []).concat(tagged));
+  renderRowThumbs(evidenceRow);
+  // Left open: the set below now shows what was added, and a second type is
+  // usually picked in the same sitting -- a truck shot and a slip. The
+  // picker is emptied so what is on screen is only what is still to add.
+  renderEvidenceList();
+  clearEvidencePicker();
+});
+
+async function uploadPendingEvidence(ids) {
+  const trs = Array.from(get('row-table').tBodies[0].rows);
+  const failures = [];
+  for (let i = 0; i < trs.length; i++) {
+    const entries = pendingEvidence.get(trs[i]) || [];
+    const saleId = ids[i];
+    if (!entries.length || !saleId) continue;
+    // Grouped by type and posted in one request per type, which is what the
+    // register's own upload does -- the endpoint takes a kind and a set of
+    // photos, and it enforces the five-per-type cap across the batch.
+    const byKind = {};
+    entries.forEach(e => { (byKind[e.kind] = byKind[e.kind] || []).push(e.file); });
+    for (const kind of Object.keys(byKind)) {
+      const form = new FormData();
+      form.append('kind', kind);
+      byKind[kind].forEach(f => form.append('photos', f));
+      try {
+        const r = await fetch(`/bird-sale/${saleId}/photos/`, {
+          method: 'POST', body: form,
+          headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        });
+        if (!r.ok) byKind[kind].forEach(f => failures.push(f.name));
+      } catch (err) { byKind[kind].forEach(f => failures.push(f.name)); }
+    }
+  }
+  if (failures.length) {
+    // Said plainly rather than swallowed: the sale is saved either way, and
+    // somebody who thinks the slip went up when it did not will not look again.
+    window.alert('The sale was saved, but these photographs did not upload:\n'
+      + failures.join('\n') + '\n\nAttach them from the edit screen.');
+  }
+}
 
 {% if instance and not request_mode %}
 /* Lifting evidence: put a photograph up, or take one down.
@@ -646,11 +883,43 @@ get('bird-sale-form').addEventListener('submit', function (e) {
   tr.querySelector('.customer').value = "{{ instance.customer_id|default:'' }}";
   tr.querySelector('.doc-no').value = "{{ instance.doc_no|escapejs }}";
   tr.querySelector('.farm').value = "{{ instance.farm_id }}";
-  // Editing: show the saved batch as the chosen one.
-  {% if instance and instance.batch_id %}
-  fillBatchSelect(tr.querySelector('.batch'),
-                  [{ id: {{ instance.batch_id }},
-                     name: "{{ instance.batch.batch_name|escapejs }}" }]);
+  // Editing: offer the farm's open batches, not just whatever was saved.
+  // Listing one option made a correction impossible -- a sale filed against
+  // the wrong flock could not be moved to the right one without deleting it
+  // and starting again -- and a sale saved with no batch at all offered
+  // nothing to choose from.
+  {% if instance and instance.farm_id %}
+  (function loadBatchesForEdit() {
+    const sel = tr.querySelector('.batch');
+    {% if instance.batch_id %}
+    const saved = { id: {{ instance.batch_id }},
+                    name: "{{ instance.batch.batch_name|escapejs }}" };
+    // Shown at once, so the field is never briefly empty while the lookup
+    // is in flight.
+    fillBatchSelect(sel, [saved]);
+    {% else %}
+    const saved = null;
+    {% endif %}
+    fetch(`{% url 'bird_sale_farm_lookup' %}?farm={{ instance.farm_id }}`)
+      .then(r => r.json())
+      .then(data => {
+        const list = (data.batches || []).slice();
+        // The lookup returns open batches. A sale being corrected months
+        // later may name one that has since closed, and dropping it would
+        // silently move the sale to another flock on save.
+        if (saved && !list.some(b => String(b.id) === String(saved.id))) {
+          list.unshift(saved);
+        }
+        fillBatchSelect(sel, list);
+        // fillBatchSelect auto-picks a lone batch and clears the box when
+        // there are several; the saved one wins over both.
+        if (saved) {
+          sel.value = String(saved.id);
+          if (window.jQuery) jQuery(sel).trigger('change.select2');
+        }
+      })
+      .catch(() => { /* leave whatever is already showing */ });
+  })();
   {% endif %}
   const farmerDisplay = tr.querySelector('.farmer-display');
   farmerDisplay.value = "{{ instance.farmer.farmer_name|default:''|escapejs }}";
