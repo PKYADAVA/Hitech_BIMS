@@ -46,6 +46,13 @@
   .vb-chick-sale    { background:#fff3cd; color:#8a6d00; }
   .vb-receipt       { background:#e6f7ea; color:#1a7f4b; }
   .vb-note          { background:#f3e8ff; color:#6b3fa0; }
+  /* Settlement status, in the same badge shape the Type column uses. Green
+     reads as done, amber as partly done, red as still owing. */
+  .cl-st { display:inline-block; font-weight:600; font-size:.66rem;
+           border-radius:.35rem; padding:.12em .5em; white-space:nowrap; }
+  .cl-st-paid      { background:#e6f7ea; color:#1a7f4b; }
+  .cl-st-part-paid { background:#fff3cd; color:#8a6d00; }
+  .cl-st-unpaid    { background:#fdeaea; color:#c0392b; }
   .cl-legends { font-size:.75rem; color:#6c757d; display:flex; gap:1.1rem; flex-wrap:wrap; margin-top:.6rem; }
   .cl-legends .dot { display:inline-block; width:.6rem; height:.6rem; border-radius:50%; margin-right:.3rem; }
 </style>
@@ -74,8 +81,15 @@
       <div class="col-auto d-flex gap-1 flex-wrap">
         <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-rotate me-1"></i>Submit</button>
         {% if customer %}<a class="btn btn-outline-success btn-sm" href="{% url 'customer_ledger' %}?customer={{ customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}&export=excel"><i class="fas fa-file-excel me-1"></i>Export Excel</a>{% endif %}
-        <button class="btn btn-outline-danger btn-sm" type="button" onclick="window.print()"><i class="fas fa-file-pdf me-1"></i>Export PDF</button>
+        {% comment %}
+        A real PDF from the server, not window.print(). Printing produced
+        whatever the browser's page setup happened to be -- and gave the
+        customer a different-looking statement from the one the Share dialog
+        attaches. Both now come from the same builder.
+        {% endcomment %}
+        {% if customer %}<a class="btn btn-outline-danger btn-sm" href="{% url 'customer_ledger' %}?customer={{ customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}&export=pdf"><i class="fas fa-file-pdf me-1"></i>Export PDF</a>{% endif %}
         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+        {% if customer %}<button class="btn btn-outline-primary btn-sm" type="button" id="cl-share-btn"><i class="fas fa-share-nodes me-1"></i>Share</button>{% endif %}
       </div>
     </form>
   </div>
@@ -115,7 +129,20 @@
         <th class="num">Birds</th><th class="ds-num num">Quantity</th>
         <th class="ds-num num">Avg.Weight</th><th class="num">Free</th><th class="ds-num num">Rate</th><th class="ds-num num">Amount</th>
         <th class="ds-num num">Debit</th><th class="ds-num num">Credit</th><th class="ds-num num">Balance</th>
-        <th>Sector</th><th>Vehicle</th><th>Remarks</th>
+        {% comment %}
+        Not "Sector": the column carries whatever place or account a row
+        belongs to -- the farm a bird sale lifted from, the branch on an
+        invoice, the warehouse on a chick sale, the sector on a note, and the
+        cash or bank account a receipt landed in. Only one of those five is a
+        sector, so the header says what they have in common instead.
+        {% endcomment %}
+        <th>Source / Location</th><th>Vehicle</th><th>Remarks</th>
+        {% comment %}
+        Receipts are applied to the oldest debit first, so each sale can say
+        whether it has been settled and what is left against it. A receipt row
+        itself is blank in both: a payment is not something that falls due.
+        {% endcomment %}
+        <th class="ds-mid">Status</th><th class="ds-num num">Unpaid</th>
         <th class="ds-num num">Over Due By Days</th>
       </tr></thead>
       <tbody>
@@ -123,7 +150,7 @@
         <tr class="cl-prev">
           <td colspan="13" class="text-end">Previous Balance</td>
           <td class="num {% if prev_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ prev_balance|indian_currency }} {{ prev_cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="6"></td>
         </tr>
         {% for g in groups %}
         <tr class="grp-row">
@@ -131,7 +158,7 @@
           <td class="num">{{ g.debit|indian_currency }}</td>
           <td class="num">{{ g.credit|indian_currency }}</td>
           <td class="num {% if g.cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ g.closing|indian_currency }} {{ g.cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="6"></td>
         </tr>
         {% for r in g.rows %}
         <tr>
@@ -152,6 +179,8 @@
           <td title="{{ r.sector }}">{{ r.sector }}</td>
           <td title="{{ r.vehicle }}">{{ r.vehicle }}</td>
           <td title="{{ r.remarks }}">{{ r.remarks }}</td>
+          <td class="ds-mid">{% if r.settled %}<span class="cl-st cl-st-{{ r.settled|slugify }}">{{ r.settled }}</span>{% endif %}</td>
+          <td class="num">{% if r.unpaid and r.unpaid > 0 %}{{ r.unpaid|indian_currency }}{% endif %}</td>
           <td class="num">{% if r.overdue != "" %}{{ r.overdue }}{% endif %}</td>
         </tr>
         {% endfor %}
@@ -161,10 +190,10 @@
           <td class="num">{{ totals.debit|indian_currency }}</td>
           <td class="num">{{ totals.credit|indian_currency }}</td>
           <td class="num {% if closing_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ closing|indian_currency }} {{ closing_cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="6"></td>
         </tr>
         {% else %}
-        <tr><td colspan="18" class="text-center text-muted py-4">Select a customer and click Submit.</td></tr>
+        <tr><td colspan="20" class="text-center text-muted py-4">Select a customer and click Submit.</td></tr>
         {% endif %}
       </tbody>
     </table>
@@ -178,4 +207,283 @@
     <span><span class="dot" style="background:#6b3fa0"></span>Debit / Credit Note</span>
   </div>
 </div></div>
+
+{% if customer %}
+{% comment %}
+Sharing sends the statement the user is looking at -- the filters stay on the
+querystring, so what goes out always matches what is on screen. Email carries
+the file; WhatsApp carries the summary, because the service this project talks
+to sends text and templates only and a message promising an attachment would
+arrive without one.
+{% endcomment %}
+<div class="modal fade no-print" id="clShareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-share-nodes me-1"></i>Share statement</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 small text-muted" id="cl-share-who"></div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">Attach as</label>
+          <div class="d-flex gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="cl-fmt" id="cl-fmt-pdf" value="pdf" checked>
+              <label class="form-check-label small" for="cl-fmt-pdf">
+                <i class="fas fa-file-pdf text-danger me-1"></i>PDF</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="cl-fmt" id="cl-fmt-xlsx" value="xlsx">
+              <label class="form-check-label small" for="cl-fmt-xlsx">
+                <i class="fas fa-file-excel text-success me-1"></i>Excel</label>
+            </div>
+          </div>
+          <div class="form-text" style="font-size:.72rem;">Attached to the email. WhatsApp carries the summary text.</div>
+        </div>
+
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="cl-ch-email" checked>
+          <label class="form-check-label small fw-semibold" for="cl-ch-email">Email</label>
+        </div>
+        <input type="email" class="form-control form-control-sm mb-3" id="cl-email"
+               placeholder="customer@example.com">
+
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="cl-ch-wa">
+          <label class="form-check-label small fw-semibold" for="cl-ch-wa">WhatsApp</label>
+        </div>
+        <input type="text" class="form-control form-control-sm mb-3" id="cl-mobile"
+               placeholder="91XXXXXXXXXX">
+
+        <label class="form-label small fw-semibold mb-1">Message</label>
+        <textarea class="form-control form-control-sm" id="cl-message" rows="7"></textarea>
+        <div id="cl-share-result" class="small mt-2"></div>
+
+        {% comment %}
+        Sending from your own apps instead of from the ERP. The buttons above
+        send as the company, through the configured mail and WhatsApp accounts;
+        these hand the statement to whatever is on this device -- a personal
+        WhatsApp, Gmail, Telegram -- which is what somebody wants when the
+        customer is already a contact of theirs, or when the ERP has no email
+        address on file.
+        {% endcomment %}
+        <hr class="my-3">
+        <div class="small fw-semibold mb-2">Or share from your own apps</div>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-secondary btn-sm" id="cl-dl" target="_blank" rel="noopener">
+            <i class="fas fa-download me-1"></i>Download file</a>
+          <a class="btn btn-outline-success btn-sm" id="cl-wa-web" target="_blank" rel="noopener">
+            <i class="fab fa-whatsapp me-1"></i>Open in WhatsApp</a>
+          <a class="btn btn-outline-danger btn-sm" id="cl-mailto">
+            <i class="fas fa-envelope me-1"></i>Open in mail app</a>
+          <button type="button" class="btn btn-outline-primary btn-sm" id="cl-copy">
+            <i class="fas fa-copy me-1"></i>Copy summary</button>
+          <button type="button" class="btn btn-outline-dark btn-sm d-none" id="cl-os-share">
+            <i class="fas fa-share-nodes me-1"></i>Share file…</button>
+        </div>
+        <div class="form-text" style="font-size:.72rem;">
+          WhatsApp and mail open with the summary filled in; attach the
+          downloaded file there. &ldquo;Share file&rdquo; passes the file itself to
+          your device&rsquo;s share sheet where supported.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="cl-share-send">
+          <i class="fas fa-paper-plane me-1"></i>Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block js %}
+{% if customer %}
+<script>
+(function () {
+  const qs = "?customer={{ customer_id }}"
+    + "{% if from_date %}&from_date={{ from_date }}{% endif %}"
+    + "{% if to_date %}&to_date={{ to_date }}{% endif %}";
+  const shareUrl = "{% url 'customer_ledger' %}" + qs + "&export=share";
+  const csrf = "{{ csrf_token }}";
+  const result = () => document.getElementById("cl-share-result");
+
+  document.getElementById("cl-share-btn").addEventListener("click", function () {
+    result().innerHTML = "";
+    fetch(shareUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then(r => r.json())
+      .then(function (d) {
+        document.getElementById("cl-share-who").textContent =
+          "Statement for " + d.customer;
+        document.getElementById("cl-email").value = d.email || "";
+        document.getElementById("cl-mobile").value = d.mobile || "";
+        document.getElementById("cl-message").value = d.summary || "";
+        // Nothing on file to send to is worth saying before they press Send,
+        // not after it fails.
+        if (!d.email) {
+          result().innerHTML =
+            '<span class="text-warning">This customer has no email address on file.</span>';
+        }
+        refreshShareTargets();
+        new bootstrap.Modal(document.getElementById("clShareModal")).show();
+      })
+      .catch(() => window.showToast
+        ? window.showToast("danger", "Could not prepare the statement.")
+        : alert("Could not prepare the statement."));
+  });
+
+  // --- sharing from the user's own apps -----------------------------------
+  // These never touch the server's mail or WhatsApp accounts. The file is
+  // downloaded (or handed to the device's share sheet) and the message is
+  // pre-filled; the user sends it themselves, as themselves.
+  const fileUrl = () =>
+    "{% url 'customer_ledger' %}" + qs + "&export="
+    + (document.querySelector('input[name="cl-fmt"]:checked').value === "xlsx"
+       ? "excel" : "pdf");
+
+  function syncExternal() {
+    const msg = document.getElementById("cl-message").value || "";
+    const mob = (document.getElementById("cl-mobile").value || "").replace(/\D/g, "");
+    document.getElementById("cl-dl").href = fileUrl();
+    // wa.me opens the app with the chat and text ready; a number is optional,
+    // and without one WhatsApp asks who to send it to.
+    document.getElementById("cl-wa-web").href =
+      "https://wa.me/" + (mob ? mob : "") + "?text=" + encodeURIComponent(msg);
+    document.getElementById("cl-mailto").href =
+      "mailto:" + encodeURIComponent(document.getElementById("cl-email").value || "")
+      + "?subject=" + encodeURIComponent("Statement of account — {{ customer.name|escapejs }}")
+      + "&body=" + encodeURIComponent(msg);
+  }
+
+  // Called once when the dialog opens, so the share sheet has its file ready
+  // before anybody presses the button. Binding it only to the format radios
+  // left it null until the format was changed, which read as "file is not
+  // ready" on a first press.
+  function refreshShareTargets() {
+    syncExternal();
+    prepareShareFile();
+  }
+  ["cl-message", "cl-mobile", "cl-email"].forEach(id =>
+    document.getElementById(id).addEventListener("input", syncExternal));
+  document.querySelectorAll('input[name="cl-fmt"]').forEach(r =>
+    r.addEventListener("change", syncExternal));
+
+  document.getElementById("cl-copy").addEventListener("click", function () {
+    const text = document.getElementById("cl-message").value || "";
+    const done = () => { result().innerHTML =
+      '<span class="text-success">Summary copied.</span>'; };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else { fallback(); }
+    function fallback() {
+      // http:// pages get no clipboard API, and this ERP runs on one locally.
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); }
+      catch (e) { result().innerHTML =
+        '<span class="text-danger">Could not copy — select the text and copy it.</span>'; }
+      document.body.removeChild(ta);
+    }
+  });
+
+  // The share sheet can only carry a file where the browser supports it, so
+  // the button stays hidden rather than failing when pressed. canShare alone
+  // is not enough: the API is secure-context only, and on plain http it is
+  // either absent or refuses, so a button offered there could only disappoint.
+  const osBtn = document.getElementById("cl-os-share");
+  const canShareFiles = !!(navigator.canShare && navigator.share && window.isSecureContext);
+
+  // The file is fetched when the dialog opens and whenever the format
+  // changes -- never when the button is pressed. navigator.share() needs
+  // transient user activation, and awaiting a fetch inside the click handler
+  // spends it, which the browser reports as a permission error rather than
+  // as the timing problem it is.
+  let shareFile = null;          // the resolved File, ready to hand over
+  function prepareShareFile() {
+    if (!canShareFiles) return;
+    shareFile = null;
+    osBtn.disabled = true;
+    const fmt = document.querySelector('input[name="cl-fmt"]:checked').value;
+    const name = "{{ customer.code|default:customer.id|escapejs }}."
+      + (fmt === "xlsx" ? "xlsx" : "pdf");
+    fetch(fileUrl())
+      .then(r => r.blob())
+      .then(function (blob) { shareFile = new File([blob], name, { type: blob.type }); })
+      .catch(function () { shareFile = null; })
+      .finally(function () { osBtn.disabled = false; });
+  }
+
+  if (canShareFiles) {
+    osBtn.classList.remove("d-none");
+    document.querySelectorAll('input[name="cl-fmt"]').forEach(r =>
+      r.addEventListener("change", prepareShareFile));
+
+    // Deliberately not async: share() is called straight out of the click, so
+    // the activation the browser grants it is still unspent.
+    osBtn.addEventListener("click", function () {
+      if (!shareFile || !navigator.canShare({ files: [shareFile] })) {
+        result().innerHTML =
+          '<span class="text-danger">The file is not ready, or this device '
+          + 'cannot share files — use Download file instead.</span>';
+        return;
+      }
+      navigator.share({
+        files: [shareFile],
+        title: "Statement of account",
+        text: document.getElementById("cl-message").value || "",
+      }).catch(function (e) {
+        // Closing the share sheet is not a failure worth reporting.
+        if (e && e.name === "AbortError") return;
+        result().innerHTML = '<span class="text-danger">'
+          + (e.message || "Sharing the file failed.") + "</span>";
+      });
+    });
+  }
+
+  document.getElementById("cl-share-send").addEventListener("click", function () {
+    const channels = [];
+    if (document.getElementById("cl-ch-email").checked) channels.push("email");
+    if (document.getElementById("cl-ch-wa").checked) channels.push("whatsapp");
+    if (!channels.length) {
+      result().innerHTML = '<span class="text-danger">Choose email, WhatsApp, or both.</span>';
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending…';
+
+    const body = new URLSearchParams({
+      channels: channels.join(","),
+      format: document.querySelector('input[name="cl-fmt"]:checked').value,
+      email: document.getElementById("cl-email").value.trim(),
+      mobile: document.getElementById("cl-mobile").value.trim(),
+      message: document.getElementById("cl-message").value,
+    });
+    fetch(shareUrl, {
+      method: "POST",
+      headers: { "X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    })
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(function (res) {
+        const d = res.d || {};
+        const bits = [];
+        (d.sent || []).forEach(s => bits.push('<div class="text-success">Sent — ' + s + "</div>"));
+        (d.failed || []).forEach(s => bits.push('<div class="text-danger">' + s + "</div>"));
+        if (d.error) bits.push('<div class="text-danger">' + d.error + "</div>");
+        result().innerHTML = bits.join("") || '<span class="text-danger">Nothing was sent.</span>';
+      })
+      .catch(() => { result().innerHTML = '<span class="text-danger">The send failed.</span>'; })
+      .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Send';
+      });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

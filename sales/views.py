@@ -730,6 +730,56 @@ def _cl_overdue_days(as_of, due_date):
     return diff if diff > 0 else 0
 
 
+def _cl_apply_receipts_fifo(groups):
+    """Settle each debit against later credits, oldest debit first.
+
+    No receipt in this system names the sale it pays -- ``reference_no`` holds
+    a bank reference, not an invoice number -- so what a payment settles has
+    to be inferred. Oldest-first is the convention an accounts office follows
+    by default, and it is what makes the Over Due column mean "still unpaid"
+    rather than merely "this many days old".
+
+    A debit that is fully covered loses its overdue figure altogether: a sale
+    that has been paid is not late, however long ago it was raised. One
+    partly covered keeps its age and reports what is left against it.
+
+    Rows are walked in the order the ledger already put them in, so a receipt
+    only ever settles debits that came before it.
+    """
+    from decimal import Decimal
+
+    open_debits = []          # [(row, remaining)] oldest first
+    for group in groups:
+        for row in group.get("rows") or []:
+            debit = row.get("debit")
+            credit = row.get("credit")
+
+            if debit not in ("", None):
+                open_debits.append([row, Decimal(str(debit))])
+                row["unpaid"] = Decimal(str(debit))
+                row["settled"] = "Unpaid"
+                continue
+
+            if credit in ("", None):
+                continue
+            money = Decimal(str(credit))
+            while money > 0 and open_debits:
+                target, remaining = open_debits[0]
+                take = min(money, remaining)
+                remaining -= take
+                money -= take
+                target["unpaid"] = remaining
+                if remaining <= 0:
+                    # Settled in full: no longer overdue by any amount.
+                    target["overdue"] = ""
+                    target["settled"] = "Paid"
+                    open_debits.pop(0)
+                else:
+                    target["settled"] = "Part paid"
+                    open_debits[0][1] = remaining
+    return groups
+
+
 @login_required(login_url="login")
 def customer_ledger_report(request):
     from decimal import Decimal
@@ -848,7 +898,14 @@ def customer_ledger_report(request):
             if cn.date and ((fd and cn.date < fd) or (td and cn.date > td)):
                 continue
             events.append((cn.date, 1, "CCN", cn))
-        events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
+        # Date first, then the type rank, then the record's own id. Without
+        # that last key two rows of the same type on the same day fall back to
+        # whatever order the database returned them in, and the FIFO pass
+        # below could settle a different one on each run -- the same statement
+        # showing a different sale as paid. The id is arbitrary but fixed,
+        # which is all this needs.
+        events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1],
+                                   getattr(e[3], "id", 0)))
 
         month_groups = OrderedDict()
 
@@ -1002,6 +1059,10 @@ def customer_ledger_report(request):
                 "rows": g["rows"],
             })
 
+        # Receipts settle the oldest debits first, so Over Due reports what is
+        # still unpaid rather than how old every sale happens to be.
+        _cl_apply_receipts_fifo(groups)
+
     kpi = {
         "opening": abs(prev_balance).quantize(q2), "opening_cr_dr": "Dr" if prev_balance >= 0 else "Cr",
         "sales": sales_total.quantize(q2), "sale_count": sale_count,
@@ -1022,7 +1083,156 @@ def customer_ledger_report(request):
     if export == "excel" and customer:
         return _customer_ledger_excel(company, customer, from_date, to_date, ctx["prev_balance"],
                                       ctx["prev_cr_dr"], groups, ctx["totals"], ctx["closing"], ctx["closing_cr_dr"])
+    if export == "pdf" and customer:
+        # A real file to download, so the statement can be forwarded through
+        # whatever the user already has open -- their own WhatsApp, Gmail,
+        # Telegram. The Export PDF button still prints; this is the file.
+        from django.http import HttpResponse
+
+        pdf = _customer_ledger_pdf_bytes(company, customer, from_date, to_date,
+                                         ctx["prev_balance"], ctx["prev_cr_dr"], groups,
+                                         ctx["totals"], ctx["closing"], ctx["closing_cr_dr"])
+        resp = HttpResponse(pdf, content_type="application/pdf")
+        disposition = "inline" if request.GET.get("inline") else "attachment"
+        resp["Content-Disposition"] = (
+            f'{disposition}; filename="{_ledger_filename(customer, "pdf")}"')
+        return resp
+    if export == "share" and customer:
+        # The same figures the page is about to render, handed to the share
+        # code rather than recomputed there. Filters stay on the querystring
+        # for both GET and POST, so a send always matches the statement the
+        # user was looking at.
+        return _customer_ledger_share(request, company, customer, from_date, to_date, ctx)
     return render(request, "customer_ledger_report.html", ctx)
+
+
+def _ledger_summary_text(company, customer, from_date, to_date, ctx):
+    """The statement in a sentence or two, for a WhatsApp message.
+
+    WhatsApp carries this rather than the workbook: the service this project
+    talks to sends text and templates only, with no document send, so a
+    message promising an attachment would arrive without one. It says what the
+    customer owes and over what period, and leaves the file to email.
+    """
+    from datetime import date as _date
+
+    kpi = ctx["kpi"]
+
+    # Real dates, not placeholders. An unfiltered ledger runs from the first
+    # transaction on record to today, and "start to date" told the customer
+    # nothing about which period they are being asked to settle.
+    def _fmt(value):
+        parsed = date_from_query(value)
+        return parsed.strftime("%d-%m-%Y") if parsed else None
+
+    first = None
+    for group in ctx.get("groups") or []:
+        for row in group.get("rows") or []:
+            if row.get("date"):
+                first = row["date"]
+                break
+        if first:
+            break
+
+    start = _fmt(from_date) or (first.strftime("%d-%m-%Y") if first else None)
+    end = _fmt(to_date) or _date.today().strftime("%d-%m-%Y")
+    period = f"{start} to {end}" if start else f"up to {end}"
+    owed = "owe us" if ctx["closing_cr_dr"] == "Dr" else "are in credit with us by"
+    return (
+        f"{company.name if company else ''}\n"
+        f"Statement of account — {customer.name}\n"
+        f"Period: {period}\n\n"
+        f"Opening: Rs {kpi['opening']} {kpi['opening_cr_dr']}\n"
+        f"Sales: Rs {kpi['sales']} ({kpi['sale_count']})\n"
+        f"Receipts: Rs {kpi['receipts']} ({kpi['receipt_count']})\n"
+        f"Closing: Rs {ctx['closing']} {ctx['closing_cr_dr']}\n\n"
+        f"As on {end} you {owed} Rs {ctx['closing']}."
+    ).strip()
+
+
+def _customer_ledger_share(request, company, customer, from_date, to_date, ctx):
+    """Send this ledger to the customer by email, WhatsApp, or both.
+
+    GET returns what the dialog needs to prefill itself; POST sends. Kept
+    behind the report's own view so it cannot be reached for a customer the
+    user is not scoped to see -- ``customer`` here has already been filtered
+    through ``customers_for``.
+    """
+    from django.http import JsonResponse
+
+    summary = _ledger_summary_text(company, customer, from_date, to_date, ctx)
+    if request.method != "POST":
+        return JsonResponse({
+            "customer": customer.name,
+            "email": customer.email or "",
+            "mobile": customer.mobile or "",
+            "summary": summary,
+            "filename": _ledger_filename(customer),
+        })
+
+    channels = set((request.POST.get("channels") or "").split(","))
+    fmt = (request.POST.get("format") or "pdf").strip().lower()
+    if fmt not in ("pdf", "xlsx"):
+        fmt = "pdf"
+    email_to = (request.POST.get("email") or "").strip()
+    mobile_to = (request.POST.get("mobile") or "").strip()
+    message = (request.POST.get("message") or "").strip() or summary
+    sent, failed = [], []
+
+    if "email" in channels:
+        if not email_to:
+            failed.append("Email: no address given.")
+        else:
+            try:
+                from django.conf import settings
+                from django.core.mail import EmailMessage
+
+                mail = EmailMessage(
+                    subject=f"Statement of account — {customer.name}",
+                    body=message,
+                    from_email=(getattr(settings, "DEFAULT_FROM_EMAIL", None)
+                                or settings.EMAIL_HOST_USER),
+                    to=[email_to],
+                )
+                args = (company, customer, from_date, to_date, ctx["prev_balance"],
+                        ctx["prev_cr_dr"], ctx["groups"], ctx["totals"],
+                        ctx["closing"], ctx["closing_cr_dr"])
+                if fmt == "xlsx":
+                    # The workbook the Export Excel button produces, byte for byte.
+                    payload = _ledger_excel_bytes(*args)
+                    mime = ("application/vnd.openxmlformats-officedocument"
+                            ".spreadsheetml.sheet")
+                else:
+                    payload = _customer_ledger_pdf_bytes(*args)
+                    mime = "application/pdf"
+                mail.attach(_ledger_filename(customer, fmt), payload, mime)
+                mail.send(fail_silently=False)
+                sent.append(f"Email to {email_to}")
+            except Exception as exc:                      # noqa: BLE001
+                # Reported, not swallowed: a statement the office believes was
+                # sent and never was is worse than an error on screen.
+                failed.append(f"Email: {exc}")
+
+    if "whatsapp" in channels:
+        if not mobile_to:
+            failed.append("WhatsApp: no mobile number given.")
+        else:
+            try:
+                from notification.services.whatsapp_service import get_whatsapp_service
+
+                result = get_whatsapp_service().send_text(mobile_to, message)
+                if result.success:
+                    sent.append(f"WhatsApp to {mobile_to}")
+                else:
+                    failed.append(f"WhatsApp: {result.error or 'send failed'}")
+            except Exception as exc:                      # noqa: BLE001
+                failed.append(f"WhatsApp: {exc}")
+
+    if not channels - {""}:
+        return JsonResponse({"error": "Choose at least one of email or WhatsApp."},
+                            status=400)
+    return JsonResponse({"sent": sent, "failed": failed,
+                         "ok": bool(sent) and not failed}, status=200 if sent else 502)
 
 
 def _customer_balance_row(cust, fd, td, ref_date):
@@ -1535,7 +1745,8 @@ def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, 
     head_font = Font(bold=True, color="FFFFFF")
     bold = Font(bold=True)
     headers = ["Date", "Transaction No.", "Doc No.", "Type", "Item", "Birds", "Quantity",
-               "Avg.Weight", "Free", "Rate", "Amount", "Debit", "Credit", "Balance", "Sector",
+               "Avg.Weight", "Free", "Rate", "Amount", "Debit", "Credit", "Balance",
+               "Source / Location",
                "Vehicle", "Remarks", "Over Due By Days"]
 
     ws.append([company.name if company else ""])
@@ -1574,9 +1785,307 @@ def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, 
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
     resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    resp["Content-Disposition"] = f'attachment; filename="customer_ledger_{customer.code or customer.id}.xlsx"'
+    resp["Content-Disposition"] = f'attachment; filename="{_ledger_filename(customer)}"'
     wb.save(resp)
     return resp
+
+
+def _ledger_filename(customer, fmt="xlsx"):
+    return f"customer_ledger_{customer.code or customer.id}.{fmt}"
+
+
+def _customer_ledger_pdf_bytes(company, customer, from_date, to_date, prev_balance,
+                               prev_cr_dr, groups, totals, closing, closing_cr_dr):
+    """The Customer Ledger as a PDF, in bytes.
+
+    Landscape, and a narrower set of columns than the workbook: the Excel
+    export can afford eighteen because a spreadsheet scrolls, while a page
+    cannot, and a statement squeezed to illegibility serves nobody. The
+    columns kept are the ones a customer checks a balance against.
+    """
+    import io
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer)
+
+    from purchase.templatetags.purchase_extras import indian_currency
+
+    # The same grouping the screen uses, so 1309768.30 reads 13,09,768.30
+    # rather than leaving the customer to count digits.
+    #
+    # "Rs." rather than the rupee sign: the glyph needs a TrueType font, and
+    # the ones that carry it on this Windows machine are not on the Linux box
+    # this deploys to. A statement that renders a blank box where the currency
+    # should be is worse than one that spells it.
+    def inr(value, sign=False):
+        if value in (None, ""):
+            return ""
+        text = indian_currency(value)
+        return f"Rs. {text}" if sign else text
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=10 * mm, rightMargin=10 * mm,
+                            topMargin=10 * mm, bottomMargin=10 * mm,
+                            title=f"Statement of account - {customer.name}")
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("t", parent=styles["Title"], fontSize=14, spaceAfter=2)
+    sub = ParagraphStyle("s", parent=styles["Normal"], fontSize=9,
+                         alignment=1, textColor=colors.HexColor("#555555"))
+    cell = ParagraphStyle("c", parent=styles["Normal"], fontSize=6, leading=7.2)
+    head = ParagraphStyle("h", parent=cell, textColor=colors.white, alignment=1)
+    right = ParagraphStyle("r", parent=cell, alignment=2)
+    # A size down, for the columns holding a single unbreakable token.
+    tight = ParagraphStyle("t2", parent=cell, fontSize=5.2, leading=6.2)
+
+    # A three-panel band, the shape an accounts office already reads on a
+    # Tally statement: who is sending it on the left, whose ledger it is in
+    # the middle, and the period with its balances boxed on the right.
+    co_name = ParagraphStyle("cn", parent=styles["Normal"], fontSize=10,
+                             leading=12, fontName="Helvetica-Bold")
+    co_meta = ParagraphStyle("cm", parent=styles["Normal"], fontSize=6.5,
+                             leading=8, textColor=colors.HexColor("#444444"))
+    led_lbl = ParagraphStyle("ll", parent=styles["Normal"], fontSize=8.5,
+                             leading=11, fontName="Helvetica-Bold")
+    led_sub = ParagraphStyle("ls", parent=styles["Normal"], fontSize=6.5,
+                             leading=8, textColor=colors.HexColor("#444444"))
+    per_sty = ParagraphStyle("ps", parent=styles["Normal"], fontSize=7.5,
+                             leading=9, alignment=2, fontName="Helvetica-Bold")
+    kv_l = ParagraphStyle("kl", parent=styles["Normal"], fontSize=6.5, leading=8)
+    kv_r = ParagraphStyle("kr", parent=kv_l, alignment=2)
+
+    left_bits = [Paragraph(company.name if company else "", co_name)]
+    for line in (getattr(company, "address", "") or "").splitlines():
+        if line.strip():
+            left_bits.append(Paragraph(line.strip(), co_meta))
+    state = (getattr(company, "state", "") or "").strip()
+    gstin = (getattr(company, "gstin", "") or "").strip()
+    if state:
+        left_bits.append(Paragraph(f"State Name : {state}", co_meta))
+    if gstin:
+        left_bits.append(Paragraph(f"GSTIN : {gstin}", co_meta))
+
+    middle = [Paragraph(f"Ledger :&nbsp;&nbsp;{customer.name}", led_lbl),
+              Paragraph("Customer Ledger Account", led_sub)]
+    place = (getattr(customer, "place", "") or "").strip()
+    if place:
+        middle.append(Paragraph(place, led_sub))
+
+    # The balances, as the reference lays them out: label, colon, figure.
+    def kv(label, value, strong=False):
+        tag = ("<b>%s</b>" % label) if strong else label
+        val = ("<b>%s</b>" % value) if strong else value
+        return [Paragraph(tag, kv_l), Paragraph(":", kv_l), Paragraph(val, kv_r)]
+
+    kv_rows = [
+        kv("Opening Balance", f"{inr(prev_balance, sign=True)} {prev_cr_dr}"),
+        kv("Total Debit", inr(totals["debit"], sign=True)),
+        kv("Total Credit", inr(totals["credit"], sign=True)),
+        kv("Closing Balance", f"{inr(closing, sign=True)} {closing_cr_dr}", strong=True),
+    ]
+    kv_table = Table(kv_rows, colWidths=[27 * mm, 3 * mm, 32 * mm])
+    kv_table.setStyle(TableStyle([
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("LINEBELOW", (0, 0), (-1, 2), 0.25, colors.HexColor("#D5DCE4")),
+        # The closing figure is what the reader came for, so it is the one
+        # row given a fill of its own.
+        ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#DFF3E3")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#9FB3C8")),
+    ]))
+
+    # "1-Apr-26 to 5-Jun-26", as the reference statement writes it. The dates
+    # arrive as the querystring left them, so they are parsed rather than
+    # printed raw; an unset end means the statement runs to today.
+    def _short(value, fallback=None):
+        parsed = date_from_query(value)
+        if not parsed:
+            return fallback
+        return f"{parsed.day}-{parsed.strftime('%b-%y')}"
+
+    first_date = None
+    for group in groups:
+        for row_ in group.get("rows") or []:
+            if row_.get("date"):
+                first_date = row_["date"]
+                break
+        if first_date:
+            break
+
+    from datetime import date as _today_date
+
+    span_from = _short(from_date) or (
+        f"{first_date.day}-{first_date.strftime('%b-%y')}" if first_date else None)
+    _now = _today_date.today()
+    span_to = _short(to_date) or f"{_now.day}-{_now.strftime('%b-%y')}"
+    period = f"{span_from} to {span_to}" if span_from else f"up to {span_to}"
+
+    right_cell = [Paragraph(period, per_sty), Spacer(1, 1.5 * mm), kv_table]
+
+    band = Table([[left_bits, middle, right_cell]],
+                 colWidths=[92 * mm, 83 * mm, 102 * mm])
+    band.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#9FB3C8")),
+        ("LINEAFTER", (0, 0), (1, 0), 0.5, colors.HexColor("#9FB3C8")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story = [band, Spacer(1, 4 * mm)]
+
+    # The report's own eighteen columns, in its own order. Narrower than the
+    # screen can afford, so the text columns wrap in Paragraphs rather than
+    # being dropped -- the statement a customer is sent should be the
+    # statement the office is looking at.
+    # Two columns are left off deliberately, and both stay on the screen and
+    # in the workbook.
+    #
+    # Remarks is the one free-text column, often a sentence long, and on a
+    # page it forced every row to the height of its longest note.
+    #
+    # Source / Location carries whatever place or account a row belongs to --
+    # which on a receipt is the cash or bank account the money landed in.
+    # That is an internal chart-of-accounts name: it means nothing to the
+    # customer reading their statement, and it says which account their
+    # cheque was banked into.
+    headers = ["Date", "Transaction No.", "Doc No.", "Type", "Item", "Birds",
+               "Quantity", "Avg.Wt", "Free", "Rate", "Amount", "Debit",
+               "Credit", "Balance", "Vehicle",
+               "Status", "Unpaid", "Over Due"]
+    ncols = len(headers)
+    data = [[Paragraph(f"<b>{h}</b>", head) for h in headers]]
+    # Rows that are a heading or a total, styled apart from the transactions,
+    # and spanned the way the report spans them.
+    spans, emphatic = [], []
+
+    def num(value):
+        """A plain figure: counts and weights, which carry no grouping."""
+        return "" if value == "" or value is None else str(value)
+
+    def amt(value):
+        """A money column, grouped the way the screen groups it."""
+        return inr(value)
+
+    # Previous Balance: the report runs it across the first thirteen columns.
+    row = [""] * ncols
+    row[0] = Paragraph("<b>Previous Balance</b>", right)
+    row[13] = Paragraph(f"<b>{amt(prev_balance)} {prev_cr_dr}</b>", right)
+    data.append(row)
+    spans.append(("SPAN", (0, len(data) - 1), (12, len(data) - 1)))
+    emphatic.append(len(data) - 1)
+
+    for g in groups:
+        row = [""] * ncols
+        row[0] = Paragraph(
+            f"<b>{g['label']}</b> ({g['count']} transaction"
+            f"{'' if g['count'] == 1 else 's'})", cell)
+        row[11] = Paragraph(f"<b>{amt(g['debit'])}</b>", right)
+        row[12] = Paragraph(f"<b>{amt(g['credit'])}</b>", right)
+        row[13] = Paragraph(f"<b>{amt(g['closing'])} {g['cr_dr']}</b>", right)
+        data.append(row)
+        spans.append(("SPAN", (0, len(data) - 1), (10, len(data) - 1)))
+        emphatic.append(len(data) - 1)
+
+        for r in g["rows"]:
+            data.append([
+                r["date"].strftime("%d-%m-%Y") if r["date"] else "",
+                Paragraph(str(r["trnum"] or ""), cell),
+                Paragraph(str(r["doc_no"] or ""), cell),
+                Paragraph(str(r["type"] or ""), cell),
+                Paragraph(str(r["item"] or ""), cell),
+                num(r["birds"]), num(r["quantity"]), num(r["avg_weight"]),
+                num(r["free"]), amt(r["rate"]), amt(r["amount"]),
+                amt(r["debit"]), amt(r["credit"]),
+                f"{amt(r['balance'])} {r['cr_dr']}" if r["balance"] != "" else "",
+                # A registration split across lines ("UP53KT909" / "0") reads
+                # as two numbers. Shrunk to fit instead of broken.
+                Paragraph(str(r["vehicle"] or ""), tight),
+                Paragraph(str(r.get("settled") or ""), cell),
+                amt(r["unpaid"]) if r.get("unpaid") and r["unpaid"] > 0 else "",
+                num(r["overdue"]),
+            ])
+
+    row = [""] * ncols
+    row[0] = Paragraph("<b>Grand Total</b>", right)
+    row[11] = Paragraph(f"<b>{amt(totals['debit'])}</b>", right)
+    row[12] = Paragraph(f"<b>{amt(totals['credit'])}</b>", right)
+    row[13] = Paragraph(f"<b>{amt(closing)} {closing_cr_dr}</b>", right)
+    data.append(row)
+    spans.append(("SPAN", (0, len(data) - 1), (10, len(data) - 1)))
+    emphatic.append(len(data) - 1)
+
+    # Totals exactly 277mm: A4 landscape (297) less the 10mm margins either
+    # side. Overshoot it and reportlab runs the table off the page edge.
+    widths = [16, 24, 16, 15, 22, 10, 14, 12, 10, 12, 18, 18, 18, 20, 15,
+              13, 16, 8]
+    table = Table(data, colWidths=[w * mm for w in widths], repeatRows=1)
+    style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1B3A6B")),
+        ("FONTSIZE", (0, 0), (-1, -1), 6),
+        ("ALIGN", (5, 1), (13, -1), "RIGHT"),
+        # Status (15) is text and stays left; Unpaid and Over Due are figures.
+        ("ALIGN", (16, 1), (17, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CCCCCC")),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    ]
+    style.extend(spans)
+    # Alternate shading on the transaction rows only, so the eye can hold a
+    # line across eighteen columns. Heading and total rows get their own
+    # fill afterwards, which must win.
+    emphatic_set = set(emphatic)
+    for i in range(1, len(data)):
+        if i not in emphatic_set and i % 2 == 0:
+            style.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#F7F9FC")))
+    for i in emphatic:
+        style.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#EAF0F8")))
+    table.setStyle(TableStyle(style))
+
+    story.append(table)
+
+    # Page x of y, and whose statement it is, on every page: past one page
+    # these are handled as loose sheets, and a page carrying nothing to say
+    # where it belongs in the set is the one that goes astray.
+    #
+    # The total is only known once the document is laid out, so the page
+    # count is written on a second pass. reportlab consumes the flowables it
+    # builds, which is why the count is taken from a canvas callback rather
+    # than from building the story twice.
+    page_total = {"n": 0}
+
+    def _stamp(canvas, doc_):
+        page_total["n"] = max(page_total["n"], doc_.page)
+        canvas.saveState()
+        canvas.setFont("Helvetica", 6.5)
+        canvas.setFillColor(colors.HexColor("#666666"))
+        canvas.drawString(10 * mm, 6 * mm, f"{customer.name} — {period}")
+        canvas.drawRightString(287 * mm, 6 * mm, f"Page {doc_.page}")
+        canvas.restoreState()
+
+    doc.bottomMargin = 12 * mm
+    doc.build(story, onFirstPage=_stamp, onLaterPages=_stamp)
+    return buf.getvalue()
+
+
+def _ledger_excel_bytes(*args, **kwargs):
+    """The same workbook ``_customer_ledger_excel`` streams, as bytes.
+
+    Sharing attaches the identical file the Export Excel button produces --
+    built once here rather than a second time in the mail code, so the two can
+    never drift into disagreeing about what a statement says.
+    """
+    return _customer_ledger_excel(*args, **kwargs).content
 
 
 # ---------------------------------------------------------------------------
