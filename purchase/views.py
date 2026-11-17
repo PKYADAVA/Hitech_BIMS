@@ -423,7 +423,8 @@ def _general_purchase_to_item_dict(row):
         "item_description": row.item.description, "unit": row.unit,
         "sent_qty": str(row.sent_qty), "rcv_qty": str(row.rcv_qty), "free_qty": str(row.free_qty),
         "rate": str(row.rate), "discount_percent": str(row.discount_percent),
-        "discount_amount": str(row.discount_amount), "gst_percent": str(row.gst_percent),
+        "discount_amount": str(row.discount_amount),
+        "discount_basis": row.discount_basis, "gst_percent": str(row.gst_percent),
         "amount": str(row.amount),
         # One field carrying its own kind, matching what the form posts back.
         "destination": (f"farm:{row.farm_id}" if row.farm_id
@@ -522,7 +523,11 @@ def _apply_posted_general_purchase_fields(instance, request):
     instance.driver_name = request.POST.get("driver_name", "").strip()
     instance.driver_mobile = request.POST.get("driver_mobile", "").strip()
     instance.calculation_based_on = request.POST.get("calculation_based_on") or "Received Quantity"
-    instance.payment_terms = request.POST.get("payment_terms") or "Cash"
+    # Not defaulted to Cash. The form asks for this and will not submit
+    # without it; falling back here would have quietly recorded a purchase
+    # nobody chose terms for as paid in cash, which is the thing the blank
+    # option on the form exists to prevent. full_clean below refuses "".
+    instance.payment_terms = (request.POST.get("payment_terms") or "").strip()
     # "Extra" was the old default and no longer exists as a value. A missing
     # freight type means nobody chose one, which is No Freight.
     instance.freight_type = request.POST.get("freight_type") or "No Freight"
@@ -605,6 +610,25 @@ def _require_farm_batches(rows):
         raise ValidationError("Select the batch for every farm line: " + ", ".join(missing) + ".")
 
 
+def _save_general_purchase_attachments(instance, request):
+    """File anything picked in the form's Attachments box against the purchase.
+
+    Saved here rather than uploaded afterwards by the page: this form is an
+    ordinary POST, so by the time the browser could upload anything it has
+    already navigated away. The files are in the same submission as the
+    figures, which also means a purchase that fails validation does not leave
+    orphaned files behind.
+    """
+    uploads = request.FILES.getlist("attachments")
+    if not uploads:
+        return
+    caption = (request.POST.get("attachment_caption") or "").strip()
+    for upload in uploads:
+        GeneralPurchaseAttachment.objects.create(
+            purchase=instance, file=upload, caption=caption,
+            uploaded_by=request.user if request.user.is_authenticated else None)
+
+
 def _save_general_purchase_items(instance, request):
     try:
         rows = json.loads(request.POST.get("items_json") or "[]")
@@ -635,6 +659,7 @@ def _apply_general_purchase_items(instance, rows):
             rate=Decimal(str(row.get("rate") or 0)),
             discount_percent=Decimal(str(row.get("discount_percent") or 0)),
             discount_amount=Decimal(str(row.get("discount_amount") or 0)),
+            discount_basis=(row.get("discount_basis") or "line"),
             gst_percent=Decimal(str(row.get("gst_percent") or 0)),
             farm_warehouse_id=None if to_farm else int(dest_id),
             farm_id=int(dest_id) if to_farm else None,
@@ -668,6 +693,7 @@ def create_general_purchase(request):
             with transaction.atomic():
                 instance.save()
                 _save_general_purchase_items(instance, request)
+                _save_general_purchase_attachments(instance, request)
             messages.success(request, "General purchase added successfully.")
             return redirect("general_purchase_list")
         except ValidationError as e:
@@ -734,6 +760,9 @@ def edit_general_purchase(request, id, request_mode=False):
             with transaction.atomic():
                 instance.save()
                 _save_general_purchase_items(instance, request)
+                # Added to what is already filed, not replacing it: the
+                # existing attachments are removed one at a time above.
+                _save_general_purchase_attachments(instance, request)
             messages.success(request, "General purchase updated successfully.")
             return redirect("general_purchase_list")
         except ValidationError as e:
@@ -1046,6 +1075,24 @@ def _apply_posted_chicks_purchase_fields(instance, request):
         instance.reference_document_3 = request.FILES["reference_document_3"]
 
 
+def _save_chicks_purchase_attachments(instance, request):
+    """File anything picked in the form's Attachments box against the purchase.
+
+    Saved here rather than uploaded afterwards by the page, for the same
+    reason as the General Purchase version: this form is an ordinary POST, so
+    by the time the browser could upload anything it has already navigated
+    away.
+    """
+    uploads = request.FILES.getlist("attachments")
+    if not uploads:
+        return
+    caption = (request.POST.get("attachment_caption") or "").strip()
+    for upload in uploads:
+        ChicksPurchaseAttachment.objects.create(
+            purchase=instance, file=upload, caption=caption,
+            uploaded_by=request.user if request.user.is_authenticated else None)
+
+
 def _save_chicks_purchase_items(instance, request):
     try:
         rows = json.loads(request.POST.get("items_json") or "[]")
@@ -1113,6 +1160,7 @@ def create_chicks_purchase(request):
             with transaction.atomic():
                 instance.save()
                 _save_chicks_purchase_items(instance, request)
+                _save_chicks_purchase_attachments(instance, request)
             messages.success(request, "Chicks purchase added successfully.")
             return redirect("chicks_purchase_list")
         except ValidationError as e:
@@ -1159,6 +1207,7 @@ def edit_chicks_purchase(request, id, request_mode=False):
             with transaction.atomic():
                 instance.save()
                 _save_chicks_purchase_items(instance, request)
+                _save_chicks_purchase_attachments(instance, request)
             messages.success(request, "Chicks purchase updated successfully.")
             return redirect("chicks_purchase_list")
         except ValidationError as e:
@@ -2248,11 +2297,20 @@ def _pr_branch_by_sector():
 
 
 def _pr_upload_status(purchase):
-    """Purchases carry up to three optional reference documents; the report
-    reports whether any of them was actually attached."""
+    """Whether anything is filed against this purchase.
+
+    Two places to look. The three reference_document fields are what the form
+    used to offer, and older purchases still hold their documents there; the
+    attachments relation is what it offers now and takes any number. A
+    purchase filed since the change carries only the latter, so reading one
+    without the other would report it as having nothing attached.
+    """
     for field in ("reference_document_1", "reference_document_2", "reference_document_3"):
         if getattr(purchase, field, None):
             return "Uploaded"
+    related = getattr(purchase, "attachments", None)
+    if related is not None and related.exists():
+        return "Uploaded"
     return "Not Uploaded"
 
 
@@ -2266,6 +2324,14 @@ def _pr_upload_files(purchase):
         f = getattr(purchase, field, None)
         if f:
             files.append({"url": f.url, "name": f"Document {i}"})
+    # Anything filed through the form's Attachments box, which replaced those
+    # three slots. Named by its caption where it has one, since "Document 4"
+    # says nothing about which page of the invoice it is.
+    related = getattr(purchase, "attachments", None)
+    if related is not None:
+        for a in related.all():
+            files.append({"url": a.file.url,
+                          "name": a.caption or a.file.name.rsplit("/", 1)[-1]})
     return files
 
 
@@ -2442,9 +2508,12 @@ def purchase_report(request):
         # rebuilt exactly the way GeneralPurchaseItem.save() computes it.
         basis = getattr(p, "calculation_based_on", "Received Quantity")
         qty = Decimal(str((r.rcv_qty if basis == "Received Quantity" else r.sent_qty) or 0))
+        # flat_discount() rather than the raw field: a per-unit rebate is
+        # multiplied by the quantity, and rebuilding it by hand here would
+        # drift from what GeneralPurchaseItem.save() actually stored.
         subtotal = ((qty * Decimal(str(r.rate or 0)))
                     * (1 - Decimal(str(r.discount_percent or 0)) / 100)
-                    - Decimal(str(r.discount_amount or 0)))
+                    - r.flat_discount())
         rows.append(build(r, p, r.item, "purchase.GeneralPurchase",
                           "General Purchase", r.farm_warehouse, subtotal, r.amount))
 

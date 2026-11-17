@@ -398,6 +398,22 @@ class GeneralPurchaseItem(models.Model):
     rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    #: Whether ``discount_amount`` is the whole line's rebate or one unit's.
+    #:
+    #: A supplier who allows two rupees off each of nine hundred bags states
+    #: it per bag; the line wants 1,800. Entering it per line meant doing that
+    #: multiplication by hand, and redoing it whenever the received quantity
+    #: was corrected. "line" is the default, which is what every row saved
+    #: before this field existed means.
+    DISCOUNT_BASIS_LINE = "line"
+    DISCOUNT_BASIS_UNIT = "unit"
+    DISCOUNT_BASIS_CHOICES = [
+        (DISCOUNT_BASIS_LINE, "₹ on the line"),
+        (DISCOUNT_BASIS_UNIT, "₹ per unit"),
+    ]
+    discount_basis = models.CharField(
+        max_length=4, choices=DISCOUNT_BASIS_CHOICES, default=DISCOUNT_BASIS_LINE,
+        help_text="Whether the flat discount is for the whole line or per unit")
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     # Where the goods landed. Exactly one of these two is set.
@@ -456,10 +472,22 @@ class GeneralPurchaseItem(models.Model):
         basis = self.purchase.calculation_based_on if self.purchase_id else "Received Quantity"
         return self.rcv_qty if basis == "Received Quantity" else self.sent_qty
 
+    def flat_discount(self):
+        """The flat discount this line actually gives up.
+
+        Per unit it scales with the quantity, so correcting a received
+        quantity carries the rebate with it rather than leaving a figure
+        somebody worked out against the old one.
+        """
+        flat = _dec(self.discount_amount)
+        if self.discount_basis == self.DISCOUNT_BASIS_UNIT:
+            return flat * _dec(self.effective_qty())
+        return flat
+
     def save(self, *args, **kwargs):
         qty = _dec(self.effective_qty())
         subtotal = ((qty * _dec(self.rate)) * (1 - _dec(self.discount_percent) / 100)
-                    - _dec(self.discount_amount))
+                    - self.flat_discount())
         self.amount = subtotal * (1 + _dec(self.gst_percent) / 100)
         super().save(*args, **kwargs)
 

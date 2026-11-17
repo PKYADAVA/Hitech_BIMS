@@ -74,8 +74,16 @@
           </div>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Mode / Terms of Payment</label>
-          <select class="form-select" name="payment_terms">
+          <label class="form-label">Mode / Terms of Payment <span class="text-danger">*</span></label>
+          {% comment %}
+          A blank first option, and required with it. The field's model
+          default is Cash, so without one every new purchase arrived already
+          saying Cash -- and a credit purchase saved by somebody who never
+          looked at this box was recorded as paid in cash. Nothing is chosen
+          here until somebody chooses it.
+          {% endcomment %}
+          <select class="form-select" name="payment_terms" required>
+            <option value="">Select</option>
             {% for value, label in payment_terms_choices %}
             <option value="{{ value }}" {% if general_purchase.payment_terms == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -107,7 +115,7 @@
               <th class="c-num m-num ds-num">Free Qty</th>
               <th class="c-num m-num ds-num">Rate <span class="text-danger">*</span></th>
               <th class="c-num m-num ds-num">Disc %</th>
-              <th class="c-fit m-short">Disc ₹</th>
+              <th class="c-fit m-mid" style="min-width:132px;">Disc ₹</th>
               <th class="c-fit m-short">GST</th>
               <th class="c-num m-num ds-num">Amount</th>
               <th class="c-fit m-mid">Warehouse / Farm <span class="text-danger">*</span></th>
@@ -126,6 +134,40 @@
 
   <div class="card mb-3">
 <style>
+  /* Flat discount: the amount, and whether it is off the whole line or off
+     each unit. A dropdown here cost the column half its width for a two-way
+     choice; a pair of buttons says the same in a third of the room, and
+     reads at a glance on a filled-in sheet -- "₹" for the line, "/u" per
+     unit, lit when it is the one in force. */
+  /* The input must be allowed to shrink. A .form-control inside a flex row
+     keeps its own default width and pushes anything beside it out of the
+     cell -- it took 159px of a 173px column and the switch overflowed
+     unseen. flex:1 1 0 with min-width:0 makes it yield. */
+  .disc-cell { display:flex; align-items:stretch; gap:3px; width:100%; }
+  /* Matching `.ds table.ds-entry .form-control`, which is three selectors
+     deep and sets width:100%. At less specificity the input kept the full
+     cell -- 159px of 173px -- and pushed the switch out of sight. */
+  .ds table.ds-entry .disc-cell .disc-amount {
+    flex:1 1 0; min-width:0; width:auto;
+  }
+  .disc-switch { display:inline-flex; flex:0 0 auto; border:1px solid var(--bs-border-color, #dee2e6);
+                 border-radius:.25rem; overflow:hidden; }
+  .disc-switch .disc-opt { border:0; background:#fff; color:#6c757d; cursor:pointer;
+                 font-size:.68rem; line-height:1; padding:0 5px; min-width:22px; }
+  .disc-switch .disc-opt + .disc-opt { border-left:1px solid var(--bs-border-color, #dee2e6); }
+  .disc-switch .disc-opt.active { background:#2563eb; color:#fff; font-weight:700; }
+  .disc-switch .disc-opt:not(.active):hover { background:#eef2f7; color:#2563eb; }
+  /* What the row actually gives up, when that is not the number typed into
+     the box -- ₹2 per unit on 900 bags is ₹1,800 off, and the figure that
+     reaches the total should not have to be worked out to be checked. */
+  .disc-effective { font-size:.65rem; line-height:1.1; color:#2563eb;
+                    margin-top:1px; text-align:right; white-space:nowrap; }
+  .disc-effective:empty { display:none; }
+  /* A line discounted past zero. Red on the hint and on the amount it
+     produced, so the row that is wrong is the row that is marked. */
+  #item-table tr.disc-over .disc-effective { color:#c0392b; font-weight:600; }
+  #item-table tr.disc-over .amount { color:#c0392b; font-weight:700; }
+
   /* The whole form, compact — every section, not just Purchase Details.
      Every control sizes from --ds-control-h, so one override shortens the
      boxes, dropdowns and file pickers together; the Items grid keeps its own
@@ -333,23 +375,55 @@
   <div class="card mb-3">
     <div class="card-header">Reference Documents</div>
     <div class="card-body">
+      {% comment %}
+      One box rather than the three fixed Reference Document slots this card
+      used to carry. Those took one file each and no more -- a purchase with
+      four pages of weighbridge slips had nowhere to put the fourth -- and the
+      register's own upload could only be reached after saving. This takes any
+      number, with drag, browse or paste, and files picked here are saved with
+      the purchase in the same submission rather than in a second visit.
+
+      The three fields stay on the model: purchases filed before this still
+      hold their documents there, and the register reads both.
+      {% endcomment %}
       <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label">Reference Document-1</label>
-          <input type="file" class="form-control" name="reference_document_1">
-          {% if general_purchase.reference_document_1 %}<div class="form-text"><a href="{{ general_purchase.reference_document_1.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        <div class="col-md-8">
+          <label class="form-label">Attachments
+            <span class="text-muted small">— invoice copy, weighbridge slip, photos</span></label>
+          <input type="file" class="form-control" name="attachments" multiple
+                 accept="image/*,application/pdf" id="gp-attachments" data-paste-drop>
         </div>
         <div class="col-md-4">
-          <label class="form-label">Reference Document-2</label>
-          <input type="file" class="form-control" name="reference_document_2">
-          {% if general_purchase.reference_document_2 %}<div class="form-text"><a href="{{ general_purchase.reference_document_2.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Reference Document-3</label>
-          <input type="file" class="form-control" name="reference_document_3">
-          {% if general_purchase.reference_document_3 %}<div class="form-text"><a href="{{ general_purchase.reference_document_3.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+          <label class="form-label">Caption <span class="text-muted small">(optional)</span></label>
+          <input type="text" class="form-control" name="attachment_caption"
+                 maxlength="150" placeholder="e.g. Invoice copy">
         </div>
       </div>
+
+      {% if general_purchase and general_purchase.attachments.exists %}
+      <div class="mt-3">
+        <div class="small fw-semibold mb-2">Already attached</div>
+        <div class="row g-2" id="gp-existing-attachments">
+          {% for a in general_purchase.attachments.all %}
+          <div class="col-6 col-md-2 text-center gp-att-item" data-attachment="{{ a.id }}">
+            <a href="{{ a.file.url }}" target="_blank" rel="noopener">
+              {% if a.file.name|lower|slice:"-4:" == ".pdf" %}
+                <div class="border rounded py-3 text-danger"><i class="fas fa-file-pdf fa-2x"></i></div>
+              {% else %}
+                <img src="{{ a.file.url }}" class="img-fluid rounded border" alt="{{ a.caption }}">
+              {% endif %}
+            </a>
+            <div class="small text-muted text-truncate">{{ a.caption|default:a.file.name|cut:"general_purchase/attachments/" }}</div>
+            {% if page_perms.edit %}
+            <button type="button" class="btn btn-outline-danger btn-sm mt-1 py-0 px-1 gp-att-del"
+                    data-attachment="{{ a.id }}" title="Remove this attachment">
+              <i class="fas fa-trash"></i></button>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -439,8 +513,18 @@ function itemRow(row = {}) {
     <td><input class="form-control rcv-qty" type="number" min="0" step=".01" value="${row.rcv_qty || 0}"></td>
     <td><input class="form-control free-qty" type="number" min="0" step=".01" value="${row.free_qty || 0}"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
-    <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent || 0}"></td>
-    <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount || 0}"></td>
+    <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent || 0}">
+      <div class="disc-effective pct-effective" aria-live="polite"></div></td>
+    <td><div class="disc-cell">
+      <input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount || 0}">
+      <div class="disc-switch" role="group"
+           title="Is this off the whole line, or off each unit?">
+        <button type="button" class="disc-opt${(row.discount_basis || 'line') === 'line' ? ' active' : ''}" data-basis="line">₹</button>
+        <button type="button" class="disc-opt${row.discount_basis === 'unit' ? ' active' : ''}" data-basis="unit">/u</button>
+      </div>
+      <input type="hidden" class="disc-basis" value="${row.discount_basis || 'line'}">
+    </div>
+    <div class="disc-effective flat-effective" aria-live="polite"></div></td>
     <td><select class="form-select gst">${taxOptions}</select></td>
     <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
     <td><select class="form-select destination" required>${destOptions}</select></td>
@@ -472,7 +556,42 @@ function itemRow(row = {}) {
 function calcRow(tr) {
   const num = s => Number(tr.querySelector(s).value) || 0;
   const qty = calcBasis() === 'Received Quantity' ? num('.rcv-qty') : num('.sent-qty');
-  const subtotal = (qty * num('.rate')) * (1 - num('.disc-percent') / 100) - num('.disc-amount');
+  // A flat discount is either the whole line's or one unit's -- per unit it
+  // scales with the quantity, which is how suppliers usually state a rebate
+  // ("two rupees a bag") and saves working it out by hand.
+  const perUnit = tr.querySelector('.disc-basis').value === 'unit';
+  const flat = perUnit ? num('.disc-amount') * qty : num('.disc-amount');
+
+  // What each discount actually takes off, in rupees. A percentage and a
+  // per-unit rate both need working out against the line before they can be
+  // checked, and a figure that reaches the total should not need mental
+  // arithmetic to verify.
+  const gross = qty * num('.rate');
+  const pctOff = gross * num('.disc-percent') / 100;
+  const pctHint = tr.querySelector('.pct-effective');
+  if (pctHint) {
+    pctHint.textContent = pctOff > 0 ? '= ₹' + pctOff.toFixed(2) : '';
+  }
+  // The flat one only where it differs from the number typed, which is to
+  // say on a per-unit row: on a line row the box already says it.
+  const hint = tr.querySelector('.flat-effective');
+  if (hint) {
+    hint.textContent = (perUnit && flat > 0) ? '= ₹' + flat.toFixed(2) : '';
+  }
+
+  // A discount bigger than the line itself. Easy to reach by accident on a
+  // per-unit row -- a rate meant for the whole line, switched to per unit,
+  // multiplies into something absurd -- and a negative line amount flows
+  // into the purchase total with nothing to show it is wrong. Flagged
+  // rather than clamped: the figures are the office's to correct, and
+  // silently rewriting a typed number is worse than saying it is wrong.
+  const over = (pctOff + flat) > gross && gross > 0;
+  tr.classList.toggle('disc-over', over);
+  if (over && hint) {
+    hint.textContent = (hint.textContent ? hint.textContent + ' ' : '')
+      + '⚠ more than the line';
+  }
+  const subtotal = (qty * num('.rate')) * (1 - num('.disc-percent') / 100) - flat;
   const amount = subtotal * (1 + num('.gst') / 100);
   tr.querySelector('.amount').value = amount.toFixed(2);
   totals();
@@ -620,6 +739,7 @@ get('general-purchase-form').addEventListener('submit', function (e) {
     sent_qty: tr.querySelector('.sent-qty').value, rcv_qty: tr.querySelector('.rcv-qty').value,
     free_qty: tr.querySelector('.free-qty').value, rate: tr.querySelector('.rate').value,
     discount_percent: tr.querySelector('.disc-percent').value, discount_amount: tr.querySelector('.disc-amount').value,
+    discount_basis: tr.querySelector('.disc-basis').value,
     gst_percent: tr.querySelector('.gst').value,
     destination: tr.querySelector('.destination').value,
     batch: tr.querySelector('.batch').value,
@@ -645,8 +765,46 @@ get('general-purchase-form').addEventListener('submit', function (e) {
   get('items_json').value = JSON.stringify(rows);
 });
 
+// The ₹ / per-unit switch on a row. Delegated, so rows added later work
+// without being wired up one at a time.
+document.getElementById('item-table').addEventListener('click', e => {
+  const opt = e.target.closest('.disc-opt');
+  if (!opt) return;
+  const tr = opt.closest('tr');
+  tr.querySelectorAll('.disc-opt').forEach(b => b.classList.toggle('active', b === opt));
+  tr.querySelector('.disc-basis').value = opt.dataset.basis;
+  calcRow(tr);
+});
+
 (existingItems.length ? existingItems : [{}]).forEach(itemRow);
 $('#supplier').on('change', () => RateHistory.refresh());
 totals();
+
+{% if general_purchase %}
+/* Removing a file already filed against this purchase.
+ *
+ * Done straight away through the register's own endpoint rather than held
+ * until Save: the file is already on the record, and leaving a "will be
+ * removed" state to be forgotten about is how a deleted slip comes back.
+ */
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.gp-att-del');
+  if (!btn) return;
+  if (!window.confirm('Remove this attachment from the purchase?')) return;
+  const item = btn.closest('.gp-att-item');
+  btn.disabled = true;
+  fetch(`{% url 'general_purchase_attachments' general_purchase.id %}`
+        + `?attachment=${btn.dataset.attachment}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+  }).then(r => {
+    if (!r.ok) throw new Error('Could not remove the attachment.');
+    item.remove();
+  }).catch(err => {
+    btn.disabled = false;
+    window.alert(err.message);
+  });
+});
+{% endif %}
 </script>
 {% endblock %}

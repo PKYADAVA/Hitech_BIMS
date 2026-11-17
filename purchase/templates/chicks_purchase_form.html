@@ -355,23 +355,54 @@
   <div class="card mb-3">
     <div class="card-header">Reference Documents</div>
     <div class="card-body">
+      {% comment %}
+      One box rather than the three fixed Reference Document slots this card
+      used to carry, matching General Purchase. Those took one file each and
+      no more, and the register's own upload could only be reached after
+      saving. This takes any number, with drag, browse or paste, and files
+      picked here are saved with the purchase in the same submission.
+
+      The three fields stay on the model: purchases filed before this still
+      hold their documents there, and the register reads both.
+      {% endcomment %}
       <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label">Reference Document-1</label>
-          <input type="file" class="form-control" name="reference_document_1">
-          {% if chicks_purchase.reference_document_1 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_1.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        <div class="col-md-8">
+          <label class="form-label">Attachments
+            <span class="text-muted small">— invoice copy, weighbridge slip, photos</span></label>
+          <input type="file" class="form-control" name="attachments" multiple
+                 accept="image/*,application/pdf" id="cp-attachments" data-paste-drop>
         </div>
         <div class="col-md-4">
-          <label class="form-label">Reference Document-2</label>
-          <input type="file" class="form-control" name="reference_document_2">
-          {% if chicks_purchase.reference_document_2 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_2.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Reference Document-3</label>
-          <input type="file" class="form-control" name="reference_document_3">
-          {% if chicks_purchase.reference_document_3 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_3.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+          <label class="form-label">Caption <span class="text-muted small">(optional)</span></label>
+          <input type="text" class="form-control" name="attachment_caption"
+                 maxlength="150" placeholder="e.g. Invoice copy">
         </div>
       </div>
+
+      {% if chicks_purchase and chicks_purchase.attachments.exists %}
+      <div class="mt-3">
+        <div class="small fw-semibold mb-2">Already attached</div>
+        <div class="row g-2" id="cp-existing-attachments">
+          {% for a in chicks_purchase.attachments.all %}
+          <div class="col-6 col-md-2 text-center cp-att-item" data-attachment="{{ a.id }}">
+            <a href="{{ a.file.url }}" target="_blank" rel="noopener">
+              {% if a.file.name|lower|slice:"-4:" == ".pdf" %}
+                <div class="border rounded py-3 text-danger"><i class="fas fa-file-pdf fa-2x"></i></div>
+              {% else %}
+                <img src="{{ a.file.url }}" class="img-fluid rounded border" alt="{{ a.caption }}">
+              {% endif %}
+            </a>
+            <div class="small text-muted text-truncate">{{ a.caption|default:a.file.name|cut:"chicks_purchase/attachments/" }}</div>
+            {% if page_perms.edit %}
+            <button type="button" class="btn btn-outline-danger btn-sm mt-1 py-0 px-1 cp-att-del"
+                    data-attachment="{{ a.id }}" title="Remove this attachment">
+              <i class="fas fa-trash"></i></button>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -668,5 +699,32 @@ $('[name=supplier]').on('change', () => RateHistory.refresh());
   }
 })();
 totals();
+
+{% if chicks_purchase %}
+/* Removing a file already filed against this purchase.
+ *
+ * Done straight away through the register's own endpoint rather than held
+ * until Save: the file is already on the record, and leaving a "will be
+ * removed" state to be forgotten about is how a deleted slip comes back.
+ */
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.cp-att-del');
+  if (!btn) return;
+  if (!window.confirm('Remove this attachment from the purchase?')) return;
+  const item = btn.closest('.cp-att-item');
+  btn.disabled = true;
+  fetch(`{% url 'chicks_purchase_attachments' chicks_purchase.id %}`
+        + `?attachment=${btn.dataset.attachment}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+  }).then(r => {
+    if (!r.ok) throw new Error('Could not remove the attachment.');
+    item.remove();
+  }).catch(err => {
+    btn.disabled = false;
+    window.alert(err.message);
+  });
+});
+{% endif %}
 </script>
 {% endblock %}
