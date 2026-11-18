@@ -66,6 +66,29 @@
 </head>
 
 <body{% if ds_shell %} class="ds-shell"{% endif %}>
+  {% comment %}
+    Viewing the ERP as someone else is never allowed to look like ordinary use:
+    whatever is done here is recorded against the user being viewed as, so the
+    banner stays on screen, on every page, until it is stopped. See
+    user.views.impersonate_start.
+  {% endcomment %}
+  {% if request.session.impersonator_id %}
+  <div class="impersonation-bar{% if request.session.impersonator_can_write %} impersonation-bar--write{% endif %}" role="status">
+    <span class="impersonation-bar__text">
+      <i class="fas fa-user-secret" aria-hidden="true"></i>
+      Viewing as <strong>{{ request.user.get_username }}</strong> &mdash;
+      {% if request.session.impersonator_can_write %}
+        write access on; entries are recorded against this user.
+      {% else %}
+        read-only; saving and deleting are refused.
+      {% endif %}
+    </span>
+    <form method="post" action="{% url 'impersonate_stop' %}" class="impersonation-bar__form">
+      {% csrf_token %}
+      <button type="submit" class="impersonation-bar__stop">Stop viewing as</button>
+    </form>
+  </div>
+  {% endif %}
   {% if ds_shell %}{% include '_ds_sidebar.html' %}{% endif %}
   <!-- `ds` turns on the design system for every page: one type scale, one set
        of control sizes, one palette. Grids still opt in per page with ds-grid /

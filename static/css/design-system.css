@@ -1676,3 +1676,65 @@ button.acct-row { width: 100%; text-align: left; background: none; border: 0; }
 }
 .mobile-paste-zone > i { font-size: 1rem; opacity: .6; }
 .mobile-paste-zone img { display: none; }
+
+/* ---------------------------------------------------------------------------
+   Viewing the ERP as another user (user.views.impersonate_start).
+
+   In normal flow rather than fixed: the shell's sidebar is itself fixed at
+   inset:0 auto 0 0, so a fixed bar would sit on top of it. Sitting in the flow
+   the bar pushes the whole shell down instead, which is also what makes it
+   impossible to scroll away from and forget about.
+
+   Amber rather than the danger red: this is a state to stay aware of, not an
+   error, and red here would cry wolf next to real validation messages.
+--------------------------------------------------------------------------- */
+.impersonation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: #92400e;
+  color: #fff;
+  font-family: var(--ds-font, inherit);
+  font-size: .82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  border-bottom: 2px solid #7c2d12;
+  position: relative;
+  z-index: 1080;
+}
+.impersonation-bar__text { display: inline-flex; align-items: center; gap: 8px; }
+/* Write access is the state worth telling apart at a glance, so it gets the
+   danger red while plain looking stays amber. */
+.impersonation-bar--write { background: #991b1b; border-bottom-color: #7f1d1d; }
+.impersonation-bar__text i { opacity: .9; }
+.impersonation-bar__text strong { font-weight: 700; }
+.impersonation-bar__form { margin: 0; display: inline-flex; }
+.impersonation-bar__stop {
+  border: 1px solid rgba(255, 255, 255, .55);
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.impersonation-bar__stop:hover { background: rgba(255, 255, 255, .24); }
+.impersonation-bar__stop:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* The sidebar is fixed from the top of the viewport, so it has to be told
+   about the bar's height or it would slide underneath it. */
+body.ds-shell:has(.impersonation-bar) .ds-sidebar { top: var(--ds-imp-h, 41px); }
+
+/* Toasts are fixed at top:15px and would otherwise land squarely on the
+   banner, hiding the one control that ends the impersonation. Nudged down
+   past it for as long as the banner is on screen. */
+body:has(.impersonation-bar) .toastify.on.toastify-top { top: 57px !important; }
+
+@media (max-width: 575.98px) {
+  .impersonation-bar { font-size: .76rem; gap: 10px; padding: 7px 12px; }
+}

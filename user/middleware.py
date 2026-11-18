@@ -64,6 +64,14 @@ class WebAccessMiddleware:
         if not user or not user.is_authenticated:
             return None
 
+        # Read-only while viewing the ERP as someone else, unless that has been
+        # switched on too. Enforced here rather than per view because a write
+        # can leave through any of several hundred of them, and one missed view
+        # is a saved document attributed to the wrong person.
+        blocked = self._impersonation_write_block(request)
+        if blocked is not None:
+            return blocked
+
         match = getattr(request, "resolver_match", None)
         if match is None:
             return None
@@ -111,6 +119,54 @@ class WebAccessMiddleware:
 
         self._record(request, view_func, url_name, user, "denied", tab, action)
         return self._deny(request, action)
+
+    # ---- read-only impersonation ------------------------------------------
+
+    # The two ways out of an impersonated session. Never blocked, whatever the
+    # write setting says: the alternative is an administrator who cannot stop
+    # viewing as someone else without being refused by this very check.
+    IMPERSONATION_EXITS = frozenset({"impersonate_stop", "logout"})
+
+    def _impersonation_write_block(self, request):
+        """Refuse a state-changing request made while viewing as another user.
+
+        Returns ``None`` when the request may proceed. GET/HEAD/OPTIONS pass
+        regardless — this is about writes, and a report that reads with GET is
+        exactly what impersonation is for.
+        """
+        if not request.session.get("impersonator_id"):
+            return None
+        if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+            return None
+
+        match = getattr(request, "resolver_match", None)
+        if match is not None and match.url_name in self.IMPERSONATION_EXITS:
+            return None
+
+        # The mode chosen when this impersonation began, not the global
+        # setting: switching the setting on must not quietly grant write
+        # access to a session that was started read-only.
+        if request.session.get("impersonator_can_write"):
+            return None
+
+        logger.warning(
+            "impersonation: refused %s %s for %s (viewing as, read-only)",
+            request.method, request.path, request.user.get_username(),
+        )
+        message = ("You are viewing the ERP as another user, which is "
+                   "read-only. Stop viewing as them to make changes.")
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        if is_ajax or request.headers.get("accept", "").startswith("application/json"):
+            return JsonResponse({"error": message}, status=403)
+        # A refusal must not itself blow up. The messages framework needs its
+        # middleware to have run, which is true for every real request but not
+        # for one built by hand, and a 500 here would read as a broken ERP
+        # rather than a refused write.
+        try:
+            messages.error(request, message)
+        except Exception:
+            logger.debug("impersonation: could not queue the refusal message")
+        return redirect(request.META.get("HTTP_REFERER") or "home")
 
     @staticmethod
     def _is_reference_read(request, url_name):

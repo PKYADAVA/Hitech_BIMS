@@ -23,6 +23,11 @@ urlpatterns = [
     path('user/<int:user_id>/toggle-active/', views.toggle_user_active,
          name='create_user_toggle_active'),
     path('user/<int:user_id>/delete/', views.delete_user, name='create_user_delete'),
+    # Viewing the ERP as another user. Superuser-only and POSTed, so no link
+    # or crawler can trigger it; see views.impersonate_start.
+    path('user/<int:user_id>/view-as/', views.impersonate_start,
+         name='impersonate_start'),
+    path('stop-viewing-as/', views.impersonate_stop, name='impersonate_stop'),
     # Named for the tab it serves, so user/access.py derives its rights.
     path('user/<int:user_id>/permissions/', views.user_permissions,
          name='create_user_permissions'),

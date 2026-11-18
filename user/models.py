@@ -508,3 +508,80 @@ class DuplicateDismissal(models.Model):
     @property
     def ids(self) -> set:
         return {int(i) for i in self.record_ids.split(",") if i.strip().isdigit()}
+
+
+class ImpersonationSettings(models.Model):
+    """The master switch for User > Users > "View as".
+
+    Viewing the ERP as another user is support plumbing, not an everyday
+    feature: whatever is done while it is active is saved under the name of
+    the person being viewed as, so the trail cannot tell their work from the
+    administrator's. That is a reasonable trade while someone is diagnosing a
+    permissions complaint, and an unreasonable one for a system left
+    permanently open to it.
+
+    Hence a switch, and hence off by default: a fresh install, and any database
+    that has never seen this row, cannot impersonate until somebody decides it
+    may. The button disappears from the Users page and the view refuses the
+    POST, so turning it off mid-session stops it at the next request rather
+    than leaving an open impersonation running.
+
+    Existing sessions are not hunted down when it is switched off — the banner
+    keeps its "Stop viewing as" button, which still works, because stranding
+    an administrator inside someone else's identity would be the worse failure.
+    """
+
+    enabled = models.BooleanField(
+        default=False,
+        help_text=("Allow the super admin to open the ERP as another user from "
+                   "User > Users. Entries made while viewing as someone are "
+                   "saved under that user's name, so leave this off unless "
+                   "support work needs it."))
+    allow_writes = models.BooleanField(
+        default=False,
+        help_text=("Let the administrator save, edit and delete while viewing "
+                   "as another user. Off means look but do not touch, which is "
+                   "what answering a permissions question needs. Switch it on "
+                   "only for support that has to reproduce a save, and "
+                   "remember the entry is recorded against the user being "
+                   "viewed as, not against the administrator."))
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Impersonation Settings"
+        verbose_name_plural = "Impersonation Settings"
+
+    def __str__(self):
+        return "Impersonation Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @classmethod
+    def is_enabled(cls):
+        """Whether "View as" is available at all.
+
+        Swallows database errors so a missing table — an install whose
+        migration has not run yet — reads as "off" rather than breaking every
+        page that asks, since the Users template asks on every row.
+        """
+        try:
+            return cls.get_solo().enabled
+        except Exception:
+            return False
+
+    @classmethod
+    def writes_allowed(cls):
+        """Whether an impersonated session may change anything.
+
+        Independent of :meth:`is_enabled` on purpose: turning impersonation on
+        is a decision about who may look, and this is a separate decision about
+        whether they may also act. Defaults to no on the same failure-closed
+        reasoning — if the row or the table cannot be read, nothing is saved.
+        """
+        try:
+            return cls.get_solo().allow_writes
+        except Exception:
+            return False

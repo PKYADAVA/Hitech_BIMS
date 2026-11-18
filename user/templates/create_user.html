@@ -106,6 +106,27 @@
                             <i class="fas fa-user-shield"></i>
                         </a>
                         {% endif %}
+                        {% comment %}
+                          Open the ERP as this person — for answering "I cannot
+                          see X" without asking anyone for their password. Super
+                          admin only, and never offered for another super admin
+                          or a deactivated account, matching what the view will
+                          accept. A POST, so it cannot be triggered by a link.
+                        {% endcomment %}
+                        {% if impersonation_enabled and request.user.is_superuser and not user.is_superuser and user.is_active and user.id != request.user.id %}
+                        <form method="post" action="{% url 'impersonate_start' user.id %}"
+                              class="d-inline view-as-form">
+                          {% csrf_token %}
+                          {# Set by the dialog before the form is submitted. #}
+                          <input type="hidden" name="mode" value="read">
+                          <button type="submit" class="btn btn-outline-info btn-sm view-as-btn"
+                                  data-username="{{ user.username }}"
+                                  data-can-write="{{ impersonation_writes|yesno:'1,0' }}"
+                                  title="View ERP as {{ user.username }}">
+                            <i class="fas fa-user-secret"></i>
+                          </button>
+                        </form>
+                        {% endif %}
                         {% if page_perms.delete %}
                         <button type="button" class="btn btn-outline-danger btn-sm delete-user-btn"
                             data-id="{{ user.id }}"
@@ -385,6 +406,35 @@
                     window.showToast('danger', message);
                 }
             });
+        });
+
+        // One button, two ways in. Read-only is the default and the safe
+        // one, so it is what Cancel leaves you with; write access has to be
+        // chosen deliberately, and is only offered where the setting allows.
+        $(document).on('submit', '.view-as-form', function (e) {
+            var form = $(this);
+            if (form.data('confirmed')) { return; }
+            e.preventDefault();
+            var btn  = form.find('.view-as-btn');
+            var name = btn.data('username');
+            var mode = 'read';
+            if (String(btn.data('can-write')) === '1') {
+                var wantsWrite = window.confirm(
+                    'Open the ERP as "' + name + '" WITH WRITE ACCESS?' + '\n\n' +
+                    'OK  = you can save, edit and delete, and every entry is ' +
+                    'recorded against ' + name + ', not against you.' + '\n' +
+                    'Cancel = open read-only instead.');
+                mode = wantsWrite ? 'write' : 'read';
+            }
+            if (mode === 'read') {
+                if (!window.confirm(
+                    'Open the ERP as "' + name + '" (read-only)?' + '\n\n' +
+                    'You will see exactly what they see, but saving and ' +
+                    'deleting are refused.')) { return; }
+            }
+            form.find('input[name="mode"]').val(mode);
+            form.data('confirmed', true);
+            form.trigger('submit');
         });
     });
 </script>

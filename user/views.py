@@ -20,13 +20,18 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from hr.models import Designation, Employee
 from hr.models import Group as HrGroup
 from inventory.models import Warehouse
-from .models import UserProfile, GroupTabPermission, GroupAccessProfile
+from .models import (UserProfile, GroupTabPermission, GroupAccessProfile,
+                     ImpersonationSettings)
 from .access import (MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES,
                      UNENFORCED_ACTIONS, UNENFORCED_FLAGS, iter_tabs)
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.utils.http import url_has_allowed_host_and_scheme
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_next(request):
@@ -79,6 +84,12 @@ def login(request):
 
 
 def logout(request):
+    # Signing out while viewing as someone else returns the administrator to
+    # their own account rather than ending the session: otherwise the obvious
+    # way out of impersonation logs them out of the ERP entirely, and the
+    # audit log would show the *viewed* user signing out.
+    if request.session.get(IMPERSONATE_SESSION_KEY):
+        return _end_impersonation(request)
     auth_logout(request)
     return redirect("login")
 
@@ -893,6 +904,10 @@ def _user_page_context():
         # Each option carries its current user so the dialog can tell them apart.
         "all_employees": Employee.objects.select_related("user").order_by("full_name"),
         "groups": Group.objects.all(),
+        # Drives the "View as" button. Read once here rather than per row.
+        "impersonation_enabled": ImpersonationSettings.is_enabled(),
+        # Whether to offer the second, write-enabled button beside it.
+        "impersonation_writes": ImpersonationSettings.writes_allowed(),
     }
 
 
@@ -1967,6 +1982,151 @@ def mobile_login_link(request):
         return redirect("login")
     auth_login(request, user)
     return redirect(next_url)
+
+
+# The key the real administrator's id is parked under while they are viewing
+# the ERP as someone else. Its presence *is* the impersonation: the banner, the
+# "stop" button and the audit attribution all key off it, and ending the
+# session ends the impersonation with it.
+IMPERSONATE_SESSION_KEY = "impersonator_id"
+
+# Whether this impersonated session may change anything. Set once when it
+# starts; absent or False means look but do not touch.
+IMPERSONATE_WRITE_KEY = "impersonator_can_write"
+
+
+@require_POST
+@login_required
+def impersonate_start(request, user_id):
+    """User > Users > "View as" — open the ERP as another user.
+
+    Support work on a permission complaint otherwise means asking someone for
+    their password, which is the habit worth not teaching. This logs the
+    administrator into the target's session instead, keeping their own id in
+    ``IMPERSONATE_SESSION_KEY`` so the ERP can say whose hands are really on it.
+
+    Deliberately narrow:
+
+    * superusers only — the Web-Access matrix governs what a user may *do*,
+      and borrowing an identity sits outside it;
+    * a superuser may not be impersonated, so this cannot be used to climb;
+    * inactive accounts are refused, same as an ordinary login refuses them;
+    * no nesting — impersonating while impersonating would lose the thread back
+      to the real account.
+
+    Every start and stop is written to the log with both identities, because an
+    action taken here is recorded against the target by everything downstream.
+    """
+    # The master switch first: off means the feature does not exist, whoever
+    # is asking. Checked here and not only in the template, because hiding a
+    # button is a courtesy and refusing the POST is the control.
+    if not ImpersonationSettings.is_enabled():
+        messages.error(
+            request,
+            "Viewing the ERP as another user is switched off. Turn it on in "
+            "Admin > User > Impersonation Settings.",
+        )
+        return redirect("create_user")
+
+    if not request.user.is_superuser:
+        messages.error(request, "Only the super admin can view the ERP as another user.")
+        return redirect("create_user")
+
+    if request.session.get(IMPERSONATE_SESSION_KEY):
+        messages.error(request, "You are already viewing as another user. Stop that first.")
+        return redirect("home")
+
+    target = get_object_or_404(User, pk=user_id)
+    if target.pk == request.user.pk:
+        messages.error(request, "You are already signed in as yourself.")
+        return redirect("create_user")
+    if target.is_superuser:
+        messages.error(request, "A super admin cannot be viewed as — they already see everything.")
+        return redirect("create_user")
+    if not target.is_active:
+        messages.error(request, f"{target.username} is deactivated and cannot be viewed as.")
+        return redirect("create_user")
+
+    # Read-only unless write access was both asked for on this click and
+    # allowed globally. The mode is decided here, once, and carried in the
+    # session: a session that began read-only cannot be talked into writing
+    # later without stopping and starting again.
+    wants_writes = request.POST.get("mode") == "write"
+    writable = bool(wants_writes and ImpersonationSettings.writes_allowed())
+    if wants_writes and not writable:
+        messages.error(
+            request,
+            "Viewing as another user with write access is switched off. "
+            "Turn it on in Admin > User > Impersonation Settings.",
+        )
+        return redirect("create_user")
+
+    admin_id = request.user.pk
+    admin_name = request.user.get_username()
+
+    # auth_login cycles the session key, so stash the real id *after* it.
+    auth_login(request, target, backend="django.contrib.auth.backends.ModelBackend")
+    request.session[IMPERSONATE_SESSION_KEY] = admin_id
+    request.session[IMPERSONATE_WRITE_KEY] = writable
+    request.session.modified = True
+
+    logger.warning(
+        "IMPERSONATION START: %s (id=%s) is now viewing the ERP as %s (id=%s), %s",
+        admin_name, admin_id, target.get_username(), target.pk,
+        "READ-WRITE" if writable else "read-only",
+    )
+    if writable:
+        messages.warning(
+            request,
+            f"You are now viewing the ERP as {target.get_username()} with write "
+            "access. Anything you save is recorded against them.",
+        )
+    else:
+        messages.warning(
+            request,
+            f"You are now viewing the ERP as {target.get_username()} "
+            "(read-only). Saving and deleting are refused.",
+        )
+    return redirect("home")
+
+
+@require_POST
+@login_required
+def impersonate_stop(request):
+    """Hand the session back to the administrator who started it."""
+    return _end_impersonation(request)
+
+
+def _end_impersonation(request):
+    """Restore the real administrator, for the banner's button and for logout.
+
+    Shared rather than one calling the other because the button POSTs while the
+    navbar's sign-out is an ordinary link, and ``require_POST`` would refuse it.
+    """
+    admin_id = request.session.get(IMPERSONATE_SESSION_KEY)
+    if not admin_id:
+        return redirect("home")
+
+    viewed_as = request.user.get_username()
+    admin = User.objects.filter(pk=admin_id, is_active=True, is_superuser=True).first()
+    if admin is None:
+        # The account that started this is gone or demoted: the safe landing is
+        # signed out, not left wearing someone else's identity.
+        auth_logout(request)
+        messages.error(request, "Your administrator account is no longer available. Please sign in again.")
+        return redirect("login")
+
+    auth_login(request, admin, backend="django.contrib.auth.backends.ModelBackend")
+    request.session.pop(IMPERSONATE_SESSION_KEY, None)
+    request.session.pop(IMPERSONATE_WRITE_KEY, None)
+    request.session.modified = True
+
+    logger.warning(
+        "IMPERSONATION STOP: %s (id=%s) stopped viewing the ERP as %s",
+        admin.get_username(), admin.pk, viewed_as,
+    )
+    messages.success(request, f"You are signed in as {admin.get_username()} again.")
+    return redirect("create_user")
 
 
 @login_required
