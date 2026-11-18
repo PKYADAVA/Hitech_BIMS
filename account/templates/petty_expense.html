@@ -68,6 +68,16 @@
   .px-kpi-note { display: block; font-size: .64rem; color: var(--text-muted); line-height: 1.2; }
 
   /* The filter strip, as the Broiler registers wear it. */
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the strip's
+     top edge and tints it. Restated because this page's own .px-filters rule
+     is written after the stylesheet and would otherwise win on equal
+     specificity, leaving the label floating over an unmarked strip. */
+  .px-filters.lf-active {
+    margin-top: .6rem;
+    background: rgba(217, 119, 6, .07);
+    border-left: 3px solid #d97706;
+    border-radius: 4px;
+  }
   .px-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
     gap: .4rem; padding: .45rem; align-items: center; }
   .px-filter { display: flex; align-items: center; gap: .4rem; min-width: 0;
@@ -886,6 +896,93 @@ $(function () {
       $("#px-month, #px-year").trigger("change.select2");
     }
   });
+  /* ---------------------------------------------------------------------
+     Remembering the strip for the sitting.
+
+     Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages and the refusal throws, so a guarded write
+     fails silently and the strip simply resets on the next refresh. Where it
+     is refused the same values ride in the address bar instead, written with
+     replaceState so Back still leaves the register rather than walking
+     through its own filter states.
+     --------------------------------------------------------------------- */
+  const PX_KEY = "bims.petty.filters";
+  const PX_DEFAULTS = { from: "", to: "" };
+  const PX_FIELDS = ["px-from", "px-to", "px-month", "px-year", "px-branch",
+    "px-farm", "px-centre", "px-account", "px-paid-from", "px-paid-to",
+    "px-mode", "px-status", "px-min", "px-max"];
+  const PX_STORAGE_OK = (function () {
+    try {
+      const probe = PX_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      const ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function pxRead() {
+    const out = {};
+    PX_FIELDS.forEach(function (id) {
+      const node = el(id);
+      if (node) out[id] = node.value || "";
+    });
+    return out;
+  }
+
+  function pxRemember() {
+    const value = pxRead();
+    if (PX_STORAGE_OK) {
+      try { window.sessionStorage.setItem(PX_KEY, JSON.stringify(value)); }
+      catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const keep = {};
+      Object.keys(value).forEach(function (k) { if (value[k]) keep[k] = value[k]; });
+      if (Object.keys(keep).length) params.set(PX_KEY, JSON.stringify(keep));
+      else params.delete(PX_KEY);
+      const qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the strip is simply not carried */ }
+  }
+
+  function pxSaved() {
+    if (PX_STORAGE_OK) {
+      try { return JSON.parse(window.sessionStorage.getItem(PX_KEY) || "{}") || {}; }
+      catch (e) { return {}; }
+    }
+    try {
+      const raw = new URLSearchParams(window.location.search).get(PX_KEY);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+
+  /* The strip says when it is filtering, with the same amber mark and
+     FILTERED label every other list page uses. This register opens on
+     everything, so any value at all is a filter somebody chose. */
+  function pxSyncMark() {
+    const v = pxRead();
+    // The default week this register opens on is not a filter anybody chose,
+    // so the dates only count when they differ from it. Everything else
+    // counts as soon as it has a value.
+    const on = Object.keys(v).some(function (k) {
+      if (k === "px-from") return v[k] && v[k] !== PX_DEFAULTS.from;
+      if (k === "px-to") return v[k] && v[k] !== PX_DEFAULTS.to;
+      return !!v[k];
+    });
+    $("#px-filters").toggleClass("lf-active", on);
+    $("#px-clear").toggleClass("btn-warning", on);
+  }
+
+  PX_FIELDS.forEach(function (id) {
+    const node = el(id);
+    if (!node) return;
+    node.addEventListener("change", function () { pxRemember(); pxSyncMark(); });
+  });
+
   ["px-from", "px-to", "px-month", "px-year", "px-branch", "px-farm",
    "px-centre", "px-account", "px-paid-from", "px-mode", "px-status",
    "px-min", "px-max"].forEach(function (id) {
@@ -894,7 +991,7 @@ $(function () {
   let typing;
   el("px-paid-to").addEventListener("input", function () {
     clearTimeout(typing);
-    typing = setTimeout(function () { kpi = ""; load(); }, 300);
+    typing = setTimeout(function () { kpi = ""; load(); pxRemember(); pxSyncMark(); }, 300);
   });
 
   $("#px-toggle").on("click", function () {
@@ -907,6 +1004,11 @@ $(function () {
     kpi = "";
     narrowFarms();
     load();
+    if (PX_STORAGE_OK) {
+      try { window.sessionStorage.removeItem(PX_KEY); } catch (e) { /* nothing stored */ }
+    }
+    pxRemember();
+    pxSyncMark();
   });
 
   // ---- adding cash to the box -------------------------------------------
@@ -1005,11 +1107,46 @@ $(function () {
     from.setDate(from.getDate() - 6);        // today included, seven in all
     el("px-from").value = iso(from);
     el("px-to").value = iso(today);
+    // Kept so the FILTERED mark can tell this opening week from a range
+    // somebody actually chose.
+    PX_DEFAULTS.from = iso(from);
+    PX_DEFAULTS.to = iso(today);
   }
 
   narrowFarms();
   lastSevenDays();
+  /* After the page has set its own defaults, so a remembered strip wins over
+     them rather than being overwritten by the default week. */
+  (function pxRestore() {
+    const saved = pxSaved();
+    if (!saved || !Object.keys(saved).length) { pxSyncMark(); return; }
+    PX_FIELDS.forEach(function (id) {
+      if (!saved[id]) return;
+      const node = el(id);
+      if (!node) return;
+      if (node.tagName === "SELECT"
+          && !Array.prototype.some.call(node.options, function (o) {
+            return o.value === saved[id];
+          })) return;
+      node.value = saved[id];
+    });
+    $("#px-filters").find("select").trigger("change.select2");
+    narrowFarms();
+    // A farm belongs to a branch, so its options are rebuilt above; set it
+    // again now that they exist.
+    if (saved["px-farm"]) {
+      const farm = el("px-farm");
+      if (farm && Array.prototype.some.call(farm.options, function (o) {
+        return o.value === saved["px-farm"];
+      })) { farm.value = saved["px-farm"]; $(farm).trigger("change.select2"); }
+    }
+    pxSyncMark();
+  })();
   load();
+  // Last word on the mark, after the restore, narrowFarms() and every
+  // change event they fire have all settled -- otherwise the strip could be
+  // left claiming the opening week was a filter somebody chose.
+  pxSyncMark();
 });
 </script>
 {% endblock %}

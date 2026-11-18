@@ -56,6 +56,17 @@
   .ntx-filter-grid .txn-actions .btn { white-space:nowrap; padding:.3rem .55rem; font-size:.82rem; }
   .ntx-filter-grid .form-label { font-size:.75rem; margin-bottom:.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ntx-filter-grid .form-control, .ntx-filter-grid .form-select { font-size:.82rem; padding:.3rem .5rem; }
+  /* The FILTERED mark (design-system.css, .lf-active) sits on the bar's top
+     edge and tints it, so the bar needs room above and a little padding to
+     tint. The tint and left edge are restated because this page's own grid
+     rule is written after the stylesheet and would otherwise win. */
+  .ntx-filter-grid.lf-active {
+    margin-top: .6rem;
+    padding: .5rem;
+    background: rgba(217, 119, 6, .07);
+    border-left: 3px solid #d97706;
+    border-radius: 4px;
+  }
   @media (max-width:1100px) { .ntx-filter-grid { flex-wrap:wrap; }
                               .ntx-filter-grid > div { flex:1 1 180px; } }
   #ntx-doc-table { font-size:.82rem; }
@@ -101,7 +112,7 @@
 <!-- Filters -->
 <div class="card mb-3">
   <div class="card-body">
-    <div class="ntx-filter-grid">
+    <div class="ntx-filter-grid" id="ntx-filter-bar">
       <div>
         <label class="form-label">From Date</label>
         <input type="date" class="form-control" id="from-date">
@@ -609,6 +620,88 @@ $(function () {
     });
   }
 
+  /* ---------------------------------------------------------------------
+     Remembering the filter bar.
+
+     This screen sends real messages to real customers, so the filter that
+     decides who is listed should not quietly reset to "everything, last
+     seven days" because someone refreshed. The bar is remembered for the
+     sitting and put back on return.
+
+     Storage is probed once rather than trusted: Edge's Tracking Prevention
+     refuses sessionStorage on our own pages, and a refusal throws, so a
+     guarded write fails silently and the filter simply vanishes. Where it is
+     refused the same values ride in the address bar instead.
+     --------------------------------------------------------------------- */
+  const NTX_KEY = "ntx.filters";
+  const NTX_STORAGE_OK = (function () {
+      try {
+          const probe = NTX_KEY + ".probe";
+          window.sessionStorage.setItem(probe, "1");
+          const ok = window.sessionStorage.getItem(probe) === "1";
+          window.sessionStorage.removeItem(probe);
+          return ok;
+      } catch (e) { return false; }
+  })();
+
+  function ntxCurrent() {
+      return {
+          module: $("#module").val() || "",
+          from: $("#from-date").val() || "",
+          to: $("#to-date").val() || "",
+          partyType: $("#party-type-filter").val() || "",
+          party: partyValue(),
+          location: $("#location-filter").val() || "",
+          template: $("#template").val() || "",
+      };
+  }
+
+  function ntxRemember() {
+      const value = ntxCurrent();
+      if (NTX_STORAGE_OK) {
+          try { window.sessionStorage.setItem(NTX_KEY, JSON.stringify(value)); }
+          catch (e) { /* not remembered */ }
+          return;
+      }
+      try {
+          const params = new URLSearchParams(window.location.search);
+          const keep = {};
+          Object.keys(value).forEach((k) => { if (value[k]) keep[k] = value[k]; });
+          if (Object.keys(keep).length) params.set(NTX_KEY, JSON.stringify(keep));
+          else params.delete(NTX_KEY);
+          const qs = params.toString();
+          // replaceState, not push: Back should leave this screen rather than
+          // walk back through its own filter states.
+          window.history.replaceState(null, "",
+              window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+      } catch (e) { /* older browser: the filter is simply not carried */ }
+  }
+
+  function ntxSaved() {
+      if (NTX_STORAGE_OK) {
+          try { return JSON.parse(window.sessionStorage.getItem(NTX_KEY) || "{}") || {}; }
+          catch (e) { return {}; }
+      }
+      try {
+          const raw = new URLSearchParams(window.location.search).get(NTX_KEY);
+          return raw ? (JSON.parse(raw) || {}) : {};
+      } catch (e) { return {}; }
+  }
+
+  /* The bar says when it is filtering, using the same amber mark and
+     FILTERED label every other list screen in the ERP uses -- a filtered
+     view should announce itself the same way wherever it is met. Judged
+     against the page's own defaults: the date range it loads with is not a
+     filter anybody chose. */
+  function ntxSyncMark() {
+      const v = ntxCurrent();
+      const on = !!(v.module || v.partyType || v.party || v.location || v.template ||
+                    v.from !== sevenDaysAgo || v.to !== today);
+      $("#ntx-filter-bar").toggleClass("lf-active", on);
+      $("#clear-btn").toggleClass("btn-warning", on)
+                     .toggleClass("btn-outline-secondary", !on);
+  }
+
   function loadRows() {
     $.getJSON(CHANNEL_URLS[channel].source, {
       module: $("#module").val(), from_date: $("#from-date").val(),
@@ -623,7 +716,14 @@ $(function () {
     });
   }
 
-  $("#search-btn").on("click", loadRows);
+  /* What gets remembered is what was searched on, not whatever the controls
+     happen to hold: a half-finished choice nobody pressed Search on should
+     not come back as though it were the list on screen. */
+  $("#search-btn").on("click", function () {
+      loadRows();
+      ntxRemember();
+      ntxSyncMark();
+  });
 
   $("#template").on("change", function () {
     $("#select-all").prop("checked", false);
@@ -668,6 +768,11 @@ $(function () {
     $("#location-filter").val("");
     markActiveQuickRange();
     $("#module").val("").trigger("change");
+    if (NTX_STORAGE_OK) {
+        try { window.sessionStorage.removeItem(NTX_KEY); } catch (e) { /* nothing stored */ }
+    }
+    ntxRemember();
+    ntxSyncMark();
   });
 
   $("#select-all").on("change", function () {
@@ -796,6 +901,40 @@ $(function () {
   syncPartySelects();
   setChannel(channel);
   markActiveQuickRange();
+
+  /* Put back the bar this sitting last searched on. Module goes first and
+     synchronously rebuilds the party selects, so the party value has a
+     control to land in by the time it is set. */
+  (function ntxRestore() {
+      const saved = ntxSaved();
+      if (!saved || !Object.keys(saved).length) { ntxSyncMark(); return; }
+      if (saved.module && $("#module option[value='" + saved.module + "']").length) {
+          $("#module").val(saved.module).trigger("change");
+      }
+      if (saved.from) $("#from-date").val(saved.from);
+      if (saved.to) $("#to-date").val(saved.to);
+      if (saved.partyType && $("#party-type-filter option[value='" + saved.partyType + "']").length) {
+          $("#party-type-filter").val(saved.partyType).trigger("change");
+      }
+      if (saved.party) {
+          const $party = $("#party-" + partyType());
+          if ($party.find("option[value='" + saved.party + "']").length) {
+              $party.val(saved.party).trigger("change.select2");
+          }
+      }
+      if (saved.location && $("#location-filter option[value='" + saved.location + "']").length) {
+          $("#location-filter").val(saved.location).trigger("change.select2");
+      }
+      if (saved.template && $("#template option[value='" + saved.template + "']").length) {
+          $("#template").val(saved.template).trigger("change");
+      }
+      markActiveQuickRange();
+      ntxSyncMark();
+      // The restored bar is a search that was already run, so run it: coming
+      // back to the full list with a narrowed bar above it would be the same
+      // lie the mark exists to prevent.
+      loadRows();
+  })();
 });
 </script>
 {% endblock %}

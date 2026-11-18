@@ -7,6 +7,16 @@
 {% endblock nav %}
 
 {% block content %}
+<style>
+  /* A module filter that is on says so: the control sits in the card's dark
+     header, where the shared .lf-active bar tint would look like damage. */
+  #module-filter.tpl-filtered {
+    border-color: #d97706;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, .35);
+    font-weight: 600;
+  }
+</style>
+
 {% include '_subnav.html' with module='notification_master' active_tab='sms_templates' %}
 
 <div class="page-header">
@@ -388,9 +398,77 @@ $(document).ready(function () {
       order: [[1, 'asc'], [0, 'asc']],
       language: { emptyTable: "No SMS templates found. Click 'Add Template' or run seed_sms_templates." }
     });
+    /* The module choice is remembered for the sitting, so a refresh comes
+       back to the templates you were working through rather than all of
+       them. Storage is probed rather than trusted: Edge's Tracking
+       Prevention refuses it on our own pages and the refusal throws, so a
+       guarded write fails silently. Where it is refused the choice rides in
+       the address bar instead. */
+    var TPL_KEY = "bims.smstpl.module";
+    var TPL_STORAGE_OK = (function () {
+      try {
+        var probe = TPL_KEY + ".probe";
+        window.sessionStorage.setItem(probe, "1");
+        var ok = window.sessionStorage.getItem(probe) === "1";
+        window.sessionStorage.removeItem(probe);
+        return ok;
+      } catch (e) { return false; }
+    })();
+
+    function tplRemember(value) {
+      if (TPL_STORAGE_OK) {
+        try {
+          if (value) window.sessionStorage.setItem(TPL_KEY, value);
+          else window.sessionStorage.removeItem(TPL_KEY);
+        } catch (e) { /* not remembered */ }
+        return;
+      }
+      try {
+        var params = new URLSearchParams(window.location.search);
+        if (value) params.set(TPL_KEY, value); else params.delete(TPL_KEY);
+        var qs = params.toString();
+        window.history.replaceState(null, "",
+          window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+      } catch (e) { /* older browser: the choice is simply not carried */ }
+    }
+
+    function tplSaved() {
+      if (TPL_STORAGE_OK) {
+        try { return window.sessionStorage.getItem(TPL_KEY) || ""; }
+        catch (e) { return ""; }
+      }
+      try { return new URLSearchParams(window.location.search).get(TPL_KEY) || ""; }
+      catch (e) { return ""; }
+    }
+
+    /* The bar says when it is filtering, with the same amber mark and
+       FILTERED label every other list page uses. */
+    function tplSyncMark() {
+      var on = !!$('#module-filter').val();
+      // The control sits in the card's dark header, where the shared amber
+      // bar tint would read as damage rather than as a mark, so the select
+      // itself carries it: an amber ring and a "Filtered" title.
+      $('#module-filter').toggleClass('tpl-filtered', on)
+        .attr('title', on ? 'Filtered by module — choose "All modules" to clear'
+                          : 'Filter the list by module');
+    }
+
     $('#module-filter').off('change').on('change', function () {
       templateTable.column(1).search(this.value).draw();
+      tplRemember(this.value);
+      tplSyncMark();
     });
+
+    /* Put back the module this sitting last chose, once the options and the
+       table both exist for it to act on. */
+    var tplKeep = tplSaved();
+    if (tplKeep && $('#module-filter option').filter(function () {
+      return this.value === tplKeep;
+    }).length) {
+      $('#module-filter').val(tplKeep);
+      templateTable.column(1).search(tplKeep).draw();
+    }
+    tplSyncMark();
   }
 
   function loadTemplates() {

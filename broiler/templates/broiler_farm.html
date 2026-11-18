@@ -46,6 +46,40 @@
   .bf-tabs .nav-link.active .bf-count { background: rgba(255,255,255,.25); color: #fff; }
 
   .bf-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: .4rem; padding: .45rem; margin-bottom: .6rem; }
+  /* Clear sits with the filters it clears, not under the table. It used to
+     live in the footer block that only appears when a filter leaves nothing
+     to show -- so the one case it could not help with was the ordinary one,
+     a filter that found rows and now has to be undone by hand, control by
+     control. It is a tile in the same grid, narrower than a filter because
+     it carries no label, and it is dimmed until there is something to
+     clear. */
+  .bf-filter-acts { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; border-color: transparent; padding: 0; }
+  .bf-filter-acts .btn { white-space: nowrap; font-size: .72rem; padding: .34rem .7rem; }
+  .bf-filter-acts .btn:disabled { opacity: .45; }
+  /* Two different things the bar can be saying, so they look different.
+
+     Applied: .lf-active, the same amber tint, left edge and FILTERED label
+     every other list page in the ERP uses -- a filtered list should announce
+     itself the same way wherever someone meets it, and the rule already
+     exists in design-system.css, so this page only has to switch it on.
+
+     Unapplied: a blue outline, meaning a choice is sitting in the bar that
+     the list below has not been shown yet. Named bf-unapplied, not
+     bf-pending: this page already uses that one for the setup-request link,
+     and it carries display:inline-flex, which collapsed the whole filter
+     grid the moment a filter was touched. */
+  .bf-filters.bf-unapplied { border-color: #1d6fe0; box-shadow: 0 0 0 2px rgba(29,111,224,.1); }
+  /* The FILTERED label rides on the bar's top edge, so the bar needs room
+     for it. The tint and left edge are restated here because this page's own
+     .bf-filters rule -- white, hairline border -- is written after
+     design-system.css and would otherwise win on equal specificity and leave
+     the label floating over an unmarked bar. */
+  .bf-filters.lf-active {
+    margin-top: .55rem;
+    background: rgba(217, 119, 6, .07);
+    border-color: rgba(217, 119, 6, .35);
+    border-left: 3px solid #d97706;
+  }
   .bf-filter { display: flex; align-items: center; gap: .4rem; min-width: 0; border: 1px solid #eef1f5; border-radius: .45rem; padding: .25rem .4rem; }
   .bf-filter-icon {
     width: 24px; height: 24px; flex: 0 0 24px; border-radius: .4rem; display: flex; align-items: center;
@@ -74,11 +108,29 @@
   @media (min-width: 1100px) {
     /* Both panes gained filters; these counts keep each pane's rows full
        rather than leaving a short second row. */
-    #add-farmer-pane .bf-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); }
+    #add-farmer-pane .bf-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr) auto; }
     /* Two rows, but six to a row rather than four: eight across squeezed
        every control, and four across stretched each one past what a "All"
        dropdown needs. */
-    #add-farm-pane .bf-filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    /* Eight filters four to a row, then Search and the buttons below. Forcing
+       four columns rather than letting auto-fit pack all nine across keeps a
+       dropdown wide enough to read a branch name in; the buttons take the
+       last cell of the second row, sized to themselves. */
+    #add-farm-pane .bf-filters {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) max-content;
+        grid-template-areas:
+            "f1 f2 f3 f4 acts"
+            "f5 f6 f7 f8 acts";
+    }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(1) { grid-area: f1; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(2) { grid-area: f2; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(3) { grid-area: f3; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(4) { grid-area: f4; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(5) { grid-area: f5; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(6) { grid-area: f6; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(7) { grid-area: f7; }
+    #add-farm-pane .bf-filters .bf-filter:nth-child(8) { grid-area: f8; }
+    #add-farm-pane .bf-filters .bf-filter-acts { grid-area: acts; }
   }
 
   .bf-card { padding: .7rem; }
@@ -313,6 +365,14 @@
             <input type="search" id="bf-fr-search" class="form-control form-control-sm" placeholder="Code, name, mobile, USC...">
           </div>
         </div>
+        <div class="bf-filter bf-filter-acts">
+          <button type="button" class="btn btn-primary btn-sm" id="bf-fr-submit" disabled>
+            <i class="fas fa-filter me-1"></i>Submit
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fr-clear" disabled>
+            <i class="fas fa-filter-circle-xmark me-1"></i>Clear
+          </button>
+        </div>
       </div>
       <div class="bf-sum" id="bf-fr-sum"></div>
       <div class="bf-bulk" id="bf-fr-bulk" hidden>
@@ -348,9 +408,6 @@
           </thead>
           <tbody></tbody>
         </table>
-        <div id="bf-fr-end" hidden>
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fr-clear"><i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters</button>
-        </div>
       </div>
     </div>
 
@@ -436,6 +493,14 @@
             <input type="search" id="bf-fm-search" class="form-control form-control-sm" placeholder="Search farms...">
           </div>
         </div>
+        <div class="bf-filter bf-filter-acts">
+          <button type="button" class="btn btn-primary btn-sm" id="bf-fm-submit" disabled>
+            <i class="fas fa-filter me-1"></i>Submit
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fm-clear" disabled>
+            <i class="fas fa-filter-circle-xmark me-1"></i>Clear
+          </button>
+        </div>
       </div>
       <div class="bf-sum" id="bf-fm-sum"></div>
       <div class="bf-bulk" id="bf-fm-bulk" hidden>
@@ -474,9 +539,6 @@
           </thead>
           <tbody></tbody>
         </table>
-        <div id="bf-fm-end" hidden>
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="bf-fm-clear"><i class="fas fa-filter-circle-xmark me-1"></i>Clear Filters</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1676,10 +1738,47 @@ $(document).ready(function () {
     const BF_EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
     const BF_LENGTHS = [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]];
 
+    /* Edge's Tracking Prevention refuses localStorage on our own pages, and
+       both calls below are wrapped in a try/catch -- so being refused looked
+       like nothing at all: no error, just a filter that came back empty on
+       every refresh. So storage is probed once, and where it is refused the
+       same values ride in the address bar instead, written with replaceState
+       so Back still leaves the page rather than walking its filter states. */
+    const BF_STORAGE_OK = (function () {
+        try {
+            const probe = "bims.probe";
+            window.localStorage.setItem(probe, "1");
+            const ok = window.localStorage.getItem(probe) === "1";
+            window.localStorage.removeItem(probe);
+            return ok;
+        } catch (e) { return false; }
+    })();
+
+    function bfUrlRead(key) {
+        try {
+            const raw = new URLSearchParams(window.location.search).get(key);
+            return raw ? (JSON.parse(raw) || {}) : {};
+        } catch (e) { return {}; }
+    }
+    function bfUrlWrite(key, value) {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const keep = {};
+            Object.keys(value || {}).forEach((k) => { if (value[k]) keep[k] = value[k]; });
+            if (Object.keys(keep).length) params.set(key, JSON.stringify(keep));
+            else params.delete(key);
+            const qs = params.toString();
+            window.history.replaceState(null, "",
+                window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+        } catch (e) { /* older browser: the filter simply is not carried */ }
+    }
+
     function bfSaved(key) {
+        if (!BF_STORAGE_OK) return bfUrlRead(key);
         try { return JSON.parse(window.localStorage.getItem(key) || "{}") || {}; } catch (e) { return {}; }
     }
     function bfRemember(key, value) {
+        if (!BF_STORAGE_OK) { bfUrlWrite(key, value); return; }
         try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not remembered */ }
     }
     function bfFillOptions(select, values, allLabel, preferred) {
@@ -1765,33 +1864,55 @@ $(document).ready(function () {
     if (farmerSaved.search) farmerFilters.search.val(farmerSaved.search);
     if (farmSaved.search) farmFilters.search.val(farmSaved.search);
 
+    /* The filters are applied on Submit, not as they are touched -- the same
+       bargain the rest of the ERP's list pages make, so that choosing a
+       branch, a status and a date range is one decision rather than three
+       redraws. The table therefore reads these snapshots rather than the
+       controls themselves: the controls hold what is being chosen, these
+       hold what is actually being shown. */
+    const bfApplied = {
+        farmer: { status: "", group: "", ready: "", search: "" },
+        farm: { branch: "", supervisor: "", type: "", status: "",
+                location: "", flock: "", agreement: "", search: "" },
+    };
+    const BF_FARMER_KEYS = ["status", "group", "ready"];
+    const BF_FARM_KEYS = ["branch", "supervisor", "type", "status", "location", "flock", "agreement"];
+
+    function bfRead(kind) {
+        const src = kind === "farmer" ? farmerFilters : farmFilters;
+        const keys = kind === "farmer" ? BF_FARMER_KEYS : BF_FARM_KEYS;
+        const out = {};
+        keys.forEach((k) => { out[k] = src[k].val() || ""; });
+        out.search = src.search.val() || "";
+        return out;
+    }
+    function bfSame(a, b) {
+        return Object.keys(a).every((k) => a[k] === b[k]);
+    }
+
     $.fn.dataTable.ext.search.push(function (settings, _data, index) {
         const row = settings.aoData[index]._aData;
         if (settings.nTable.id === "farmer-table") {
-            const status = farmerFilters.status.val();
-            if (status === "active" && row.status === "inactive") return false;
-            if (status === "inactive" && row.status !== "inactive") return false;
-            const group = farmerFilters.group.val();
-            if (group && (row.farmer_group_name || "") !== group) return false;
-            const ready = farmerFilters.ready.val();
-            if (ready === "ready" && !row.payable_ready) return false;
-            if (ready === "gap" && row.payable_ready) return false;
+            const f = bfApplied.farmer;
+            if (f.status === "active" && row.status === "inactive") return false;
+            if (f.status === "inactive" && row.status !== "inactive") return false;
+            if (f.group && (row.farmer_group_name || "") !== f.group) return false;
+            if (f.ready === "ready" && !row.payable_ready) return false;
+            if (f.ready === "gap" && row.payable_ready) return false;
             return true;
         }
         if (settings.nTable.id === "farm-table") {
-            if (farmFilters.branch.val() && (row.branch_name || "") !== farmFilters.branch.val()) return false;
-            if (farmFilters.supervisor.val() && (row.supervisor_name || "") !== farmFilters.supervisor.val()) return false;
-            if (farmFilters.type.val() && row.farm_type !== farmFilters.type.val()) return false;
-            if (farmFilters.status.val() && (row.computed_status || "active") !== farmFilters.status.val()) return false;
-            const location = farmFilters.location.val();
-            if (location === "verified" && !row.location_verified) return false;
-            if (location === "unverified" && (row.location_verified || !row.has_location)) return false;
-            if (location === "none" && row.has_location) return false;
-            const flock = farmFilters.flock.val();
-            if (flock === "occupied" && !row.occupied) return false;
-            if (flock === "vacant" && row.occupied) return false;
-            const agreement = farmFilters.agreement.val();
-            if (agreement && bfAgreementState(row) !== agreement) return false;
+            const f = bfApplied.farm;
+            if (f.branch && (row.branch_name || "") !== f.branch) return false;
+            if (f.supervisor && (row.supervisor_name || "") !== f.supervisor) return false;
+            if (f.type && row.farm_type !== f.type) return false;
+            if (f.status && (row.computed_status || "active") !== f.status) return false;
+            if (f.location === "verified" && !row.location_verified) return false;
+            if (f.location === "unverified" && (row.location_verified || !row.has_location)) return false;
+            if (f.location === "none" && row.has_location) return false;
+            if (f.flock === "occupied" && !row.occupied) return false;
+            if (f.flock === "vacant" && row.occupied) return false;
+            if (f.agreement && bfAgreementState(row) !== f.agreement) return false;
             return true;
         }
         return true;
@@ -2007,8 +2128,6 @@ $(document).ready(function () {
         ],
     });
 
-    $(".bf-dt-end-farmer").append($("#bf-fr-end").children());
-    $(".bf-dt-end-farm").append($("#bf-fm-end").children());
     farmerTable.on("draw", () => { bfNumber(farmerTable); bfSyncPickAll("farmer"); });
     farmTable.on("draw", () => { bfNumber(farmTable); bfSyncPickAll("farm"); });
 
@@ -2216,6 +2335,7 @@ $(document).ready(function () {
                                              ready: farmerFilters.ready.val() || "",
                                              search: farmerFilters.search.val() || "", length: farmerTable.page.len() });
         bfFarmerSummary(bfRows.farmer);
+        bfSyncButtons();
     }
     function rememberFarms() {
         bfRemember("bims.farms.filters", { branch: farmFilters.branch.val() || "", supervisor: farmFilters.supervisor.val() || "",
@@ -2224,31 +2344,89 @@ $(document).ready(function () {
                                            flock: farmFilters.flock.val() || "", agreement: farmFilters.agreement.val() || "",
                                            length: farmTable.page.len() });
         bfFarmSummary(bfRows.farm);
+        bfSyncButtons();
     }
+    /* Applying a pane: take what the controls hold, hand it to the table,
+       and only then remember it. What is remembered is what is on screen,
+       so a reload brings back the list the person was actually looking at
+       rather than a half-finished choice they never applied. */
+    function bfApply(kind) {
+        const next = bfRead(kind);
+        bfApplied[kind] = next;
+        const table = kind === "farmer" ? farmerTable : farmTable;
+        table.search(next.search).draw();
+        if (kind === "farmer") rememberFarmers(); else rememberFarms();
+        bfSyncButtons();
+    }
+
+    $("#bf-fr-submit").on("click", () => bfApply("farmer"));
+    $("#bf-fm-submit").on("click", () => bfApply("farm"));
+
+    /* Enter applies the pane rather than doing nothing, since a search box
+       invites it. */
+    farmerFilters.search.on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); bfApply("farmer"); } });
+    farmFilters.search.on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); bfApply("farm"); } });
+
+    /* Touching a control no longer redraws; it only re-reads the buttons, so
+       Submit can light up to say there is something waiting to be applied. */
     [farmerFilters.status, farmerFilters.group, farmerFilters.ready]
-        .forEach((el) => el.on("change", () => { farmerTable.draw(); rememberFarmers(); }));
-    farmerFilters.search.on("input", () => { farmerTable.search(farmerFilters.search.val()).draw(); rememberFarmers(); });
+        .forEach((el) => el.on("change", bfSyncButtons));
+    farmerFilters.search.on("input", bfSyncButtons);
     [farmFilters.branch, farmFilters.supervisor, farmFilters.type, farmFilters.status, farmFilters.location,
      farmFilters.flock, farmFilters.agreement]
-        .forEach((el) => el.on("change", () => { farmTable.draw(); rememberFarms(); }));
-    farmFilters.search.on("input", () => { farmTable.search(farmFilters.search.val()).draw(); rememberFarms(); });
+        .forEach((el) => el.on("change", bfSyncButtons));
+    farmFilters.search.on("input", bfSyncButtons);
     farmerTable.on("length", rememberFarmers);
     farmTable.on("length", rememberFarms);
 
+    /* Both buttons read the state of their pane rather than sitting there
+       inert. Submit lights up only while the controls hold something the
+       table has not been shown yet -- that difference is the whole point of
+       a Submit button, and a filter bar that is already applied says so by
+       dimming it. Clear dims when there is nothing to clear. The bar also
+       carries a mark while a change is pending, so an unapplied filter does
+       not quietly read as the list in front of you. */
+    function bfSyncButtons() {
+        const farmerNow = bfRead("farmer");
+        const farmerPending = !bfSame(farmerNow, bfApplied.farmer);
+        const farmerOn = Object.keys(farmerNow).some((k) => !!farmerNow[k]);
+        const farmerLive = Object.keys(bfApplied.farmer).some((k) => !!bfApplied.farmer[k]);
+        $("#bf-fr-clear").toggleClass("btn-warning", farmerLive)
+                         .toggleClass("btn-outline-secondary", !farmerLive);
+        $("#bf-fr-submit").prop("disabled", !farmerPending);
+        $("#bf-fr-clear").prop("disabled", !farmerOn);
+        $("#add-farmer-pane .bf-filters")
+            .toggleClass("bf-unapplied", farmerPending)
+            // Judged on what has been applied, not on what the controls hold:
+            // the mark describes the list on screen, so a filter still being
+            // chosen must not make an unfiltered list claim to be filtered.
+            .toggleClass("lf-active", Object.keys(bfApplied.farmer).some((k) => !!bfApplied.farmer[k]));
+
+        const farmNow = bfRead("farm");
+        const farmPending = !bfSame(farmNow, bfApplied.farm);
+        const farmOn = Object.keys(farmNow).some((k) => !!farmNow[k]);
+        const farmLive = Object.keys(bfApplied.farm).some((k) => !!bfApplied.farm[k]);
+        $("#bf-fm-clear").toggleClass("btn-warning", farmLive)
+                         .toggleClass("btn-outline-secondary", !farmLive);
+        $("#bf-fm-submit").prop("disabled", !farmPending);
+        $("#bf-fm-clear").prop("disabled", !farmOn);
+        $("#add-farm-pane .bf-filters")
+            .toggleClass("bf-unapplied", farmPending)
+            .toggleClass("lf-active", Object.keys(bfApplied.farm).some((k) => !!bfApplied.farm[k]));
+    }
+
+    /* Clear applies straight away. Emptying the bar and then having to press
+       Submit to see the full list again would be a gate on the one action
+       whose result is never in doubt. */
     $("#bf-fr-clear").on("click", function () {
-        farmerFilters.status.val("").trigger("change");
-        farmerFilters.group.val("").trigger("change");
-        farmerFilters.ready.val("").trigger("change");
+        BF_FARMER_KEYS.forEach((k) => farmerFilters[k].val("").trigger("change.select2"));
         farmerFilters.search.val("");
-        farmerTable.search("").draw();
-        rememberFarmers();
+        bfApply("farmer");
     });
     $("#bf-fm-clear").on("click", function () {
-        ["branch", "supervisor", "type", "status", "location", "flock", "agreement"]
-            .forEach((k) => farmFilters[k].val("").trigger("change"));
+        BF_FARM_KEYS.forEach((k) => farmFilters[k].val("").trigger("change.select2"));
         farmFilters.search.val("");
-        farmTable.search("").draw();
-        rememberFarms();
+        bfApply("farm");
     });
 
     // The chosen tab is remembered too; a hidden table is re-measured when shown.
@@ -2256,6 +2434,12 @@ $(document).ready(function () {
         bfRemember("bims.farms.tab", { tab: e.target.id });
         (e.target.id === "add-farm-tab" ? farmTable : farmerTable).columns.adjust();
     });
+    // A filter restored from the last visit is already applied: hand it to
+    // the table before the first draw, so the page opens on the list the
+    // person left rather than on everything with Submit waiting.
+    bfApply("farmer");
+    bfApply("farm");
+
     if (bfSaved("bims.farms.tab").tab === "add-farm-tab") {
         bootstrap.Tab.getOrCreateInstance(document.getElementById("add-farm-tab")).show();
     }

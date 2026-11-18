@@ -5,6 +5,16 @@
 {% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">
 <style>
   .wa-filter-grid { display:flex; flex-wrap:nowrap; gap:.6rem; align-items:end; }
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the bar's top
+     edge and tints it. Restated because this page's own grid rule is written
+     after the stylesheet and would otherwise win on equal specificity,
+     leaving the label floating over an unmarked bar. */
+  .wa-filter-grid.lf-active {
+    margin-top:.6rem; padding:.5rem;
+    background:rgba(217,119,6,.07);
+    border-left:3px solid #d97706;
+    border-radius:4px;
+  }
   .wa-filter-grid > div { flex:1 1 0; min-width:0; }
   @media (max-width:1200px) { .wa-filter-grid { flex-wrap:wrap; }
                               .wa-filter-grid > div { flex:1 1 180px; } }
@@ -31,7 +41,7 @@
 <!-- Filters -->
 <div class="card mb-3 rpt-filter no-print">
   <div class="card-body">
-    <div class="wa-filter-grid mb-2">
+    <div class="wa-filter-grid mb-2" id="hist-filter-bar">
       <div>
         <label class="form-label">From Date</label>
         <input type="date" class="form-control" id="from-date">
@@ -181,6 +191,91 @@ $(function () {
     });
   }
 
+  /* ---------------------------------------------------------------------
+     Remembering the filter bar for the sitting.
+
+     Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages, and a refusal throws, so a guarded write
+     fails silently and the filter simply vanishes on the next refresh.
+     Where it is refused the same values ride in the address bar instead,
+     written with replaceState so Back still leaves the page rather than
+     walking through its own filter states.
+     --------------------------------------------------------------------- */
+  const HIST_KEY = "bims.wahistory.filters";
+  const HIST_FIELDS = ["from-date", "to-date", "module", "template", "status", "mobile", "q"];
+  const HIST_STORAGE_OK = (function () {
+    try {
+      const probe = HIST_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      const ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function histRead() {
+    const out = {};
+    HIST_FIELDS.forEach((f) => { out[f] = $("#" + f).val() || ""; });
+    return out;
+  }
+
+  function histRemember() {
+    const value = histRead();
+    if (HIST_STORAGE_OK) {
+      try { window.sessionStorage.setItem(HIST_KEY, JSON.stringify(value)); }
+      catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const keep = {};
+      Object.keys(value).forEach((k) => { if (value[k]) keep[k] = value[k]; });
+      if (Object.keys(keep).length) params.set(HIST_KEY, JSON.stringify(keep));
+      else params.delete(HIST_KEY);
+      const qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the filter is simply not carried */ }
+  }
+
+  function histSaved() {
+    if (HIST_STORAGE_OK) {
+      try { return JSON.parse(window.sessionStorage.getItem(HIST_KEY) || "{}") || {}; }
+      catch (e) { return {}; }
+    }
+    try {
+      const raw = new URLSearchParams(window.location.search).get(HIST_KEY);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+
+  /* The bar says when it is filtering, with the same amber mark and FILTERED
+     label every other list page uses. This page opens on everything, so any
+     value at all is a filter somebody chose. */
+  function histSyncMark() {
+    const v = histRead();
+    const on = Object.keys(v).some((k) => !!v[k]);
+    $("#hist-filter-bar").toggleClass("lf-active", on);
+    $("#clear-btn").toggleClass("btn-warning", on)
+                   .toggleClass("btn-outline-secondary", !on);
+  }
+
+  function histRestore() {
+    const saved = histSaved();
+    if (!saved || !Object.keys(saved).length) { histSyncMark(); return false; }
+    HIST_FIELDS.forEach((f) => {
+      if (!saved[f]) return;
+      const $el = $("#" + f);
+      if ($el.is("select") && !$el.find("option").filter(function () {
+        return this.value === saved[f];
+      }).length) return;
+      $el.val(saved[f]);
+      if ($el.is("select")) $el.trigger("change.select2");
+    });
+    histSyncMark();
+    return true;
+  }
+
   function loadHistory() {
     $.getJSON("{% url 'whatsapp_history_api' %}", {
       from_date: $("#from-date").val(), to_date: $("#to-date").val(),
@@ -198,11 +293,26 @@ $(function () {
     });
   }
 
-  $("#search-btn, #refresh-btn").on("click", loadHistory);
+  /* What is remembered is what was searched on, not whatever the controls
+     happen to hold: a half-finished choice nobody pressed Search on should
+     not come back looking like the list on screen. */
+  $("#search-btn, #refresh-btn").on("click", function () {
+    loadHistory();
+    histRemember();
+    histSyncMark();
+  });
+  $("#mobile, #q").on("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); $("#search-btn").click(); }
+  });
   $("#clear-btn").on("click", function () {
     $("#from-date, #to-date, #mobile, #q").val("");
     $("#module, #template, #status").val("");
     loadHistory();
+    if (HIST_STORAGE_OK) {
+      try { window.sessionStorage.removeItem(HIST_KEY); } catch (e) { /* nothing stored */ }
+    }
+    histRemember();
+    histSyncMark();
   });
 
   $(document).on("click", ".view-whatsapp", function () {
@@ -294,6 +404,10 @@ $(function () {
     });
   });
 
+  /* Put back the bar this sitting last searched on, then run that search:
+     coming back to the full list with a narrowed bar above it would be the
+     same lie the mark exists to prevent. */
+  histRestore();
   loadHistory();
 });
 </script>

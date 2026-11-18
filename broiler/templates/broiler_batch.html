@@ -54,6 +54,17 @@
     font-size: .8rem; background-position: right .1rem center; }
   .bl-filter .form-select:focus, .bl-filter .form-control:focus { box-shadow: none; }
   .bl-clear { align-self: center; }
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the bar's top
+     edge and tints it. Restated here because this page's own .bl-filters
+     rule is written after the stylesheet and would otherwise win on equal
+     specificity, leaving the label floating over an unmarked bar. */
+  .bl-filters.lf-active {
+    margin-top: .6rem;
+    padding: .5rem;
+    background: rgba(217, 119, 6, .07);
+    border-left: 3px solid #d97706;
+    border-radius: 4px;
+  }
   /* Two dates need the room of two controls; the rest of the strip is one
      each, so this cell spans two of the grid's tracks where there are two. */
   .bl-dates { grid-column: span 2; }
@@ -133,7 +144,7 @@
   </div>
 </div>
 
-<div class="bl-filters">
+<div class="bl-filters" id="bl-filter-bar">
   <div class="bl-filter bl-dates">
     <span class="bl-filter-icon" style="--bl-bg:#e7f7ee;--bl-fg:#067647"><i class="fas fa-calendar-day"></i></span>
     <div class="bl-filter-body">
@@ -340,6 +351,12 @@ $(document).ready(function () {
         }
         tableBody.empty();
         fillBatchFilters(response);
+        // The options now exist, so a remembered choice has something to
+        // land in. The reply can arrive before or after the restore function
+        // is defined, so whichever comes second does the work: a flag here,
+        // and the same check where it is defined.
+        window.blFiltersReady = true;
+        if (window.blRestoreFilters) { window.blRestoreFilters(); }
 
         // Batch No. is an auto-generated code and the farm is fixed at
         // creation — only Book Number / Lot No are editable.
@@ -465,7 +482,76 @@ $(document).ready(function () {
 
   registerBatchFilter();
 
-  $("#bl-branch, #bl-farm, #bl-shed, #bl-status, #bl-from, #bl-to").on("change input", function () {
+  /* ---------------------------------------------------------------------
+     Remembering the filter strip for the sitting.
+
+     Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages, and a refusal throws, so a guarded write
+     fails silently and the filter simply vanishes on the next refresh.
+     Where it is refused the same values ride in the address bar instead,
+     written with replaceState so Back still leaves the page rather than
+     walking through its own filter states.
+     --------------------------------------------------------------------- */
+  const BL_KEY = "bims.batch.filters";
+  const BL_STORAGE_OK = (function () {
+    try {
+      const probe = BL_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      const ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function blRead() {
+    return {
+      branch: $("#bl-branch").val() || "", farm: $("#bl-farm").val() || "",
+      shed: $("#bl-shed").val() || "", status: $("#bl-status").val() || "",
+      from: $("#bl-from").val() || "", to: $("#bl-to").val() || "",
+    };
+  }
+
+  function blRemember() {
+    const value = blRead();
+    if (BL_STORAGE_OK) {
+      try { window.sessionStorage.setItem(BL_KEY, JSON.stringify(value)); }
+      catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const keep = {};
+      Object.keys(value).forEach((k) => { if (value[k]) keep[k] = value[k]; });
+      if (Object.keys(keep).length) params.set(BL_KEY, JSON.stringify(keep));
+      else params.delete(BL_KEY);
+      const qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the filter is simply not carried */ }
+  }
+
+  function blSaved() {
+    if (BL_STORAGE_OK) {
+      try { return JSON.parse(window.sessionStorage.getItem(BL_KEY) || "{}") || {}; }
+      catch (e) { return {}; }
+    }
+    try {
+      const raw = new URLSearchParams(window.location.search).get(BL_KEY);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+
+  /* The strip says when it is filtering, with the same amber mark and
+     FILTERED label every other list page in the ERP uses. */
+  function blSyncMark() {
+    const v = blRead();
+    const on = Object.keys(v).some((k) => !!v[k]);
+    $("#bl-filter-bar").toggleClass("lf-active", on);
+    $("#bl-clear").toggleClass("btn-warning", on)
+                  .toggleClass("btn-outline-secondary", !on);
+  }
+
+  function blApply() {
     BATCH_FILTERS.branch = $("#bl-branch").val() || "";
     BATCH_FILTERS.farm = $("#bl-farm").val() || "";
     BATCH_FILTERS.shed = $("#bl-shed").val() || "";
@@ -474,7 +560,36 @@ $(document).ready(function () {
     BATCH_FILTERS.to = $("#bl-to").val() || "";
     const table = $("#broiler-batch-table");
     if ($.fn.DataTable.isDataTable(table)) { table.DataTable().draw(); }
+    blSyncMark();
+  }
+
+  $("#bl-branch, #bl-farm, #bl-shed, #bl-status, #bl-from, #bl-to").on("change input", function () {
+    blApply();
+    blRemember();
   });
+
+  /* Put back what this sitting last filtered by. The branch, farm and shed
+     options are built from the rows themselves, so this runs once the list
+     has arrived and those options exist to be chosen. */
+  window.blRestoreFilters = function () {
+    const saved = blSaved();
+    if (!saved || !Object.keys(saved).length) { blSyncMark(); return; }
+    [["branch", "#bl-branch"], ["farm", "#bl-farm"], ["shed", "#bl-shed"],
+     ["status", "#bl-status"]].forEach(([k, sel]) => {
+      if (saved[k] && $(sel + " option").filter(function () {
+        return this.value === saved[k];
+      }).length) {
+        $(sel).val(saved[k]).trigger("change.select2");
+      }
+    });
+    if (saved.from) $("#bl-from").val(saved.from);
+    if (saved.to) $("#bl-to").val(saved.to);
+    blApply();
+  };
+
+  // If the rows beat this definition, restore now; otherwise the reply will
+  // call it. Either way it runs exactly once with options in place.
+  if (window.blFiltersReady) { window.blRestoreFilters(); } else { blSyncMark(); }
 
   $("#bl-clear").on("click", function () {
     // The box is the table's own; clearing it through its own event keeps
@@ -483,16 +598,27 @@ $(document).ready(function () {
     $("#bl-branch, #bl-farm, #bl-shed, #bl-status").val("").trigger("change.select2");
     $("#bl-from, #bl-to").val("");
     $("#bl-branch").trigger("change");
+    if (BL_STORAGE_OK) {
+      try { window.sessionStorage.removeItem(BL_KEY); } catch (e) { /* nothing stored */ }
+    }
+    blRemember();
+    blSyncMark();
   });
 
   // Batches saved on the add page say so here, where they now appear.
-  const justSaved = sessionStorage.getItem("bims-batch-saved");
-  if (justSaved !== null) {
-    sessionStorage.removeItem("bims-batch-saved");
-    const many = justSaved.indexOf(",") !== -1;
-    window.showToast('success',
-      `Batch${many ? 'es' : ''} ${justSaved} created.`);
-  }
+  // Guarded: Edge's Tracking Prevention refuses sessionStorage on our own
+  // pages and the refusal throws, which took out every handler registered
+  // after this line -- the filter strip included. A missing toast is worth
+  // nothing next to a page that stops working.
+  try {
+    const justSaved = sessionStorage.getItem("bims-batch-saved");
+    if (justSaved !== null) {
+      sessionStorage.removeItem("bims-batch-saved");
+      const many = justSaved.indexOf(",") !== -1;
+      window.showToast('success',
+        `Batch${many ? 'es' : ''} ${justSaved} created.`);
+    }
+  } catch (e) { /* blocked storage: nothing was stored to announce */ }
 
   $(document).on("click", ".delete-button", function () {
     const id = $(this).data("id");

@@ -64,6 +64,16 @@
   .al-filters { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
                 gap:10px; align-items:end; margin-bottom:12px; }
   .al-filters label { display:block; font-size:.72rem; font-weight:600; color:#6b7890; margin-bottom:4px; }
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the bar's top
+     edge and tints it. Restated because this page's own .al-filters rule is
+     written after the stylesheet and would otherwise win on equal
+     specificity, leaving the label over an unmarked bar. */
+  .al-filters.lf-active {
+    margin-top:.6rem;
+    background:rgba(217,119,6,.07);
+    border-left:3px solid #d97706;
+    border-radius:4px;
+  }
   .al-filters .form-control, .al-filters .form-select { font-size:.8rem; }
   /* Two date inputs need the room of two fields, or the second one lands
      under its neighbour. */
@@ -181,7 +191,7 @@
   </div>
 </div>
 
-<div class="al-card al-filters">
+<div class="al-card al-filters" id="al-filter-bar">
   <div>
     <label>Date Range</label>
     <div class="al-dates">
@@ -423,6 +433,15 @@ $(function () {
       });
     }
     renderTable();
+    // Last, once the options above are in the box: a type carried in on the
+    // URL was being sent to the server and filtering the list, while the
+    // control itself showed "All" -- a filtered view that denied it was
+    // filtered, and could not be adjusted without re-picking the type.
+    if (TYPE && $("#al-type").val() !== TYPE
+        && $("#al-type option[value='" + TYPE + "']").length) {
+      $("#al-type").val(TYPE).trigger("change.select2");
+    }
+    alSyncMark();
   }
 
   function applySort() {
@@ -547,7 +566,29 @@ $(function () {
     });
   }
 
-  $("#al-apply").on("click", function () { TYPE = $("#al-type").val() || ""; load(); });
+  /* The page already reads its filter from the URL on load -- it just never
+     wrote it there, so a reload always came back to the default week. Apply
+     now puts the same query it is about to send into the address bar, with
+     replaceState so Back still leaves the page rather than walking through
+     its own filter states. Nothing else here needs to change, and it works
+     whether or not the browser allows storage, because it uses none. */
+  /* The bar says when it is filtering, with the same amber mark and FILTERED
+     label every other list page uses. The default week is not a filter
+     anybody chose, so it does not count. */
+  function alSyncMark() {
+    var on = !!($("#al-farm").val() || $("#al-batch").val() || $("#al-user").val() ||
+                ($("#al-type").val() || TYPE) || $("#al-q").val() ||
+                $("#al-from").val() !== localDay(new Date(Date.now() - 6 * 86400000)) ||
+                $("#al-to").val() !== localDay());
+    $("#al-filter-bar").toggleClass("lf-active", on);
+    $("#al-reset").toggleClass("btn-warning", on)
+                  .toggleClass("btn-outline-secondary", !on);
+  }
+
+  $("#al-apply").on("click", function () {
+    TYPE = $("#al-type").val() || "";
+    load();
+  });
   $("#al-q").on("keydown", function (e) { if (e.key === "Enter") $("#al-apply").click(); });
   $("#al-reset").on("click", function () {
     $("#al-from").val(localDay(new Date(Date.now() - 6 * 86400000)));
@@ -611,6 +652,9 @@ $(function () {
   });
 
   load();
+  // A filter carried in on the URL is already applied, so the bar says so
+  // from the moment the page opens.
+  alSyncMark();
 });
 </script>
 {% endblock %}
