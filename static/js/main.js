@@ -2198,13 +2198,113 @@ window.loadOptions = function (select, url, data, options) {
   var MAX_IDLE_MS = 30 * 60 * 1000;
 
   var KEY_PREFIX = "listfilter:";
+  var DEFAULTS_PREFIX = "listfilterdef:";
 
   function key() { return KEY_PREFIX + window.location.pathname; }
+
+  // Whether this browser will let us keep anything at all. Edge's Tracking
+  // Prevention, Safari's partitioning and every private-browsing mode can
+  // refuse sessionStorage outright -- the read throws, or returns nothing that
+  // was just written. A filter bar that silently forgets is the result, and it
+  // looks exactly like a bug in the page: the person picks a branch, refreshes
+  // and the branch is gone, with nothing in the console to explain it.
+  //
+  // So storage is never assumed. It is tested once, and when it is unavailable
+  // the filter is carried in the address bar instead, which no privacy setting
+  // can take away and which survives a refresh, a bookmark and a link sent to
+  // someone else.
+  var storageWorks = (function () {
+    try {
+      var probe = "listfilter:probe";
+      sessionStorage.setItem(probe, "1");
+      var ok = sessionStorage.getItem(probe) === "1";
+      sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  // The filter as it travels in the query string. Only the controls that are
+  // set are written, under their own ids, so the URL stays readable.
+  function urlValues() {
+    var out = null;
+    try {
+      var params = new URLSearchParams(window.location.search);
+      // Coming back from a form: the filter travelled as _lf so it would not
+      // be mistaken for one of the form's own fields. Unpack it once, then
+      // put it in the address bar properly so a refresh from here works too.
+      if (params.has("_lf")) {
+        var carried = new URLSearchParams(params.get("_lf"));
+        var recovered = {};
+        FIELDS.forEach(function (sel) {
+          var n = sel.replace(/^#/, "");
+          if (carried.has(n)) recovered[sel] = carried.get(n);
+        });
+        if (Object.keys(recovered).length) {
+          writeUrl(recovered);
+          return recovered;
+        }
+      }
+      FIELDS.forEach(function (sel) {
+        var name = sel.replace(/^#/, "");
+        if (params.has(name)) {
+          out = out || {};
+          out[sel] = params.get(name);
+        }
+      });
+    } catch (e) { return null; }
+    return out;
+  }
+
+  function writeUrl(values) {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      FIELDS.forEach(function (sel) { params.delete(sel.replace(/^#/, "")); });
+      Object.keys(values || {}).forEach(function (sel) {
+        if (values[sel]) params.set(sel.replace(/^#/, ""), values[sel]);
+      });
+      var qs = params.toString();
+      // replaceState, not pushState: refining a filter is not a new page, and
+      // Back should leave the list rather than walk every filter that was
+      // tried on the way to this one.
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the filter simply is not carried */ }
+  }
 
   // Who the page says is signed in, stamped on <body> by base.html. Blank on a
   // login or other anonymous page.
   function sessionUser() {
     return (document.body && document.body.getAttribute("data-session-user")) || "";
+  }
+
+  // The page's own defaults, kept apart from the filter. Needed because the
+  // only moment the controls are reliably at their defaults is the first visit
+  // in a tab: after that a plain reload may have refilled them from session
+  // history, so the live values cannot be trusted to define "unfiltered".
+  function defaultsKey() { return DEFAULTS_PREFIX + window.location.pathname; }
+
+  // The values of the record as it stands, or null when nothing is stored.
+  function storedValues() {
+    try {
+      var rec = JSON.parse(sessionStorage.getItem(key()) || "null");
+      return (rec && rec.v === 1 && rec.values) ? rec.values : null;
+    } catch (e) { return null; }
+  }
+
+  function storedDefaults() {
+    try {
+      var raw = sessionStorage.getItem(defaultsKey());
+      if (!raw) return null;
+      var d = JSON.parse(raw);
+      return (d && typeof d === "object" && d.values) ? d.values : null;
+    } catch (e) { return null; }
+  }
+
+  function rememberDefaults(values) {
+    try {
+      if (!values) return;
+      sessionStorage.setItem(defaultsKey(), JSON.stringify({ v: 1, values: values }));
+    } catch (e) { /* blocked storage: fall back to the live snapshot */ }
   }
 
   // Drop every remembered filter, across all pages, not just this one. Used
@@ -2216,12 +2316,26 @@ window.loadOptions = function (select, url, data, options) {
       var doomed = [];
       for (var i = 0; i < sessionStorage.length; i++) {
         var k = sessionStorage.key(i);
-        if (k && k.indexOf(KEY_PREFIX) === 0) doomed.push(k);
+        if (k && (k.indexOf(KEY_PREFIX) === 0 ||
+                  k.indexOf(DEFAULTS_PREFIX) === 0)) doomed.push(k);
       }
       doomed.forEach(function (k) { sessionStorage.removeItem(k); });
     } catch (e) { /* blocked storage: nothing was stored to begin with */ }
   }
 
+
+  // The date inputs are special: every one of these pages rewrites them to its
+  // own range on load, so yesterday's stored dates are never equal to today's
+  // defaults. Judging "is this filtered" on them alone meant that the morning
+  // after a filter was set -- or any time the page's range moved -- a branch
+  // or status the person had chosen was read as the page's own view and
+  // dropped. The dates are still remembered and restored; they just do not get
+  // a vote on whether a filter exists.
+  var DATE_FIELDS = ["#from-date", "#to-date"];
+
+  function isDateField(sel) {
+    return DATE_FIELDS.indexOf(sel) !== -1;
+  }
 
   function store() {
     try {
@@ -2229,15 +2343,18 @@ window.loadOptions = function (select, url, data, options) {
       // writing them back would mean Clear appears not to have taken (the key
       // is there again the moment Submit runs), and would pin today's default
       // range into a session that should pick up tomorrow's.
-      if (defaults && !isFiltered()) {
-        sessionStorage.removeItem(key());
-        return;
-      }
       var values = {};
       FIELDS.forEach(function (sel) {
         var el = document.querySelector(sel);
         if (el && el.value) values[sel] = el.value;
       });
+      if (defaults && !isFiltered(values)) {
+        if (!storageWorks) writeUrl({});
+        sessionStorage.removeItem(key());
+        return;
+      }
+      // Without storage the address bar is the only place left to keep this.
+      if (!storageWorks) writeUrl(values);
       if (Object.keys(values).length) {
         // Stamped with who stored it and when, so restore() can refuse a
         // record belonging to a previous sign-in or to a sitting long enough
@@ -2255,7 +2372,42 @@ window.loadOptions = function (select, url, data, options) {
     } catch (e) { /* private mode, blocked storage: filters just do not persist */ }
   }
 
+  // Put a set of remembered values back into the controls. Shared by both
+  // sources, because a filter read from the address bar deserves the same
+  // care as one read from storage.
+  function apply(data) {
+    var applied = false;
+    Object.keys(data || {}).forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      // Only restore a value the control still offers: a branch that has since
+      // been removed, or a year no longer in the financial-year list, would
+      // otherwise leave the select showing nothing while the page filtered by
+      // it invisibly.
+      if (el.tagName === "SELECT") {
+        var ok = Array.prototype.some.call(el.options, function (o) {
+          return o.value === data[sel];
+        });
+        if (!ok) return;
+      }
+      el.value = data[sel];
+      applied = true;
+      // Select2 mirrors the native select, so it has to be told.
+      if (window.jQuery && window.jQuery(el).data("select2")) {
+        window.jQuery(el).trigger("change.select2");
+      }
+    });
+    return applied;
+  }
+
   function restore() {
+    // The address bar first when storage is unavailable: it is the only copy
+    // there is, and it is as trustworthy as the person's own URL.
+    if (!storageWorks) {
+      var fromUrl = urlValues();
+      return fromUrl ? apply(fromUrl) : false;
+    }
+
     var rec;
     try {
       rec = JSON.parse(sessionStorage.getItem(key()) || "null");
@@ -2283,29 +2435,7 @@ window.loadOptions = function (select, url, data, options) {
       return false;
     }
 
-    var data = rec.values;
-    var applied = false;
-    Object.keys(data).forEach(function (sel) {
-      var el = document.querySelector(sel);
-      if (!el) return;
-      // Only restore a value the control still offers: a branch that has since
-      // been removed, or a year no longer in the financial-year list, would
-      // otherwise leave the select showing nothing while the page filtered by
-      // it invisibly.
-      if (el.tagName === "SELECT") {
-        var ok = Array.prototype.some.call(el.options, function (o) {
-          return o.value === data[sel];
-        });
-        if (!ok) return;
-      }
-      el.value = data[sel];
-      applied = true;
-      // Select2 mirrors the native select, so it has to be told.
-      if (window.jQuery && window.jQuery(el).data("select2")) {
-        window.jQuery(el).trigger("change.select2");
-      }
-    });
-    return applied;
+    return apply(rec.values);
   }
 
   // What the page itself loads with, captured before anything is restored, so
@@ -2323,19 +2453,39 @@ window.loadOptions = function (select, url, data, options) {
     return out;
   }
 
-  function isFiltered() {
+  // A filter the person set, as opposed to the view the page opens with. The
+  // question is asked against the stored record where there is one, not only
+  // against the live controls: the page rewrites its date range whenever it
+  // reloads, so by the time this runs the dates may be the page's newest
+  // default rather than anything that was chosen, and comparing those would
+  // call a real filter "no filter" and throw it away.
+  // `record`, when given, is the set of values being judged -- what store() is
+  // about to write, or what was read back. Otherwise the live controls are
+  // read, which is what the mark on the bar is about.
+  //
+  // `settled` says the page has finished loading and the date inputs can be
+  // believed. During a restore they cannot: the page rewrites its own range on
+  // load, so a date that differs then says nothing about what the person
+  // chose. Sixteen of these pages offer a date range and nothing else, so
+  // discounting dates everywhere would mean they could never be filtered at
+  // all -- the dates have to count, just not while they are still moving.
+  function isFiltered(record, settled) {
     if (!defaults) return false;
-    // Everything blank is the widest view there is, whatever the page happened
-    // to load with: GC Payment's own Clear empties the dates rather than
-    // restoring its default range, and that is not a filter either.
     var anyValue = false;
     var differs = false;
     FIELDS.forEach(function (sel) {
       var el = document.querySelector(sel);
       if (!el) return;
-      if (el.value) anyValue = true;
-      if (el.value !== (defaults[sel] || "")) differs = true;
+      var value = (record && Object.prototype.hasOwnProperty.call(record, sel))
+        ? record[sel] : el.value;
+      if (value) anyValue = true;
+      if (value !== (defaults[sel] || "")) {
+        if (!isDateField(sel) || settled !== false) differs = true;
+      }
     });
+    // Everything blank is the widest view there is, whatever the page happened
+    // to load with: GC Payment's own Clear empties the dates rather than
+    // restoring its default range, and that is not a filter either.
     return anyValue && differs;
   }
 
@@ -2356,7 +2506,10 @@ window.loadOptions = function (select, url, data, options) {
   function paint() {
     var bar = filterBar();
     if (!bar) return;
-    var on = isFiltered();
+    // Judged against what is stored, so the mark agrees with what will still
+    // be there after a reload rather than with a date range the page has just
+    // rewritten underneath it.
+    var on = isFiltered(storageWorks ? storedValues() : urlValues());
     // Both classes: .lf-active styles a .list-filter-row bar, and .lf-marked
     // carries the same look on a page whose bar is a plain row.
     bar.classList.toggle("lf-active", on);
@@ -2368,6 +2521,131 @@ window.loadOptions = function (select, url, data, options) {
     }
   }
 
+  // The page asks for its rows as soon as it loads, using the default range.
+  // When a filter is about to be restored that request is already wrong, and
+  // it is in flight before this file gets a turn -- so the restored filter
+  // fires a second one and the two race. Whichever answers last paints the
+  // table, and when the unfiltered reply came second it overwrote the filtered
+  // rows: the bar showed one branch while the table listed every branch, a
+  // screen that lies about what it is showing.
+  //
+  // So the losing reply is never delivered. jQuery's getJSON is wrapped for
+  // the moment between the page starting up and the restore being applied: a
+  // request sent in that window still goes out, but its success handler is
+  // dropped if a filter was restored, because it describes a view the person
+  // did not ask for. Nothing is cancelled and no page is modified -- the
+  // answer is simply not painted.
+  function holdFirstFetch() {
+    var $ = window.jQuery;
+    if (!$ || !$.getJSON) return function () {};
+    var original = $.getJSON;
+    var suppress = false;
+    var done = false;
+
+    $.getJSON = function (url, data, success) {
+      if (typeof data === "function") { success = data; data = undefined; }
+      var wrapped = typeof success === "function"
+        ? function () {
+            // Dropped only while the restore is still pending and a filter
+            // turned out to be stored; everything after is the page's own.
+            if (suppress) return;
+            return success.apply(this, arguments);
+          }
+        : success;
+      return original.call($, url, data, wrapped);
+    };
+
+    return function settle(filterRestored) {
+      if (done) return;
+      done = true;
+      suppress = !!filterRestored;
+      // Restore jQuery before the filtered request is sent, so only the
+      // page's own start-up reply is ever held back.
+      $.getJSON = original;
+      if (suppress) {
+        // Let the held reply arrive and be discarded, then stop suppressing
+        // so nothing later is affected.
+        setTimeout(function () { suppress = false; }, 4000);
+      }
+    };
+  }
+
+  // A plain reload (Ctrl+R, F5) is not a fresh load: Chrome and Firefox refill
+  // form controls from session history before any script runs, which is good
+  // for a half-typed form and wrong for a filter bar. It left the restored
+  // filter sitting in the controls at the moment snapshot() ran, so the page's
+  // own defaults were recorded as the filter itself -- isFiltered() then saw
+  // nothing out of the ordinary, store() dropped the memory as redundant, and
+  // the list came back unfiltered. A hard reload skips that refill, which is
+  // exactly why Ctrl+Shift+R held the filter while Ctrl+R lost it.
+  //
+  // Turning the refill off hands the page back its own defaults and leaves
+  // this file as the single thing that decides what a filter bar shows.
+  // Append the current filter to the links that leave this list page, so the
+  // round trip through a form comes back to the same view. Same-origin links
+  // to this page or its sub-paths only, and never a download, an anchor or
+  // anything the person opens in a new tab deliberately.
+  function keepFilterOnLinks() {
+    document.addEventListener("click", function (ev) {
+      var a = ev.target && ev.target.closest ? ev.target.closest("a[href]") : null;
+      if (!a) return;
+      if (a.target && a.target !== "_self") return;
+      if (a.hasAttribute("download")) return;
+      var href = a.getAttribute("href") || "";
+      if (!href || href.charAt(0) === "#" || /^[a-z]+:/i.test(href)) return;
+
+      var current = urlValues();
+      if (!current) return;
+      try {
+        var url = new URL(a.href, window.location.href);
+        if (url.origin !== window.location.origin) return;
+        // Carry it as the return address, not as a filter on the form itself:
+        // the form has no filter bar, and a stray f-branch in its query string
+        // would mean nothing there.
+        url.searchParams.set("_lf", window.location.search.replace(/^\?/, ""));
+        a.href = url.toString();
+      } catch (e) { /* leave the link alone */ }
+    }, true);
+  }
+
+  // On a form reached from a filtered list, rewrite the links that lead back
+  // to that list -- Cancel, breadcrumbs -- so they return to the filtered view
+  // rather than to the bare list. The filter rides in _lf, put there by
+  // keepFilterOnLinks when the person left the list.
+  function restoreReturnLinks() {
+    var carried;
+    try {
+      carried = new URLSearchParams(window.location.search).get("_lf");
+    } catch (e) { return; }
+    if (!carried) return;
+
+    Array.prototype.forEach.call(document.querySelectorAll("a[href]"), function (a) {
+      var href = a.getAttribute("href") || "";
+      if (!href || href.charAt(0) === "#" || /^[a-z]+:/i.test(href)) return;
+      try {
+        var url = new URL(a.href, window.location.href);
+        if (url.origin !== window.location.origin) return;
+        // Only the list this form belongs to: its path is a prefix of ours.
+        var here = window.location.pathname.replace(/[^/]*\/?$/, "");
+        if (url.pathname === window.location.pathname) return;
+        if (here.indexOf(url.pathname) !== 0) return;
+        if (url.search) return;
+        a.href = url.pathname + "?" + carried + url.hash;
+      } catch (e) { /* leave it */ }
+    });
+  }
+
+  function disableFormRestore() {
+    FIELDS.forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) el.setAttribute("autocomplete", "off");
+    });
+  }
+
+  // Installed at once, not on DOMContentLoaded: the page's start-up request
+  // goes out from its own jQuery ready handler, which runs first.
+  var settleFirstFetch = holdFirstFetch();
+
   document.addEventListener("DOMContentLoaded", function () {
     // Landing on a page with nobody signed in means the session has ended --
     // logged out, or expired and bounced to the login form. Every remembered
@@ -2376,12 +2654,29 @@ window.loadOptions = function (select, url, data, options) {
     // no filter bar of its own to run this check later.
     if (!sessionUser()) {
       forgetAll();
+      settleFirstFetch(false);
       return;
     }
 
     var submit = document.querySelector("#filter-submit");
-    // Only on a page that has this filter bar at all.
-    if (!submit) return;
+    // Not a list page. It may still be the form a list page sent us to, in
+    // which case the way back carries the filter that was in force.
+    if (!submit) {
+      restoreReturnLinks();
+      settleFirstFetch(false);
+      return;
+    }
+
+    disableFormRestore();
+
+    // Leaving the list for a form and coming back loses the query string: the
+    // Cancel link on each form points at the bare list URL, so a filter held
+    // only in the address bar would not survive Add -> Cancel. Rather than
+    // edit every form template, the links that lead off this page carry the
+    // filter with them, and the form's own Cancel then returns to a URL that
+    // still has it. Only matters where storage is blocked; where it works the
+    // filter is remembered anyway.
+    if (!storageWorks) keepFilterOnLinks();
 
     // Deferred, and not only so the page's own Submit handler is bound: most
     // of these pages set a default range (the last seven days) on load, and
@@ -2389,8 +2684,31 @@ window.loadOptions = function (select, url, data, options) {
     // person had chosen while leaving the other filters alone. Running last
     // means the remembered values win, which is the whole point.
     setTimeout(function () {
-      defaults = snapshot();
-      if (restore()) submit.click();
+      // The page has now set its own defaults. Remembered ones win when they
+      // exist, because on a plain reload the live controls may still hold the
+      // previous filter and would otherwise be mistaken for defaults; the
+      // snapshot is the fallback on a first visit, when there is nothing
+      // stored yet and the controls are genuinely untouched.
+      defaults = storedDefaults() || snapshot();
+      rememberDefaults(defaults);
+
+      // Re-asking for the rows is a second request, and the page has already
+      // sent its own for the default range. Two requests are a race: whichever
+      // answers last paints the table, so when the page's unfiltered reply
+      // arrived second it overwrote the filtered rows -- leaving the filter
+      // bar showing a branch while the table showed every branch, which is
+      // worse than not restoring at all, because the screen then lies about
+      // what it is listing.
+      //
+      // Asking again is still the only way in (these pages expose no hook to
+      // amend a request in flight), so the second answer is made the one that
+      // counts: the table is repainted when this reply lands, whatever order
+      // the two arrive in.
+      var restored = restore();
+      // Release the wrapper before asking again, so the filtered reply is
+      // delivered normally and only the stale one is dropped.
+      settleFirstFetch(restored);
+      if (restored) submit.click();
       paint();
     }, 0);
 
@@ -2427,6 +2745,7 @@ window.loadOptions = function (select, url, data, options) {
       // are left to the page's own default by reloading without a memory.
       clear.addEventListener("click", function () {
         try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+        if (!storageWorks) writeUrl({});
         // Put the controls back to what the page loaded with and ask it to
         // reload its own rows, rather than reloading the browser: a round trip
         // makes Clear feel like it did not take until the page comes back.
@@ -2448,6 +2767,7 @@ window.loadOptions = function (select, url, data, options) {
       // next visit starts from the page's defaults rather than the old filter.
       clear.addEventListener("click", function () {
         try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+        if (!storageWorks) writeUrl({});
         // The page's own handler resets its controls in the same click, and
         // may touch ones this file does not track. Repainting after it has run
         // keeps the mark honest rather than leaving it set on a cleared bar.

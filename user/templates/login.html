@@ -232,7 +232,8 @@
       var doomed = [];
       for (var i = 0; i < sessionStorage.length; i++) {
         var k = sessionStorage.key(i);
-        if (k && k.indexOf("listfilter:") === 0) doomed.push(k);
+        if (k && (k.indexOf("listfilter:") === 0 ||
+                  k.indexOf("listfilterdef:") === 0)) doomed.push(k);
       }
       doomed.forEach(function (k) { sessionStorage.removeItem(k); });
     } catch (e) { /* private mode or blocked storage: nothing was stored */ }
