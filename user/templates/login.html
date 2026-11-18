@@ -80,6 +80,8 @@
         {% endcomment %}
         <form method="POST">
           {% csrf_token %}
+          {# Carries the page they were headed for through the sign-in. #}
+          {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
 
           <div class="field">
             <label for="username">Username / Employee ID</label>

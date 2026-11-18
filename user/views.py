@@ -26,9 +26,33 @@ from .access import (MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES,
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
+from django.utils.http import url_has_allowed_host_and_scheme
+
+
+def _safe_next(request):
+    """The ``?next=`` target, but only when it is a path on this site.
+
+    An open redirect is a phishing primitive, so anything with a host or scheme
+    is discarded rather than followed.
+    """
+    nxt = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if not nxt:
+        return ""
+    if url_has_allowed_host_and_scheme(
+        nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return nxt
+    return ""
 
 
 def login(request):
+    # Someone who is already signed in has no business being shown the form
+    # again: following a stale /login/ link, or a bookmark of it, used to serve
+    # a fresh login page to a perfectly valid session, which is indistinguishable
+    # from having been logged out.
+    if request.user.is_authenticated:
+        return redirect(_safe_next(request) or "dashboard")
+
     if request.method == "POST":
         username = request.POST["username"]
         password = request.POST["password"]
@@ -41,9 +65,9 @@ def login(request):
             # shared office machine is asking for when they clear it.
             if not request.POST.get("remember"):
                 request.session.set_expiry(0)
-            return redirect(
-                "dashboard"
-            )  # Redirect to a dashboard or homepage after login
+            # Honour ?next= so @login_required sends them on to the page they
+            # actually asked for instead of dropping everyone on the dashboard.
+            return redirect(_safe_next(request) or "dashboard")
         else:
             messages.error(request, "Invalid username or password.")
             # Handed back to the form: a mistyped password used to cost the
@@ -670,11 +694,17 @@ def _dashboard_or_landing(request):
     return render(request, "home.html", _home_context(request))
 
 
+# Both land on the dashboard, and both need a user: _home_context and
+# home.html read request.user.employee, so an anonymous visitor rendered a
+# broken page rather than being sent to the login form. The root URL now
+# routes here, so this is also the entry point for someone arriving signed out.
 @xframe_options_sameorigin
+@login_required
 def dashboard(request):
     return _dashboard_or_landing(request)
 
 
+@login_required
 def home(request):
     return _dashboard_or_landing(request)
 

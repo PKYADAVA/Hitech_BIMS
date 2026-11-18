@@ -3,7 +3,12 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.login, name='login'),
+    # The root URL is the signed-in landing page, not the login form:
+    # LOGIN_REDIRECT_URL is '/', so routing it to the login view served the
+    # form again to a user who had just authenticated, which reads as being
+    # asked to log in a second time on every refresh of the home page.
+    # views.login itself now redirects an already-authenticated visitor.
+    path('', views.dashboard, name='root'),
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
     path('dashboard/', views.dashboard, name='dashboard'),
