@@ -2542,13 +2542,21 @@ window.loadOptions = function (select, url, data, options) {
     var suppress = false;
     var done = false;
 
+    // The held reply, kept rather than thrown away: see settle() below for
+    // why a dropped reply is only safe when another one is coming.
+    var held = null;
+
     $.getJSON = function (url, data, success) {
       if (typeof data === "function") { success = data; data = undefined; }
       var wrapped = typeof success === "function"
         ? function () {
             // Dropped only while the restore is still pending and a filter
             // turned out to be stored; everything after is the page's own.
-            if (suppress) return;
+            if (suppress) {
+              var self = this, args = arguments;
+              held = function () { return success.apply(self, args); };
+              return;
+            }
             return success.apply(this, arguments);
           }
         : success;
@@ -2563,9 +2571,28 @@ window.loadOptions = function (select, url, data, options) {
       // page's own start-up reply is ever held back.
       $.getJSON = original;
       if (suppress) {
-        // Let the held reply arrive and be discarded, then stop suppressing
-        // so nothing later is affected.
-        setTimeout(function () { suppress = false; }, 4000);
+        // Dropping the start-up reply is only safe where the page answers
+        // Submit with a fresh request. Some lists fetch once and then filter
+        // the rows they already hold -- their Submit sends nothing, so the
+        // reply dropped here was the only one coming and the table was left
+        // permanently empty: not a lost filter but a lost list.
+        //
+        // So the reply is held rather than discarded. If a later request
+        // arrives it was the refetch, and the held one is genuinely stale.
+        // If none does, the page does not refetch, and the held reply is
+        // delivered after all -- late, but the rows are there.
+        var sawRefetch = false;
+        $.getJSON = function () {
+          sawRefetch = true;
+          $.getJSON = original;
+          return original.apply($, arguments);
+        };
+        setTimeout(function () {
+          suppress = false;
+          if ($.getJSON !== original) { $.getJSON = original; }
+          if (!sawRefetch && held) { try { held(); } catch (e) { /* page's own */ } }
+          held = null;
+        }, 1200);
       }
     };
   }
