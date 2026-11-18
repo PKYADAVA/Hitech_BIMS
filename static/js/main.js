@@ -2149,3 +2149,310 @@ window.loadOptions = function (select, url, data, options) {
     }).observe(document.body, { childList: true, subtree: true });
   });
 })();
+
+// ---------------------------------------------------------------------------
+// List filters survive a reload.
+//
+// A list page's filter bar is plain inputs read by the page's own loadRows()
+// at Submit time, so the filters live nowhere but the DOM. Refreshing, or
+// coming back from an Add / Edit form, re-renders the bar empty and the page
+// loads unfiltered — a supervisor who had narrowed to one branch and one month
+// gets the whole register back every time they save a row.
+//
+// Each page's filters are remembered under its own path, so Bird Sale and
+// Chicks Placement do not share a memory, and restored on the next visit to
+// that same path. sessionStorage rather than localStorage: a filter is how you
+// are working right now, not a preference, and it should not still be there
+// tomorrow. Clear empties the memory as well as the controls.
+//
+// Restoring sets the controls and then asks the page to reload its rows the
+// only way it can be asked from here — the Submit the page already binds — so
+// nothing needs changing in the ten templates that include these filters.
+// ---------------------------------------------------------------------------
+(function () {
+  "use strict";
+
+  // The shared filter bar's controls. Ids rather than a class because that is
+  // what _list_period_filter.html and _list_place_filter.html already emit,
+  // and what each page's loadRows() reads.
+  // Every control that sits in one of these filter bars. The shared partials
+  // emit the f-* ids; the rest are a page's own, named without a prefix long
+  // before the partials existed. Listing a selector a page does not have costs
+  // nothing — it is simply never found.
+  var FIELDS = [
+    // shared partials (_list_period_filter / _list_place_filter)
+    "#from-date", "#to-date", "#f-month", "#f-year", "#f-branch",
+    "#f-warehouse", "#f-user",
+    // broiler
+    "#status", "#farm", "#farm-filter",
+    // inventory
+    "#category", "#item", "#warehouse", "#from-location", "#to-location",
+    "#branch", "#charge-type", "#charge-scope"
+  ];
+
+  // How long a remembered filter stays good for. A filter is a view of a
+  // moment's work, not a setting: coming back to a list after a long break
+  // should show the list, not a range chosen before lunch that now hides
+  // everything entered since. Thirty minutes of not touching the page is the
+  // same idle window the rest of the ERP treats as "stepped away".
+  var MAX_IDLE_MS = 30 * 60 * 1000;
+
+  var KEY_PREFIX = "listfilter:";
+
+  function key() { return KEY_PREFIX + window.location.pathname; }
+
+  // Who the page says is signed in, stamped on <body> by base.html. Blank on a
+  // login or other anonymous page.
+  function sessionUser() {
+    return (document.body && document.body.getAttribute("data-session-user")) || "";
+  }
+
+  // Drop every remembered filter, across all pages, not just this one. Used
+  // when the session owner changes and when the tab lands on an anonymous
+  // page -- the logged-out case -- because what is stale then is the whole
+  // set, and the next sign-in will not visit each page to find out.
+  function forgetAll() {
+    try {
+      var doomed = [];
+      for (var i = 0; i < sessionStorage.length; i++) {
+        var k = sessionStorage.key(i);
+        if (k && k.indexOf(KEY_PREFIX) === 0) doomed.push(k);
+      }
+      doomed.forEach(function (k) { sessionStorage.removeItem(k); });
+    } catch (e) { /* blocked storage: nothing was stored to begin with */ }
+  }
+
+
+  function store() {
+    try {
+      // Nothing to remember when the controls are the page's own defaults:
+      // writing them back would mean Clear appears not to have taken (the key
+      // is there again the moment Submit runs), and would pin today's default
+      // range into a session that should pick up tomorrow's.
+      if (defaults && !isFiltered()) {
+        sessionStorage.removeItem(key());
+        return;
+      }
+      var values = {};
+      FIELDS.forEach(function (sel) {
+        var el = document.querySelector(sel);
+        if (el && el.value) values[sel] = el.value;
+      });
+      if (Object.keys(values).length) {
+        // Stamped with who stored it and when, so restore() can refuse a
+        // record belonging to a previous sign-in or to a sitting long enough
+        // ago that the person has moved on. Older records are a bare map of
+        // selectors and read as neither; restore() discards those.
+        sessionStorage.setItem(key(), JSON.stringify({
+          v: 1,
+          user: sessionUser(),
+          at: Date.now(),
+          values: values
+        }));
+      } else {
+        sessionStorage.removeItem(key());
+      }
+    } catch (e) { /* private mode, blocked storage: filters just do not persist */ }
+  }
+
+  function restore() {
+    var rec;
+    try {
+      rec = JSON.parse(sessionStorage.getItem(key()) || "null");
+    } catch (e) { return false; }
+    if (!rec || typeof rec !== "object") return false;
+
+    // Anything without the stamp is from before filters were dated -- a
+    // record whose age and owner cannot be checked, so it is not trusted.
+    if (rec.v !== 1 || !rec.values) {
+      try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+      return false;
+    }
+
+    // A different signed-in user, or none at all: not this session's filter.
+    if ((rec.user || "") !== sessionUser()) {
+      forgetAll();
+      return false;
+    }
+
+    // Too long since it was last used. Expiring on idle rather than on a
+    // fixed lifetime means a filter survives as long as it is being worked
+    // with and lapses once it is not.
+    if (!rec.at || (Date.now() - rec.at) > MAX_IDLE_MS) {
+      try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+      return false;
+    }
+
+    var data = rec.values;
+    var applied = false;
+    Object.keys(data).forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      // Only restore a value the control still offers: a branch that has since
+      // been removed, or a year no longer in the financial-year list, would
+      // otherwise leave the select showing nothing while the page filtered by
+      // it invisibly.
+      if (el.tagName === "SELECT") {
+        var ok = Array.prototype.some.call(el.options, function (o) {
+          return o.value === data[sel];
+        });
+        if (!ok) return;
+      }
+      el.value = data[sel];
+      applied = true;
+      // Select2 mirrors the native select, so it has to be told.
+      if (window.jQuery && window.jQuery(el).data("select2")) {
+        window.jQuery(el).trigger("change.select2");
+      }
+    });
+    return applied;
+  }
+
+  // What the page itself loads with, captured before anything is restored, so
+  // "filtered" can mean "not what this page would show on its own" rather than
+  // "some control has a value" — every one of these pages defaults to the last
+  // seven days, and calling that a filter would mark every page all the time.
+  var defaults = null;
+
+  function snapshot() {
+    var out = {};
+    FIELDS.forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) out[sel] = el.value;
+    });
+    return out;
+  }
+
+  function isFiltered() {
+    if (!defaults) return false;
+    // Everything blank is the widest view there is, whatever the page happened
+    // to load with: GC Payment's own Clear empties the dates rather than
+    // restoring its default range, and that is not a filter either.
+    var anyValue = false;
+    var differs = false;
+    FIELDS.forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      if (el.value) anyValue = true;
+      if (el.value !== (defaults[sel] || "")) differs = true;
+    });
+    return anyValue && differs;
+  }
+
+  // The bar carries the mark, not each control: the point is "this list is not
+  // the whole list", which is one fact about the page.
+  function filterBar() {
+    // Most of these pages mark the bar .list-filter-row, but not all: Sales
+    // Invoice and General Purchase just use a plain .row, so the mark has to
+    // be hung on whatever row actually holds Submit rather than on a class
+    // that may not be there.
+    var submit = document.querySelector("#filter-submit");
+    if (!submit) return null;
+    return document.querySelector(".list-filter-row")
+        || submit.closest(".row")
+        || submit.parentElement;
+  }
+
+  function paint() {
+    var bar = filterBar();
+    if (!bar) return;
+    var on = isFiltered();
+    // Both classes: .lf-active styles a .list-filter-row bar, and .lf-marked
+    // carries the same look on a page whose bar is a plain row.
+    bar.classList.toggle("lf-active", on);
+    var clear = document.querySelector("#filter-clear");
+    if (clear) {
+      clear.classList.toggle("btn-warning", on);
+      clear.classList.toggle("btn-outline-secondary", !on);
+      clear.title = on ? "Filters are applied — clear them" : "Clear filters";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // Landing on a page with nobody signed in means the session has ended --
+    // logged out, or expired and bounced to the login form. Every remembered
+    // filter goes, here rather than on the next list page, because the login
+    // form is the one page the person is guaranteed to pass through and it has
+    // no filter bar of its own to run this check later.
+    if (!sessionUser()) {
+      forgetAll();
+      return;
+    }
+
+    var submit = document.querySelector("#filter-submit");
+    // Only on a page that has this filter bar at all.
+    if (!submit) return;
+
+    // Deferred, and not only so the page's own Submit handler is bound: most
+    // of these pages set a default range (the last seven days) on load, and
+    // doing that *after* a restore would quietly overwrite the dates the
+    // person had chosen while leaving the other filters alone. Running last
+    // means the remembered values win, which is the whole point.
+    setTimeout(function () {
+      defaults = snapshot();
+      if (restore()) submit.click();
+      paint();
+    }, 0);
+
+    submit.addEventListener("click", function () { store(); paint(); });
+
+    // Re-stamp the record whenever the person comes back to this tab with the
+    // filter still applied, so "idle" measures time away rather than time
+    // since the filter was first set. Without this, a filter being used for
+    // over half an hour would lapse mid-work on the next refresh.
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && isFiltered()) store();
+    });
+    // Typing in a date or picking a branch re-marks the bar straight away,
+    // without waiting for Submit, so the mark always describes the controls.
+    FIELDS.forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) { el.addEventListener("change", paint); el.addEventListener("input", paint); }
+    });
+
+    // Clearing has to exist wherever filters are remembered, or a range chosen
+    // once is the range you get for the rest of the session with no way back
+    // but retyping it. Seven of these pages ship a Clear button; the rest get
+    // one here, beside their Submit, rather than editing a template apiece.
+    var clear = document.querySelector("#filter-clear");
+    if (!clear) {
+      clear = document.createElement("button");
+      clear.type = "button";
+      clear.id = "filter-clear";
+      clear.className = "btn btn-outline-secondary";
+      clear.textContent = "Clear";
+      submit.insertAdjacentElement("afterend", clear);
+      // The page has no handler of its own for a button it never had, so this
+      // one empties the controls and asks for the unfiltered list. The dates
+      // are left to the page's own default by reloading without a memory.
+      clear.addEventListener("click", function () {
+        try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+        // Put the controls back to what the page loaded with and ask it to
+        // reload its own rows, rather than reloading the browser: a round trip
+        // makes Clear feel like it did not take until the page comes back.
+        if (defaults) {
+          FIELDS.forEach(function (sel) {
+            var el = document.querySelector(sel);
+            if (!el) return;
+            el.value = defaults[sel] || "";
+            if (window.jQuery && window.jQuery(el).data("select2")) {
+              window.jQuery(el).trigger("change.select2");
+            }
+          });
+        }
+        paint();
+        submit.click();
+      });
+    } else {
+      // The page clears its own controls; this only drops the memory, so the
+      // next visit starts from the page's defaults rather than the old filter.
+      clear.addEventListener("click", function () {
+        try { sessionStorage.removeItem(key()); } catch (e) { /* ignore */ }
+        // The page's own handler resets its controls in the same click, and
+        // may touch ones this file does not track. Repainting after it has run
+        // keeps the mark honest rather than leaving it set on a cleared bar.
+        setTimeout(paint, 0);
+      });
+    }
+  });
+})();

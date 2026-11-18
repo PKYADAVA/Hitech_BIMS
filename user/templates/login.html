@@ -220,5 +220,23 @@
     });
   })();
 </script>
+<script>
+  // Reaching the login form means the session is over -- signed out, or
+  // expired and bounced here. The list-page filters each page remembers for
+  // the sitting go with it, so the next sign-in starts from every page's own
+  // default range rather than inheriting a view set by whoever was here
+  // before. This page does not load main.js, which holds the rest of that
+  // code, so the sweep lives here.
+  (function () {
+    try {
+      var doomed = [];
+      for (var i = 0; i < sessionStorage.length; i++) {
+        var k = sessionStorage.key(i);
+        if (k && k.indexOf("listfilter:") === 0) doomed.push(k);
+      }
+      doomed.forEach(function (k) { sessionStorage.removeItem(k); });
+    } catch (e) { /* private mode or blocked storage: nothing was stored */ }
+  })();
+</script>
 </body>
 </html>

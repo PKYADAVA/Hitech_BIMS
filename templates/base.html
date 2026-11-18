@@ -52,7 +52,7 @@
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20261018p" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20261118c" />
 
   <!-- Dark. Last, so its token values win over the light ones above, and
        harmless when the theme is light: every rule in it is behind
@@ -65,7 +65,14 @@
   <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
 </head>
 
-<body{% if ds_shell %} class="ds-shell"{% endif %}>
+{% comment %}
+    data-session-user lets main.js tell one signed-in session from the
+    next. Remembered list filters are scoped to it, so logging out and
+    back in -- as the same person or anyone else -- starts from each
+    page's own defaults instead of inheriting the previous session's
+    view. Empty for an anonymous page, which drops them outright.
+  {% endcomment %}
+<body{% if ds_shell %} class="ds-shell"{% endif %} data-session-user="{% if request.user.is_authenticated %}{{ request.user.pk }}{% endif %}">
   {% comment %}
     Viewing the ERP as someone else is never allowed to look like ordinary use:
     whatever is done here is recorded against the user being viewed as, so the
@@ -224,7 +231,7 @@
   <!-- html2canvas (render an invoice/print view to an image for Share) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  <script src="{% static 'js/main.js' %}?v=20261020a"></script>
+  <script src="{% static 'js/main.js' %}?v=20261118g"></script>
 
   <!-- Module menus, shared by the top bar and the sidebar (bump ?v= on edit) -->
   <script src="{% static 'js/nav_menu.js' %}?v=20260922f"></script>

@@ -1738,3 +1738,44 @@ body:has(.impersonation-bar) .toastify.on.toastify-top { top: 57px !important; }
 @media (max-width: 575.98px) {
   .impersonation-bar { font-size: .76rem; gap: 10px; padding: 7px 12px; }
 }
+
+/* ---------------------------------------------------------------------------
+   A filter bar that is actually filtering says so.
+
+   List filters now survive a refresh, which is what people asked for and also
+   the way to not notice one is on: the register looks short, the row you just
+   saved is "missing", and nothing on screen explains why. The bar takes a tint
+   and a left edge whenever the controls differ from what the page loads with,
+   and Clear turns amber beside it — the mark and the way out in one place.
+
+   Keyed off .lf-active, set in main.js. Both themes get the same shape; the
+   tint is alpha over whatever the card is, so it works on either.
+--------------------------------------------------------------------------- */
+.lf-active {
+  position: relative;
+  background: rgba(217, 119, 6, .07);
+  border-left: 3px solid #d97706;
+  border-radius: 4px;
+}
+.card-body:has(> .lf-active) { background: rgba(217, 119, 6, .02); }
+
+/* "Filtered" in words, for anyone who does not read a colour — and colour is
+   never the only carrier of meaning here. Rides on the bar's own padding. */
+.lf-active::after {
+  content: "Filtered";
+  position: absolute;
+  top: -9px;
+  left: 8px;
+  padding: 0 6px;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: var(--ds-card, #fff);
+  border-radius: 3px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+:root:not([data-theme="light"]) .lf-active::after,
+:root[data-theme="dark"] .lf-active::after { color: #fbbf24; }
