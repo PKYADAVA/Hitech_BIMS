@@ -255,49 +255,70 @@
   }
 
   /**
-   * The band under the title: "Customer Detail" on the left as label/value
-   * rows, and the document's own fields on the right as a two-column grid —
-   * the arrangement the statutory bill uses, rather than three equal boxes.
-   * `meta` is [label, value] pairs; blanks are dropped so a challan without
-   * an e-way bill doesn't print an empty row.
+   * The band under the title: the two receiver boxes side by side, and the
+   * document's own fields in a third column. `meta` is [label, value] pairs;
+   * blanks are dropped so a challan without an e-way bill doesn't print an
+   * empty row.
    */
   function partyRowsHtml(party) {
     return [
       ["Name", party.name],
       ["Address", party.address],
-      ["Phone", party.mobile],
-      ["GSTIN", party.gstin],
-      ["State", party.state]
-    ].filter(function (r) { return String(r[1] || "").trim(); })
-      .map(function (r) {
-        return '<tr><th>' + esc(r[0]) + '</th><td>'
-          + esc(r[1]).replace(/\n/g, '<br>') + '</td></tr>';
-      }).join("");
+      ["Phone No.", party.mobile],
+      ["State", party.state],
+      ["GSTIN/UIN", party.gstin]
+    ].map(function (r) {
+      // Blank rows are kept rather than dropped: the two boxes sit beside
+      // each other and the eye reads across them, so a missing Phone on one
+      // side would slide its remaining rows up out of step with the other.
+      return '<tr><th>' + esc(r[0]) + '</th><td>'
+        + esc(r[1] || "").replace(/\n/g, '<br>') + '</td></tr>';
+    }).join("");
+  }
+
+  /**
+   * The document's own identity -- its number and date -- in a box of its
+   * own above the party boxes, where the statutory form puts it. It used to
+   * sit in the right-hand column among the transport rows, which buried the
+   * one pair of fields the document is filed and found by.
+   */
+  function docIdBandHtml(rows, placeOfSupply) {
+    var kept = (rows || []).filter(function (r) { return String(r[1] || "").trim(); });
+    if (!kept.length && !String(placeOfSupply || "").trim()) return "";
+    return '<div class="doc-id-band">'
+      + '<div class="dib-box"><table class="pb-table">'
+      + kept.map(function (r) {
+        return '<tr><th>' + esc(r[0]) + '</th><td>: ' + esc(r[1]) + '</td></tr>';
+      }).join("")
+      + '</table></div>'
+      + '</div>';
+  }
+
+  /** The supply state, named once under the boxes as the form has it. */
+  function placeOfSupplyHtml(placeOfSupply) {
+    var v = String(placeOfSupply || "").trim();
+    return v ? '<div class="pos-line">Place Of Supply : <b>' + esc(v) + '</b></div>' : "";
   }
 
   function partyBlockHtml(party, meta, shipTo) {
     var metaRows = (meta || []).filter(function (r) { return String(r[1] || "").trim(); });
 
-    // Where the goods go is its own box beside the billed-to, the way the
-    // statutory form has it. Printing the shipping address in the billed-to
-    // box instead -- which is what this did -- meant a delivery sent
-    // somewhere else wiped the billed party's own address off the document,
-    // so the bill no longer said who was being billed. Only shown when the
-    // two actually differ; most deliveries go to the billing address and a
-    // second identical box would be noise.
-    var ship = shipTo && String(shipTo.address || "").trim()
-      && String(shipTo.address).trim() !== String(party.address || "").trim()
-      ? shipTo : null;
+    // Both boxes always, even when the goods go to the billing address and
+    // the two read the same. The statutory form has a fixed shape and is
+    // read by people checking one box against the other; dropping the second
+    // when it matches made the document change shape from one consignment to
+    // the next, and left a reader wondering whether a consignee had been
+    // recorded at all. Where no separate address was entered the delivery is
+    // to the buyer, so the buyer's own details fill it.
+    var ship = shipTo && String(shipTo.address || "").trim() ? shipTo : party;
 
-    return '<div class="party-band' + (ship ? ' has-ship' : '') + '">'
+    return '<div class="party-band has-ship">'
       + '<div class="pb-customer">'
-      + '<div class="pb-head">' + (ship ? 'Details of Receiver (Billed To)' : 'Customer Detail') + '</div>'
+      + '<div class="pb-head">Details of Receiver (Buyer Detail)</div>'
       + '<table class="pb-table">' + partyRowsHtml(party) + '</table></div>'
-      + (ship
-        ? '<div class="pb-ship">'
-          + '<div class="pb-head">Details of Receiver (Shipped To)</div>'
-          + '<table class="pb-table">' + partyRowsHtml(ship) + '</table></div>'
-        : '')
+      + '<div class="pb-ship">'
+      + '<div class="pb-head">Details of Consignee (Shipped Detail)</div>'
+      + '<table class="pb-table">' + partyRowsHtml(ship) + '</table></div>'
       + '<div class="pb-meta"><table class="pb-table">'
       + metaRows.map(function (r) {
         return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>';
@@ -350,6 +371,11 @@
 
     let html = headerHtml(company, "Delivery Challan", "ORIGINAL FOR RECIPIENT");
 
+    html += docIdBandHtml([
+      ["Challan Number", c.challan_no],
+      ["Challan Date", fmtDate(c.date)],
+    ], c.place_of_supply || c.customer_state);
+
     html += partyBlockHtml({
       name: c.customer_name,
       address: c.customer_address,
@@ -357,8 +383,6 @@
       gstin: c.customer_gstin,
       state: c.place_of_supply || c.customer_state,
     }, [
-      ["Challan No.", c.challan_no],
-      ["Challan Date", fmtDate(c.date)],
       ["Transport Doc No.", c.transport_document_no],
       ["Transport Doc Date", c.transport_document_date ? fmtDate(c.transport_document_date) : ""],
       ["E-Way Bill No.", c.eway_bill_no],
@@ -380,6 +404,8 @@
       gstin: c.customer_gstin,
       state: c.place_of_supply || c.customer_state,
     });
+
+    html += placeOfSupplyHtml(c.place_of_supply || c.customer_state);
 
     // Columns follow the statutory grid: the tax columns sit inside it under a
     // grouped CGST+SGST / IGST header, and each line closes with its own Total
@@ -476,6 +502,11 @@
 
     let html = headerHtml(company, "Tax Invoice", "ORIGINAL FOR RECIPIENT");
 
+    html += docIdBandHtml([
+      ["Invoice Number", cs.bill_no],
+      ["Invoice Date", fmtDate(cs.date)],
+    ], cs.customer_state);
+
     html += partyBlockHtml({
       name: cs.customer_name,
       address: cs.customer_address,
@@ -483,8 +514,6 @@
       gstin: cs.customer_gstin,
       state: cs.customer_state,
     }, [
-      ["Invoice No.", cs.bill_no],
-      ["Invoice Date", fmtDate(cs.date)],
       ["Challan No.", cs.dc_no],
       ["Stock Point", cs.warehouse_name],
       ["Vehicle", cs.vehicle],
@@ -498,6 +527,8 @@
       gstin: cs.customer_gstin,
       state: cs.customer_state,
     });
+
+    html += placeOfSupplyHtml(cs.customer_state);
 
     const COLS = 8;
     html += `<div class="items-wrap"><table><thead><tr>
