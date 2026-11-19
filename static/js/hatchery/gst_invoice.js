@@ -127,7 +127,7 @@
     });
   }
 
-  /** The HSN/SAC summary table, with the grouped CGST+SGST / IGST header.
+  /** The HSN/SAC summary table, with the grouped CGST+SGST / GST header.
       Skipped entirely when no line carries tax — an all-zero block is a
       statutory table saying nothing, and the documents here are often
       raised for exempt/nil-rated supply (day-old chicks). */
@@ -140,7 +140,7 @@
     }, { taxable: 0, cgst: 0, sgst: 0, igst: 0, tax: 0 });
 
     var head = inter
-      ? '<th class="num" colspan="2">IGST</th>'
+      ? '<th class="num" colspan="2">GST</th>'
       : '<th class="num" colspan="2">CGST</th><th class="num" colspan="2">SGST</th>';
     var sub = inter
       ? '<th class="num">%</th><th class="num">Amount</th>'
@@ -429,7 +429,7 @@
     html += placeOfSupplyHtml(c.place_of_supply || c.customer_state);
 
     // Columns follow the statutory grid: the tax columns sit inside it under a
-    // grouped CGST+SGST / IGST header, and each line closes with its own Total
+    // grouped CGST+SGST / GST header, and each line closes with its own Total
     // (taxable + tax) rather than leaving tax to the summary alone.
     const taxCols = inter ? 2 : 4;
     const colCount = priceCols ? 6 + taxCols : 5;
@@ -439,7 +439,7 @@
         <th class="ds-mid" rowspan="2">Sr. No.</th><th rowspan="2">Name of Product / Service</th>
         <th rowspan="2">HSN / SAC</th><th class="num" rowspan="2">Qty</th>
         <th class="num" rowspan="2">Rate</th><th class="num" rowspan="2">Taxable Value</th>
-        ${inter ? '<th class="num" colspan="2">IGST</th>'
+        ${inter ? '<th class="num" colspan="2">GST</th>'
                 : '<th class="num" colspan="2">CGST</th><th class="num" colspan="2">SGST</th>'}
         <th class="num" rowspan="2">Total</th>
       </tr><tr>
@@ -458,7 +458,15 @@
     let sumTaxable = 0, sumTax = 0;
     (c.items || []).forEach((row, i) => {
       const discPct = num(row.discount_percent), taxPct = num(row.tax_percent);
-      const lineTaxable = num(row.quantity) * num(row.price) * (1 - discPct / 100);
+      // The flat discount beside the percentage one, either off the whole
+      // line or off each unit. Both come off before tax, the same order the
+      // entry form works the amount out in, so the printed bill and the
+      // saved record agree.
+      const flatDisc = row.discount_basis === "unit"
+        ? num(row.discount_amount) * num(row.quantity)
+        : num(row.discount_amount);
+      const lineTaxable = Math.max(
+        num(row.quantity) * num(row.price) * (1 - discPct / 100) - flatDisc, 0);
       const lineTax = lineTaxable * taxPct / 100;
       const half = Math.round(taxPct / 2 * 100) / 100;
       sumTaxable += lineTaxable; sumTax += lineTax;
@@ -501,7 +509,7 @@
         <div class="wb-sum">
           <div><span>Taxable Amount</span><b>${money(sumTaxable)}</b></div>
           ${discount ? `<div><span>Discount</span><b>(-) ${money(discount)}</b></div>` : ""}
-          <div><span>Add : ${inter ? "IGST" : "CGST + SGST"}</span><b>${money(sumTax)}</b></div>
+          <div><span>Add : ${inter ? "GST" : "CGST + SGST"}</span><b>${money(sumTax)}</b></div>
           <div><span>Total Tax</span><b>${money(sumTax)}</b></div>
           <div class="grand"><span>Total Amount After Tax</span><b>&#8377; ${money(grandTotal)}</b></div>
         </div>

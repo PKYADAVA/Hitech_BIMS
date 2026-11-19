@@ -723,6 +723,23 @@ class DeliveryChallanItem(models.Model):
     unit = models.CharField(max_length=30, blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    #: Whether ``discount_amount`` is the whole line's rebate or one unit's.
+    #:
+    #: The same pair the purchase line carries, for the same reason: a rebate
+    #: of two rupees on each of nine hundred bags is stated per bag, and
+    #: entering it per line meant doing that multiplication by hand and
+    #: redoing it whenever the quantity was corrected. "line" is the default,
+    #: which is what every row saved before this field existed means.
+    DISCOUNT_BASIS_LINE = "line"
+    DISCOUNT_BASIS_UNIT = "unit"
+    DISCOUNT_BASIS_CHOICES = [
+        (DISCOUNT_BASIS_LINE, "₹ on the line"),
+        (DISCOUNT_BASIS_UNIT, "₹ per unit"),
+    ]
+    discount_basis = models.CharField(
+        max_length=4, choices=DISCOUNT_BASIS_CHOICES, default=DISCOUNT_BASIS_LINE,
+        help_text="Whether the flat discount is for the whole line or per unit")
     tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 

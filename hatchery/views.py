@@ -892,7 +892,10 @@ def _delivery_challan_to_dict(challan):
             "item_description": row.item.description, "hsn_code": row.item.hsn_code or "",
             "packing_size": str(row.packing_size), "units": str(row.units),
             "quantity": str(row.quantity), "unit": row.unit, "price": str(row.price),
-            "discount_percent": str(row.discount_percent), "tax_percent": str(row.tax_percent),
+            "discount_percent": str(row.discount_percent),
+            "discount_amount": str(row.discount_amount),
+            "discount_basis": row.discount_basis,
+            "tax_percent": str(row.tax_percent),
             "amount": str(row.amount),
         } for row in challan.items.select_related("item")],
     }
@@ -1022,6 +1025,9 @@ class DeliveryChallanAPI(BaseAPIView):
                 packing_size=Decimal(str(row.get("packing_size") or 1)), units=Decimal(str(row.get("units") or 1)),
                 quantity=Decimal(str(row.get("quantity") or 0)), unit=row.get("unit", ""),
                 price=Decimal(str(row.get("price") or 0)), discount_percent=Decimal(str(row.get("discount_percent") or 0)),
+                discount_amount=Decimal(str(row.get("discount_amount") or 0)),
+                discount_basis=(row.get("discount_basis")
+                                or DeliveryChallanItem.DISCOUNT_BASIS_LINE),
                 tax_percent=Decimal(str(row.get("tax_percent") or 0)),
             )
         return challan
