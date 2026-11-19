@@ -899,22 +899,42 @@ $(function () {
   });
 
   syncPartySelects();
+  /* The bar is put back before setChannel(), because setChannel() asks for
+     the rows: restoring afterwards meant two requests, an unfiltered one
+     from start-up and a filtered one from here, and the start-up reply
+     landed second and painted the whole list under a bar that said it was
+     filtered. Restoring first means the one request start-up makes is
+     already the right one. */
+  ntxRestoreBar();
   setChannel(channel);
   markActiveQuickRange();
 
   /* Put back the bar this sitting last searched on. Module goes first and
      synchronously rebuilds the party selects, so the party value has a
-     control to land in by the time it is set. */
-  (function ntxRestore() {
+     control to land in by the time it is set. Called above, before the rows
+     are first asked for -- it sets controls only and never loads, so the
+     page makes exactly one request with the whole bar in place. */
+  function ntxRestoreBar() {
       const saved = ntxSaved();
       if (!saved || !Object.keys(saved).length) { ntxSyncMark(); return; }
       if (saved.module && $("#module option[value='" + saved.module + "']").length) {
-          $("#module").val(saved.module).trigger("change");
+          // Set, then rebuild the dependent controls by hand rather than
+          // firing "change": this page loads its rows on every change, so
+          // the event would send an unfiltered request for a bar that is
+          // still half restored. Its reply came back last and painted the
+          // whole list under a filter bar that said otherwise -- the exact
+          // lie the mark exists to prevent. One request goes out, at the
+          // end, with the whole bar in place.
+          $("#module").val(saved.module);
+          syncPartySelects();
+          syncLocationSelect();
+          refreshTemplateOptions();
       }
       if (saved.from) $("#from-date").val(saved.from);
       if (saved.to) $("#to-date").val(saved.to);
       if (saved.partyType && $("#party-type-filter option[value='" + saved.partyType + "']").length) {
-          $("#party-type-filter").val(saved.partyType).trigger("change");
+          $("#party-type-filter").val(saved.partyType).trigger("change.select2");
+          syncPartySelects();
       }
       if (saved.party) {
           const $party = $("#party-" + partyType());
@@ -926,15 +946,11 @@ $(function () {
           $("#location-filter").val(saved.location).trigger("change.select2");
       }
       if (saved.template && $("#template option[value='" + saved.template + "']").length) {
-          $("#template").val(saved.template).trigger("change");
+          $("#template").val(saved.template).trigger("change.select2");
       }
       markActiveQuickRange();
       ntxSyncMark();
-      // The restored bar is a search that was already run, so run it: coming
-      // back to the full list with a narrowed bar above it would be the same
-      // lie the mark exists to prevent.
-      loadRows();
-  })();
+  }
 });
 </script>
 {% endblock %}
