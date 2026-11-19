@@ -61,12 +61,13 @@
 /* The pair the document is filed and found by, boxed on its own above the
    party boxes rather than buried among the transport rows. */
 .challan-view-content .doc-id-band {
-  display: grid; grid-template-columns: max-content;
+  display: grid; grid-template-columns: 1fr 1fr;
   border-bottom: 1.5px solid #000;
 }
-.challan-view-content .dib-box {
-  border-right: 1px solid #000; padding: 2px 0;
-}
+.challan-view-content .dib-box { padding: 2px 0; }
+/* Only between the two columns -- a rule on the right of the last one would
+   print a stray line down the edge of the page. */
+.challan-view-content .dib-box + .dib-box { border-left: 1px solid #000; }
 .challan-view-content .dib-box .pb-table th { width: auto; padding-right: 14px; }
 .challan-view-content .dib-box .pb-table td { font-weight: 700; }
 /* Named once under the boxes, where both parties' states can be read
@@ -84,6 +85,11 @@
    side, and the document's own fields keep the right-hand column. */
 .challan-view-content .party-band.has-ship {
   grid-template-columns: 1fr 1fr 1.15fr;
+}
+/* No document fields left to show beside them: the two receiver boxes take
+   the width rather than leaving a ruled-off empty panel. */
+.challan-view-content .party-band.has-ship.no-meta {
+  grid-template-columns: 1fr 1fr;
 }
 /* The divider runs the band's full height. Drawing it as the right panel's
    own border stopped at that panel's content, leaving a stub hanging under

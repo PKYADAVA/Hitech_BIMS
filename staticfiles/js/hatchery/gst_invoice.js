@@ -282,15 +282,26 @@
    * sit in the right-hand column among the transport rows, which buried the
    * one pair of fields the document is filed and found by.
    */
-  function docIdBandHtml(rows, placeOfSupply) {
+  function docIdBandHtml(rows) {
     var kept = (rows || []).filter(function (r) { return String(r[1] || "").trim(); });
-    if (!kept.length && !String(placeOfSupply || "").trim()) return "";
+    if (!kept.length) return "";
+
+    // Split across two columns rather than one tall list. The band sits above
+    // the party boxes and runs the full width of the page: a single column
+    // left most of that width empty while the rows ran down past the boxes
+    // beside them.  Filled column-wise, so reading down the left and then the
+    // right follows the order the fields were given in.
+    var half = Math.ceil(kept.length / 2);
+    var cols = [kept.slice(0, half), kept.slice(half)];
+
     return '<div class="doc-id-band">'
-      + '<div class="dib-box"><table class="pb-table">'
-      + kept.map(function (r) {
-        return '<tr><th>' + esc(r[0]) + '</th><td>: ' + esc(r[1]) + '</td></tr>';
+      + cols.map(function (col) {
+        return '<div class="dib-box"><table class="pb-table">'
+          + col.map(function (r) {
+            return '<tr><th>' + esc(r[0]) + '</th><td>: ' + esc(r[1]) + '</td></tr>';
+          }).join("")
+          + '</table></div>';
       }).join("")
-      + '</table></div>'
       + '</div>';
   }
 
@@ -312,18 +323,24 @@
     // to the buyer, so the buyer's own details fill it.
     var ship = shipTo && String(shipTo.address || "").trim() ? shipTo : party;
 
-    return '<div class="party-band has-ship">'
+    // The third column only exists when the caller still has document fields
+    // to put there. The challan's moved up into the band above, so its two
+    // receiver boxes share the full width instead of leaving an empty panel
+    // ruled off beside them.
+    return '<div class="party-band has-ship' + (metaRows.length ? '' : ' no-meta') + '">'
       + '<div class="pb-customer">'
       + '<div class="pb-head">Details of Receiver (Buyer Detail)</div>'
       + '<table class="pb-table">' + partyRowsHtml(party) + '</table></div>'
       + '<div class="pb-ship">'
       + '<div class="pb-head">Details of Consignee (Shipped Detail)</div>'
       + '<table class="pb-table">' + partyRowsHtml(ship) + '</table></div>'
-      + '<div class="pb-meta"><table class="pb-table">'
-      + metaRows.map(function (r) {
-        return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>';
-      }).join("")
-      + '</table></div>'
+      + (metaRows.length
+        ? '<div class="pb-meta"><table class="pb-table">'
+          + metaRows.map(function (r) {
+            return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>';
+          }).join("")
+          + '</table></div>'
+        : '')
       + '</div>';
   }
 
@@ -371,18 +388,14 @@
 
     let html = headerHtml(company, "Delivery Challan", "ORIGINAL FOR RECIPIENT");
 
+    // The document's own fields, all of them, in the band above the party
+    // boxes: its number and date, then how the consignment travelled. They
+    // had been split, the number and date here and the transport rows down
+    // the side of the party boxes, which left the carrier's details reading
+    // as part of the consignee rather than as the document's own.
     html += docIdBandHtml([
       ["Challan Number", c.challan_no],
       ["Challan Date", fmtDate(c.date)],
-    ], c.place_of_supply || c.customer_state);
-
-    html += partyBlockHtml({
-      name: c.customer_name,
-      address: c.customer_address,
-      mobile: c.customer_mobile,
-      gstin: c.customer_gstin,
-      state: c.place_of_supply || c.customer_state,
-    }, [
       ["Transport Doc No.", c.transport_document_no],
       ["Transport Doc Date", c.transport_document_date ? fmtDate(c.transport_document_date) : ""],
       ["E-Way Bill No.", c.eway_bill_no],
@@ -395,7 +408,15 @@
       ["Vehicle No.", c.vehicle_no],
       ["Driver", c.driver_name],
       ["Driver Mobile", c.driver_mobile],
-    ], {
+    ]);
+
+    html += partyBlockHtml({
+      name: c.customer_name,
+      address: c.customer_address,
+      mobile: c.customer_mobile,
+      gstin: c.customer_gstin,
+      state: c.place_of_supply || c.customer_state,
+    }, [], {
       // Same party, different address: a delivery elsewhere is still the
       // customer's consignment, so the name and GSTIN carry over.
       name: c.customer_name,
@@ -505,7 +526,13 @@
     html += docIdBandHtml([
       ["Invoice Number", cs.bill_no],
       ["Invoice Date", fmtDate(cs.date)],
-    ], cs.customer_state);
+      ["Challan No.", cs.dc_no],
+      ["Stock Point", cs.warehouse_name],
+      ["Vehicle", cs.vehicle],
+      ["Driver", cs.driver],
+      ["Freight", cs.freight_type],
+      ["Payment", cs.payment_mode === "pay_in_bill" ? "Paid" : (cs.payment_mode ? "Credit" : "")],
+    ]);
 
     html += partyBlockHtml({
       name: cs.customer_name,
@@ -513,14 +540,7 @@
       mobile: cs.customer_mobile,
       gstin: cs.customer_gstin,
       state: cs.customer_state,
-    }, [
-      ["Challan No.", cs.dc_no],
-      ["Stock Point", cs.warehouse_name],
-      ["Vehicle", cs.vehicle],
-      ["Driver", cs.driver],
-      ["Freight", cs.freight_type],
-      ["Payment", cs.payment_mode === "pay_in_bill" ? "Paid" : (cs.payment_mode ? "Credit" : "")],
-    ], {
+    }, [], {
       name: cs.customer_name,
       address: cs.shipping_address,
       mobile: cs.customer_mobile,

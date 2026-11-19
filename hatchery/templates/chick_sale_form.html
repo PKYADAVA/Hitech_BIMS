@@ -4,7 +4,7 @@
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
 {% block css %}
 {% load static %}
-<link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261119c">
+<link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261119e">
 <style>
   /* The print area carries the shared GST form; it is only ever shown on paper. */
   #print-area { display:none; }
@@ -198,7 +198,7 @@
 {% endblock %}
 
 {% block js %}
-<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261119d"></script>
+<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261119e"></script>
 <script>
 const editId = {{ chick_sale_id|default:'null' }};
 const requestMode = {{ request_mode|yesno:'true,false' }};
