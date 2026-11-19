@@ -6,6 +6,22 @@
 {% load static %}
 <link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261119e">
 <style>
+  /* What the GST rate comes to in rupees, under the box that sets it --
+     the same hint the challan and purchase lines carry. */
+  .pct-effective { font-size:.65rem; line-height:1.1; color:#2563eb;
+                   margin-top:1px; text-align:right; white-space:nowrap; }
+  .pct-effective:empty { display:none; }
+  #item-table tr.disc-over .pct-effective { color:#c0392b; font-weight:600; }
+  #item-table tr.disc-over .amount { color:#c0392b; font-weight:700; }
+  .disc-cell { display:flex; align-items:stretch; gap:3px; width:100%; }
+  .ds table.ds-entry .disc-cell .disc-amount { flex:1 1 0; min-width:0; width:auto; }
+  .disc-switch { display:inline-flex; flex:0 0 auto; border:1px solid var(--bs-border-color, #dee2e6);
+                 border-radius:.25rem; overflow:hidden; }
+  .disc-switch .disc-opt { border:0; background:#fff; color:#6c757d; cursor:pointer;
+                 font-size:.68rem; line-height:1; padding:0 5px; min-width:22px; }
+  .disc-switch .disc-opt + .disc-opt { border-left:1px solid var(--bs-border-color, #dee2e6); }
+  .disc-switch .disc-opt.active { background:#2563eb; color:#fff; font-weight:700; }
+  .disc-switch .disc-opt:not(.active):hover { background:#eef2f7; color:#2563eb; }
   /* The print area carries the shared GST form; it is only ever shown on paper. */
   #print-area { display:none; }
   @media print {
@@ -94,13 +110,13 @@
         <table class="table table-bordered mb-0 ds-entry" id="item-table">
           <thead class="table-light">
             <tr>
-              <th class="c-fit m-short ds-mid">Sr.</th><th class="c-grow m-long">Item <span class="text-danger">*</span></th><th class="c-num m-num ds-num">Item Stock</th><th class="c-num m-num ds-num">Total Qty</th><th class="c-fit m-short">Mortality</th><th class="c-fit m-short">Culls</th>
-              <th class="c-num m-num ds-num">Sale Qty</th><th class="c-num m-num ds-num">Disc %</th><th class="c-num m-num ds-num">Disc Amount</th><th class="c-num m-num ds-num">Free Qty</th><th class="c-num m-num ds-num">Billed Qty</th><th class="c-num m-num ds-num">Sale Rate</th><th class="c-num m-num ds-num">Amount</th><th class="c-fit m-mid">Farm</th><th class="c-fit"></th>
+              <th class="c-fit m-short ds-mid">Sr.</th><th class="c-grow m-long">Item <span class="text-danger">*</span></th><th class="c-fit m-short">UOM</th><th class="c-num m-num ds-num">Item Stock</th><th class="c-num m-num ds-num">Total Qty</th><th class="c-fit m-short">Mortality</th><th class="c-fit m-short">Culls</th>
+              <th class="c-num m-num ds-num">Sale Qty</th><th class="c-num m-num ds-num">Disc %</th><th class="c-fit m-mid" style="min-width:132px;">Disc &#8377;</th><th class="c-num m-num ds-num">Free Qty</th><th class="c-num m-num ds-num">Billed Qty</th><th class="c-num m-num ds-num">Sale Rate</th><th class="c-num m-num ds-num">GST %</th><th class="c-num m-num ds-num">Amount</th><th class="c-fit m-mid">Farm</th><th class="c-fit"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="2" class="c-num m-num ds-num text-end">Total</th><th class="c-fit"></th><th class="c-fit m-short" id="total_birds">0</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit m-short" id="total_sale">0</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit m-short" id="total_free">0</th><th class="c-fit m-short" id="total_net">0</th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit"></th></tr>
+            <tr><th colspan="4" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_birds">0</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit m-short" id="total_sale">0</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit m-short" id="total_free">0</th><th class="c-fit m-short" id="total_net">0</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -198,7 +214,7 @@
 {% endblock %}
 
 {% block js %}
-<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261119f"></script>
+<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261119h"></script>
 <script>
 const editId = {{ chick_sale_id|default:'null' }};
 const requestMode = {{ request_mode|yesno:'true,false' }};
@@ -211,7 +227,7 @@ async function submitChangeRequest(module, payloadData, listUrl) {
   location.href = listUrl;
 }
 const fromChallan = {{ from_challan|safe }};
-const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const itemOptions = `{% for item in items %}<option value="{{ item.id }}" data-hsn="{{ item.hsn_code|default:''|escapejs }}" data-unit="{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const get = id => document.getElementById(id); const value = id => get(id).value;
 function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
 
@@ -219,7 +235,7 @@ function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftok
 function itemRow(row={}) {
   const tr=document.createElement('tr');
   tr.innerHTML=`<td class="sr text-center"></td>
-    <td><select class="form-select item" required><option value="">select</option>${itemOptions}</select></td>
+    <td><select class="form-select item" required><option value="">select</option>${itemOptions}</select></td><td><input class="form-control bg-light unit" readonly value="${row.unit||''}" title="The item's own unit of measure"></td>
     <td><input class="form-control bg-light item-stock" readonly placeholder="&mdash;"
                title="Stock of this item at the selected Stock Point"></td>
     <td><input class="form-control total-qty" type="number" min="0" step=".01" value="${row.total_qty||0}"></td>
@@ -227,10 +243,10 @@ function itemRow(row={}) {
     <td><input class="form-control culls" type="number" min="0" step=".01" value="${row.culls||0}"></td>
     <td><input class="form-control bg-light sale-qty" readonly value="0.00"></td>
     <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent||0}"></td>
-    <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount||0}"></td>
+    <td><div class="disc-cell"><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount||0}"><div class="disc-switch" role="group" title="Is this off the whole line, or off each unit?"><button type="button" class="disc-opt${(row.discount_basis||'line')==='line'?' active':''}" data-basis="line">&#8377;</button><button type="button" class="disc-opt${row.discount_basis==='unit'?' active':''}" data-basis="unit">/u</button></div><input type="hidden" class="disc-basis" value="${row.discount_basis||'line'}"></div><div class="pct-effective flat-effective" aria-live="polite"></div></td>
     <td><input class="form-control free-qty" type="number" min="0" step=".01" value="${row.free_qty||0}"></td>
     <td><input class="form-control bg-light net-qty" readonly value="0.00"></td>
-    <td><input class="form-control sale-rate" type="number" min="0" step=".01" value="${row.sale_rate||0}"></td>
+    <td><input class="form-control sale-rate" type="number" min="0" step=".01" value="${row.sale_rate||0}"></td><td><input class="form-control tax" type="number" min="0" step=".01" value="${row.tax_percent||0}"><div class="pct-effective tax-effective" aria-live="polite"></div></td>
     <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
     <td><input class="form-control farm" value="${row.farm||''}"></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
@@ -251,7 +267,32 @@ function calcRow(tr){
     billed=Math.max(0, Math.round(saleQty)-num('.free-qty'));
   }
   tr.querySelector('.net-qty').value=billed;
-  tr.querySelector('.amount').value=(billed*num('.sale-rate')-num('.disc-amount')).toFixed(2);
+  // GST on what is actually billed, after the flat discount -- the same order
+  // the delivery challan works its line out in, so the two documents agree.
+  // The unit follows the item, the way the HSN code does: picking a
+  // different item must not leave the previous one's measure behind.
+  const chosen=tr.querySelector('.item').selectedOptions[0];
+  const unitBox=tr.querySelector('.unit');
+  if(unitBox) unitBox.value=chosen?.dataset.unit||unitBox.value||'';
+  // A flat discount is either the whole line's or one unit's -- per unit it
+  // scales with the billed quantity, the same bargain the challan and
+  // purchase lines make.
+  const perUnit=tr.querySelector('.disc-basis')?.value==='unit';
+  const flat=perUnit ? num('.disc-amount')*billed : num('.disc-amount');
+  const gross=billed*num('.sale-rate');
+  const taxable=gross-flat;
+  const taxOn=taxable*num('.tax')/100;
+  const hint=(sel,v)=>{ const el=tr.querySelector(sel); if(el) el.textContent = v>0 ? '= ₹'+v.toFixed(2) : ''; };
+  hint('.tax-effective', taxOn);
+  // The flat one only where it differs from the number typed, which is to
+  // say on a per-unit row: on a line row the box already says it.
+  const flatHint=tr.querySelector('.flat-effective');
+  if(flatHint) flatHint.textContent = (perUnit && flat>0) ? '= ₹'+flat.toFixed(2) : '';
+  // A discount worth more than the line itself, flagged rather than clamped.
+  const over=flat>gross && gross>0;
+  tr.classList.toggle('disc-over', over);
+  if(over && flatHint) flatHint.textContent=(flatHint.textContent?flatHint.textContent+' ':'')+'⚠ more than the line';
+  tr.querySelector('.amount').value=(taxable+taxOn).toFixed(2);
   totals();
 }
 function renumberRows(){ document.querySelectorAll('#item-table tbody tr').forEach((tr,i)=>{tr.querySelector('.sr').textContent=i+1;}); }
@@ -275,7 +316,16 @@ get('item-table').addEventListener('input', e=>{
   const tr=e.target.closest('tr'); if(!tr) return;
   calcRow(tr);
 });
-get('item-table').addEventListener('click', e=>{ if(e.target.closest('.remove')){ e.target.closest('tr').remove(); renumberRows(); totals(); } });
+get('item-table').addEventListener('click', e=>{
+  if(e.target.closest('.remove')){ e.target.closest('tr').remove(); renumberRows(); totals(); return; }
+  // The flat discount's basis: whole line, or each unit.
+  const opt=e.target.closest('.disc-opt');
+  if(opt){ const tr=opt.closest('tr');
+    tr.querySelectorAll('.disc-opt').forEach(b=>b.classList.toggle('active', b===opt));
+    tr.querySelector('.disc-basis').value=opt.dataset.basis;
+    calcRow(tr);
+  }
+});
 get('freight_type').addEventListener('change', totals);
 get('freight_amount').addEventListener('input', totals);
 get('terms_template').onchange = e => { const opt = e.target.selectedOptions[0]; if (opt && opt.dataset.condition) get('terms').value = opt.dataset.condition; e.target.value = ''; };
@@ -389,8 +439,10 @@ function payload(){
       total_qty: tr.querySelector('.total-qty').value, mortality: tr.querySelector('.mortality').value,
       culls: tr.querySelector('.culls').value, sale_qty: tr.querySelector('.sale-qty').value,
       discount_percent: tr.querySelector('.disc-percent').value, discount_amount: tr.querySelector('.disc-amount').value,
+      discount_basis: tr.querySelector('.disc-basis').value,
       free_qty: tr.querySelector('.free-qty').value,
       net_qty: tr.querySelector('.net-qty').value, sale_rate: tr.querySelector('.sale-rate').value,
+      tax_percent: tr.querySelector('.tax').value,
     })),
   };
 }
@@ -406,12 +458,17 @@ function salePrintData(){
     item_description:'',
     // HSN lives on the item master and reaches the printed bill once the sale
     // is saved; an unsaved row simply prints without it.
-    hsn_code:'',
+    hsn_code:(tr.querySelector('.item')?.selectedOptions[0]?.dataset.hsn)||'',
+    unit:tr.querySelector('.unit')?.value||'',
     farm:tr.querySelector('.farm').value,
     total_qty:tr.querySelector('.total-qty').value,
     free_qty:tr.querySelector('.free-qty').value,
     net_qty:tr.querySelector('.net-qty').value,
     sale_rate:tr.querySelector('.sale-rate').value,
+    discount_percent:tr.querySelector('.disc-percent').value,
+    discount_amount:tr.querySelector('.disc-amount').value,
+    discount_basis:tr.querySelector('.disc-basis').value,
+    tax_percent:tr.querySelector('.tax').value,
     amount:tr.querySelector('.amount').value,
   }));
   return {

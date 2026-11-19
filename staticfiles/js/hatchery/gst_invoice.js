@@ -529,15 +529,30 @@
     const itemsAmount = (cs.items || []).reduce((s, r) => s + num(r.amount), 0);
     const inter = isInterState(company, cs.customer_state, cs.customer_gstin, "");
 
-    let html = headerHtml(company, "Tax Invoice", "ORIGINAL FOR RECIPIENT");
+    // A sale that charges GST is a tax invoice; one that charges none is a
+    // bill of supply. The document names itself after what it actually did,
+    // rather than claiming tax it never collected.
+    const chargesTax = (cs.items || []).some(r => num(r.tax_percent) > 0);
+    let html = headerHtml(company, chargesTax ? "Tax Invoice" : "Bill of Supply",
+                          "ORIGINAL FOR RECIPIENT");
 
     html += docIdBandHtml([
       ["Invoice Number", cs.bill_no],
       ["Invoice Date", fmtDate(cs.date)],
       ["Challan No.", cs.dc_no],
-      ["Stock Point", cs.warehouse_name],
-      ["Vehicle", cs.vehicle],
+      // The same rows the challan's band carries, in the same order and
+      // under the same names, so the two documents read alike. Where the
+      // sale was raised against a challan these come from it; a sale with no
+      // challan simply has fewer, and blank rows are dropped.
+      ["Transport Doc No.", cs.transport_document_no],
+      ["Transport Doc Date", cs.transport_document_date ? fmtDate(cs.transport_document_date) : ""],
+      ["E-Way Bill No.", cs.eway_bill_no],
+      ["E-Way Bill Date", cs.eway_bill_date ? fmtDate(cs.eway_bill_date) : ""],
+      ["Transport Mode", cs.transport_mode],
+      ["Transporter", cs.transporter_name],
+      ["Vehicle No.", cs.vehicle],
       ["Driver", cs.driver],
+      ["Driver Mobile", cs.driver_mobile],
       ["Freight", cs.freight_type],
       ["Payment", cs.payment_mode === "pay_in_bill" ? "Paid" : (cs.payment_mode ? "Credit" : "")],
     ]);
@@ -558,30 +573,71 @@
 
     html += placeOfSupplyHtml(cs.customer_state);
 
-    const COLS = 8;
+    // The same grid the delivery challan prints: the tax columns inside it
+    // under a grouped CGST+SGST / GST header, and each line closing with its
+    // own Total. Free and Billed Qty stay -- a chick sale bills fewer birds
+    // than it sends, and the bill has to show both.
+    const taxCols = inter ? 2 : 4;
+    const COLS = 9 + taxCols;
     html += `<div class="items-wrap"><table><thead><tr>
-      <th class="ds-mid">Sr. No.</th><th>Name of Product / Service</th><th>HSN / SAC</th>
-      <th class="num">Qty</th><th class="num">Free Qty</th><th class="num">Billed Qty</th>
-      <th class="num">Rate</th><th class="num">Amount (&#8377;)</th>
+      <th class="ds-mid" rowspan="2">Sr. No.</th><th rowspan="2">Name of Product / Service</th>
+      <th rowspan="2">HSN / SAC</th>
+      <th class="num" rowspan="2">Qty</th><th class="num" rowspan="2">Free Qty</th>
+      <th class="num" rowspan="2">Billed Qty</th><th class="num" rowspan="2">Rate</th>
+      <th class="num" rowspan="2">Taxable Value</th>
+      ${inter ? '<th class="num" colspan="2">GST</th>'
+              : '<th class="num" colspan="2">CGST</th><th class="num" colspan="2">SGST</th>'}
+      <th class="num" rowspan="2">Total</th>
+    </tr><tr>
+      ${inter ? '<th class="num">%</th><th class="num">Amount</th>'
+              : '<th class="num">%</th><th class="num">Amount</th><th class="num">%</th><th class="num">Amount</th>'}
     </tr></thead><tbody>`;
 
     // Chick sale carries no per-line GST rate, so the HSN summary reports the
     // line value at a 0% rate rather than inventing one — the bill still shows
     // the statutory HSN breakdown without overstating tax that wasn't charged.
     const taxLines = [];
+    let sumTaxable = 0, sumTax = 0;
     (cs.items || []).forEach((row, i) => {
-      taxLines.push({ hsn: row.hsn_code, taxable: num(row.amount), taxPercent: 0 });
-      html += `<tr><td>${i + 1}</td><td>${itemName(row)}${row.farm ? `<br><small>Farm: ${esc(row.farm)}</small>` : ""}</td>`
+      // What the line is taxed on: billed qty x rate less the flat discount,
+      // which is what the saved amount is built from too.
+      const flatDisc = row.discount_basis === "unit"
+        ? num(row.discount_amount) * num(row.net_qty)
+        : num(row.discount_amount);
+      const lineTaxable = Math.max(num(row.net_qty) * num(row.sale_rate) - flatDisc, 0);
+      const lineTax = lineTaxable * num(row.tax_percent) / 100;
+      sumTaxable += lineTaxable; sumTax += lineTax;
+      taxLines.push({ hsn: row.hsn_code, taxable: lineTaxable, taxPercent: num(row.tax_percent) });
+      // The scheme that produced the free quantity, named under the item.
+      // It was recorded on the line and shown nowhere, so the bill offered a
+      // free quantity with nothing to say where it came from.
+      const schemePct = num(row.discount_percent);
+      const schemeNote = schemePct > 0
+        ? `<br><small>Scheme: ${qty(row.discount_percent)}% (free ${qty(row.free_qty)})</small>` : "";
+      const taxPct = num(row.tax_percent);
+      const half = Math.round(taxPct / 2 * 100) / 100;
+      html += `<tr><td>${i + 1}</td><td>${itemName(row)}${schemeNote}${row.farm ? `<br><small>Farm: ${esc(row.farm)}</small>` : ""}</td>`
         + `<td>${esc(row.hsn_code) || "-"}</td>`
         + `<td class="num">${qty(row.total_qty)}</td><td class="num">${qty(row.free_qty)}</td>`
         + `<td class="num">${qty(row.net_qty)}</td><td class="num">${money(row.sale_rate)}</td>`
-        + `<td class="num">${money(row.amount)}</td></tr>`;
+        + `<td class="num">${money(lineTaxable)}</td>`
+        + (inter
+          ? `<td class="num">${taxPct.toFixed(2)}</td><td class="num">${money(lineTax)}</td>`
+          : `<td class="num">${half.toFixed(2)}</td><td class="num">${money(lineTax / 2)}</td>`
+            + `<td class="num">${half.toFixed(2)}</td><td class="num">${money(lineTax / 2)}</td>`)
+        + `<td class="num">${money(lineTaxable + lineTax)}</td></tr>`;
     });
 
-    // Totals stacked inside the grid, as the statutory form does it.
-    const sub = [["", money(itemsAmount)]];
-    if (billedFreight) sub.push(["Freight", money(billedFreight)]);
-    else if (freightAmount) sub.push(["Freight (paid by customer)", money(freightAmount)]);
+    // Totals stacked inside the grid, as the statutory form does it. The
+    // unlabelled subtotal is only worth a row when something is added below
+    // it: on a sale with no freight it repeated the line's own amount
+    // immediately under the line, saying nothing.
+    const sub = [];
+    if (billedFreight) {
+      sub.push(["", money(itemsAmount)], ["Freight", money(billedFreight)]);
+    } else if (freightAmount) {
+      sub.push(["", money(itemsAmount)], ["Freight (paid by customer)", money(freightAmount)]);
+    }
     sub.forEach(([label, val], idx) => {
       html += `<tr class="sub-row${idx === 0 ? " first" : ""}"><td colspan="${COLS - 2}" class="noline"></td>`
         + `<td class="num lbl">${esc(label)}</td><td class="num">${val}</td></tr>`;
@@ -589,8 +645,14 @@
 
     html += fillerRowsHtml(COLS);
     const totalNetQty = (cs.items || []).reduce((s, r) => s + num(r.net_qty), 0);
+    // Totals under their own columns, as the challan's row does it: billed
+    // quantity, what was taxed, the tax itself, and the line total.
     html += `<tr class="total-row"><td colspan="5">Total</td><td class="num">${qty(totalNetQty)}</td>`
-      + `<td></td><td class="num grand">&#8377; ${money(finalAmount)}</td></tr>`;
+      + `<td></td><td class="num">${money(sumTaxable)}</td>`
+      + (inter
+        ? `<td></td><td class="num">${money(sumTax)}</td>`
+        : `<td></td><td class="num">${money(sumTax / 2)}</td><td></td><td class="num">${money(sumTax / 2)}</td>`)
+      + `<td class="num grand">&#8377; ${money(finalAmount)}</td></tr>`;
     html += `</tbody></table></div>`;
 
     // Words left, tax summary boxed right — the same close as the challan.
@@ -603,10 +665,12 @@
         <div class="wb-eoe">(E &amp; O.E.)</div>
       </div>
       <div class="wb-sum">
-        <div><span>Taxable Amount</span><b>${money(itemsAmount)}</b></div>
+        <div><span>${chargesTax ? "Taxable Amount" : "Amount"}</span><b>${money(chargesTax ? sumTaxable : itemsAmount)}</b></div>
+        ${chargesTax ? `<div><span>Add : ${inter ? "GST" : "CGST + SGST"}</span><b>${money(sumTax)}</b></div>
+        <div><span>Total Tax</span><b>${money(sumTax)}</b></div>` : ""}
         ${billedFreight ? `<div><span>Add : Freight</span><b>${money(billedFreight)}</b></div>` : ""}
         ${freightAmount && !billedFreight ? `<div><span>Freight (paid by customer)</span><b>${money(freightAmount)}</b></div>` : ""}
-        <div class="grand"><span>Total Amount After Tax</span><b>&#8377; ${money(finalAmount)}</b></div>
+        <div class="grand"><span>${chargesTax ? "Total Amount After Tax" : "Total Amount"}</span><b>&#8377; ${money(finalAmount)}</b></div>
       </div>
     </div>`;
 

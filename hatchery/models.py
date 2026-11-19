@@ -1134,9 +1134,26 @@ class ChickSaleItem(models.Model):
     sale_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    #: Whether ``discount_amount`` is the whole line's rebate or one unit's,
+    #: the same pair the delivery challan and purchase lines carry. "line" is
+    #: the default, which is what every row saved before this field means.
+    DISCOUNT_BASIS_LINE = "line"
+    DISCOUNT_BASIS_UNIT = "unit"
+    DISCOUNT_BASIS_CHOICES = [
+        (DISCOUNT_BASIS_LINE, "₹ on the line"),
+        (DISCOUNT_BASIS_UNIT, "₹ per unit"),
+    ]
+    discount_basis = models.CharField(
+        max_length=4, choices=DISCOUNT_BASIS_CHOICES, default=DISCOUNT_BASIS_LINE,
+        help_text="Whether the flat discount is for the whole line or per unit")
     free_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     net_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text=_("Billed quantity"))
     sale_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    #: GST on the line, the rate the delivery challan's line already carried.
+    #: Without it the sale could charge no tax at all, so its document had to
+    #: go out as a Bill of Supply; lines saved before this field existed
+    #: charged none, which is what the zero default says.
+    tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
     class Meta:
@@ -1150,7 +1167,14 @@ class ChickSaleItem(models.Model):
             self.free_qty = self.sale_qty - self.net_qty
         elif not self.net_qty:
             self.net_qty = max(self.sale_qty - (self.free_qty or 0), 0)
-        self.amount = (self.net_qty or 0) * (self.sale_rate or 0) - (self.discount_amount or 0)
+        # Tax goes on what is actually billed, after the flat discount -- the
+        # same order the delivery challan's line works its amount out in, so
+        # the two documents agree on the same figures.
+        flat = (self.discount_amount or 0)
+        if self.discount_basis == self.DISCOUNT_BASIS_UNIT:
+            flat = flat * (self.net_qty or 0)
+        taxable = (self.net_qty or 0) * (self.sale_rate or 0) - flat
+        self.amount = taxable + taxable * (self.tax_percent or 0) / 100
         super().save(*args, **kwargs)
 
 

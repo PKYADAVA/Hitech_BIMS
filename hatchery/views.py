@@ -1817,6 +1817,18 @@ def _chick_sale_to_dict(cs):
         "warehouse": cs.warehouse_id, "warehouse_name": cs.warehouse.name,
         "delivery_challan": cs.delivery_challan_id,
         "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
+        # The consignment's transport details belong on the invoice as much as
+        # on the challan, and the sale keeps only a vehicle and a driver of its
+        # own. Where it was raised against a challan, that challan's details
+        # are the ones that describe the journey, so the invoice carries them
+        # and falls back to the sale's own where there is no challan.
+        "transport_mode": dc.transport_mode if (dc := cs.delivery_challan) else "",
+        "transporter_name": dc.transporter_name if dc else "",
+        "transport_document_no": dc.transport_document_no if dc else "",
+        "transport_document_date": dc.transport_document_date if dc else None,
+        "eway_bill_no": dc.eway_bill_no if dc else "",
+        "eway_bill_date": dc.eway_bill_date if dc else None,
+        "driver_mobile": dc.driver_mobile if dc else "",
         "shipping_address": cs.shipping_address, "vehicle": cs.vehicle, "driver": cs.driver,
         "freight_type": cs.freight_type, "payment_mode": cs.payment_mode,
         "pay_account": cs.pay_account_id, "freight_account": cs.freight_account_id,
@@ -1832,7 +1844,10 @@ def _chick_sale_to_dict(cs):
             "culls": str(row.culls), "sale_qty": str(row.sale_qty),
             "discount_percent": str(row.discount_percent), "discount_amount": str(row.discount_amount),
             "free_qty": str(row.free_qty),
-            "net_qty": str(row.net_qty), "sale_rate": str(row.sale_rate), "amount": str(row.amount),
+            "net_qty": str(row.net_qty), "sale_rate": str(row.sale_rate),
+            "discount_amount": str(row.discount_amount),
+            "discount_basis": row.discount_basis,
+            "tax_percent": str(row.tax_percent), "amount": str(row.amount),
         } for row in cs.items.select_related("item")],
     }
 
@@ -1945,9 +1960,12 @@ class ChickSaleAPI(BaseAPIView):
                 sale_qty=Decimal(str(row.get("sale_qty") or 0)),
                 discount_percent=Decimal(str(row.get("discount_percent") or 0)),
                 discount_amount=Decimal(str(row.get("discount_amount") or 0)),
+                discount_basis=(row.get("discount_basis")
+                                or ChickSaleItem.DISCOUNT_BASIS_LINE),
                 free_qty=Decimal(str(row.get("free_qty") or 0)),
                 net_qty=Decimal(str(row.get("net_qty") or 0)),
                 sale_rate=Decimal(str(row.get("sale_rate") or 0)),
+                tax_percent=Decimal(str(row.get("tax_percent") or 0)),
             )
         if not cs.items.exists():
             raise ValidationError("Add at least one item line.")
