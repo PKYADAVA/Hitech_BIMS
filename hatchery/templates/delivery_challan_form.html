@@ -3,27 +3,18 @@
 {% block title %}{% if delivery_challan_id %}Edit{% else %}Add{% endif %} Delivery Challan - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
 {% block css %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261118a">
 <style>
-  .challan-print { display:none; color:#111; font-family:Arial,sans-serif; border:1px solid #333; padding:18px; }
-  .challan-print h2 { text-align:center; margin:0 0 10px; font-size:20px; letter-spacing:1px; }
-  .challan-print .company-header { text-align:center; border-bottom:2px solid #333; padding-bottom:8px; margin-bottom:10px; }
-  .challan-print .company-header h3 { margin:0 0 4px; font-size:16px; }
-  .challan-print .company-header div { font-size:12px; }
-  .challan-print .detail-grid { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid #333; border-bottom:1px solid #333; margin-bottom:10px; font-size:12px; }
-  .challan-print .detail-grid > div { padding:8px 10px; }
-  .challan-print .detail-grid > div + div { border-left:1px solid #333; }
-  .challan-print .detail-grid hr { margin:4px 0 6px; border-top:1px solid #999; }
-  .challan-print table { width:100%; border-collapse:collapse; margin-top:4px; }
-  .challan-print th,.challan-print td { border:1px solid #333; padding:6px; font-size:12px; }
-  .challan-print th { background:#eee; }
-  .challan-print .discount-row { text-align:right; padding:6px 4px; font-size:13px; }
-  .challan-print .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 4px; background:#fbe4d5; }
-  .challan-print .amount-words { margin-top:6px; font-size:12px; }
-  .challan-print .tax-line { font-size:12px; margin-top:2px; }
-  .challan-print .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:20px; font-size:12px; }
-  .challan-print .footer-grid .signature-box { text-align:right; }
-  .challan-print .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
-  @media print { body * { visibility:hidden; } .challan-print,.challan-print * { visibility:visible; } .challan-print { display:block; position:absolute; left:0; top:0; width:100%; border:0; } .container-cstm, footer { padding:0; margin:0; } }
+  /* The print area carries the shared GST form; it is only ever shown on paper. */
+  #print-area { display:none; }
+  @media print {
+    body * { visibility:hidden; }
+    #print-area, #print-area * { visibility:visible; }
+    #print-area { display:flex; position:absolute; left:0; top:0; width:100%; }
+    .container-cstm, footer { padding:0; margin:0; }
+    @page { size:A4; margin:1.5cm; }
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -36,70 +27,19 @@
       <a href="{% url 'delivery_challan_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a>
     </div>
 </div>
-<form id="challan-form"><div class="card mb-3"><div class="card-header">Challan Details</div><div class="card-body"><div class="row g-3"><div class="col-md-2"><label class="form-label">Challan No.</label><input class="form-control" id="challan_no" readonly value="{{ next_challan_no|default:'' }}"></div><div class="col-md-2"><label class="form-label">Challan Date <span class="text-danger">*</span></label><input type="date" class="form-control" id="date" required></div><div class="col-md-2"><label class="form-label">Place of Supply</label><input type="text" class="form-control" id="place_of_supply" placeholder="Enter place of supply..."></div><div class="col-md-2"><label class="form-label">Stock Point</label><select class="form-select" id="warehouse"><option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div><div class="col-md-4"><label class="form-label">Customer Ledger Balance</label><input class="form-control bg-light" id="customer_ledger_balance" readonly placeholder="&mdash;" title="Outstanding balance of the selected customer"></div><div class="col-md-6 d-flex flex-column"><label class="form-label">Customer <span class="text-danger">*</span></label><div class="d-flex gap-2"><select class="form-select" id="customer" required><option value="">Select customer</option>{% for customer in customers %}<option value="{{ customer.id }}" data-name="{{ customer.name }}" data-address="{{ customer.address }}" data-mobile="{{ customer.mobile }}" data-gstin="{{ customer.gstin|default:'' }}" data-email="{{ customer.email|default:'' }}">{{ customer.name }}{% if customer.mobile %} — {{ customer.mobile }}{% endif %}</option>{% endfor %}</select><a class="btn btn-outline-secondary text-nowrap" href="{% url 'customer' %}" target="_blank" title="Manage customers in Customer Master"><i class="fas fa-pen"></i> Edit</a></div><div class="mt-auto d-flex flex-column flex-grow-1"><label class="form-label mt-3">Billing Address</label><div class="border rounded p-2 bg-light flex-grow-1" id="billing_address" style="min-height:58px"><span class="text-muted">Select a customer.</span></div></div></div><div class="col-md-6 d-flex flex-column"><label class="form-label">Shipping Address</label><div class="d-flex gap-2"><select class="form-select" id="shipping_address_select" disabled><option value="">Select a customer first.</option></select><button type="button" class="btn btn-outline-secondary text-nowrap" id="edit_shipping_address" title="Edit selected address" disabled><i class="fas fa-pen"></i></button><button type="button" class="btn btn-success text-nowrap" id="add_shipping_address" title="Add new address" disabled><i class="fas fa-plus"></i></button></div><div class="mt-auto d-flex flex-column flex-grow-1"><div class="form-text mt-3 mb-0" style="line-height:1.5">New shipping addresses added here are saved directly in Customer Master.</div><div class="border rounded p-2 bg-light mt-1 flex-grow-1" id="shipping_address_summary" style="min-height:58px">Select a customer first.</div></div><textarea class="d-none" id="shipping_address"></textarea></div></div></div></div>
+<form id="challan-form"><div class="card mb-3"><div class="card-header">Challan Details</div><div class="card-body"><div class="row g-3"><div class="col-md-2"><label class="form-label">Challan No.</label><input class="form-control" id="challan_no" readonly value="{{ next_challan_no|default:'' }}"></div><div class="col-md-2"><label class="form-label">Challan Date <span class="text-danger">*</span></label><input type="date" class="form-control" id="date" required></div><div class="col-md-2"><label class="form-label">Place of Supply</label><input type="text" class="form-control" id="place_of_supply" placeholder="Enter place of supply..."></div><div class="col-md-2"><label class="form-label">Stock Point</label><select class="form-select" id="warehouse"><option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div><div class="col-md-4"><label class="form-label">Customer Ledger Balance</label><input class="form-control bg-light" id="customer_ledger_balance" readonly placeholder="&mdash;" title="Outstanding balance of the selected customer"></div><div class="col-md-6 d-flex flex-column"><label class="form-label">Customer <span class="text-danger">*</span></label><div class="d-flex gap-2"><select class="form-select" id="customer" required><option value="">Select customer</option>{% for customer in customers %}<option value="{{ customer.id }}" data-name="{{ customer.name }}" data-address="{{ customer.address }}" data-mobile="{{ customer.mobile }}" data-gstin="{{ customer.gstin|default:'' }}" data-email="{{ customer.email|default:'' }}" data-state="{{ customer.state|default:'' }}">{{ customer.name }}{% if customer.mobile %} — {{ customer.mobile }}{% endif %}</option>{% endfor %}</select><a class="btn btn-outline-secondary text-nowrap" href="{% url 'customer' %}" target="_blank" title="Manage customers in Customer Master"><i class="fas fa-pen"></i> Edit</a></div><div class="mt-auto d-flex flex-column flex-grow-1"><label class="form-label mt-3">Billing Address</label><div class="border rounded p-2 bg-light flex-grow-1" id="billing_address" style="min-height:58px"><span class="text-muted">Select a customer.</span></div></div></div><div class="col-md-6 d-flex flex-column"><label class="form-label">Shipping Address</label><div class="d-flex gap-2"><select class="form-select" id="shipping_address_select" disabled><option value="">Select a customer first.</option></select><button type="button" class="btn btn-outline-secondary text-nowrap" id="edit_shipping_address" title="Edit selected address" disabled><i class="fas fa-pen"></i></button><button type="button" class="btn btn-success text-nowrap" id="add_shipping_address" title="Add new address" disabled><i class="fas fa-plus"></i></button></div><div class="mt-auto d-flex flex-column flex-grow-1"><div class="form-text mt-3 mb-0" style="line-height:1.5">New shipping addresses added here are saved directly in Customer Master.</div><div class="border rounded p-2 bg-light mt-1 flex-grow-1" id="shipping_address_summary" style="min-height:58px">Select a customer first.</div></div><textarea class="d-none" id="shipping_address"></textarea></div></div></div></div>
 <div class="card mb-3"><div class="card-header">Transportation Details</div><div class="card-body"><div class="row g-3"><div class="col-md-3"><label class="form-label">Transport Mode</label><select id="transport_mode" class="form-select"><option>Road</option><option>Rail</option><option>Air</option><option>Courier</option></select></div><div class="col-md-3"><label class="form-label">Vehicle No.</label><input class="form-control" id="vehicle_no"></div><div class="col-md-3"><label class="form-label">Driver Name</label><input class="form-control" id="driver_name"></div><div class="col-md-3"><label class="form-label">Driver Mobile</label><input class="form-control" id="driver_mobile"></div><div class="col-md-3"><label class="form-label">Transporter Name</label><input class="form-control" id="transporter_name"></div><div class="col-md-3"><label class="form-label">Transport Document No.</label><input class="form-control" id="transport_document_no"></div><div class="col-md-3"><label class="form-label">Transport Document Date</label><input type="date" class="form-control" id="transport_document_date"></div><div class="col-md-3"><label class="form-label">E-Way Bill No.</label><input class="form-control" id="eway_bill_no"></div><div class="col-md-3"><label class="form-label">E-Way Bill Date</label><input type="date" class="form-control" id="eway_bill_date"></div></div></div></div>
 <div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-start"><div><div><i class="fas fa-boxes-stacked me-1"></i><strong>Challan Items</strong></div><div class="form-text mb-0">Quantity is auto-calculated as Packing Size &times; No. of Units, but can be overridden</div></div><button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-bordered mb-0 ds-entry" id="item-table"><thead class="table-light"><tr><th class="c-fit m-short ds-mid">Sr.</th><th class="c-grow m-long">Item Description</th><th class="c-fit m-short">HSN/SAC</th><th class="c-num m-num ds-num">Item Stock</th><th class="c-fit m-short">Packing Size</th><th class="c-fit m-short">No. of Units</th><th class="c-num m-num ds-num">Qty</th><th class="c-num m-num ds-num">Price</th><th class="c-fit m-short">Per</th><th class="c-num m-num ds-num">Disc. %</th><th class="c-num m-num ds-num">Tax %</th><th class="c-num m-num ds-num">Amount</th><th class="c-fit"></th></tr></thead><tbody></tbody><tfoot><tr><th colspan="5" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_units">0</th><th class="c-fit m-short" id="total_qty">0</th><th class="c-fit" colspan="4"></th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th></tr></tfoot></table></div><div class="d-flex justify-content-end align-items-center gap-2 p-3 border-top price-column"><label class="form-label mb-0" for="overall_discount">Overall Discount</label><input type="number" step="0.01" min="0" class="form-control" style="max-width:150px" id="overall_discount" value="0"><span class="fw-bold ms-3">Grand Total: &#8377;<span id="grand_total">0.00</span></span></div></div></div>
 <div class="card mb-3"><div class="card-body"><div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="print_price_details" checked><label class="form-check-label" for="print_price_details">Print price and amount details</label></div><div class="d-flex justify-content-between align-items-center mb-1"><label class="form-label mb-0">Terms and Conditions</label><select class="form-select form-select-sm" id="terms_template" style="max-width:260px"><option value="">Select from master...</option>{% for tc in terms_conditions %}<option value="{{ forloop.counter0 }}" data-condition="{{ tc.condition }}">{{ tc.type|default:"Unnamed" }}</option>{% endfor %}</select></div><textarea class="form-control" id="terms" rows="3"></textarea></div></div>
 {% if request_mode %}<div class="alert alert-warning mb-3"><i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.</div>{% endif %}
 <div class="d-flex gap-2 mb-4"><button class="btn btn-primary" type="submit"><i class="fas fa-floppy-disk"></i> {% if request_mode %}Submit for Approval{% else %}{% if delivery_challan_id %}Update{% else %}Save{% endif %} Challan{% endif %}</button><button class="btn btn-dark" type="button" id="print"><i class="fas fa-print"></i> Print Challan</button><a href="{% url 'delivery_challan_list' %}" class="btn btn-danger"><i class="fas fa-times"></i> Cancel</a></div></form>
 <div class="modal fade" id="shippingAddressModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form class="modal-content" id="shipping-address-form"><div class="modal-header"><h5 class="modal-title" id="shipping_address_modal_title">Add Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label">Street Address <span class="text-danger">*</span></label><textarea class="form-control" id="shipping_street" rows="3" required></textarea></div><div class="row g-3"><div class="col-md-6"><label class="form-label">State</label><select class="form-select" id="shipping_state"><option value="">Enter State</option>{% for st in states_and_union_territories %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Pincode</label><input class="form-control" id="shipping_pincode" maxlength="10"></div></div><div class="mb-3 mt-3"><label class="form-label">City</label><input class="form-control" id="shipping_city"></div><div class="row g-3"><div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" id="shipping_contact_person"></div><div class="col-md-6"><label class="form-label">Mobile</label><input class="form-control" id="shipping_mobile"></div></div><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="shipping_is_default"><label class="form-check-label" for="shipping_is_default">Set as default shipping address</label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Address</button></div></form></div></div>
-<section class="challan-print" id="print-area">
-  <h2>DELIVERY CHALLAN</h2>
-  <div class="company-header" style="display:flex;align-items:flex-start;justify-content:center;gap:10px;text-align:left">
-    {% if company.logo %}<img src="{{ company.logo.url }}" alt="" style="width:88px;height:88px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">{% endif %}
-    <div>
-      <h3>{{ company.name }}</h3>
-      <div>{{ company.address|linebreaksbr }}</div>
-      <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
-      <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
-    </div>
-  </div>
-  <div class="detail-grid">
-    <div>
-      <b>Challan Number:</b> <span id="p_no"></span><br>
-      <b>Challan Date:</b> <span id="p_date"></span><br>
-      <b>Place of Supply:</b> <span id="p_place_of_supply"></span>
-    </div>
-    <div>
-      <b>Transporter Details</b><hr>
-      <div id="p_transporter_details"></div>
-    </div>
-  </div>
-  <div class="detail-grid">
-    <div>
-      <b>Billing Details</b><br>
-      Name: <span id="p_bill_name"></span><br>
-      GSTIN: <span id="p_bill_gstin"></span> | Mobile: <span id="p_bill_mobile"></span><br>
-      Email: <span id="p_bill_email"></span><br>
-      Address: <span id="p_billing"></span>
-    </div>
-    <div>
-      <b>Shipping Details</b><br>
-      Name: <span id="p_ship_name"></span><br>
-      GSTIN: <span id="p_ship_gstin"></span> | Mobile: <span id="p_ship_mobile"></span><br>
-      Email: <span id="p_ship_email"></span><br>
-      Address: <span id="p_shipping"></span>
-    </div>
-  </div>
-  <table>
-    <thead><tr>
-      <th class="c-fit m-short ds-mid">Sr.</th><th class="c-grow m-long">Item Description</th><th class="c-fit m-short">HSN/SAC</th><th class="c-num m-num ds-num">Qty</th><th class="c-fit m-short">Unit</th>
-      <th class="c-num m-num ds-num price-column">List Price</th><th class="c-fit m-short price-column">Disc.</th><th class="c-num m-num ds-num price-column">Tax %</th><th class="c-num m-num ds-num price-column">Amount (&#8377;)</th>
-    </tr></thead>
-    <tbody id="p_items"></tbody>
-  </table>
-  <div class="discount-row price-column" id="p_discount_row">Discount &nbsp; <span id="p_discount"></span></div>
-  <div class="total-row price-column">Total &nbsp; <span id="p_total"></span></div>
-  <div class="amount-words price-column" id="p_words"></div>
-  <div class="tax-line price-column" id="p_tax_line"></div>
-  <div class="footer-grid">
-    <div><b>Terms and Conditions</b><br><span id="p_terms" style="white-space:pre-line;"></span></div>
-    <div class="price-column"><b>Bank Details</b><br>A/c: {{ company.bank_account_no }}<br>Bank: {{ company.bank_name }}<br>IFSC: {{ company.ifsc_code }}<br>Branch: {{ company.bank_branch }}</div>
-    <div class="signature-box">For {{ company.name }}<div class="signature-line">Signature</div></div>
-  </div>
-</section>
+<!-- Filled by fillPrint() with the same GST form the list page prints,
+     so a challan looks identical whether printed here or from the list. -->
+<section id="print-area" class="challan-view-content"></section>
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261118a"></script>
 <script>
 const editId = {{ delivery_challan_id|default:'null' }};
 const requestMode = {{ request_mode|yesno:'true,false' }};
@@ -231,63 +171,55 @@ get('shipping-address-form').onsubmit=async event=>{event.preventDefault(); cons
 function payload() { return {date:value('date'),place_of_supply:value('place_of_supply'),overall_discount:value('overall_discount'),customer:value('customer'),shipping_address:value('shipping_address'),transport_mode:value('transport_mode'),vehicle_no:value('vehicle_no'),driver_name:value('driver_name'),driver_mobile:value('driver_mobile'),transporter_name:value('transporter_name'),transport_document_no:value('transport_document_no'),transport_document_date:value('transport_document_date'),eway_bill_no:value('eway_bill_no'),eway_bill_date:value('eway_bill_date'),print_price_details:get('print_price_details').checked,terms:value('terms'),items:[...document.querySelectorAll('#item-table tbody tr')].map(tr=>({item:tr.querySelector('.item').value,packing_size:tr.querySelector('.packing').value,units:tr.querySelector('.units').value,quantity:tr.querySelector('.qty').value,unit:tr.querySelector('.unit').value,price:tr.querySelector('.price').value,discount_percent:tr.querySelector('.discount').value,tax_percent:tr.querySelector('.tax').value}))}; }
 function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
 get('challan-form').onsubmit=async e=>{e.preventDefault(); const data=payload(); if(!data.items.length||data.items.some(x=>!x.item)) return window.showToast('warning', 'Add at least one item.'); if(requestMode) return submitChangeRequest('delivery_challan', data, '/delivery-challan/'); const url=editId?`/delivery_challan_api/${editId}/`:'{% url "delivery_challan_api_list" %}'; const res=await fetch(url,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!res.ok){const err=await res.json();return window.showToast('danger', err.error||'Unable to save challan.')} location.href='/delivery-challan/';};
-function numberToWordsIndian(num){
-  num=Math.round(Number(num)||0); if(num===0) return 'Zero';
-  const ones=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-  const tens=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-  function twoDigits(n){ if(n<20) return ones[n]; return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:''); }
-  function threeDigits(n){ let s=''; if(n>=100){ s+=ones[Math.floor(n/100)]+' Hundred'; n%=100; if(n) s+=' '; } if(n) s+=twoDigits(n); return s; }
-  const crore=Math.floor(num/10000000); num%=10000000;
-  const lakh=Math.floor(num/100000); num%=100000;
-  const thousand=Math.floor(num/1000); num%=1000;
-  const hundred=num;
-  const parts=[];
-  if(crore) parts.push(threeDigits(crore)+' Crore');
-  if(lakh) parts.push(twoDigits(lakh)+' Lakh');
-  if(thousand) parts.push(twoDigits(thousand)+' Thousand');
-  if(hundred) parts.push(threeDigits(hundred));
-  return parts.join(' ');
-}
-function detailLines(pairs){ return pairs.filter(([label,val])=>val).map(([label,val])=>`<b>${label}:</b> ${val}`).join('<br>'); }
-function fillPrint(){
+// The printed form is built by the shared renderer in js/hatchery/gst_invoice.js,
+// the same one the list page uses, so a challan prints identically from either
+// screen. Here the figures come from the form's own fields rather than the API,
+// since the challan may not be saved yet.
+function challanPrintData(){
   const customerOption=get('customer').selectedOptions[0];
-  get('p_no').textContent=value('challan_no');
-  get('p_date').textContent=value('date');
-  get('p_place_of_supply').textContent=value('place_of_supply');
-  get('p_transporter_details').innerHTML=detailLines([
-    ['Transporter', value('transporter_name')],
-    ['Vehicle No.', value('vehicle_no')],
-    ['Driver Name', value('driver_name')],
-    ['Driver Mobile', value('driver_mobile')],
-    ['Transporter Doc No.', value('transport_document_no')],
-    ['Transporter Doc Date', value('transport_document_date')],
-    ['E-Way Bill No.', value('eway_bill_no')],
-    ['E-Way Bill Date', value('eway_bill_date')],
-  ]);
-  get('p_bill_name').textContent=customerOption?.dataset.name||'';
-  get('p_bill_gstin').textContent=customerOption?.dataset.gstin||'';
-  get('p_bill_mobile').textContent=customerOption?.dataset.mobile||'';
-  get('p_bill_email').textContent=customerOption?.dataset.email||'';
-  get('p_billing').textContent=currentBillingAddress;
-  get('p_ship_name').textContent=customerOption?.dataset.name||'';
-  get('p_ship_gstin').textContent=customerOption?.dataset.gstin||'';
-  get('p_ship_mobile').textContent=customerOption?.dataset.mobile||'';
-  get('p_ship_email').textContent=customerOption?.dataset.email||'';
-  get('p_shipping').textContent=value('shipping_address');
-  get('p_terms').textContent=value('terms');
-  const items=[...document.querySelectorAll('#item-table tbody tr')];
-  get('p_items').innerHTML=items.map((tr,i)=>`<tr><td>${i+1}</td><td>${tr.querySelector('.item').selectedOptions[0]?.textContent||''}</td><td>${tr.querySelector('.hsn').value}</td><td>${tr.querySelector('.qty').value}</td><td>${tr.querySelector('.unit').value}</td><td class="price-column">${tr.querySelector('.price').value}</td><td class="price-column">${tr.querySelector('.discount').value}%</td><td class="price-column">${tr.querySelector('.tax').value}%</td><td class="price-column">${tr.querySelector('.amount').value}</td></tr>`).join('');
+  const priceDetails=get('print_price_details').checked;
+  const items=[...document.querySelectorAll('#item-table tbody tr')].map(tr=>({
+    item_code:(tr.querySelector('.item').selectedOptions[0]?.textContent||'').trim(),
+    item_description:'',
+    hsn_code:tr.querySelector('.hsn').value,
+    quantity:tr.querySelector('.qty').value,
+    unit:tr.querySelector('.unit').value,
+    price:tr.querySelector('.price').value,
+    discount_percent:tr.querySelector('.discount').value,
+    tax_percent:tr.querySelector('.tax').value,
+    amount:tr.querySelector('.amount').value,
+  }));
   const totalAmount=Number(get('total_amount').textContent)||0;
   const discount=Number(get('overall_discount').value)||0;
-  const grandTotal=totalAmount-discount;
-  get('p_discount').textContent=discount.toFixed(2);
-  get('p_total').textContent=grandTotal.toFixed(2);
-  get('p_words').textContent='Rs. '+numberToWordsIndian(grandTotal)+' Only';
   let totalTax=0;
-  items.forEach(tr=>{const qty=Number(tr.querySelector('.qty').value)||0,price=Number(tr.querySelector('.price').value)||0,disc=Number(tr.querySelector('.discount').value)||0,tax=Number(tr.querySelector('.tax').value)||0; totalTax+=qty*price*(1-disc/100)*tax/100;});
-  get('p_tax_line').textContent='Tax: Rs. '+totalTax.toFixed(2);
-  document.querySelectorAll('.price-column').forEach(el=>el.style.display=get('print_price_details').checked?'':'none');
-  get('p_discount_row').style.display=(get('print_price_details').checked && discount)?'':'none';
+  items.forEach(it=>{
+    const q=Number(it.quantity)||0,pr=Number(it.price)||0;
+    const d=Number(it.discount_percent)||0,t=Number(it.tax_percent)||0;
+    totalTax+=q*pr*(1-d/100)*t/100;
+  });
+  return {
+    challan_no:value('challan_no'), date:value('date'),
+    place_of_supply:value('place_of_supply'),
+    customer_name:customerOption?.dataset.name||'',
+    customer_address:currentBillingAddress,
+    customer_mobile:customerOption?.dataset.mobile||'',
+    customer_gstin:customerOption?.dataset.gstin||'',
+    customer_state:customerOption?.dataset.state||'',
+    shipping_address:value('shipping_address'),
+    transporter_name:value('transporter_name'), vehicle_no:value('vehicle_no'),
+    driver_name:value('driver_name'), driver_mobile:value('driver_mobile'),
+    transport_document_no:value('transport_document_no'),
+    transport_document_date:value('transport_document_date'),
+    eway_bill_no:value('eway_bill_no'), eway_bill_date:value('eway_bill_date'),
+    print_price_details:priceDetails, terms:value('terms'),
+    overall_discount:discount, total_tax:totalTax,
+    grand_total:totalAmount-discount,
+    company:{{ company_json|safe }},
+    items:items,
+  };
+}
+function fillPrint(){
+  get('print-area').innerHTML=renderChallanViewHtml(challanPrintData());
 }
 get('print').onclick=()=>{fillPrint();window.print();};
 (async()=>{get('date').value=localDay(); if(editId){const data=await fetch(`/delivery_challan_api/${editId}/`).then(r=>r.json()); Object.entries(data).forEach(([key,val])=>{const el=get(key);if(el&&key!=='items'){if(el.type==='checkbox')el.checked=val;else el.value=val||''}});get('challan_no').value=data.challan_no;renderBilling(get('customer').selectedOptions[0]);refreshCustomerLedgerBalance();get('shipping_address').value=data.shipping_address;await loadShippingAddresses();data.items.forEach(itemRow);} else itemRow();})();

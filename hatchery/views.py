@@ -825,6 +825,7 @@ class DeliveryChallanListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class DeliveryChallanFormTemplateView(View):
     def get(self, request, id: Optional[int] = None, request_mode: bool = False):
+        company = CompanyProfile.get_solo()
         return render(request, "delivery_challan_form.html", {
             "delivery_challan_id": id,
             "request_mode": request_mode,
@@ -833,9 +834,33 @@ class DeliveryChallanFormTemplateView(View):
             "items": _items_for_form(id, ("hatchery.DeliveryChallanItem", "challan_id", "item_id")),
             "next_challan_no": DeliveryChallan.next_challan_no() if id is None else None,
             "states_and_union_territories": STATES_AND_TERRITORIES,
-            "company": CompanyProfile.get_solo(),
+            "company": company,
+            # The printed form is built client-side from the unsaved fields, so
+            # it needs the letterhead as data, not just as template variables.
+            "company_json": json.dumps(_company_print_dict(company)),
             "terms_conditions": TermsConditions.objects.filter(party_type=TermsConditions.PartyType.CUSTOMER).exclude(condition__isnull=True).exclude(condition__exact="").order_by("type"),
         })
+
+
+def _company_print_dict(company):
+    """The company fields the printed GST form needs, in the shape
+    js/hatchery/gst_invoice.js expects. Shared by the API serializers and the
+    Add/Edit form templates so a document prints identically from either."""
+    return {
+        "name": company.name, "address": company.address, "state": company.state,
+        "mobile": company.mobile, "email": company.email,
+        "gstin": company.gstin, "pan": company.pan,
+        "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
+        "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
+        "logo_url": company.logo.url if company.logo else "",
+        # Letterhead extras the statutory form has room for. CompanyProfile
+        # doesn't carry them yet, so they print only once those fields exist;
+        # getattr keeps this working either way rather than needing a migration
+        # before the layout can be used.
+        "tagline": getattr(company, "tagline", "") or "",
+        "website": getattr(company, "website", "") or "",
+        "upi_id": getattr(company, "upi_id", "") or "",
+    }
 
 
 def _delivery_challan_to_dict(challan):
@@ -849,6 +874,7 @@ def _delivery_challan_to_dict(challan):
         "customer": challan.customer_id, "customer_name": challan.customer.name,
         "customer_address": challan.customer.address, "customer_mobile": challan.customer.mobile,
         "customer_gstin": challan.customer.gstin or "", "customer_email": challan.customer.email or "",
+        "customer_state": challan.customer.state or "",
         "shipping_address": challan.shipping_address, "transport_mode": challan.transport_mode,
         "vehicle_no": challan.vehicle_no, "driver_name": challan.driver_name,
         "driver_mobile": challan.driver_mobile, "transporter_name": challan.transporter_name,
@@ -860,13 +886,7 @@ def _delivery_challan_to_dict(challan):
         "total_quantity": str(challan.total_quantity()), "total_units": str(challan.total_units()),
         "total_amount": str(challan.total_amount()), "total_tax": str(challan.total_tax()),
         "grand_total": str(challan.grand_total()),
-        "company": {
-            "name": company.name, "address": company.address, "state": company.state,
-            "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
-            "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
-            "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
-            "logo_url": company.logo.url if company.logo else "",
-        },
+        "company": _company_print_dict(company),
         "items": [{
             "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
             "item_description": row.item.description, "hsn_code": row.item.hsn_code or "",
@@ -1758,6 +1778,7 @@ class ChickSaleFormTemplateView(View):
                     } for row in challan.items.all()],
                 }
         from account.services.bank_cash import bank_cash_accounts
+        company = CompanyProfile.get_solo()
         return render(request, "chick_sale_form.html", {
             "chick_sale_id": id,
             "request_mode": request_mode,
@@ -1771,7 +1792,10 @@ class ChickSaleFormTemplateView(View):
             "next_bill_no": ChickSale.next_bill_no() if id is None else None,
             "from_challan": json.dumps(from_challan),
             "terms_conditions": TermsConditions.objects.filter(party_type=TermsConditions.PartyType.CUSTOMER).exclude(condition__isnull=True).exclude(condition__exact="").order_by("type"),
-            "company": CompanyProfile.get_solo(),
+            "company": company,
+            # The printed bill is built client-side from the unsaved fields, so
+            # it needs the letterhead as data, not just as template variables.
+            "company_json": json.dumps(_company_print_dict(company)),
         })
 
 
@@ -1783,6 +1807,7 @@ def _chick_sale_to_dict(cs):
         "customer": cs.customer_id, "customer_name": cs.customer.name,
         "customer_address": cs.customer.address, "customer_mobile": cs.customer.mobile,
         "customer_gstin": cs.customer.gstin or "", "customer_email": cs.customer.email or "",
+        "customer_state": cs.customer.state or "",
         "warehouse": cs.warehouse_id, "warehouse_name": cs.warehouse.name,
         "delivery_challan": cs.delivery_challan_id,
         "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
@@ -1792,16 +1817,11 @@ def _chick_sale_to_dict(cs):
         "freight_amount": str(cs.freight_amount), "final_amount": str(cs.final_amount),
         "avg_amount": str(cs.avg_amount), "profit_amount": str(cs.profit_amount),
         "terms": cs.terms, "remarks": cs.remarks,
-        "company": {
-            "name": company.name, "address": company.address, "state": company.state,
-            "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
-            "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
-            "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
-            "logo_url": company.logo.url if company.logo else "",
-        },
+        "company": _company_print_dict(company),
         "items": [{
             "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
-            "item_description": row.item.description, "farm": row.farm,
+            "item_description": row.item.description, "hsn_code": row.item.hsn_code or "",
+            "farm": row.farm,
             "total_qty": str(row.total_qty), "mortality": str(row.mortality),
             "culls": str(row.culls), "sale_qty": str(row.sale_qty),
             "discount_percent": str(row.discount_percent), "discount_amount": str(row.discount_amount),

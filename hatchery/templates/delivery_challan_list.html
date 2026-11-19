@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Delivery Challan - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='delivery_challan' %}
+<link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261118a">
 <style>
   .bs-dr { color:#c0392b; font-weight:600; }
   .bs-cr { color:#0e8698; font-weight:600; }
@@ -126,46 +128,8 @@
 </div>
 
 <style>
-/* A single outer-bordered document, GST-tax-invoice style: every section is
-   its own bordered box rather than loose rows, so the printed page reads as
-   one form instead of a stack of paragraphs. */
-.challan-view-content { border:1.5px solid #000; font-size:12px; line-height:1.35; color:#000; font-family:Arial, Helvetica, sans-serif; display:flex; flex-direction:column; }
-/* The items table grows to absorb leftover page height: the filler row's
-   cells keep the column rules running down to the summary, so a one-line
-   challan still prints as a full ruled form instead of a blank gap. */
-.challan-view-content .items-wrap { flex:1 1 auto; display:flex; flex-direction:column; }
-.challan-view-content .items-wrap table { flex:1 1 auto; }
-.challan-view-content .items-wrap tbody td { vertical-align:top; }
-.challan-view-content .items-wrap tbody tr:not(.filler) td { height:1px; }
-.challan-view-content tr.filler td { border-top:none; border-bottom:none; height:100%; }
-.challan-view-content tr.total-row td { font-weight:700; border-top:1px solid #000; }
-.challan-view-content .company-header { text-align:center; border-bottom:1.5px solid #000; padding:10px 8px 8px; display:flex; align-items:center; justify-content:center; gap:14px; }
-.challan-view-content .company-header h4 { margin:0 0 2px; font-size:22px; font-weight:700; text-align:center; }
-.challan-view-content .company-header .co-text { text-align:center; font-size:11.5px; }
-.challan-view-content .doc-title { text-align:center; font-weight:700; font-size:16px; padding:5px; border-bottom:1.5px solid #000; }
-.challan-view-content .detail-grid { display:grid; grid-template-columns:1fr 1fr 1fr; border-bottom:1.5px solid #000; }
-.challan-view-content .detail-grid > div { padding:6px 10px; }
-.challan-view-content .detail-grid > div + div { border-left:1px solid #000; }
-.challan-view-content .detail-grid .dg-label { font-weight:700; text-decoration:underline; margin-bottom:4px; }
-.challan-view-content .kv-row { display:flex; justify-content:space-between; gap:8px; padding:0; }
-.challan-view-content .kv-row b { font-weight:700; }
-.challan-view-content .meta-row { display:flex; justify-content:space-between; gap:8px; padding:0; }
-.challan-view-content table { width:100%; border-collapse:collapse; }
-.challan-view-content table th, .challan-view-content table td { border:1px solid #000; padding:4px 6px; font-size:11.5px; }
-.challan-view-content table th { background:#eee; font-weight:700; text-align:center; }
-.challan-view-content table td.num, .challan-view-content table th.num { text-align:right; }
-.challan-view-content .summary-strip { display:grid; grid-template-columns:1.4fr 1fr; border-bottom:1.5px solid #000; }
-.challan-view-content .words-box { padding:8px 10px; border-right:1px solid #000; display:flex; flex-direction:column; justify-content:center; }
-.challan-view-content .amount-words { font-weight:700; }
-.challan-view-content .summary-box div { display:flex; justify-content:space-between; padding:3px 10px; font-size:12px; }
-.challan-view-content .summary-box div + div { border-top:1px solid #000; }
-.challan-view-content .summary-box .grand { font-weight:700; font-size:14px; background:#fbe4d5; }
-.challan-view-content .footer-grid { display:grid; grid-template-columns:1fr 1fr 1fr; }
-.challan-view-content .footer-grid > div { padding:8px 10px; }
-.challan-view-content .footer-grid > div + div { border-left:1px solid #000; }
-.challan-view-content .footer-grid .fg-label { font-weight:700; text-decoration:underline; margin-bottom:4px; }
-.challan-view-content .signature-box { text-align:center; display:flex; flex-direction:column; justify-content:space-between; }
-.challan-view-content .signature-line { margin-top:40px; border-top:1px solid #333; padding-top:4px; }
+/* The printed document's own rules live in css/gst-invoice.css, shared
+   with Chick Sale. Only this page's print plumbing stays here. */
 
 @media print {
   @page { size: A4; margin: 1.5cm; }
@@ -185,9 +149,6 @@
   #viewChallanModal.show .modal-footer { display: none !important; }
   #viewChallanModal.show .modal-body { padding: 0; }
 
-  /* Fill one A4 page when content is short, but let the box grow past
-     29.7cm and paginate normally once items push it over one page. */
-  .challan-view-content { min-height: calc(29.7cm - 3cm); }
 
   #print-only-container { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
 }
@@ -195,6 +156,7 @@
 
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/hatchery/gst_invoice.js' %}?v=20261118a"></script>
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
@@ -208,122 +170,10 @@ $(function () {
 
   // escapeHtml() provided globally by main.js
 
-  function numberToWordsIndian(num) {
-    num = Math.round(Number(num) || 0); if (num === 0) return "Zero";
-    const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-    function twoDigits(n) { if (n < 20) return ones[n]; return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : ""); }
-    function threeDigits(n) { let s = ""; if (n >= 100) { s += ones[Math.floor(n / 100)] + " Hundred"; n %= 100; if (n) s += " "; } if (n) s += twoDigits(n); return s; }
-    const crore = Math.floor(num / 10000000); num %= 10000000;
-    const lakh = Math.floor(num / 100000); num %= 100000;
-    const thousand = Math.floor(num / 1000); num %= 1000;
-    const hundred = num;
-    const parts = [];
-    if (crore) parts.push(threeDigits(crore) + " Crore");
-    if (lakh) parts.push(twoDigits(lakh) + " Lakh");
-    if (thousand) parts.push(twoDigits(thousand) + " Thousand");
-    if (hundred) parts.push(threeDigits(hundred));
-    return parts.join(" ");
-  }
-
-  function renderChallanViewHtml(c) {
-    const priceCols = c.print_price_details;
-    const company = c.company || {};
-    const discount = Number(c.overall_discount) || 0;
-    const grandTotal = Number(c.grand_total) || 0;
-    const totalTax = Number(c.total_tax || 0);
-    const taxableValue = grandTotal - totalTax + discount;
-
-    let html = `<div class="company-header">
-      ${company.logo_url ? `<img src="${escapeHtml(company.logo_url)}" alt="" style="width:70px;height:70px;object-fit:contain;flex-shrink:0;mix-blend-mode:multiply">` : ""}
-      <div class="co-text">
-        <h4>${escapeHtml(company.name)}</h4>
-        <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
-        <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
-        <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
-      </div>
-    </div>`;
-    html += `<div class="doc-title">Delivery Challan</div>`;
-    html += `<div class="detail-grid">
-      <div>
-        <div class="dg-label">Bill To,</div>
-        <div><b>${escapeHtml(c.customer_name)}</b></div>
-        <div>${escapeHtml(c.customer_address) || "-"}</div>
-        <div class="kv-row"><span>GSTIN</span><b>${escapeHtml(c.customer_gstin) || "-"}</b></div>
-        <div class="kv-row"><span>Mobile</span><b>${escapeHtml(c.customer_mobile) || "-"}</b></div>
-      </div>
-      <div>
-        <div class="dg-label">Ship To</div>
-        <div><b>${escapeHtml(c.customer_name)}</b></div>
-        <div>${escapeHtml(c.shipping_address) || "-"}</div>
-        <div class="kv-row"><span>Place of Supply</span><b>${escapeHtml(c.place_of_supply) || "-"}</b></div>
-      </div>
-      <div>
-        ${[
-          ["Challan No.", escapeHtml(c.challan_no)],
-          ["Date", fmtDate(c.date)],
-          ["Vehicle No.", c.vehicle_no],
-          ["Transporter", c.transporter_name],
-          ["Driver Name", c.driver_name],
-          ["Driver Mobile", c.driver_mobile],
-          ["Transport Doc No.", c.transport_document_no],
-          ["Transport Doc Date", c.transport_document_date],
-          ["E-Way Bill No.", c.eway_bill_no],
-          ["E-Way Bill Date", c.eway_bill_date],
-        ].filter(([, v]) => v).map(([label, v]) =>
-          `<div class="meta-row"><span>${label}</span><b>${escapeHtml(v)}</b></div>`).join("")}
-      </div>
-    </div>`;
-    const colCount = priceCols ? 9 : 5;
-    html += `<div class="items-wrap"><table><thead><tr>
-      <th class="ds-mid">Sr.</th><th>Item Description</th><th>HSN/SAC</th><th class="num">Qty</th><th>Unit</th>
-      ${priceCols ? "<th class='num'>Rate</th><th class='num'>Disc%</th><th class='num'>Tax%</th><th class='num'>Amount (₹)</th>" : ""}
-    </tr></thead><tbody>`;
-    (c.items || []).forEach((row, i) => {
-      const discPct = Number(row.discount_percent) || 0, taxPct = Number(row.tax_percent) || 0;
-      html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td>${escapeHtml(row.hsn_code)}</td><td class="num">${row.quantity}</td><td>${escapeHtml(row.unit)}</td>${priceCols ?
-        `<td class="num">${Number(row.price || 0).toFixed(2)}</td><td class="num">${discPct}%</td><td class="num">${taxPct}%</td><td class="num">${escapeHtml(row.amount)}</td>` : ""}</tr>`;
-    });
-    html += `<tr class="filler">${"<td>&nbsp;</td>".repeat(colCount)}</tr>`;
-    const totalQty = (c.items || []).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-    html += `<tr class="total-row"><td colspan="3">Total</td><td class="num">${totalQty.toFixed(2)}</td><td colspan="${colCount - 4}"></td></tr>`;
-    html += `</tbody></table></div>`;
-    if (priceCols) {
-      html += `<div class="summary-strip">
-        <div class="words-box">
-          <div class="amount-words">Rs. ${numberToWordsIndian(grandTotal)} Only</div>
-        </div>
-        <div class="summary-box">
-          <div><span>Taxable Amount</span><b>${taxableValue.toFixed(2)}</b></div>
-          ${discount ? `<div><span>Discount</span><b>(-) ${discount.toFixed(2)}</b></div>` : ""}
-          <div><span>Tax (IGST/CGST+SGST)</span><b>${totalTax.toFixed(2)}</b></div>
-          <div class="grand"><span>Total</span><b>₹${grandTotal.toFixed(2)}</b></div>
-        </div>
-      </div>`;
-    }
-    html += `<div class="footer-grid">
-      <div>
-        <div class="fg-label">Terms and Conditions</div>
-        ${c.terms ? escapeHtml(c.terms).replace(/\n/g, "<br>") : "-"}
-      </div>`;
-    if (priceCols) {
-      html += `<div>
-        <div class="fg-label">Bank Details</div>
-        <div class="kv-row"><span>A/c No.</span><b>${escapeHtml(company.bank_account_no) || "-"}</b></div>
-        <div class="kv-row"><span>Bank</span><b>${escapeHtml(company.bank_name) || "-"}</b></div>
-        <div class="kv-row"><span>IFSC</span><b>${escapeHtml(company.ifsc_code) || "-"}</b></div>
-        <div class="kv-row"><span>Branch</span><b>${escapeHtml(company.bank_branch) || "-"}</b></div>
-      </div>`;
-    } else {
-      html += `<div></div>`;
-    }
-    html += `<div class="signature-box">
-        <div>For ${escapeHtml(company.name)}</div>
-        <div class="signature-line">Authorised Signatory</div>
-      </div>
-    </div>`;
-    return html;
-  }
+  // The printed GST form itself — letterhead, HSN summary, words, bank strip
+  // and the intra/inter-state tax split — lives in js/hatchery/gst_invoice.js,
+  // shared with Chick Sale so the two documents print as one house format.
+  const G = window.GSTInvoice;
 
   // Attachments, as Bird Sale Receipt shows its own payment proof: one
   // thumbnail standing for the set, with the count as a small corner badge.
