@@ -261,25 +261,43 @@
    * `meta` is [label, value] pairs; blanks are dropped so a challan without
    * an e-way bill doesn't print an empty row.
    */
-  function partyBlockHtml(party, meta) {
-    var rows = [
-      ["M/S", party.name],
+  function partyRowsHtml(party) {
+    return [
+      ["Name", party.name],
       ["Address", party.address],
       ["Phone", party.mobile],
       ["GSTIN", party.gstin],
-      ["Place of Supply", party.place_of_supply]
-    ].filter(function (r) { return String(r[1] || "").trim(); });
+      ["State", party.state]
+    ].filter(function (r) { return String(r[1] || "").trim(); })
+      .map(function (r) {
+        return '<tr><th>' + esc(r[0]) + '</th><td>'
+          + esc(r[1]).replace(/\n/g, '<br>') + '</td></tr>';
+      }).join("");
+  }
 
+  function partyBlockHtml(party, meta, shipTo) {
     var metaRows = (meta || []).filter(function (r) { return String(r[1] || "").trim(); });
 
-    return '<div class="party-band">'
+    // Where the goods go is its own box beside the billed-to, the way the
+    // statutory form has it. Printing the shipping address in the billed-to
+    // box instead -- which is what this did -- meant a delivery sent
+    // somewhere else wiped the billed party's own address off the document,
+    // so the bill no longer said who was being billed. Only shown when the
+    // two actually differ; most deliveries go to the billing address and a
+    // second identical box would be noise.
+    var ship = shipTo && String(shipTo.address || "").trim()
+      && String(shipTo.address).trim() !== String(party.address || "").trim()
+      ? shipTo : null;
+
+    return '<div class="party-band' + (ship ? ' has-ship' : '') + '">'
       + '<div class="pb-customer">'
-      + '<div class="pb-head">Customer Detail</div>'
-      + '<table class="pb-table">'
-      + rows.map(function (r) {
-        return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]).replace(/\n/g, '<br>') + '</td></tr>';
-      }).join("")
-      + '</table></div>'
+      + '<div class="pb-head">' + (ship ? 'Details of Receiver (Billed To)' : 'Customer Detail') + '</div>'
+      + '<table class="pb-table">' + partyRowsHtml(party) + '</table></div>'
+      + (ship
+        ? '<div class="pb-ship">'
+          + '<div class="pb-head">Details of Receiver (Shipped To)</div>'
+          + '<table class="pb-table">' + partyRowsHtml(ship) + '</table></div>'
+        : '')
       + '<div class="pb-meta"><table class="pb-table">'
       + metaRows.map(function (r) {
         return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>';
@@ -334,10 +352,10 @@
 
     html += partyBlockHtml({
       name: c.customer_name,
-      address: c.shipping_address || c.customer_address,
+      address: c.customer_address,
       mobile: c.customer_mobile,
       gstin: c.customer_gstin,
-      place_of_supply: c.place_of_supply || c.customer_state,
+      state: c.place_of_supply || c.customer_state,
     }, [
       ["Challan No.", c.challan_no],
       ["Challan Date", fmtDate(c.date)],
@@ -349,7 +367,15 @@
       ["Vehicle No.", c.vehicle_no],
       ["Driver", c.driver_name],
       ["Driver Mobile", c.driver_mobile],
-    ]);
+    ], {
+      // Same party, different address: a delivery elsewhere is still the
+      // customer's consignment, so the name and GSTIN carry over.
+      name: c.customer_name,
+      address: c.shipping_address,
+      mobile: c.customer_mobile,
+      gstin: c.customer_gstin,
+      state: c.place_of_supply || c.customer_state,
+    });
 
     // Columns follow the statutory grid: the tax columns sit inside it under a
     // grouped CGST+SGST / IGST header, and each line closes with its own Total
@@ -448,10 +474,10 @@
 
     html += partyBlockHtml({
       name: cs.customer_name,
-      address: cs.shipping_address || cs.customer_address,
+      address: cs.customer_address,
       mobile: cs.customer_mobile,
       gstin: cs.customer_gstin,
-      place_of_supply: cs.customer_state,
+      state: cs.customer_state,
     }, [
       ["Invoice No.", cs.bill_no],
       ["Invoice Date", fmtDate(cs.date)],
@@ -461,7 +487,13 @@
       ["Driver", cs.driver],
       ["Freight", cs.freight_type],
       ["Payment", cs.payment_mode === "pay_in_bill" ? "Paid" : (cs.payment_mode ? "Credit" : "")],
-    ]);
+    ], {
+      name: cs.customer_name,
+      address: cs.shipping_address,
+      mobile: cs.customer_mobile,
+      gstin: cs.customer_gstin,
+      state: cs.customer_state,
+    });
 
     const COLS = 8;
     html += `<div class="items-wrap"><table><thead><tr>

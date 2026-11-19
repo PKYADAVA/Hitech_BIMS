@@ -61,6 +61,12 @@
 .challan-view-content .party-band {
   display: grid; grid-template-columns: 1fr 1.15fr; border-bottom: 1.5px solid #000;
 }
+/* With a separate ship-to the band carries three panels: the two receiver
+   boxes share the width evenly, as the statutory form prints them side by
+   side, and the document's own fields keep the right-hand column. */
+.challan-view-content .party-band.has-ship {
+  grid-template-columns: 1fr 1fr 1.15fr;
+}
 /* The divider runs the band's full height. Drawing it as the right panel's
    own border stopped at that panel's content, leaving a stub hanging under
    the shorter side; as a stretched pseudo-element it always reaches the
