@@ -172,12 +172,12 @@
       + '</div>';
   }
 
-  /** Letterhead: logo, company name, address, and the statutory PAN/GSTIN line. */
+  /** Letterhead: logo, company name, address, and the statutory GSTIN line. */
   /**
    * Letterhead, laid out as the statutory bill does it: company name large on
    * the left with its line of business under it, logo on the right, then the
    * address on the left against the phone/web/email block on the right.
-   * Below that the title band — PAN on the left, document name centred, copy
+   * Below that the title band — GSTIN on the left, document name centred, copy
    * marking on the right.
    */
   function headerHtml(company, docTitle, copyLabel) {
@@ -209,8 +209,8 @@
       + '<div class="lh-right">' + right.join("<br>") + '</div>'
       + '</div>'
       + '<div class="doc-title-bar">'
-      + '<div class="dt-left">' + (company.pan ? 'PAN : <b>' + esc(company.pan) + '</b>' : "")
-      + (company.gstin ? (company.pan ? '<br>' : '') + 'GSTIN : <b>' + esc(company.gstin) + '</b>' : "") + '</div>'
+      + '<div class="dt-left">'
+      + (company.gstin ? 'GSTIN : <b>' + esc(company.gstin) + '</b>' : "") + '</div>'
       + '<div class="dt-mid">' + esc(docTitle) + '</div>'
       + '<div class="dt-right">' + esc(copyLabel || "ORIGINAL FOR RECIPIENT") + '</div>'
       + '</div>';
