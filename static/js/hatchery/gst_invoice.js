@@ -363,7 +363,11 @@
       ["Transport Doc Date", c.transport_document_date ? fmtDate(c.transport_document_date) : ""],
       ["E-Way Bill No.", c.eway_bill_no],
       ["E-Way Bill Date", c.eway_bill_date ? fmtDate(c.eway_bill_date) : ""],
-      ["Transport", c.transporter_name],
+      // How the goods travelled. The form asks for it -- Road, Rail, Air or
+      // Courier -- and it belongs on the challan the driver carries, but it
+      // was the one Transportation Details field the document never printed.
+      ["Transport Mode", c.transport_mode],
+      ["Transporter", c.transporter_name],
       ["Vehicle No.", c.vehicle_no],
       ["Driver", c.driver_name],
       ["Driver Mobile", c.driver_mobile],
