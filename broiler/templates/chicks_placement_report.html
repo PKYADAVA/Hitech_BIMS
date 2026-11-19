@@ -368,7 +368,58 @@ $(function () {
   $('.dt-buttons').remove();
 
   // Custom search box drives the DataTable's global search.
-  $('#cpr-search').on('input', function () { table.search(this.value).draw(); });
+  /* The panel's own filters are a GET form, so they ride in the URL and
+     survive a refresh on their own. This box does not -- it searches the
+     rows already drawn -- so it is remembered for the sitting alongside
+     them. Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages and the refusal throws. */
+  var CPR_KEY = 'bims.chicksplacement.search';
+  var CPR_STORAGE_OK = (function () {
+    try {
+      var probe = CPR_KEY + '.probe';
+      window.sessionStorage.setItem(probe, '1');
+      var ok = window.sessionStorage.getItem(probe) === '1';
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function cprRemember(value) {
+    if (CPR_STORAGE_OK) {
+      try {
+        if (value) window.sessionStorage.setItem(CPR_KEY, value);
+        else window.sessionStorage.removeItem(CPR_KEY);
+      } catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (value) params.set(CPR_KEY, value); else params.delete(CPR_KEY);
+      var qs = params.toString();
+      window.history.replaceState(null, '',
+        window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    } catch (e) { /* older browser: the search is simply not carried */ }
+  }
+
+  function cprSaved() {
+    if (CPR_STORAGE_OK) {
+      try { return window.sessionStorage.getItem(CPR_KEY) || ''; } catch (e) { return ''; }
+    }
+    try { return new URLSearchParams(window.location.search).get(CPR_KEY) || ''; }
+    catch (e) { return ''; }
+  }
+
+  $('#cpr-search').on('input', function () {
+    table.search(this.value).draw();
+    cprRemember(this.value);
+  });
+
+  (function cprRestore() {
+    var keep = cprSaved();
+    if (!keep) return;
+    $('#cpr-search').val(keep);
+    table.search(keep).draw();
+  })();
 
   function rowValues(tr) {
     return $(tr).find('td').slice(0, COLUMN_LABELS.length).map(function () { return $(this).text().trim(); }).get();

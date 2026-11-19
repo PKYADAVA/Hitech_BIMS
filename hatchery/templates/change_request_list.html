@@ -195,12 +195,75 @@ $(function () {
     });
   }
 
+  /* ---------------------------------------------------------------------
+     Remembering which status tab was being worked through, for the sitting.
+
+     Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages and the refusal throws, so a guarded write
+     fails silently and the queue snaps back to Pending on every refresh --
+     losing your place halfway through a review. Where it is refused the tab
+     rides in the address bar instead, written with replaceState so Back
+     still leaves the queue rather than walking its own tabs.
+     --------------------------------------------------------------------- */
+  const CRL_KEY = "bims.changereq.status";
+  // The queue opens on Pending; that is where the work is, not a choice.
+  const CRL_DEFAULT = "pending";
+  const CRL_STORAGE_OK = (function () {
+    try {
+      const probe = CRL_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      const ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function crlRemember(value) {
+    const keep = value && value !== CRL_DEFAULT ? value : "";
+    if (CRL_STORAGE_OK) {
+      try {
+        if (keep) window.sessionStorage.setItem(CRL_KEY, keep);
+        else window.sessionStorage.removeItem(CRL_KEY);
+      } catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (keep) params.set(CRL_KEY, keep); else params.delete(CRL_KEY);
+      const qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the tab is simply not carried */ }
+  }
+
+  function crlSaved() {
+    if (CRL_STORAGE_OK) {
+      try { return window.sessionStorage.getItem(CRL_KEY) || ""; } catch (e) { return ""; }
+    }
+    try { return new URLSearchParams(window.location.search).get(CRL_KEY) || ""; }
+    catch (e) { return ""; }
+  }
+
   $("#status-filter button").on("click", function () {
     $("#status-filter button").removeClass("active");
     $(this).addClass("active");
     statusFilter = $(this).data("status");
     renderRows();
+    crlRemember(statusFilter);
   });
+
+  /* Put back the tab this sitting was last on. The buttons are in the page,
+     so they already exist here; renderRows() runs with the rows when they
+     arrive, so only the selection needs setting. */
+  (function crlRestore() {
+    const keep = crlSaved();
+    if (!keep || keep === CRL_DEFAULT) return;
+    const $btn = $('#status-filter button[data-status="' + keep + '"]');
+    if (!$btn.length) return;
+    $("#status-filter button").removeClass("active");
+    $btn.addClass("active");
+    statusFilter = keep;
+  })();
 
   /* ---------------- diff modal ---------------- */
   function labelize(key) {

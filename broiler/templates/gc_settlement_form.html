@@ -29,6 +29,15 @@
   #gcs-table th, #gcs-table td { padding:.35rem .45rem; }
   #gcs-table td { white-space:nowrap; }
   #gcs-table td.gcs-wrap { white-space:normal; min-width:7rem; }
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the bar's top
+     edge and tints it. Restated because this page's own .gcs-filters rules
+     are written after the stylesheet. */
+  .gcs-filters.lf-active {
+    margin-top:.6rem; padding:.5rem;
+    background:rgba(217,119,6,.07);
+    border-left:3px solid #d97706;
+    border-radius:4px;
+  }
   .gcs-filters input[type=date] { width:9.5rem; }
   .gcs-filters .gcs-flt-month { width:6rem; }
   .gcs-filters .gcs-flt-year { width:6rem; }
@@ -465,7 +474,113 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 $('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showList(); loadList(); });
-$('#gcs-filter-btn').on('click', loadList);
+/* ---------------------------------------------------------------------
+   Remembering the filter bar for the sitting.
+
+   Storage is probed rather than trusted: Edge's Tracking Prevention refuses
+   it on our own pages and the refusal throws, so a guarded write fails
+   silently and the bar resets on the next refresh. Where it is refused the
+   same values ride in the address bar instead, written with replaceState so
+   Back still leaves the register rather than walking its filter states.
+   --------------------------------------------------------------------- */
+var GCS_KEY = 'bims.gcsettlement.filters';
+var GCS_FIELDS = ['flt-from', 'flt-to', 'flt-month', 'flt-year', 'flt-branch'];
+// The week this screen opens on is not a filter anybody chose.
+var GCS_DEFAULTS = {
+  'flt-from': document.getElementById('flt-from').value,
+  'flt-to': document.getElementById('flt-to').value,
+};
+var GCS_STORAGE_OK = (function () {
+  try {
+    var probe = GCS_KEY + '.probe';
+    window.sessionStorage.setItem(probe, '1');
+    var ok = window.sessionStorage.getItem(probe) === '1';
+    window.sessionStorage.removeItem(probe);
+    return ok;
+  } catch (e) { return false; }
+})();
+
+function gcsRead() {
+  var out = {};
+  GCS_FIELDS.forEach(function (id) {
+    var node = document.getElementById(id);
+    if (node) out[id] = node.value || '';
+  });
+  return out;
+}
+
+function gcsRemember() {
+  var value = gcsRead();
+  if (GCS_STORAGE_OK) {
+    try { window.sessionStorage.setItem(GCS_KEY, JSON.stringify(value)); }
+    catch (e) { /* not remembered */ }
+    return;
+  }
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var keep = {};
+    Object.keys(value).forEach(function (k) { if (value[k]) keep[k] = value[k]; });
+    if (Object.keys(keep).length) params.set(GCS_KEY, JSON.stringify(keep));
+    else params.delete(GCS_KEY);
+    var qs = params.toString();
+    window.history.replaceState(null, '',
+      window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+  } catch (e) { /* older browser: the filter is simply not carried */ }
+}
+
+function gcsSaved() {
+  if (GCS_STORAGE_OK) {
+    try { return JSON.parse(window.sessionStorage.getItem(GCS_KEY) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  try {
+    var raw = new URLSearchParams(window.location.search).get(GCS_KEY);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch (e) { return {}; }
+}
+
+/* The bar says when it is filtering, with the same amber mark and FILTERED
+   label every other list screen uses. */
+function gcsSyncMark() {
+  var v = gcsRead();
+  var on = Object.keys(v).some(function (k) {
+    if (GCS_DEFAULTS[k] !== undefined) return v[k] && v[k] !== GCS_DEFAULTS[k];
+    return !!v[k];
+  });
+  $('.gcs-filters').toggleClass('lf-active', on);
+}
+
+/* What is remembered is what was submitted, not whatever the controls happen
+   to hold: a half-finished choice nobody submitted should not come back
+   looking like the list on screen. */
+$('#gcs-filter-btn').on('click', function () {
+  loadList();
+  gcsRemember();
+  gcsSyncMark();
+});
+
+/* Put back the bar this sitting last submitted, then run it. The month/year
+   pair rewrites the dates through main.js's period handling, so the dates go
+   last and win. */
+(function gcsRestore() {
+  var saved = gcsSaved();
+  if (!saved || !Object.keys(saved).length) { gcsSyncMark(); return; }
+  ['flt-month', 'flt-year', 'flt-branch'].forEach(function (id) {
+    if (!saved[id]) return;
+    var node = document.getElementById(id);
+    if (!node) return;
+    if (!Array.prototype.some.call(node.options, function (o) {
+      return o.value === saved[id];
+    })) return;
+    node.value = saved[id];
+    $(node).trigger('change.select2');
+  });
+  ['flt-from', 'flt-to'].forEach(function (id) {
+    if (saved[id]) { document.getElementById(id).value = saved[id]; }
+  });
+  gcsSyncMark();
+  loadList();
+})();
 $(document).on('click', '.gcs-del', function () {
   if (!confirm('Delete this settlement? The batch will be reopened.')) return;
   const id = $(this).data('id');

@@ -3,6 +3,16 @@
 {% block title %}Farmer & Farm Setup Request - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 {% block content %}
+<style>
+  /* A branch filter that is on says so: the control sits in the card's dark
+     header, where the shared .lf-active bar tint would look like damage. */
+  #f-branch.ffs-filtered {
+    border-color: #d97706;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, .35);
+    font-weight: 600;
+  }
+</style>
+
 {% include '_subnav.html' with module='broiler_transaction' active_tab='farmer_farm_setup_request' %}
 
 <style>
@@ -266,7 +276,76 @@ $(function () {
     });
   }
 
-  $("#f-branch").on("change", loadList);
+  /* ---------------------------------------------------------------------
+     Remembering the branch for the sitting. Storage is probed rather than
+     trusted: Edge's Tracking Prevention refuses it on our own pages and the
+     refusal throws, so a guarded write fails silently. Where it is refused
+     the choice rides in the address bar instead, written with replaceState
+     so Back still leaves the register.
+     --------------------------------------------------------------------- */
+  var FFS_KEY = "bims.setupreq.branch";
+  var FFS_STORAGE_OK = (function () {
+    try {
+      var probe = FFS_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      var ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function ffsRemember(value) {
+    if (FFS_STORAGE_OK) {
+      try {
+        if (value) window.sessionStorage.setItem(FFS_KEY, value);
+        else window.sessionStorage.removeItem(FFS_KEY);
+      } catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (value) params.set(FFS_KEY, value); else params.delete(FFS_KEY);
+      var qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the choice is simply not carried */ }
+  }
+
+  function ffsSaved() {
+    if (FFS_STORAGE_OK) {
+      try { return window.sessionStorage.getItem(FFS_KEY) || ""; } catch (e) { return ""; }
+    }
+    try { return new URLSearchParams(window.location.search).get(FFS_KEY) || ""; }
+    catch (e) { return ""; }
+  }
+
+  /* The control sits in the card's dark header, where the shared amber bar
+     tint would read as damage rather than as a mark, so the select itself
+     carries it: an amber ring and a title that says so. */
+  function ffsSyncMark() {
+    var on = !!$("#f-branch").val();
+    $("#f-branch").toggleClass("ffs-filtered", on)
+      .attr("title", on ? "Filtered by branch — choose \"All Branches\" to clear"
+                        : "Filter the register by branch");
+  }
+
+  $("#f-branch").on("change", function () {
+    loadList();
+    ffsRemember($(this).val() || "");
+    ffsSyncMark();
+  });
+
+  /* Put back the branch this sitting last chose. The options arrive with the
+     page, so they already exist here. */
+  (function ffsRestore() {
+    var keep = ffsSaved();
+    if (keep && $("#f-branch option").filter(function () {
+      return this.value === keep;
+    }).length) {
+      $("#f-branch").val(keep);
+    }
+    ffsSyncMark();
+  })();
 
   $("#request-search").on("input", function () {
     if (table) table.search(this.value).draw();

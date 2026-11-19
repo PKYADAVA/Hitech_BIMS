@@ -73,6 +73,18 @@
      already supposed to have stopped making. */
   .per-tab:hover:not(.is-on) { background: var(--primary-subtle);
     border-color: var(--primary); color: var(--primary); }
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the panel's
+     top edge and tints it. Restated because this page's own .per-filters
+     rule is written after the stylesheet and would otherwise win on equal
+     specificity, leaving the label floating over an unmarked panel. */
+  .per-filters.lf-active {
+    margin-top: .6rem;
+    background: rgba(217, 119, 6, .07);
+    border-left: 3px solid #d97706;
+    border-radius: 4px;
+  }
+  /* The hidden tab stays hidden: .lf-active must not override it. */
+  .per-filters.is-hidden { display: none; }
   .per-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
     gap: .4rem; padding: .45rem; }
   .per-filters.is-hidden { display: none; }
@@ -849,11 +861,104 @@ $(function () {
     el("per-basic").classList.toggle("is-hidden", pane !== "basic");
     el("per-advanced").classList.toggle("is-hidden", pane !== "advanced");
   });
-  $("#per-load, #per-load-2").on("click", load);
+  /* ---------------------------------------------------------------------
+     Remembering the filter panels for the sitting.
+
+     Storage is probed rather than trusted: Edge's Tracking Prevention
+     refuses it on our own pages and the refusal throws, so a guarded write
+     fails silently and the report resets on the next refresh. Where it is
+     refused the same values ride in the address bar instead, written with
+     replaceState so Back still leaves the report rather than walking through
+     its own filter states.
+     --------------------------------------------------------------------- */
+  const PER_KEY = "bims.pettyreport.filters";
+  const PER_FIELDS = ["per-from", "per-to", "per-branch", "per-farm", "per-shed",
+    "per-account", "per-centre", "per-paid-from", "per-mode", "per-paid-to",
+    "per-status", "per-group"];
+  // What the report opens on. A month-to-date range nobody chose is not a
+  // filter, so the mark ignores it.
+  // Grouping is how the report is arranged, not what it leaves out, and it
+  // ships set to "category" -- counting it would mark every report filtered
+  // before anybody touched anything.
+  const PER_DEFAULTS = { "per-from": el("per-from").value, "per-to": el("per-to").value,
+                         "per-group": el("per-group") ? el("per-group").value : "" };
+  const PER_STORAGE_OK = (function () {
+    try {
+      const probe = PER_KEY + ".probe";
+      window.sessionStorage.setItem(probe, "1");
+      const ok = window.sessionStorage.getItem(probe) === "1";
+      window.sessionStorage.removeItem(probe);
+      return ok;
+    } catch (e) { return false; }
+  })();
+
+  function perRead() {
+    const out = {};
+    PER_FIELDS.forEach(function (id) {
+      const node = el(id);
+      if (node) out[id] = node.value || "";
+    });
+    return out;
+  }
+
+  function perRemember() {
+    const value = perRead();
+    if (PER_STORAGE_OK) {
+      try { window.sessionStorage.setItem(PER_KEY, JSON.stringify(value)); }
+      catch (e) { /* not remembered */ }
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const keep = {};
+      Object.keys(value).forEach(function (k) { if (value[k]) keep[k] = value[k]; });
+      if (Object.keys(keep).length) params.set(PER_KEY, JSON.stringify(keep));
+      else params.delete(PER_KEY);
+      const qs = params.toString();
+      window.history.replaceState(null, "",
+        window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    } catch (e) { /* older browser: the filter is simply not carried */ }
+  }
+
+  function perSaved() {
+    if (PER_STORAGE_OK) {
+      try { return JSON.parse(window.sessionStorage.getItem(PER_KEY) || "{}") || {}; }
+      catch (e) { return {}; }
+    }
+    try {
+      const raw = new URLSearchParams(window.location.search).get(PER_KEY);
+      return raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { return {}; }
+  }
+
+  /* Both panels say when they are filtering, with the same amber mark and
+     FILTERED label every other list screen uses. The advanced panel often
+     sits collapsed, so marking only the basic one would hide the fact that
+     something out of sight is narrowing the report. */
+  function perSyncMark() {
+    const v = perRead();
+    const on = Object.keys(v).some(function (k) {
+      if (PER_DEFAULTS[k] !== undefined) return v[k] && v[k] !== PER_DEFAULTS[k];
+      return !!v[k];
+    });
+    $("#per-basic, #per-advanced").toggleClass("lf-active", on);
+    $("#per-clear").toggleClass("btn-warning", on);
+  }
+
+  /* What is remembered is what was searched on, not whatever the controls
+     happen to hold: a half-finished choice nobody pressed Search on should
+     not come back looking like the report on screen. */
+  $("#per-load, #per-load-2").on("click", function () {
+    load();
+    perRemember();
+    perSyncMark();
+  });
   $("#per-group").on("change", function () {
     showingSummary = true;
     el("per-toggle-view").innerHTML = '<i class="fas fa-list"></i> Detail';
     load();
+    perRemember();
+    perSyncMark();
   });
   $("#per-toggle-view").on("click", function () {
     showingSummary = !showingSummary;
@@ -866,6 +971,11 @@ $(function () {
     $(".per-filters select").val("").trigger("change.select2");
     narrowFarms();
     load();
+    if (PER_STORAGE_OK) {
+      try { window.sessionStorage.removeItem(PER_KEY); } catch (e) { /* nothing stored */ }
+    }
+    perRemember();
+    perSyncMark();
   });
   $("#per-print").on("click", () => window.print());
 
@@ -902,7 +1012,43 @@ $(function () {
                                          attributeFilter: ["data-theme"] });
 
   narrowFarms();
-  load();
+  /* After the page has set its own month-to-date range, so a remembered
+     panel wins over it rather than being overwritten. */
+  (function perRestore() {
+    const saved = perSaved();
+    if (!saved || !Object.keys(saved).length) { perSyncMark(); load(); return; }
+    PER_FIELDS.forEach(function (id) {
+      if (!saved[id]) return;
+      const node = el(id);
+      if (!node) return;
+      if (node.tagName === "SELECT"
+          && !Array.prototype.some.call(node.options, function (o) {
+            return o.value === saved[id];
+          })) return;
+      node.value = saved[id];
+    });
+    $(".per-filters select").trigger("change.select2");
+    // A farm belongs to a branch and a shed to a farm, so those options are
+    // rebuilt here; set them again now that they exist.
+    narrowFarms();
+    ["per-farm", "per-shed"].forEach(function (id) {
+      if (!saved[id]) return;
+      const node = el(id);
+      if (node && Array.prototype.some.call(node.options, function (o) {
+        return o.value === saved[id];
+      })) { node.value = saved[id]; $(node).trigger("change.select2"); }
+    });
+    // Basic and Advanced are two tabs, one showing at a time. An advanced
+    // filter that is set but on the tab nobody is looking at would narrow
+    // the report with nothing on screen to say so, so its tab is the one
+    // that opens -- switched through the tab button, so the buttons and the
+    // panels stay in step rather than both panels showing at once.
+    const advancedOn = ["per-centre", "per-paid-from", "per-mode", "per-paid-to",
+      "per-status"].some(function (id) { return !!saved[id]; });
+    if (advancedOn) { $('.per-tab[data-pane="advanced"]').trigger("click"); }
+    perSyncMark();
+    load();
+  })();
 });
 </script>
 <script>

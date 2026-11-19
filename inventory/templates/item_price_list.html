@@ -24,6 +24,16 @@
   .ipl-sub { font-size: .8rem; color: #64748b; }
   .ipl-head-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
 
+  /* The FILTERED mark (design-system.css, .lf-active) rides on the bar's top
+     edge and tints it. Restated because this page's own .ipl-filters rule is
+     written after the stylesheet and would otherwise win on equal
+     specificity, leaving the label floating over an unmarked bar. */
+  .ipl-filters.lf-active {
+    margin-top: .6rem;
+    background: rgba(217, 119, 6, .07);
+    border-left: 3px solid #d97706;
+    border-radius: 4px;
+  }
   .ipl-filters {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: .6rem; padding: .7rem;
@@ -147,7 +157,7 @@
     </div>
   </div>
 
-  <div class="ipl-filters">
+  <div class="ipl-filters" id="ipl-filter-bar">
     <div class="ipl-filter">
       <span class="ipl-filter-icon" style="--ipl-bg:#e8f1fd;--ipl-fg:#1d6fe0"><i class="fas fa-layer-group"></i></span>
       <div class="ipl-filter-body">
@@ -775,13 +785,91 @@ $(function () {
         table.ajax.reload(null, false);
     }
 
-    filters.category.on("change", () => table.draw());
-    filters.status.on("change", () => table.draw());
-    $("#ipl-below-cost").on("change", () => table.draw());
+    /* -------------------------------------------------------------------
+       Remembering the filter bar for the sitting.
+
+       Storage is probed rather than trusted: Edge's Tracking Prevention
+       refuses it on our own pages and the refusal throws, so a guarded
+       write fails silently and the bar resets on the next refresh. Where it
+       is refused the same values ride in the address bar instead, written
+       with replaceState so Back still leaves the list rather than walking
+       through its own filter states.
+       ------------------------------------------------------------------- */
+    const IPL_KEY = "bims.itemprice.filters";
+    // Status ships set to "all", which is not a filter anybody chose.
+    const IPL_DEFAULTS = { status: "all" };
+    const IPL_STORAGE_OK = (function () {
+        try {
+            const probe = IPL_KEY + ".probe";
+            window.sessionStorage.setItem(probe, "1");
+            const ok = window.sessionStorage.getItem(probe) === "1";
+            window.sessionStorage.removeItem(probe);
+            return ok;
+        } catch (e) { return false; }
+    })();
+
+    function iplRead() {
+        return {
+            category: filters.category.val() || "",
+            status: filters.status.val() || "",
+            search: filters.search.val() || "",
+            belowCost: $("#ipl-below-cost").prop("checked") ? "1" : "",
+        };
+    }
+
+    function iplRemember() {
+        const value = iplRead();
+        if (IPL_STORAGE_OK) {
+            try { window.sessionStorage.setItem(IPL_KEY, JSON.stringify(value)); }
+            catch (e) { /* not remembered */ }
+            return;
+        }
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const keep = {};
+            Object.keys(value).forEach((k) => { if (value[k]) keep[k] = value[k]; });
+            if (Object.keys(keep).length) params.set(IPL_KEY, JSON.stringify(keep));
+            else params.delete(IPL_KEY);
+            const qs = params.toString();
+            window.history.replaceState(null, "",
+                window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+        } catch (e) { /* older browser: the filter is simply not carried */ }
+    }
+
+    function iplSaved() {
+        if (IPL_STORAGE_OK) {
+            try { return JSON.parse(window.sessionStorage.getItem(IPL_KEY) || "{}") || {}; }
+            catch (e) { return {}; }
+        }
+        try {
+            const raw = new URLSearchParams(window.location.search).get(IPL_KEY);
+            return raw ? (JSON.parse(raw) || {}) : {};
+        } catch (e) { return {}; }
+    }
+
+    /* The bar says when it is filtering, with the same amber mark and
+       FILTERED label every other list screen uses. */
+    function iplSyncMark() {
+        const v = iplRead();
+        const on = Object.keys(v).some((k) => {
+            if (IPL_DEFAULTS[k] !== undefined) return v[k] && v[k] !== IPL_DEFAULTS[k];
+            return !!v[k];
+        });
+        $("#ipl-filter-bar").toggleClass("lf-active", on);
+        $("#ipl-clear").toggleClass("btn-warning", on);
+    }
+
+    filters.category.on("change", () => { table.draw(); iplRemember(); iplSyncMark(); });
+    filters.status.on("change", () => { table.draw(); iplRemember(); iplSyncMark(); });
+    $("#ipl-below-cost").on("change", () => { table.draw(); iplRemember(); iplSyncMark(); });
     let searchTimer = null;
     filters.search.on("input", function () {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => table.search(filters.search.val()).draw(), 350);
+        searchTimer = setTimeout(() => {
+            table.search(filters.search.val()).draw();
+            iplRemember();
+            iplSyncMark();
+        }, 350);
     });
 
     $("#ipl-clear").on("click", function () {
@@ -790,7 +878,30 @@ $(function () {
         filters.search.val("");
         $("#ipl-below-cost").prop("checked", false);
         table.search("").draw();
+        if (IPL_STORAGE_OK) {
+            try { window.sessionStorage.removeItem(IPL_KEY); } catch (e) { /* nothing stored */ }
+        }
+        iplRemember();
+        iplSyncMark();
     });
+
+    /* Put back the bar this sitting last used. The category options come
+       from the server with the page, so they already exist here. */
+    (function iplRestore() {
+        const saved = iplSaved();
+        if (!saved || !Object.keys(saved).length) { iplSyncMark(); return; }
+        if (saved.category && filters.category.find("option").filter(function () {
+            return this.value === saved.category;
+        }).length) { filters.category.val(saved.category); }
+        if (saved.status && filters.status.find("option").filter(function () {
+            return this.value === saved.status;
+        }).length) { filters.status.val(saved.status); }
+        if (saved.search) { filters.search.val(saved.search); table.search(saved.search); }
+        if (saved.belowCost) { $("#ipl-below-cost").prop("checked", true); }
+        filters.category.add(filters.status).trigger("change.select2");
+        table.draw();
+        iplSyncMark();
+    })();
 
     // ---- selection ---------------------------------------------------------
     function syncCheckAll() {
