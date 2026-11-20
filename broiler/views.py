@@ -4001,8 +4001,22 @@ class BirdSaleListTemplateView(View):
 class BirdSaleFormTemplateView(View):
     def get(self, request, id=None, request_mode: bool = False):
         from hr.models import Employee
+        # Several sales edited on one sheet: the register sends their ids and
+        # each arrives as its own row, which is the grid the sheet already
+        # adds through. Scoped to what this user may see, so a guessed id in
+        # the address bar opens nothing they could not open one at a time.
+        multi_ids = []
+        if id is None:
+            raw = (request.GET.get("edit") or "").strip()
+            if raw:
+                wanted = [int(p) for p in raw.split(",") if p.strip().isdigit()]
+                qs = _scope_rows(request.user,
+                                 BirdSale.objects.filter(id__in=wanted))
+                multi_ids = list(qs.order_by("date", "id")
+                                 .values_list("id", flat=True))
         return render(request, "bird_sale_form.html", {
             "instance": BirdSale.objects.filter(id=id).first() if id else None,
+            "multi_ids_json": json.dumps(multi_ids),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "customers": customers_for(request.user, Customer.objects.order_by("name")),
             "farmers": Farmer.objects.order_by("farmer_name"),
@@ -4239,8 +4253,20 @@ class BirdSaleReceiptFormTemplateView(View):
     def get(self, request, id=None, request_mode: bool = False):
         from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
         import json as _json
+        # Several receipts edited on one sheet; see BirdSaleFormTemplateView.
+        multi_ids = []
+        if id is None:
+            raw = (request.GET.get("edit") or "").strip()
+            if raw:
+                wanted = [int(p) for p in raw.split(",") if p.strip().isdigit()]
+                qs = scope_multi(request.user,
+                                 BirdSaleReceipt.objects.filter(id__in=wanted),
+                                 sectors="location_id")
+                multi_ids = list(qs.order_by("date", "id")
+                                 .values_list("id", flat=True))
         return render(request, "bird_sale_receipt_form.html", {
             "instance": BirdSaleReceipt.objects.filter(id=id).first() if id else None,
+            "multi_ids_json": json.dumps(multi_ids),
             "locations": Warehouse.objects.order_by("name"),
             "customers": customers_for(request.user, Customer.objects.order_by("name")),
             "farmers": Farmer.objects.order_by("farmer_name"),

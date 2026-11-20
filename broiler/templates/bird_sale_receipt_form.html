@@ -37,7 +37,7 @@
 </style>
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-receipt"></i> {% if instance %}Edit{% else %}Add{% endif %} Bird Receipt</div>
+  <div class="page-header-title" id="page-title"><i class="fas fa-receipt"></i> {% if instance %}Edit{% else %}Add{% endif %} Bird Receipt</div>
   <div class="page-header-right"><a href="{% url 'bird_sale_receipt_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
 </div>
 
@@ -45,11 +45,11 @@
   <div class="card mb-3">
     <div class="card-body">
       <div class="row g-3 align-items-end">
-        <div class="col-md-2">
+        <div class="col-md-2" id="date-col">
           <label class="form-label">Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" id="date" value="{{ today }}" required>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-2" id="location-col">
           <label class="form-label">Location <span class="text-danger">*</span></label>
           <select class="form-select" id="location" required>
             <option value="">select</option>
@@ -79,6 +79,9 @@
         <table class="table table-bordered table-sm mb-0 align-middle ds-entry" id="row-table">
           <thead class="table-light">
             <tr>
+              <th class="c-fit m-short bsr-rownum d-none">Trnum</th>
+              <th class="c-fit m-short bsr-rowdate d-none">Date</th>
+              <th class="c-fit m-short bsr-rowloc d-none">Location</th>
               <th class="c-fit m-mid">Customer / Farmer <span class="text-danger">*</span></th>
               <th class="c-num m-num ds-num">Ledger Balance</th>
               <th class="c-fit m-short">Mode <span class="text-danger">*</span></th>
@@ -145,12 +148,16 @@ once saving returns an id.
 <script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 const INSTANCE_ID = {{ instance.id|default:"null" }};
+// Several receipts on one sheet, each as its own row.
+const MULTI_IDS = {{ multi_ids_json|default:"[]"|safe }};
+const isMulti = MULTI_IDS.length > 0;
 const requestMode = {{ request_mode|yesno:'true,false' }};
 const get = id => document.getElementById(id);
 
 const customerOptions = `<option value="">select</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
 const farmerOptions = `<option value="">select</option>{% for f in farmers %}<option value="{{ f.id }}">{{ f.farmer_name|escapejs }}</option>{% endfor %}`;
 const modeOptions = `{% for m in payment_modes %}<option value="{{ m|escapejs }}">{{ m|escapejs }}</option>{% endfor %}`;
+const locationOptions = `<option value="">select</option>{% for l in locations %}<option value="{{ l.id }}">{{ l.name|escapejs }}</option>{% endfor %}`;
 const MODE_MAP = {{ payment_mode_map_json|safe }};
 // Choosing a payment mode narrows the account list to its mapped Bank/Cash accounts.
 function applyPaymentMode(tr) {
@@ -178,6 +185,9 @@ function isFarmerReceipt() {
 function row() {
   const tr = document.createElement('tr');
   tr.innerHTML = `
+    <td class="bsr-rownum d-none"><span class="small fw-semibold row-num"></span></td>
+    <td class="bsr-rowdate d-none"><input type="date" class="form-control form-control-sm row-date"></td>
+    <td class="bsr-rowloc d-none"><select class="form-select form-select-sm row-location">${locationOptions}</select></td>
     <td>
       <select class="form-select form-select-sm customer">${customerOptions}</select>
       <select class="form-select form-select-sm farmer d-none">${farmerOptions}</select>
@@ -207,8 +217,9 @@ function row() {
 function refreshRowAddButtons() {
   const rows = document.querySelectorAll('#row-table tbody tr');
   rows.forEach((tr, i) => {
-    tr.querySelector('.add-row-inline').classList.toggle('d-none', INSTANCE_ID !== null || i !== rows.length - 1);
-    tr.querySelector('.remove').disabled = INSTANCE_ID !== null || rows.length === 1;
+    const locked = INSTANCE_ID !== null || isMulti;
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', locked || i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = locked || rows.length === 1;
   });
 }
 
@@ -227,12 +238,28 @@ get('sale-type-customer').addEventListener('change', applySaleTypeToAllRows);
 get('sale-type-farmer').addEventListener('change', applySaleTypeToAllRows);
 
 get('location').addEventListener('change', function () {
+  // Editing several receipts, each row remembers the place it was taken at,
+  // so a header that only looked set would be a lie. Changing it here is
+  // taken as meaning it for every row on the sheet.
+  const chosen = this.value;
+  if (chosen) {
+    document.querySelectorAll('#row-table tbody tr').forEach(tr => {
+      if (tr.dataset.rowLocation) tr.dataset.rowLocation = chosen;
+      const rl = tr.querySelector('.row-location');
+      if (rl && rl.value) {
+        rl.value = chosen;
+        if (window.jQuery) jQuery(rl).trigger('change.select2');
+      }
+    });
+  }
   document.querySelectorAll('#row-table tbody tr').forEach(refreshRowBalance);
 });
 
 let balanceToken = 0;
 function refreshRowBalance(tr) {
-  const locationId = get('location').value;
+  // A row that names its own branch is asked about at that branch.
+  const rowLoc = tr.querySelector('.row-location');
+  const locationId = (rowLoc && rowLoc.value) || get('location').value;
   const saleType = isFarmerReceipt() ? 'farmer' : 'customer';
   const buyerId = saleType === 'farmer' ? tr.querySelector('.farmer').value : tr.querySelector('.customer').value;
   const balanceInput = tr.querySelector('.balance');
@@ -250,7 +277,8 @@ function refreshRowBalance(tr) {
 }
 
 get('row-table').addEventListener('change', e => {
-  if (e.target.classList.contains('customer') || e.target.classList.contains('farmer')) {
+  if (e.target.classList.contains('customer') || e.target.classList.contains('farmer')
+      || e.target.classList.contains('row-location')) {
     refreshRowBalance(e.target.closest('tr'));
   }
 });
@@ -297,11 +325,28 @@ get('row-table').addEventListener('click', e => {
 get('receipt-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const locationId = get('location').value;
-  if (!locationId) { alert('Select a Location.'); return; }
+  // Editing several, the branch is stated on each row, so the hidden header
+  // is not what to complain about -- a row left blank is.
+  if (isMulti) {
+    const blank = [...document.querySelectorAll('#row-table tbody tr')]
+      .some(tr => { const l = tr.querySelector('.row-location'); return l && !l.value; });
+    if (blank) { alert('Every row needs a Location.'); return; }
+  } else if (!locationId) {
+    alert('Select a Location.'); return;
+  }
   const saleType = isFarmerReceipt() ? 'farmer' : 'customer';
   const date = get('date').value;
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
-    date: date, location: locationId, sale_type: saleType,
+    // Adding, every row is filed on the sheet's own day and at its location.
+    // Editing several at once, each receipt keeps the day and place it was
+    // actually taken on -- they are the row's, carried on it, and the sheet's
+    // controls only stand in for them while a new batch is being entered.
+    _id: tr.dataset.rowId || "",
+    date: (tr.querySelector('.row-date') && tr.querySelector('.row-date').value)
+          || tr.dataset.rowDate || date,
+    location: (tr.querySelector('.row-location') && tr.querySelector('.row-location').value)
+              || tr.dataset.rowLocation || locationId,
+    sale_type: saleType,
     customer: saleType === 'customer' ? tr.querySelector('.customer').value : '',
     farmer: saleType === 'farmer' ? tr.querySelector('.farmer').value : '',
     mode: tr.querySelector('.mode').value,
@@ -327,11 +372,53 @@ get('receipt-form').addEventListener('submit', function (e) {
   if (requestMode && isEdit) {
     return submitChangeRequest('bird_sale_receipt', INSTANCE_ID, rows[0], "{% url 'bird_sale_receipt_list' %}");
   }
+
+  // Several receipts saved together, each back to its own through the same
+  // endpoint a single edit uses. Its own idempotency key per receipt: the
+  // guard turns away several requests sharing one, which is what a single
+  // button press would otherwise give them.
+  if (isMulti) {
+    // Each row says which receipt it is, and that is what is written back.
+    // Matching by position would put one receipt's figures on another the
+    // moment the rows and the id list fell out of step -- a sort, a removed
+    // row, a receipt deleted in another tab. A row with no id of its own is
+    // refused rather than guessed at.
+    const orphan = rows.find(r => !r._id);
+    if (orphan) {
+      alert("A row has lost the receipt it belongs to. Reload the sheet and try again.");
+      return;
+    }
+    const saves = rows.map(row => {
+      const id = row._id;
+      const body = Object.assign({}, row);
+      delete body._id;
+      return fetch(`{% url 'bird_sale_receipt_api_list' %}${id}/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}',
+          'Idempotency-Key': `bsr-multi-${Date.now()}-${id}`,
+        },
+        body: JSON.stringify(body),
+      }).then(r => ({ id, ok: r.ok }));
+    });
+    return Promise.all(saves).then(async results => {
+      const failed = results.filter(r => !r.ok);
+      await uploadPendingProof(rows.map(r => r._id));
+      if (failed.length) {
+        alert(`${failed.length} of ${results.length} receipts could not be saved.`);
+        return;
+      }
+      window.location.href = "{% url 'bird_sale_receipt_list' %}";
+    }).catch(err => alert(err.message));
+  }
   const url = isEdit ? `{% url 'bird_sale_receipt_api_list' %}${INSTANCE_ID}/` : "{% url 'bird_sale_receipt_api_list' %}";
   fetch(url, {
     method: isEdit ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-    body: JSON.stringify(isEdit ? rows[0] : { rows: rows }),
+    body: JSON.stringify(isEdit
+      ? (({ _id, ...rest }) => rest)(rows[0])
+      : { rows: rows.map(({ _id, ...rest }) => rest) }),
   }).then(async r => {
     if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
     // The receipt has an id only now, so any proof picked on the sheet goes
@@ -494,6 +581,127 @@ async function uploadPendingProof(ids) {
       + failures.join('\n') + '\n\nAttach them from the register.');
   }
 }
+
+{% if multi_ids_json and multi_ids_json != "[]" %}
+/* Several receipts on one sheet, filled from the register's own API. The
+   date and the location are the sheet's, not each row's, so receipts that
+   differ in either cannot share one and are sent back to be edited singly --
+   saving them together would quietly move some to another day or branch. */
+(function prefillMulti() {
+  fetch("{% url 'bird_sale_receipt_api_list' %}?from_date=1900-01-01&to_date=2999-12-31")
+    .then(r => r.json())
+    .then(data => {
+      const all = Array.isArray(data) ? data : (data.rows || data.results || []);
+      const byId = new Map(all.map(x => [String(x.id), x]));
+      const list = MULTI_IDS.map(id => byId.get(String(id))).filter(Boolean);
+      if (!list.length) { alert("Those receipts could not be loaded."); return; }
+      const first = list[0];
+      // A mixed selection of customer and farmer receipts cannot share one
+      // sheet: that choice decides which party column every row shows, and
+      // it is one choice for the whole sheet. Dates and locations are the
+      // row's own, so receipts taken on different days or at different
+      // places edit together quite happily -- each keeps what it had.
+      if (list.some(x => x.sale_type !== first.sale_type)) {
+        alert("Those receipts are a mix of customer and farmer receipts, which cannot be edited on one sheet. Edit them separately.");
+        window.location.href = "{% url 'bird_sale_receipt_list' %}";
+        return;
+      }
+      // Keep the header's own fields filled: the balance lookup and the
+      // save guard still read them, and they stand for the sheet when a
+      // row has nothing of its own to say.
+      get('date').value = first.date || "";
+      if (first.location) get('location').value = first.location;
+      document.querySelectorAll('.bsr-rownum').forEach(el => el.classList.remove('d-none'));
+      // The page is editing existing records, not adding new ones --
+      // say so, and say how many.
+      const title = document.getElementById('page-title');
+      if (title) {
+        title.innerHTML = '<i class="fas fa-receipt"></i> Edit ' + list.length + ' Receipts';
+      }
+      // Every receipt keeps its own day and place, so those belong on the
+      // row that states them. One header standing over receipts taken on
+      // several days, at several branches, could only be a half-truth --
+      // so the header band goes, and the rows carry the detail.
+      document.querySelectorAll('.bsr-rowdate, .bsr-rowloc')
+        .forEach(el => el.classList.remove('d-none'));
+      // Only Date and Location move down to the rows. Customer/Farmer is a
+      // genuine choice for the whole sheet, so it stays in the band.
+      ['date-col', 'location-col'].forEach(id => {
+        const c = document.getElementById(id);
+        if (c) c.classList.add('d-none');
+      });
+      get('date').required = false;
+      get('location').required = false;
+      const radio = document.querySelector(`input[name="sale_type"][value="${first.sale_type}"]`);
+      if (radio) { radio.checked = true; if (window.applySaleTypeToAllRows) applySaleTypeToAllRows(); }
+      document.querySelector('#row-table tbody').innerHTML = "";
+      list.forEach(rec => {
+        const tr = row();
+        // Stamped on the row, so saving puts each receipt back on its own
+        // day and at its own location rather than the sheet's.
+        // The row carries the receipt it came from, so saving writes back to
+        // the record the row is showing rather than to whatever sits at the
+        // same position in a separate list. A row that lost its id is not
+        // guessed at -- it is refused.
+        tr.dataset.rowId = rec.id;
+        tr.dataset.rowDate = rec.date || "";
+        tr.dataset.rowLocation = rec.location || "";
+        const num = tr.querySelector('.row-num');
+        if (num) { num.textContent = rec.receipt_no || ""; num.title = `Receipt ${rec.receipt_no || rec.id}`; }
+        tr.querySelector('.bsr-rownum').classList.remove('d-none');
+        tr.querySelector('.bsr-rowdate').classList.remove('d-none');
+        tr.querySelector('.bsr-rowloc').classList.remove('d-none');
+        const box = tr.querySelector('.row-date');
+        if (box) box.value = rec.date || "";
+        const loc = tr.querySelector('.row-location');
+        if (loc) {
+          // A receipt filed at a branch that has since been retired would
+          // otherwise come back blank and be saved away from it.
+          const want = String(rec.location || "");
+          if (want && ![...loc.options].some(o => o.value === want)) {
+            const o = document.createElement('option');
+            o.value = want;
+            o.textContent = rec.location_name || want;
+            loc.appendChild(o);
+          }
+          loc.value = want;
+          if (window.jQuery) jQuery(loc).trigger('change.select2');
+        }
+        const party = tr.querySelector(rec.sale_type === "Farmer" ? '.farmer' : '.customer');
+        if (party) party.value = rec[rec.sale_type === "Farmer" ? "farmer" : "customer"] || "";
+        // The mode narrows the account list, so it goes first and the list is
+        // rebuilt before the saved account is put back -- setting both at
+        // once left the account cleared by the rebuild, and the sheet then
+        // refused to save a receipt that had an account all along.
+        const mode = tr.querySelector('.mode');
+        if (mode) { mode.value = rec.mode || ""; applyPaymentMode(tr); }
+        const acc = tr.querySelector('.account');
+        if (acc && rec.receipt_account) {
+          // A receipt filed long ago may name an account the picker no
+          // longer offers -- a parent account, or one since retired. Keeping
+          // it is the honest thing: dropping it leaves the row blank and the
+          // sheet refuses to save a receipt that had an account all along,
+          // and silently saving it to a different one would be worse.
+          const want = String(rec.receipt_account);
+          if (![...acc.options].some(o => o.value === want)) {
+            const o = document.createElement('option');
+            o.value = want;
+            o.textContent = rec.receipt_account_name || want;
+            acc.appendChild(o);
+          }
+          acc.value = want;
+          if (window.jQuery) jQuery(acc).trigger('change.select2');
+        }
+        tr.querySelector('.amount').value = rec.amount || 0;
+        const ref = tr.querySelector('.reference-no'); if (ref) ref.value = rec.reference_no || "";
+        const rem = tr.querySelector('.remarks'); if (rem) rem.value = rec.remarks || "";
+      });
+      if (window.refreshRowAddButtons) refreshRowAddButtons();
+      if (window.recalcTotals) recalcTotals();
+    })
+    .catch(() => alert("Those receipts could not be loaded."));
+})();
+{% endif %}
 
 {% if instance %}
 (function prefillEdit() {

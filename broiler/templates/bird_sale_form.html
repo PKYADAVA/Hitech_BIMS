@@ -46,26 +46,31 @@
      take two lines. */
   #row-table { table-layout: fixed; width: 1px; min-width: calc(100% - 1px); }
   #row-table thead th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
-  #row-table thead th:nth-child(1)  { width: 125px; }  /* Date */
-  #row-table thead th:nth-child(2)  { width: 155px; }  /* Customer / Farmer */
-  #row-table thead th:nth-child(3)  { width: 90px; }   /* Ledger Balance */
-  #row-table thead th:nth-child(4)  { width: 122px; }   /* Doc No. */
-  #row-table thead th:nth-child(5)  { width: 155px; }  /* Farm */
-  #row-table thead th:nth-child(6)  { width: 118px; }  /* Batch */
-  #row-table thead th:nth-child(7)  { width: 75px; }   /* Birds */
-  #row-table thead th:nth-child(8)  { width: 90px; }   /* Net Wt. */
-  #row-table thead th:nth-child(9)  { width: 70px; }   /* Avg Wt. */
-  #row-table thead th:nth-child(10) { width: 85px; }   /* Rate */
-  #row-table thead th:nth-child(11) { width: 85px; }   /* RoundOff */
-  #row-table thead th:nth-child(12) { width: 105px; }  /* Amount */
-  #row-table thead th:nth-child(13) { width: 140px; }  /* Lifting Supervisor */
-  #row-table thead th:nth-child(14) { width: 115px; }  /* Vehicle */
-  #row-table thead th:nth-child(15) { width: 130px; }  /* Driver */
-  #row-table thead th:nth-child(16) { width: 170px; }  /* Remarks */
+  /* Widths belong to the column, not to its position. They used to be set by
+     nth-child, so adding the Trnum column shifted every width one place to
+     the left and Batch ended up wearing the Birds column's 75px. Named
+     classes cannot drift that way when a column is added or moved. */
+  #row-table thead th.w-trnum { width: 125px; }
+  #row-table thead th.w-date  { width: 125px; }
+  #row-table thead th.w-party { width: 155px; }
+  #row-table thead th.w-bal   { width: 90px; }
+  #row-table thead th.w-doc   { width: 122px; }
+  #row-table thead th.w-farm  { width: 155px; }
+  #row-table thead th.w-batch { width: 118px; }
+  #row-table thead th.w-birds { width: 75px; }
+  #row-table thead th.w-net   { width: 90px; }
+  #row-table thead th.w-avg   { width: 70px; }
+  #row-table thead th.w-rate  { width: 85px; }
+  #row-table thead th.w-round { width: 85px; }
+  #row-table thead th.w-amt   { width: 105px; }
+  #row-table thead th.w-sup   { width: 140px; }
+  #row-table thead th.w-veh   { width: 115px; }
+  #row-table thead th.w-drv   { width: 130px; }
+  #row-table thead th.w-rem   { width: 170px; }
   /* Row buttons, now three of them plus any evidence thumbnails. At the old
      80px -- sized for just Add and Delete -- the extra content ran past the
      cell and was clipped by the table's fixed layout. */
-  #row-table thead th:nth-child(17) { width: 155px; }  /* row buttons */
+  #row-table thead th.w-act   { width: 155px; }
   #row-table .form-control { width: 100%; min-width: 0; }
   /* Headers break between words, never inside one ("ROUNDOF F"). */
   #row-table thead th { overflow-wrap: normal; word-break: normal; }
@@ -88,7 +93,7 @@
 </style>
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-truck-loading"></i> {% if instance %}Edit{% else %}Add{% endif %} Bird Sale</div>
+  <div class="page-header-title" id="page-title"><i class="fas fa-truck-loading"></i> {% if instance %}Edit{% else %}Add{% endif %} Bird Sale</div>
   <div class="page-header-right"><a href="{% url 'bird_sale_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
 </div>
 
@@ -115,23 +120,24 @@
         <table class="table table-bordered table-sm mb-0 align-middle ds-entry" id="row-table">
           <thead class="table-light">
             <tr>
-              <th class="c-fit m-date ds-mid">Date <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid">Customer / Farmer <span class="text-danger">*</span></th>
-              <th class="c-num m-num ds-num">Ledger Balance</th>
-              <th class="c-fit m-short">Doc No.</th>
-              <th class="c-fit m-mid">Farm <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid">Batch</th>
-              <th class="c-fit m-short">Birds</th>
-              <th class="c-fit m-short">Net Wt. <span class="text-danger">*</span></th>
-              <th class="c-fit m-short">Avg Wt.</th>
-              <th class="c-num m-num ds-num">Rate <span class="text-danger">*</span></th>
-              <th class="c-fit m-short">RoundOff</th>
-              <th class="c-num m-num ds-num">Amount</th>
-              <th class="c-fit m-short">Lifting Supervisor</th>
-              <th class="c-fit m-short">Vehicle</th>
-              <th class="c-fit m-short">Driver</th>
-              <th class="c-fit m-mid">Remarks</th>
-              <th class="c-fit"></th>
+              <th class="c-fit m-short bs-rownum w-trnum d-none">Trnum</th>
+              <th class="c-fit m-date ds-mid w-date">Date <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid w-party">Customer / Farmer <span class="text-danger">*</span></th>
+              <th class="c-num m-num ds-num w-bal">Ledger Balance</th>
+              <th class="c-fit m-short w-doc">Doc No.</th>
+              <th class="c-fit m-mid w-farm">Farm <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid w-batch">Batch</th>
+              <th class="c-fit m-short w-birds">Birds</th>
+              <th class="c-fit m-short w-net">Net Wt. <span class="text-danger">*</span></th>
+              <th class="c-fit m-short w-avg">Avg Wt.</th>
+              <th class="c-num m-num ds-num w-rate">Rate <span class="text-danger">*</span></th>
+              <th class="c-fit m-short w-round">RoundOff</th>
+              <th class="c-num m-num ds-num w-amt">Amount</th>
+              <th class="c-fit m-short w-sup">Lifting Supervisor</th>
+              <th class="c-fit m-short w-veh">Vehicle</th>
+              <th class="c-fit m-short w-drv">Driver</th>
+              <th class="c-fit m-mid w-rem">Remarks</th>
+              <th class="c-fit w-act"></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -306,6 +312,10 @@ an id.
 <script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 const INSTANCE_ID = {{ instance.id|default:"null" }};
+// Several sales on one sheet, each as its own row. Empty on a plain Add and
+// on a single Edit, so both behave exactly as before.
+const MULTI_IDS = {{ multi_ids_json|default:"[]"|safe }};
+const isMulti = MULTI_IDS.length > 0;
 const requestMode = {{ request_mode|yesno:'true,false' }};
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
@@ -353,6 +363,7 @@ function isFarmerSale() {
 function row() {
   const tr = document.createElement('tr');
   tr.innerHTML = `
+    <td class="bs-rownum d-none"><span class="small fw-semibold row-num"></span></td>
     <td><input type="date" class="form-control form-control-sm date" value="${TODAY}" required></td>
     <td>
       <select class="form-select form-select-sm customer">${customerOptions}</select>
@@ -413,8 +424,12 @@ function row() {
 function refreshRowAddButtons() {
   const rows = document.querySelectorAll('#row-table tbody tr');
   rows.forEach((tr, i) => {
-    tr.querySelector('.add-row-inline').classList.toggle('d-none', INSTANCE_ID !== null || i !== rows.length - 1);
-    tr.querySelector('.remove').disabled = INSTANCE_ID !== null || rows.length === 1;
+    // A single edit is one sale and stays one row. A multi-edit is already
+    // several, and the rows it opened with are the ones being saved, so it
+    // does not take new ones either.
+    const locked = INSTANCE_ID !== null || isMulti;
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', locked || i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = locked || rows.length === 1;
   });
 }
 
@@ -548,6 +563,7 @@ get('bird-sale-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const saleType = isFarmerSale() ? 'farmer' : 'customer';
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
+    _id: tr.dataset.rowId || "",
     date: tr.querySelector('.date').value,
     sale_type: saleType,
     customer: saleType === 'customer' ? tr.querySelector('.customer').value : '',
@@ -583,11 +599,60 @@ get('bird-sale-form').addEventListener('submit', function (e) {
   if (requestMode && isEdit) {
     return submitChangeRequest('bird_sale', INSTANCE_ID, rows[0], "{% url 'bird_sale_list' %}");
   }
+
+  // Several sales edited together: each row goes back to its own sale
+  // through the same endpoint a single edit uses, so nothing is written by a
+  // route that skips the checks. One failure stops the lot being reported as
+  // saved -- the ones that did save stay saved, and the message says which
+  // did not, rather than leaving the register looking untouched.
+  if (isMulti) {
+    // One key per sale, not one per press. The idempotency guard exists to
+    // stop a double-click filing the same thing twice, and it works by the
+    // key the page sends -- so several saves sharing one key look to it like
+    // the same request repeated, and all but the first are turned away. Each
+    // sale is its own request and carries its own key.
+    // Each row says which sale it is, and that is what is written back.
+    // Matching by position would put one sale's figures on another the moment
+    // the rows and the id list fell out of step. A row with no id of its own
+    // is refused rather than guessed at.
+    const orphan = rows.find(r => !r._id);
+    if (orphan) {
+      alert("A row has lost the sale it belongs to. Reload the sheet and try again.");
+      return;
+    }
+    const saves = rows.map(row => {
+      const id = row._id;
+      const body = Object.assign({}, row);
+      delete body._id;
+      return fetch(`{% url 'bird_sale_api_list' %}${id}/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}',
+          'Idempotency-Key': `bs-multi-${Date.now()}-${id}`,
+        },
+        body: JSON.stringify(body),
+      }).then(r => ({ id, ok: r.ok }));
+    });
+    return Promise.all(saves).then(async results => {
+      const failed = results.filter(r => !r.ok);
+      await uploadPendingEvidence(rows.map(r => r._id));
+      if (failed.length) {
+        alert(`${failed.length} of ${results.length} sales could not be saved.`);
+        return;
+      }
+      window.location.href = "{% url 'bird_sale_list' %}";
+    }).catch(err => alert(err.message));
+  }
   const url = isEdit ? `{% url 'bird_sale_api_list' %}${INSTANCE_ID}/` : "{% url 'bird_sale_api_list' %}";
   fetch(url, {
     method: isEdit ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-    body: JSON.stringify(isEdit ? rows[0] : { rows: rows }),
+    // _id belongs to the sheet, not the API: it says which sale a row came
+    // from, and a new sale has none.
+    body: JSON.stringify(isEdit
+      ? (({ _id, ...rest }) => rest)(rows[0])
+      : { rows: rows.map(({ _id, ...rest }) => rest) }),
   }).then(async r => {
     if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
     // The sale has an id only now, so any evidence picked on the sheet goes
@@ -872,6 +937,77 @@ async function uploadPendingEvidence(ids) {
       addButton.disabled = false;
     }
   });
+})();
+{% endif %}
+
+{% if multi_ids_json and multi_ids_json != "[]" %}
+/* Several sales on one sheet. Each arrives as its own row, filled from the
+   register's own API -- the same figures the list shows -- so nothing is
+   re-derived here and a row describes the sale it will be saved back to. */
+(function prefillMulti() {
+  const wanted = new Set(MULTI_IDS.map(String));
+  fetch("{% url 'bird_sale_api_list' %}?from_date=1900-01-01&to_date=2999-12-31")
+    .then(r => r.json())
+    .then(data => {
+      const all = Array.isArray(data) ? data : (data.rows || data.results || []);
+      const byId = new Map(all.map(x => [String(x.id), x]));
+      // Kept in the order the register sent them, so the sheet reads the way
+      // the list did.
+      const sales = MULTI_IDS.map(id => byId.get(String(id))).filter(Boolean);
+      if (!sales.length) { alert("Those sales could not be loaded."); return; }
+      const kind = sales[0].sale_type;
+      const radio = document.querySelector(`input[name="sale_type"][value="${kind}"]`);
+      if (radio) { radio.checked = true; applySaleTypeToAllRows(); }
+      // A mixed selection cannot sit on one sheet: the sale type decides
+      // whether each row names a customer or a farmer, and it is one choice
+      // for the whole sheet.
+      if (sales.some(x => x.sale_type !== kind)) {
+        alert("Those sales are a mix of customer and farmer sales, which cannot be edited on one sheet. Edit them separately.");
+        window.location.href = "{% url 'bird_sale_list' %}";
+        return;
+      }
+      document.querySelector('#row-table tbody').innerHTML = "";
+      document.querySelectorAll('.bs-rownum').forEach(el => el.classList.remove('d-none'));
+      // The page is editing existing records, not adding new ones --
+      // say so, and say how many.
+      const title = document.getElementById('page-title');
+      if (title) {
+        title.innerHTML = '<i class="fas fa-truck-loading"></i> Edit ' + sales.length + ' Sales';
+      }
+      sales.forEach(sale => {
+        const tr = row();
+        // The row carries the sale it came from, so saving writes back to
+        // the record the row is showing rather than to whatever sits at the
+        // same position in a separate list.
+        tr.dataset.rowId = sale.id;
+        tr.querySelector('.bs-rownum').classList.remove('d-none');
+        const num = tr.querySelector('.row-num');
+        if (num) { num.textContent = sale.sale_no || ""; num.title = `Sale ${sale.sale_no || sale.id}`; }
+        tr.querySelector('.date').value = sale.date || "";
+        const party = tr.querySelector(kind === "Farmer" ? '.farmer' : '.customer');
+        if (party) party.value = sale[kind === "Farmer" ? "farmer" : "customer"] || "";
+        tr.querySelector('.doc-no').value = sale.doc_no || "";
+        tr.querySelector('.farm').value = sale.farm || "";
+        if (sale.batch) {
+          fillBatchSelect(tr.querySelector('.batch'),
+            [{ id: sale.batch, name: sale.batch_name || String(sale.batch) }]);
+          tr.querySelector('.batch').value = sale.batch;
+        }
+        tr.querySelector('.birds').value = sale.birds || 0;
+        tr.querySelector('.net-weight').value = sale.net_weight || 0;
+        tr.querySelector('.rate').value = sale.rate || 0;
+        const ro = tr.querySelector('.round-off'); if (ro) ro.value = sale.round_off || 0;
+        const sup = tr.querySelector('.lifting-supervisor');
+        if (sup) sup.value = sale.lifting_supervisor || "";
+        const veh = tr.querySelector('.vehicle'); if (veh) veh.value = sale.vehicle || "";
+        const drv = tr.querySelector('.driver'); if (drv) drv.value = sale.driver || "";
+        const rem = tr.querySelector('.remarks'); if (rem) rem.value = sale.remarks || "";
+        recalcRow(tr);
+      });
+      refreshRowAddButtons();
+      recalcTotals();
+    })
+    .catch(() => alert("Those sales could not be loaded."));
 })();
 {% endif %}
 

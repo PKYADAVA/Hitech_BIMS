@@ -33,7 +33,27 @@
     <div class="page-header-subtitle">Payments received from Bird Sale customers/farmers at a Farm</div>
   </div>
   <div class="page-header-right">
+    {% if page_perms.edit or page_perms.delete %}
+    <button type="button" class="btn btn-outline-secondary me-2" id="bs-multi-toggle"
+            title="Pick several receipts to edit or delete together"><i class="fas fa-list-check"></i> Multiple</button>
+    {% endif %}
     {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'bird_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Hidden until Multiple is pressed; see the Bird Sale register. -->
+<div class="card mb-3 d-none" id="bs-bulk-bar">
+  <div class="card-body d-flex align-items-center gap-2 py-2">
+    <span class="fw-semibold"><span id="bs-bulk-n">0</span> selected</span>
+    {% if page_perms.edit %}
+    <button type="button" class="btn btn-outline-primary btn-sm" id="bs-bulk-edit" disabled>
+      <i class="fas fa-pen me-1"></i>Edit together</button>
+    {% endif %}
+    {% if page_perms.delete %}
+    <button type="button" class="btn btn-outline-danger btn-sm" id="bs-bulk-delete" disabled>
+      <i class="fas fa-trash me-1"></i>Delete</button>
+    {% endif %}
+    <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="bs-bulk-cancel">Cancel</button>
   </div>
 </div>
 
@@ -64,6 +84,7 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="receipt-table">
         <thead class="table-dark">
           <tr>
+            <th class="bs-pick-col d-none ds-mid"><input type="checkbox" class="form-check-input" id="bs-check-all" title="Select all shown" aria-label="Select all shown receipts"></th>
             <th class="ds-mid">Date</th><th>Trnum</th><th>Location</th><th>Customer</th><th>Mode</th>
             <th>Method</th><th>Reference</th><th class="ds-num">Amount</th>
             <th class="ds-mid text-center">Attachments</th>
@@ -258,6 +279,7 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
+        <td class="bs-pick-col d-none text-center"><input type="checkbox" class="form-check-input bs-pick" data-id="${row.id}" aria-label="Select this receipt"></td>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
         <td>${escapeHtml(row.location_name)}</td>
@@ -319,6 +341,74 @@ $(function () {
       body.append(`<tr><td class="fw-bold" style="width:200px;">${escapeHtml(label)}</td><td>${escapeHtml(value || "—")}</td></tr>`);
     });
     new bootstrap.Modal(document.getElementById("viewReceiptModal")).show();
+  });
+
+  /* Picking several receipts at once -- the same pattern as the Bird Sale
+     register, with the boxes hidden until Multiple is pressed. */
+  const picked = new Set();
+
+  function bulkSync() {
+    $("#bs-bulk-n").text(picked.size);
+    $("#bs-bulk-edit, #bs-bulk-delete").prop("disabled", picked.size === 0);
+    const shown = $(".bs-pick").length;
+    $("#bs-check-all").prop("checked", shown > 0 && $(".bs-pick:checked").length === shown);
+  }
+
+  function bulkMode(on) {
+    $(".bs-pick-col").toggleClass("d-none", !on);
+    $("#bs-bulk-bar").toggleClass("d-none", !on);
+    $("#bs-multi-toggle").toggleClass("active", on);
+    if (!on) { picked.clear(); $(".bs-pick, #bs-check-all").prop("checked", false); }
+    bulkSync();
+  }
+
+  $("#bs-multi-toggle").on("click", function () {
+    bulkMode($("#bs-bulk-bar").hasClass("d-none"));
+  });
+  $("#bs-bulk-cancel").on("click", function () { bulkMode(false); });
+
+  $(document).on("change", ".bs-pick", function () {
+    const id = String($(this).data("id"));
+    if (this.checked) picked.add(id); else picked.delete(id);
+    bulkSync();
+  });
+
+  $(document).on("change", "#bs-check-all", function () {
+    const on = this.checked;
+    $(".bs-pick").each(function () {
+      this.checked = on;
+      const id = String($(this).data("id"));
+      if (on) picked.add(id); else picked.delete(id);
+    });
+    bulkSync();
+  });
+
+  $("#bs-bulk-edit").on("click", function () {
+    if (!picked.size) return;
+    window.location.href = "{% url 'bird_sale_receipt_add' %}?edit=" + [...picked].join(",");
+  });
+
+  $("#bs-bulk-delete").on("click", function () {
+    if (!picked.size) return;
+    const ids = [...picked];
+    if (!window.confirm(`Delete ${ids.length} selected receipt${ids.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
+    const btn = $(this).prop("disabled", true);
+    // Its own key per receipt: the idempotency guard turns away several
+    // requests that share one, which is what a single button press gives.
+    Promise.all(ids.map(id => fetch(`/bird_sale_receipt_api/${id}/`, {
+      method: "DELETE",
+      headers: { "X-CSRFToken": csrfToken, "Idempotency-Key": `bsr-del-${Date.now()}-${id}` },
+    }).then(r => ({ id, ok: r.ok }))))
+      .then(results => {
+        const failed = results.filter(r => !r.ok);
+        window.showToast(failed.length ? "danger" : "success",
+          failed.length ? `${failed.length} of ${ids.length} could not be deleted.`
+                        : `${ids.length} receipt${ids.length > 1 ? "s" : ""} deleted.`);
+        bulkMode(false);
+        loadRows();
+      })
+      .catch(() => window.showToast("danger", "Delete failed."))
+      .finally(() => btn.prop("disabled", false));
   });
 
   $(document).on("click", ".delete-button", function () {
