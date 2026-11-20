@@ -27,8 +27,34 @@
   /* Name and quantity share a line when they fit; otherwise the quantity
      drops below, right-aligned, and the name keeps the full width. */
   .gp-rest li { display: flex; flex-wrap: wrap; column-gap: 10px; padding: 2px 0; }
+  /* The figure columns break down beside the item list, and must open with
+     it: one toggle, in the Item column, drives the whole row. The lists are
+     given the same spacing so the lines sit level across the table. */
+  .gp-fig .gp-rest { display: none; }
+  tr.gp-open .gp-fig .gp-rest { display: block; }
+  /* The two columns' headings must stand the same height or every figure
+     below reads against the item on the line above -- worse than not
+     breaking them down at all. The Item column's heading is a name with the
+     Show less button beside it; the figure columns' is a bare number, so it
+     is given the button's line box to sit in. */
+  /* The Item column's heading is two lines deep once opened -- the name, and
+     the Show less button under it, which the column is too narrow to keep
+     beside the name. The figure columns' heading is one number, so their
+     lists are pushed down by the difference and every figure reads against
+     its own item rather than the one above. Keyed to the row being open, so
+     a collapsed row is untouched. */
+  tr.gp-open .gp-fig .gp-rest { margin-top: 26px; }
+  .gp-fig .gp-rest li { padding: 2px 0; color: #64748b;
+                        font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .gp-fig .gp-rest li + li { border-top: 1px dotted #eef2f7; }
+  /* The whole-row figure stays the way it reads collapsed. */
+  .gp-fig-head { display: block; }
   .gp-rest li + li { border-top: 1px dotted #eef2f7; }
-  .gp-rest .gp-qty { margin-left: auto; color: #64748b; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .gp-rest .gp-qty { color: #64748b; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* The line's own rate, set apart from its quantity and aligned down the
+     column so two lines can be compared at a glance. */
+  .gp-rest .gp-rate { min-width: 72px; text-align: right; color: #334155;
+                      font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* Attachments as a thumbnail in their own column, same as Bird Sale Receipt's
      payment proof: one thumbnail standing for the set, count as a corner badge. */
   .bsr-thumbs { position:relative; display:inline-flex; padding:0; border:0;
@@ -200,16 +226,38 @@ $(function () {
     if (items.length === 1) {
       return `<td class="gp-item-cell" data-export="${exportText}">${first}</td>`;
     }
-    const rest = items.slice(1).map(i => `<li><span title="${escapeHtml(i.code)}">${escapeHtml(i.name || i.code)}</span>`
-      + `<span class="gp-qty">${Number(i.qty).toFixed(2)}${i.unit ? " " + escapeHtml(i.unit) : ""}</span></li>`).join("");
+    // Every line, the first one included: expanding to see what the bill was
+    // made of and finding the opening item missing from the breakdown reads
+    // as a line that was left out. Each carries its own rate as well as its
+    // quantity -- the Price column holds the purchase's weighted average,
+    // which says nothing about a line bought dearer or cheaper than the rest.
+    const lineHtml = i => `<li><span title="${escapeHtml(i.code)}">${escapeHtml(i.name || i.code)}</span></li>`;
+    const rest = items.map(lineHtml).join("");
     return `<td class="gp-item-cell" data-export="${exportText}"><div class="gp-items">${first}`
       + `<button type="button" class="gp-more" aria-expanded="false" data-more="+${items.length - 1} more">+${items.length - 1} more</button>`
       + `<ul class="gp-rest">${rest}</ul></div></td>`;
   }
 
+  /* A figure column that breaks down with the items beside it. The header
+     line is what the row is worth as a whole -- the quantity bought, the
+     weighted average rate, the net amount -- and under it, once the item
+     list is opened, each line's own. Without this the Price column kept
+     showing one averaged figure while the items beside it listed several,
+     so a line bought dearer than the rest had nowhere to show. */
+  function figCell(row, pick, prefix) {
+    const items = row.items || [];
+    const head = `<span class="gp-fig-head">${prefix || ""}${pick.total}</span>`;
+    if (items.length < 2) return `<td class="text-end gp-fig">${head}</td>`;
+    const lines = items.map(i => `<li>${prefix || ""}${pick.line(i)}</li>`).join("");
+    return `<td class="text-end gp-fig">${head}<ul class="gp-rest">${lines}</ul></td>`;
+  }
+
   $(document).on("click", ".gp-more", function () {
     const box = $(this).closest(".gp-items").toggleClass("open");
     const open = box.hasClass("open");
+    // The row, not just this cell: the quantity, price and amount columns
+    // break down alongside the items and open with them.
+    $(this).closest("tr").toggleClass("gp-open", open);
     $(this).attr("aria-expanded", open).text(open ? "Show less" : $(this).data("more"));
   });
 
@@ -235,10 +283,13 @@ $(function () {
         <td>${escapeHtml(row.bill_no) || "-"}</td>
         <td>${escapeHtml(row.supplier_name)}</td>
         ${itemCell(row)}
-        <td class="text-end">${escapeHtml(row.quantity)}</td>
+        ${figCell(row, { total: escapeHtml(row.quantity),
+                         line: i => Number(i.qty).toFixed(2) + (i.unit ? " " + escapeHtml(i.unit) : "") })}
         <td class="text-end">${escapeHtml(row.no_of_bags)}</td>
-        <td class="text-end">${Number(row.avg_rate).toFixed(2)}</td>
-        <td class="text-end">${Number(row.net_amount).toFixed(2)}</td>
+        ${figCell(row, { total: Number(row.avg_rate).toFixed(2),
+                         line: i => Number(i.rate || 0).toFixed(2) })}
+        ${figCell(row, { total: Number(row.net_amount).toFixed(2),
+                         line: i => Number(i.amount || 0).toFixed(2) })}
         <td>${escapeHtml(row.farm_warehouse_names) || "-"}</td>
         <td>${escapeHtml(row.batch_no) || "-"}</td>
         <td>${escapeHtml(row.vehicle_no) || "-"}</td>
@@ -249,6 +300,7 @@ $(function () {
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/general-purchase/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/general-purchase/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             <button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Upload attachment"><i class="fas fa-paperclip"></i></button>
+            {% if page_perms.add %}<a class="btn btn-outline-primary btn-sm" href="/general-purchase/add/?copy=${row.id}" title="Duplicate — start a new purchase from this one"><i class="fas fa-copy"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             {% if not page_perms.delete %}<button class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>

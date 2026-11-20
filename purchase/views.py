@@ -442,8 +442,13 @@ def _general_purchase_list_dict(gp):
     # Each line's item by name, for the register's Item column; read from the
     # prefetched lines, so no query per purchase.
     qty_field = "rcv_qty" if gp.calculation_based_on == "Received Quantity" else "sent_qty"
+    # The rate travels with the quantity. The Price column shows the
+    # purchase's weighted average, which is the right figure for a row that
+    # stands for the whole bill but says nothing about a line that was bought
+    # dearer or cheaper -- so an expanded line carries its own.
     items = [{"code": i.item.item_code, "name": i.item.description or i.item.item_code,
-              "qty": str(getattr(i, qty_field)), "unit": i.unit}
+              "qty": str(getattr(i, qty_field)), "unit": i.unit,
+              "rate": str(i.rate), "amount": str(i.amount)}
              for i in gp.items.all()]
     return {
         "id": gp.id, "date": gp.date.isoformat(), "bill_no": gp.bill_no, "dc_no": gp.dc_no,
@@ -699,7 +704,40 @@ def create_general_purchase(request):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "general_purchase_form.html", _general_purchase_form_context(request.user))
+    # Duplicate sends you here with ?copy=<id>: the same purchase again, as a
+    # new one. Feed is bought from the same supplier, to the same farm, at the
+    # same rate, week after week, and re-keying a dozen lines to change one
+    # figure is where mistakes come from. Nothing is saved until it is saved.
+    context = _general_purchase_form_context(request.user)
+    copy_id = request.GET.get("copy")
+    if copy_id:
+        source = GeneralPurchase.objects.filter(id=copy_id).first()
+        if source is not None:
+            context = _general_purchase_form_context(request.user, source)
+            # What the copy must not inherit: the things that identify the
+            # original rather than describe the purchase. Its number is the
+            # next one in the series, its own bill number and date are
+            # today's business, and its attachments are the original's
+            # evidence, not this one's.
+            context["general_purchase"] = _as_copy(source)
+            context["next_purchase_no"] = GeneralPurchase._next_purchase_no()
+            context["copy_of"] = source.purchase_no
+    return render(request, "general_purchase_form.html", context)
+
+
+def _as_copy(gp):
+    """The purchase as a starting point for a new one.
+
+    Returned unsaved and detached: the form reads it exactly as it reads a
+    real record, but nothing here is ever written back to the original.
+    """
+    gp.pk = None
+    gp.id = None
+    gp.purchase_no = ""
+    gp.bill_no = ""
+    gp.date = timezone.localdate()
+    gp.expiry_date = None
+    return gp
 
 
 def _stage_request_mode_files(model, request, payload, field_names):
