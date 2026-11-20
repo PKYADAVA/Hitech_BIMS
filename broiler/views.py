@@ -3997,6 +3997,36 @@ class BirdSaleListTemplateView(View):
         })
 
 
+@login_required
+def next_transaction_no(request):
+    """The number the next bird sale or receipt would be given.
+
+    Shown on the Add page so the number is visible before saving rather than
+    only afterwards. It is a preview and nothing more: numbers are minted
+    after the row is written, precisely so two people adding at once cannot
+    take the same one, and whoever saves second gets the next number instead.
+    So this can go stale between being shown and being saved, and the page
+    says so rather than presenting it as already assigned.
+    """
+    from user.access import user_can
+
+    which = (request.GET.get("for") or "").strip()
+    on = date_from_query(request.GET.get("date") or "") or None
+    # Gated like the page that asks, rather than left open to anyone signed
+    # in: the figure is only a counter, but it still says how much business
+    # a register has seen this year.
+    registers = {
+        "sale": ("bird_sale_list", BirdSale._next_sale_no),
+        "receipt": ("bird_sale_receipt_list", BirdSaleReceipt._next_receipt_no),
+    }
+    if which not in registers:
+        return JsonResponse({"error": "Unknown register."}, status=400)
+    tab, next_no = registers[which]
+    if not (user_can(request.user, tab, "add") or user_can(request.user, tab, "view")):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    return JsonResponse({"next_no": next_no(on)})
+
+
 @method_decorator(login_required, name="dispatch")
 class BirdSaleFormTemplateView(View):
     def get(self, request, id=None, request_mode: bool = False):

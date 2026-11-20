@@ -131,6 +131,7 @@ urlpatterns = [
          {'request_mode': True}, name='bird_sale_request_change'),
     path('bird_sale_api/', views.BirdSaleAPI.as_view(), name='bird_sale_api_list'),
     path('bird_sale_api/<int:id>/', views.BirdSaleAPI.as_view(), name='bird_sale_api'),
+    path('bird-sale/next-no/', views.next_transaction_no, name='next_transaction_no'),
     path('bird-sale/farm-lookup/', views.bird_sale_farm_lookup, name='bird_sale_farm_lookup'),
     path('bird-sale/<int:id>/photos/', views.bird_sale_photos, name='bird_sale_photos'),
 

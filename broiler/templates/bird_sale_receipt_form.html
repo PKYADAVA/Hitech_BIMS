@@ -214,7 +214,59 @@ function row() {
 // Only the last row offers "+" (add another row); earlier rows just delete.
 // The sole remaining row can't be deleted. In edit mode there's exactly one
 // row and no way to add/remove another.
+// The number a new receipt is about to be given, shown before saving rather
+// than only after. It is a preview: numbers are minted once the row is
+// written, so that two people adding at once cannot take the same one, and
+// whoever saves second is given the next instead. The column says
+// "provisional" so nobody copies it onto paperwork as settled.
+let NEXT_NO = "";
+function renumberPreview() {
+  if (INSTANCE_ID !== null || isMulti || !NEXT_NO) return;
+  // Rows added after start-up are built from a template whose number cell is
+  // hidden. Left that way they sit one column to the left of the header and
+  // every field reads under the wrong heading, so the cell is uncovered as
+  // the row is numbered.
+  document.querySelectorAll('#row-table tbody .bsr-rownum')
+    .forEach(el => el.classList.remove('d-none'));
+  const m = NEXT_NO.match(/^(.*?)(\d+)$/);
+  if (!m) return;
+  const stem = m[1], start = parseInt(m[2], 10), width = m[2].length;
+  document.querySelectorAll('#row-table tbody tr').forEach((tr, i) => {
+    const el = tr.querySelector('.row-num');
+    if (el) {
+      el.textContent = stem + String(start + i).padStart(width, '0');
+      el.title = "Provisional — the number is issued when the receipt is saved";
+    }
+  });
+}
+
+function refreshNextNo() {
+  if (INSTANCE_ID !== null || isMulti) return;
+  const d = (get('date') && get('date').value) || "";
+  fetch("{% url 'next_transaction_no' %}?for=receipt&date=" + encodeURIComponent(d))
+    .then(r => r.ok ? r.json() : null)
+    .then(j => { if (j && j.next_no) { NEXT_NO = j.next_no; renumberPreview(); } })
+    .catch(() => {});
+}
+
+// On the Add page the number column is shown from the start, carrying the
+// provisional number. It is hidden on a single edit, where the receipt
+// already has its number in the page header, and revealed separately in
+// multi-edit, where each row shows the number it actually has.
+if (INSTANCE_ID === null && !isMulti) {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.bsr-rownum').forEach(el => el.classList.remove('d-none'));
+    refreshNextNo();
+  });
+  // The series runs by financial year, so changing the date can change the
+  // number the next receipt would be given.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'date') refreshNextNo();
+  });
+}
+
 function refreshRowAddButtons() {
+  renumberPreview();
   const rows = document.querySelectorAll('#row-table tbody tr');
   rows.forEach((tr, i) => {
     const locked = INSTANCE_ID !== null || isMulti;
