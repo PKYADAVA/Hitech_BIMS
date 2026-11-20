@@ -1902,7 +1902,42 @@ window.loadOptions = function (select, url, data, options) {
 
   var modal, img, cropper, resolveEdit, rejectEdit;
 
+  // Puts the crop just inside the picture. Flush to the edge, the handles sit
+  // exactly on the boundary and there is nothing to take hold of.
+  function fitCropToCanvas() {
+    if (!cropper) return;
+    var cv = cropper.getCanvasData();
+    var ct = cropper.getContainerData();
+    // Where the picture runs wider or taller than the frame, the crop follows
+    // the frame rather than the picture: a handle placed on an edge that is
+    // off-screen cannot be taken hold of, which is what left the bottom of a
+    // tall photo -- and the right of a turned one -- impossible to pull in.
+    var left = Math.max(cv.left, 0);
+    var top = Math.max(cv.top, 0);
+    var right = Math.min(cv.left + cv.width, ct.width);
+    var bottom = Math.min(cv.top + cv.height, ct.height);
+    var w = Math.max(right - left, 10);
+    var h = Math.max(bottom - top, 10);
+    // A fixed margin as well as a proportional one: a handle is about 10px
+    // across and is drawn centred on the crop's edge, so an edge sitting
+    // right on the boundary puts half the handle beyond it, where the frame
+    // clips it and the backdrop takes the click instead.
+    var pad = 14;
+    var mx = Math.min(w * 0.04, 40) + pad;
+    var my = Math.min(h * 0.04, 40) + pad;
+    cropper.setCropBoxData({
+      left: left + mx,
+      top: top + my,
+      width: Math.max(w - mx * 2, 20),
+      height: Math.max(h - my * 2, 20),
+    });
+  }
+
   function buildModal() {
+    // The picture is bounded on both axes, not stretched to the width. A tall
+    // photo told to fill the width grows taller than the frame, and its lower
+    // edge -- carrying the crop handles -- is clipped away by the frame's own
+    // overflow, so the bottom of the crop cannot be pulled up at all.
     var div = document.createElement('div');
     div.innerHTML =
       '<div class="modal fade" id="bimsImageEditor" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">' +
@@ -1912,8 +1947,8 @@ window.loadOptions = function (select, url, data, options) {
               '<h6 class="modal-title"><i class="fas fa-crop-simple me-1"></i>Edit Image</h6>' +
               '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
             '</div>' +
-            '<div class="modal-body p-2" style="background:#1a1a2e;min-height:300px;max-height:65vh;overflow:hidden">' +
-              '<img id="bimsEditorImg" style="display:block;width:100%">' +
+            '<div class="modal-body d-flex align-items-center justify-content-center" style="background:#1a1a2e;height:70vh;overflow:hidden;padding:26px">' +
+              '<img id="bimsEditorImg" style="display:block;max-width:100%;max-height:100%">' +
             '</div>' +
             '<div class="modal-footer py-2 justify-content-between">' +
               '<div class="d-flex gap-2">' +
@@ -1939,27 +1974,24 @@ window.loadOptions = function (select, url, data, options) {
       btn.addEventListener('click', function () {
         if (!cropper) return;
         cropper.rotate(parseInt(this.dataset.deg));
-        var ct = cropper.getContainerData();
-        var cv = cropper.getCanvasData();
-        var scaleW = ct.width / cv.width;
-        var scaleH = ct.height / cv.height;
-        var scale = Math.min(scaleW, scaleH);
-        if (scale < 1) {
-          var imgData = cropper.getImageData();
-          cropper.zoomTo(imgData.width / imgData.naturalWidth * scale);
-        }
-        cv = cropper.getCanvasData();
-        cropper.setCanvasData({
-          left: (ct.width - cv.width) / 2,
-          top: (ct.height - cv.height) / 2,
-        });
-        cv = cropper.getCanvasData();
-        cropper.setCropBoxData({
-          left: cv.left, top: cv.top,
-          width: cv.width, height: cv.height,
+        // A turned picture is a different shape, and Cropper keeps the
+        // container it measured before the turn -- so a portrait photo turned
+        // on its side came out wider than the frame and its right-hand
+        // handles ended up beyond the edge, unreachable. Asking Cropper to
+        // measure again refits the picture to the frame as it now stands.
+        cropper.resize();
+        // The turn moves the canvas, and the first one moves it furthest --
+        // fitting the crop before it has come to rest leaves the handles on
+        // the edge the picture has already left, where they cannot be taken
+        // hold of. Fitted on the next few frames, so it follows the picture
+        // wherever it settles.
+        fitCropToCanvas();
+        [0, 60, 180, 360].forEach(function (ms) {
+          setTimeout(fitCropToCanvas, ms);
         });
       });
     });
+
     modal.querySelector('.bims-ed-flip-h').addEventListener('click', function () {
       if (cropper) {
         var d = cropper.getData();
@@ -2024,8 +2056,14 @@ window.loadOptions = function (select, url, data, options) {
         if (!imgReady || !modalReady) return;
         if (cropper) { cropper.destroy(); cropper = null; }
         cropper = new Cropper(img, {
-          viewMode: 0,
-          autoCropArea: 1,
+          // Keeps the crop box inside the picture. At viewMode 0 it may be
+          // dragged off the canvas, which puts its handles somewhere the
+          // frame does not show and leaves them unreachable.
+          viewMode: 1,
+          // Just inside the picture rather than flush to its edge: at 1 the
+          // top and bottom handles land exactly on the frame's boundary and
+          // there is nothing to take hold of.
+          autoCropArea: 0.92,
           responsive: true,
           restore: false,
           background: true,
