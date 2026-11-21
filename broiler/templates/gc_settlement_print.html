@@ -151,6 +151,13 @@
       <div class="kv"><span>F.C.R Incentives</span><b>{{ s.fcr_incentives|floatformat:2 }}</b></div>
       <div class="kv"><span>Mortality Incentives</span><b>{{ s.mortality_incentives|floatformat:2 }}</b></div>
       <div class="kv"><span>Summer / Other Incentives</span><b>{{ s.summer_incentives|floatformat:2 }} / {{ s.other_incentives|floatformat:2 }}</b></div>
+      {% comment %}
+        IFFT is one of the figures that make up Total Incentives, and it is
+        keyed by hand on the settlement -- so leaving it out of the statement
+        meant an amount someone had entered could not be found anywhere on
+        the page the farmer is given.
+      {% endcomment %}
+      <div class="kv"><span>IFFT Charges</span><b>{{ s.ifft_charges|floatformat:2 }}</b></div>
       <div class="kv"><span>Total Incentives</span><b>{{ s.total_incentives|floatformat:2 }}</b></div>
     </div>
     <div class="card pad">
@@ -159,6 +166,14 @@
       <div class="kv"><span>Birds Shortage Cost</span><b>{{ s.birds_shortage_amount|floatformat:2 }}</b></div>
       <div class="kv"><span>Other Deduction</span><b>{{ s.other_deductions|floatformat:2 }}</b></div>
       <div class="kv"><span>Feed Transfer / Vaccinator</span><b>{{ s.feed_transfer_charges|floatformat:2 }} / {{ s.vaccinator_charges|floatformat:2 }}</b></div>
+      {% comment %}
+        Birds this farmer bought from the batch and has not yet paid for. It
+        comes straight off what they are paid, so a statement that leaves it
+        out shows a smaller figure than the farmer expects and gives no reason
+        for it. Transportation goes the other way -- it is added.
+      {% endcomment %}
+      <div class="kv"><span>Farmer Sales Deduction</span><b>{{ s.farmer_sales_deduction|floatformat:2 }}</b></div>
+      <div class="kv"><span>Transportation Charges (Addition)</span><b>{{ s.transportation_charges|floatformat:2 }}</b></div>
       <div class="kv"><span>Equipment / Advance</span><b>{{ s.equipment_charges|floatformat:2 }} / {{ s.advance_deductions|floatformat:2 }}</b></div>
       <div class="kv"><span>Total Deduction</span><b>{{ s.total_deduction|floatformat:2 }}</b></div>
       <div class="kv"><span>Charges Payable</span><b>{{ s.total_amount_payable|floatformat:2 }}</b></div>
