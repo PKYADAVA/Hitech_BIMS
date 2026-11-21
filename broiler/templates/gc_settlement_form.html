@@ -78,6 +78,7 @@
       {% if filter_branches %}<div><label class="gcs-form-label d-block">Branch:</label>
         <select id="flt-branch" class="form-select form-select-sm gcs-flt-branch"><option value="">All Branches</option>{% for b in filter_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}</select></div>{% endif %}
       <button class="btn btn-success btn-sm" id="gcs-filter-btn">Submit</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="gcs-filter-clear">Clear</button>
       {% if page_perms.add %}<button class="btn btn-primary btn-sm ms-auto" id="gcs-add-btn"><i class="fas fa-bars me-1"></i>ADD</button>{% endif %}
     </div>
   </div></div>
@@ -330,9 +331,27 @@ function showList() { $('#gcs-form').hide(); $('#gcs-list-view').show(); }
 // shows the recent week rather than every settlement ever made. On ready,
 // because main.js (which provides localDay) loads after this page's script;
 // registered ahead of $(loadList) below, so the first load uses these dates.
+// On window: the filter bar's script is a separate block from this one, and
+// Clear needs the same week this uses.
+window.gcsOpeningWeek = function gcsOpeningWeek() {
+  // Its own date formatting rather than main.js's localDay: the filter bar
+  // asks for this week while the page is still starting up, before main.js
+  // has loaded, and reaching for localDay there threw.
+  var day = function (d) {
+    d = d || new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + dd;
+  };
+  return {
+    'flt-from': day(new Date(Date.now() - 6 * 86400000)),
+    'flt-to': day(),
+  };
+};
 $(function () {
-  document.getElementById('flt-from').value = localDay(new Date(Date.now() - 6 * 86400000));
-  document.getElementById('flt-to').value = localDay();
+  var wk = gcsOpeningWeek();
+  document.getElementById('flt-from').value = wk['flt-from'];
+  document.getElementById('flt-to').value = wk['flt-to'];
 });
 
 // Month / Year fill From and To through the shared wiring
@@ -486,10 +505,15 @@ $('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showLis
 var GCS_KEY = 'bims.gcsettlement.filters';
 var GCS_FIELDS = ['flt-from', 'flt-to', 'flt-month', 'flt-year', 'flt-branch'];
 // The week this screen opens on is not a filter anybody chose.
-var GCS_DEFAULTS = {
-  'flt-from': document.getElementById('flt-from').value,
-  'flt-to': document.getElementById('flt-to').value,
-};
+// Read as a function, not captured now: this runs while the page is still
+// being set up, before the opening week has been written into the boxes, so
+// reading them here gave two empty strings -- and the bar then counted its
+// own starting week as a filter somebody had chosen and kept saying FILTERED.
+function gcsDefaults() {
+  return (typeof window.gcsOpeningWeek === 'function')
+    ? window.gcsOpeningWeek()
+    : { 'flt-from': '', 'flt-to': '' };
+}
 var GCS_STORAGE_OK = (function () {
   try {
     var probe = GCS_KEY + '.probe';
@@ -544,7 +568,8 @@ function gcsSaved() {
 function gcsSyncMark() {
   var v = gcsRead();
   var on = Object.keys(v).some(function (k) {
-    if (GCS_DEFAULTS[k] !== undefined) return v[k] && v[k] !== GCS_DEFAULTS[k];
+    var defs = gcsDefaults();
+    if (defs[k] !== undefined) return v[k] && v[k] !== defs[k];
     return !!v[k];
   });
   $('.gcs-filters').toggleClass('lf-active', on);
@@ -554,6 +579,26 @@ function gcsSyncMark() {
    to hold: a half-finished choice nobody submitted should not come back
    looking like the list on screen. */
 $('#gcs-filter-btn').on('click', function () {
+  loadList();
+  gcsRemember();
+  gcsSyncMark();
+});
+
+/* Back to the list as it opens. The dates go back to the week the screen
+   starts on rather than empty -- that span is where the page begins, not a
+   filter anybody chose -- and the remembered bar is dropped with them, so
+   the filter does not return on the next visit. */
+$('#gcs-filter-clear').on('click', function () {
+  var wk = gcsOpeningWeek();
+  GCS_FIELDS.forEach(function (id) {
+    var node = document.getElementById(id);
+    if (!node) return;
+    node.value = wk[id] !== undefined ? wk[id] : '';
+  });
+  // Select2 has taken these over and does not notice a value set behind it.
+  if (window.jQuery) {
+    $('#flt-month, #flt-year, #flt-branch').trigger('change.select2');
+  }
   loadList();
   gcsRemember();
   gcsSyncMark();
