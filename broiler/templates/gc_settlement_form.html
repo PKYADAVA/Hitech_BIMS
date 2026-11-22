@@ -20,6 +20,14 @@
   .gcs-row .gcs-inputs { flex:1; display:flex; gap:.4rem; }
   .gcs-row input, .gcs-row textarea { font-size:.82rem; }
   input.gcs-ro { background:#eef0f4 !important; }
+  /* A recalculated figure shown before it is saved: the actual field on the
+     form changes colour, so the comparison the popup shows and the number
+     the form will submit are visibly the same box rather than two separate
+     things the person has to trust line up. */
+  input.gcs-pending-change {
+    background: #fef3c7 !important; border-color: #d97706 !important;
+    box-shadow: 0 0 0 2px rgba(217,119,6,.15);
+  }
   .gcs-colhead { text-align:center; font-weight:700; color:#2d6cdf; font-size:.8rem; }
   .gcs-total input { font-weight:700; }
   /* List fits one screen: headers may wrap to two lines, dates (DD-MM-YYYY)
@@ -433,23 +441,86 @@ function setSelectOption(id, val, label) {
   el.value = val;
   $(el).trigger('change.select2');
 }
-$('#gcs-add-btn').on('click', function () { editId = null; showForm(); showRecheckButton(); });
+$('#gcs-add-btn').on('click', function () {
+  editId = null; showForm(); showRecheckButton(); gcsSnapshotEditable();
+});
 
 /* ---- Recheck figures -------------------------------------------------- *
  * Submit sends the form. This asks the server what the read-only figures
  * would be if they were derived again now, shows the difference, and applies
  * it only if it is accepted — it alters a document a farmer was paid against,
- * so it is never a single unexplained press.                                */
+ * so it is never a single unexplained press.
+ *
+ * The preview does not stop at the popup table: the real read-only fields on
+ * the form are set to the recalculated values and marked (amber), so what
+ * gets compared is the same box the form will actually submit, not a second
+ * account of it the person has to take on trust. Closing the popup without
+ * applying puts those fields back exactly as they were — nothing is saved
+ * by looking.
+ *
+ * Applying still goes through the recalculate endpoint, not a plain form
+ * submit: unlike an edit, it leaves an audit row and re-posts the accounting
+ * voucher, and skipping that would be the quiet kind of correction this
+ * whole feature exists to avoid. It also no longer returns to the list on
+ * success -- the point of showing the change on the form is for it to still
+ * be on screen once it is saved, not for it to vanish moments later.        */
+let gcsRecheckOriginal = null;  // {field: previousValue}, while the preview is up
+let gcsEditableSnapshot = null;  // the form's own typed-in fields, as last loaded/saved
+
+// Remarks plus every field EDIT_FIELDS lists -- the boxes a person actually
+// types into, as opposed to the read-only ones Recheck itself recalculates.
+// Taken right after the form is loaded (or opened blank for Add) and again
+// right after a save, so the two can be compared at any later point.
+function gcsSnapshotEditable() {
+  gcsEditableSnapshot = {};
+  ['remarks', ...EDIT_FIELDS].forEach((name) => {
+    const el = document.getElementById('f-' + name);
+    if (el) gcsEditableSnapshot[name] = el.value;
+  });
+}
+function gcsHasUnsavedEdits() {
+  if (!gcsEditableSnapshot) return false;
+  return Object.keys(gcsEditableSnapshot).some((name) => {
+    const el = document.getElementById('f-' + name);
+    return el && el.value !== gcsEditableSnapshot[name];
+  });
+}
+
 function showRecheckButton() {
   const btn = document.getElementById('gcs-recheck');
   if (btn) btn.classList.toggle('d-none', !editId);
 }
 
+function gcsRevertPreview() {
+  if (!gcsRecheckOriginal) return;
+  Object.keys(gcsRecheckOriginal).forEach((name) => {
+    const el = document.getElementById('f-' + name);
+    if (el) { el.value = gcsRecheckOriginal[name]; el.classList.remove('gcs-pending-change'); }
+  });
+  gcsRecheckOriginal = null;
+}
+
 async function loadRecheck() {
+  // Recheck only ever touches the read-only figures it recalculates -- it
+  // has no way to see, and so cannot save, anything typed into Remarks or
+  // the manual incentive/deduction boxes since the form was last loaded.
+  // Applying a correction while one of those sits unsaved would leave it
+  // looking fine on screen and gone the moment the page is left, so this
+  // is said plainly rather than left to be discovered later.
+  if (gcsHasUnsavedEdits()) {
+    const proceed = await (window.bimsConfirm
+      ? window.bimsConfirm("This form has changes that have not been saved yet (Remarks or one of the "
+          + "typed figures). Recheck only corrects the read-only figures below and cannot save those "
+          + "for you -- they will still be lost if you leave without submitting. Continue anyway?")
+      : Promise.resolve(confirm("This form has unsaved changes that Recheck will not save. Continue anyway?")));
+    if (!proceed) return;
+  }
+
   const body = document.getElementById('gcs-recheck-body');
   body.innerHTML = '<div class="text-muted small">Checking…</div>';
   const modal = new bootstrap.Modal(document.getElementById('gcs-recheck-modal'));
   modal.show();
+  gcsRevertPreview();  // a stale preview from a cancelled earlier check, if any
 
   const apply = document.getElementById('gcs-recheck-apply');
   try {
@@ -470,6 +541,17 @@ async function loadRecheck() {
           + `<td class="text-end text-muted">${d.changes[k].from || '-'}</td>`
           + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
       + '</tbody></table>';
+
+    // The same figures, shown where they actually live on the form, and
+    // remembered as they were so a Close can put them back untouched.
+    gcsRecheckOriginal = {};
+    names.forEach((name) => {
+      const el = document.getElementById('f-' + name);
+      if (!el) return;
+      gcsRecheckOriginal[name] = el.value;
+      el.value = d.changes[name].to || '';
+      el.classList.add('gcs-pending-change');
+    });
   } catch (e) {
     body.innerHTML = '<div class="text-danger small">Could not check this settlement.</div>';
     apply.disabled = true;
@@ -489,14 +571,26 @@ document.addEventListener('DOMContentLoaded', function () {
         body: JSON.stringify({ note: 'Rechecked from the settlement form' }),
       });
       const d = await res.json();
+      // Saved for real now -- the preview's own bookkeeping is done with,
+      // and reverting on the modal's close must not undo a save that
+      // already went through.
+      gcsRecheckOriginal = null;
+      document.querySelectorAll('.gcs-pending-change').forEach((el) => el.classList.remove('gcs-pending-change'));
       bootstrap.Modal.getInstance(document.getElementById('gcs-recheck-modal')).hide();
       if (typeof showToast === 'function') showToast('success', d.message || 'Corrected.');
-      showList(); loadList();
+      // Stays on the form: the figures just corrected are the figures now
+      // showing, and returning to the list the moment they land is what
+      // made this look like nothing had happened.
+      this.disabled = false;
     } catch (e) {
       if (typeof showToast === 'function') showToast('danger', 'Could not apply the corrections.');
       this.disabled = false;
     }
   });
+  // However the popup closes without applying -- Close, the X, Esc, or a
+  // click on the backdrop -- the preview it put on the form comes back off.
+  const modalEl = document.getElementById('gcs-recheck-modal');
+  if (modalEl) modalEl.addEventListener('hidden.bs.modal', gcsRevertPreview);
 });
 $('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showList(); loadList(); });
 /* ---------------------------------------------------------------------
@@ -728,6 +822,7 @@ $(document).on('click', '.gcs-edit', function () {
     document.getElementById('f-remarks').value = d.remarks || '';
     recalc();
     showForm();
+    gcsSnapshotEditable();
   });
 });
 $(loadList);
