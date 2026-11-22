@@ -173,6 +173,29 @@ def plan(settlement, *, include_date=True):
     fresh = _gc_settlement_autofill(settlement.batch, settlement.scheme)
     review = _scheme_default_fields_to_review(settlement, fresh)
 
+    # Which scheme applies can itself have moved on -- a new scheme covering
+    # these placement dates, an existing one's date range edited, a branch or
+    # region reassigned. The settlement stays bound to the scheme it was made
+    # under (scheme_id is in _NEVER, deliberately: a settled document does not
+    # change its own basis unasked), so every figure above is worked out from
+    # that one. If the master would now pick a different scheme, the whole
+    # comparison is against the wrong rates and saying nothing about it is the
+    # worst of the options -- so it is reported, for a person to act on.
+    try:
+        from broiler.views import _match_growing_charge_scheme, _placement_date
+
+        matched = _match_growing_charge_scheme(settlement.batch,
+                                               _placement_date(settlement.batch))
+    except Exception:  # a picker failure must not take the whole preview down
+        matched = None
+    if matched and matched.id != settlement.scheme_id:
+        stored_name = (f"{settlement.scheme.scheme_code} - {settlement.scheme.schema_name}"
+                       if settlement.scheme_id else "(none)")
+        review["scheme"] = {
+            "from": stored_name,
+            "to": f"{matched.scheme_code} - {matched.schema_name}",
+        }
+
     # The person's own entries survive: they are the edit path's to change, and
     # a re-run that overwrote a typed deduction would be destroying the work it
     # claims to be protecting.

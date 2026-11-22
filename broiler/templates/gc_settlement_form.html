@@ -549,20 +549,39 @@ async function loadRecheck() {
             + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
         + '</tbody></table>';
     }
-    if (reviewNames.length) {
+    // A changed applicable scheme is not a figure and is not typed on this
+    // form, so it does not belong under the "set them by hand" heading --
+    // it is the basis every other figure was worked out from, and says
+    // something quite different: that this settlement is being compared
+    // against rates the master would no longer choose for this batch.
+    const schemeChange = (d.review || {}).scheme;
+    const figureReviewNames = reviewNames.filter((k) => k !== 'scheme');
+    if (schemeChange) {
+      html += (names.length ? '<hr class="my-2">' : '')
+        + '<div class="alert alert-warning py-2 px-2 mb-2 small">'
+        + '<i class="fas fa-triangle-exclamation me-1"></i>'
+        + '<strong>This settlement is on a scheme the master would no longer pick '
+        + 'for this batch.</strong><div class="mt-1">Settled on '
+        + `<span class="fw-semibold">${schemeChange.from}</span>; the master now matches `
+        + `<span class="fw-semibold">${schemeChange.to}</span>. `
+        + 'Every figure below is worked out from the scheme it was settled on, not '
+        + 'the one now matched \u2014 Recheck cannot move a settlement onto a different '
+        + 'scheme. Delete and re-create it if it belongs on the newer one.</div></div>';
+    }
+    if (figureReviewNames.length) {
       // A different heading and no highlight on the form: these are fields
       // the form itself lets someone type over, so the stored figure may be
       // a deliberate choice rather than a stale default -- Apply corrections
       // will not touch any of these, whether or not it is enabled, and the
       // wording says so rather than implying it will.
-      html += (names.length ? '<hr class="my-2">' : '')
+      html += ((names.length && !schemeChange) ? '<hr class="my-2">' : '')
         + '<div class="small text-muted mb-1">'
         + 'The scheme now suggests different figures for these — the form still lets you set '
         + 'them by hand, so they are shown for review, not corrected automatically:</div>'
         + '<table class="table table-sm mb-0"><thead><tr>'
         + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Scheme suggests</th>'
         + '</tr></thead><tbody>'
-        + reviewNames.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
+        + figureReviewNames.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
             + `<td class="text-end text-muted">${d.review[k].from || '-'}</td>`
             + `<td class="text-end fw-semibold">${d.review[k].to || '-'}</td></tr>`).join('')
         + '</tbody></table>';
@@ -961,6 +980,52 @@ document.getElementById('gcs-submit').addEventListener('click', async function (
   const payload = { batch, scheme, gc_date: document.getElementById('f-gc_date').value,
                     remarks: document.getElementById('f-remarks').value };
   EDIT_FIELDS.forEach(k => payload[k] = num(k));
+
+  // Saving an existing settlement keeps its computed figures as stored --
+  // a settled document does not restate itself because something upstream
+  // moved. That is right until the batch has been unlocked and its Daily
+  // Entry rows corrected: then the figures on screen are the true ones and
+  // the stored ones are stale, and saving quietly kept the stale ones while
+  // answering "saved", which read as though the correction had been filed.
+  // So where a save would leave figures behind, it says so first and the
+  // choice is made deliberately rather than by default.
+  if (editId) {
+    try {
+      const chk = await fetch(`/gc_settlement/${editId}/recalculate/`);
+      if (chk.ok) {
+        const cd = await chk.json();
+        // Both buckets matter here. changes are figures nobody can type, so
+        // refreshing them is pure correction. review are the scheme-suggested
+        // ones a person can override -- refreshing is still safe, because the
+        // form posts whatever is on screen for those and the save lets it win,
+        // so an override the person is looking at survives untouched. What
+        // would be lost is only a stale default nobody chose. 'scheme' is in
+        // review too but is not a figure and cannot be changed from here, so
+        // it is left out of this prompt; the Recheck banner says that part.
+        const stale = Object.keys(cd.changes || {})
+          .concat(Object.keys(cd.review || {}))
+          .filter(k => k !== 'gc_date' && k !== 'scheme');
+        if (stale.length) {
+          const lines = stale.sort().slice(0, 8)
+            .map(k => { const v = (cd.changes || {})[k] || (cd.review || {})[k];
+                        return `\u2022 ${k.replace(/_/g, ' ')}: ${v.from} \u2192 ${v.to}`; })
+            .join('\n');
+          const more = stale.length > 8 ? `\n\u2026 and ${stale.length - 8} more` : '';
+          const msg = 'The stored figures for this settlement no longer match the '
+            + 'batch\'s records:\n\n' + lines + more
+            + '\n\nStore the recalculated figures as well as your edits? '
+            + 'Choosing Cancel saves only the boxes you typed in and leaves these as they are.';
+          const refresh = await (window.bimsConfirm
+            ? window.bimsConfirm(msg, { title: 'Figures have moved on',
+                                        confirmText: 'Save with recalculated figures',
+                                        cancelText: 'Save my edits only', danger: false })
+            : Promise.resolve(confirm(msg)));
+          if (refresh) payload.refresh_derived = true;
+        }
+      }
+    } catch (e) { /* the check is a courtesy: a failure must not block saving */ }
+  }
+
   this.disabled = true;
   const url = editId ? `/gc_settlement/${editId}/` : '/create-gc-settlement/';
   const res = await fetch(url, {

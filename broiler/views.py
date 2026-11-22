@@ -11157,16 +11157,62 @@ class GCSettlementAPI(View):
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
-        # Editing only touches the manual/override inputs + gc_date/remarks; the
-        # auto-computed read-only figures stay as stored. Totals recompute from
-        # the current stored values overlaid with the edited inputs.
-        fields = {f.name: getattr(s, f.name) for f in GrowingChargeSettlement._meta.fields}
-        for f in GC_SETTLEMENT_INPUT_FIELDS:
-            if f in data and data[f] not in (None, ""):
-                fields[f] = Decimal(str(data[f]))
-        totals = _gc_settlement_totals(fields, s.sold_birds, s.sold_weight)
-        for k, v in {**{f: fields[f] for f in GC_SETTLEMENT_INPUT_FIELDS}, **totals}.items():
-            setattr(s, k, v)
+
+        # An edit normally touches the manual/override inputs + gc_date/remarks
+        # and leaves the auto-computed figures exactly as stored -- a settled
+        # document should not quietly restate itself because something upstream
+        # moved. But a batch that has been unlocked and had its Daily Entry rows
+        # corrected is precisely the case where it should: the figures on the
+        # form are then right and the stored ones are not, and saving used to
+        # keep the stale ones while answering "Settlement updated", which read
+        # as though the correction had been filed.
+        #
+        # So the refresh is offered rather than assumed: before submitting, the
+        # form asks the recalculate endpoint what would change, shows the
+        # difference, and only sends refresh_derived when the person accepts.
+        # Without that flag this behaves exactly as it always has.
+        #
+        # Note the editable figures still win over the fresh ones below: the
+        # form posts whatever is on screen for those, so a rate somebody typed
+        # to settle a dispute survives a refresh rather than being quietly
+        # replaced by what the scheme would have said.
+        refresh_derived = bool(data.get("refresh_derived"))
+        scheme = None
+        if data.get("scheme"):
+            scheme = GrowingChargeScheme.objects.filter(id=data["scheme"]).first()
+
+        if refresh_derived:
+            # The scheme may have been reselected on the form; honour it, since
+            # it decides every slab-derived figure below.
+            if scheme and scheme.id != s.scheme_id:
+                s.scheme = scheme
+            fields = _gc_settlement_autofill(s.batch, s.scheme)
+            # The person's typed inputs still win over the fresh defaults.
+            for f in GC_SETTLEMENT_INPUT_FIELDS:
+                if f in data and data[f] not in (None, ""):
+                    fields[f] = Decimal(str(data[f]))
+        else:
+            fields = {f.name: getattr(s, f.name) for f in GrowingChargeSettlement._meta.fields}
+            for f in GC_SETTLEMENT_INPUT_FIELDS:
+                if f in data and data[f] not in (None, ""):
+                    fields[f] = Decimal(str(data[f]))
+
+        sold_birds = fields.get("sold_birds") if refresh_derived else s.sold_birds
+        sold_weight = fields.get("sold_weight") if refresh_derived else s.sold_weight
+        totals = _gc_settlement_totals(fields, sold_birds or 0, sold_weight or 0)
+
+        if refresh_derived:
+            model_field_names = {f.name for f in GrowingChargeSettlement._meta.get_fields()}
+            skip = {"id", "settlement_code", "batch", "batch_id", "farm", "farm_id",
+                    "scheme", "scheme_id", "created_by", "created_by_id", "created_at",
+                    "updated_at", "remarks", "gc_date", "tds_percent"}
+            for k, v in {**fields, **totals}.items():
+                if k in model_field_names and k not in skip:
+                    setattr(s, k, v)
+        else:
+            for k, v in {**{f: fields[f] for f in GC_SETTLEMENT_INPUT_FIELDS}, **totals}.items():
+                setattr(s, k, v)
+
         if data.get("gc_date"):
             s.gc_date = timezone.datetime.fromisoformat(data["gc_date"]).date()
         s.remarks = data.get("remarks", s.remarks) or ""
@@ -11174,7 +11220,10 @@ class GCSettlementAPI(View):
         # Re-posting cancels the previous voucher and writes a fresh one, rather
         # than amending a posted figure in place.
         gc_posting.post_settlement_if_enabled(s, user=request.user)
-        return JsonResponse({"message": "Settlement updated", "id": s.id, "code": s.settlement_code})
+        return JsonResponse({
+            "message": "Settlement updated" + (" (figures refreshed)" if refresh_derived else ""),
+            "id": s.id, "code": s.settlement_code,
+        })
 
     @transaction.atomic
     def delete(self, request, id):
