@@ -1738,21 +1738,34 @@ $(document).ready(function () {
     const BF_EXPORT = { columns: ":visible:not(.no-export)", orthogonal: "export" };
     const BF_LENGTHS = [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]];
 
-    /* Edge's Tracking Prevention refuses localStorage on our own pages, and
+    /* Edge's Tracking Prevention refuses sessionStorage on our own pages, and
        both calls below are wrapped in a try/catch -- so being refused looked
        like nothing at all: no error, just a filter that came back empty on
        every refresh. So storage is probed once, and where it is refused the
        same values ride in the address bar instead, written with replaceState
-       so Back still leaves the page rather than walking its filter states. */
+       so Back still leaves the page rather than walking its filter states.
+
+       sessionStorage, not localStorage: this used localStorage, which keeps
+       a search or filter indefinitely -- across tab closes, browser restarts,
+       days later -- while every other list in this app clears its filter
+       when the session ends, as sessionStorage does. A search typed in once
+       was turning up again on visits that had nothing to do with it. */
     const BF_STORAGE_OK = (function () {
         try {
             const probe = "bims.probe";
-            window.localStorage.setItem(probe, "1");
-            const ok = window.localStorage.getItem(probe) === "1";
-            window.localStorage.removeItem(probe);
+            window.sessionStorage.setItem(probe, "1");
+            const ok = window.sessionStorage.getItem(probe) === "1";
+            window.sessionStorage.removeItem(probe);
             return ok;
         } catch (e) { return false; }
     })();
+    // A filter saved under the old localStorage behaviour must not keep
+    // showing up now that the session has ended for everyone already
+    // carrying one -- cleared once, on this page's first run.
+    try {
+        ["bims.farmers.filters", "bims.farms.filters", "bims.farms.tab"].forEach((k) =>
+            window.localStorage.removeItem(k));
+    } catch (e) { /* no localStorage at all: nothing to clear */ }
 
     function bfUrlRead(key) {
         try {
@@ -1775,11 +1788,11 @@ $(document).ready(function () {
 
     function bfSaved(key) {
         if (!BF_STORAGE_OK) return bfUrlRead(key);
-        try { return JSON.parse(window.localStorage.getItem(key) || "{}") || {}; } catch (e) { return {}; }
+        try { return JSON.parse(window.sessionStorage.getItem(key) || "{}") || {}; } catch (e) { return {}; }
     }
     function bfRemember(key, value) {
         if (!BF_STORAGE_OK) { bfUrlWrite(key, value); return; }
-        try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not remembered */ }
+        try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not remembered */ }
     }
     function bfFillOptions(select, values, allLabel, preferred) {
         const keep = select.val() || preferred || "";
