@@ -112,19 +112,19 @@ class RecalculateTests(TestCase):
 
     def test_it_finds_the_figures_that_are_wrong(self):
         s = self.settled_the_old_way()
-        changes, _ = gc_recalc.plan(s)
+        changes, _review, _ = gc_recalc.plan(s)
         self.assertEqual(changes["feed_out"], {"from": "500.00", "to": "1000.00"})
         self.assertEqual(changes["feed_balance"], {"from": "500.00", "to": "0.00"})
 
     def test_a_settlement_already_right_reports_nothing(self):
         """The answer for every batch settled after the fix, and the reason a
         sweep over all of them is readable."""
-        changes, _ = gc_recalc.plan(self.settle())
+        changes, _review, _ = gc_recalc.plan(self.settle())
         self.assertEqual(changes, {})
 
     def test_previewing_writes_nothing(self):
         s = self.settled_the_old_way()
-        gc_recalc.plan(s)
+        gc_recalc.plan(s)  # still a 3-tuple; unpacking isn't needed here
         s.refresh_from_db()
         self.assertEqual(s.feed_balance, Decimal("500.00"))
         self.assertEqual(GCSettlementRecalculation.objects.count(), 0)

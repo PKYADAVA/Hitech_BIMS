@@ -49,19 +49,50 @@ _NEVER = {
 
 
 def _fields_to_refresh():
-    """Every stored figure a re-run may replace.
+    """Every stored figure a re-run may replace outright.
 
-    Everything on the model except the fields a person fills in (which belong
-    to the edit path), the identity columns, and ``gc_date``. Derived by
-    subtraction rather than listed, so a figure added to the settlement in
-    future is refreshed without anyone remembering to add it here — the
-    failure this exists to fix was a figure nobody could refresh at all.
+    Everything on the model except the fields a person can actually type
+    into (which belong to the edit path), the scheme-suggested fields a
+    person *can* override (see ``_scheme_default_fields_to_review`` --
+    those are reported separately, never silently replaced), the identity
+    columns, and ``gc_date``. Derived by subtraction rather than listed, so
+    a figure added to the settlement in future is refreshed without anyone
+    remembering to add it here — the failure this exists to fix was a
+    figure nobody could refresh at all.
     """
     from broiler.models import GrowingChargeSettlement
-    from broiler.views import GC_SETTLEMENT_INPUT_FIELDS
+    from broiler.views import GC_SETTLEMENT_INPUT_FIELDS, GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS
 
+    skip = set(GC_SETTLEMENT_INPUT_FIELDS) - set(GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS)
     return [f.name for f in GrowingChargeSettlement._meta.fields
-            if f.name not in _NEVER and f.name not in GC_SETTLEMENT_INPUT_FIELDS]
+            if f.name not in _NEVER and f.name not in skip]
+
+
+def _scheme_default_fields_to_review(settlement, fresh):
+    """Scheme-suggested figures the stored value may no longer match.
+
+    These fields are overridable on the form, so what is stored may be a
+    deliberate override rather than an unrefreshed default -- a re-run
+    cannot tell those apart, and silently overwriting an override some
+    farmer was paid against is worse than leaving a stale default alone.
+    So they are never corrected automatically. What they are is reported:
+    what the scheme would suggest now, next to what is stored, so whoever
+    is rechecking the settlement can see whether the two still agree and
+    decide for themselves whether anything here needs to change.
+    """
+    from broiler.models import GrowingChargeSettlement
+    from broiler.views import GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS
+
+    columns = {f.name: f for f in GrowingChargeSettlement._meta.fields}
+    review = {}
+    for name in GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS:
+        if name not in fresh or name not in columns:
+            continue
+        old = getattr(settlement, name)
+        new = _as_stored(columns[name], fresh[name])
+        if _differs(old, new):
+            review[name] = {"from": _as_text(old), "to": _as_text(new)}
+    return review
 
 
 def _as_stored(field, value):
@@ -127,14 +158,20 @@ def _differs(old, new) -> bool:
 def plan(settlement, *, include_date=True):
     """What a re-run would change, without changing anything.
 
-    Returns ``{field: {"from": str, "to": str}}`` — empty when the stored
-    figures already match what the batch's records say, which is the answer for
-    a settlement made after the fault was fixed.
+    Returns ``(changes, review, merged)``. ``changes`` is
+    ``{field: {"from": str, "to": str}}`` for the figures a re-run would
+    simply correct — empty when the stored ones already match what the
+    batch's records say. ``review`` is the same shape for the scheme-default
+    fields a person can override: never applied automatically, since the
+    stored value may be a deliberate override rather than a stale default,
+    and a re-run has no way to tell those apart (see
+    ``_scheme_default_fields_to_review``).
     """
     from broiler.views import (GC_SETTLEMENT_INPUT_FIELDS,
                                _gc_settlement_autofill, _gc_settlement_totals)
 
     fresh = _gc_settlement_autofill(settlement.batch, settlement.scheme)
+    review = _scheme_default_fields_to_review(settlement, fresh)
 
     # The person's own entries survive: they are the edit path's to change, and
     # a re-run that overwrote a typed deduction would be destroying the work it
@@ -167,7 +204,7 @@ def plan(settlement, *, include_date=True):
             changes["gc_date"] = {"from": _as_text(settlement.gc_date),
                                   "to": _as_text(suggested)}
 
-    return changes, merged
+    return changes, review, merged
 
 
 @transaction.atomic
@@ -187,7 +224,7 @@ def recalculate(settlement, *, user=None, include_date=True, note=""):
     from broiler.models import GCSettlementRecalculation
     from broiler.services import gc_posting
 
-    changes, merged = plan(settlement, include_date=include_date)
+    changes, _review, merged = plan(settlement, include_date=include_date)
     if not changes:
         return {}
 

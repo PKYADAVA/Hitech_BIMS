@@ -527,23 +527,53 @@ async function loadRecheck() {
     const res = await fetch(`/gc_settlement/${editId}/recalculate/`);
     const d = await res.json();
     const names = Object.keys(d.changes || {});
-    if (!names.length) {
+    const reviewNames = Object.keys(d.review || {});
+    if (!names.length && !reviewNames.length) {
       body.innerHTML = '<div class="text-success small">'
         + "These figures already agree with the batch's records. Nothing to correct.</div>";
       apply.disabled = true;
       return;
     }
-    apply.disabled = false;
-    body.innerHTML = '<table class="table table-sm mb-0"><thead><tr>'
-      + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Should be</th>'
-      + '</tr></thead><tbody>'
-      + names.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
-          + `<td class="text-end text-muted">${d.changes[k].from || '-'}</td>`
-          + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
-      + '</tbody></table>';
+    // Apply corrects names only -- review is never applied automatically,
+    // so its presence alone must not enable a button whose click says
+    // "correct these figures" when there may be nothing here to correct.
+    apply.disabled = !names.length;
+
+    let html = '';
+    if (names.length) {
+      html += '<table class="table table-sm mb-0"><thead><tr>'
+        + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Should be</th>'
+        + '</tr></thead><tbody>'
+        + names.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
+            + `<td class="text-end text-muted">${d.changes[k].from || '-'}</td>`
+            + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
+        + '</tbody></table>';
+    }
+    if (reviewNames.length) {
+      // A different heading and no highlight on the form: these are fields
+      // the form itself lets someone type over, so the stored figure may be
+      // a deliberate choice rather than a stale default -- Apply corrections
+      // will not touch any of these, whether or not it is enabled, and the
+      // wording says so rather than implying it will.
+      html += (names.length ? '<hr class="my-2">' : '')
+        + '<div class="small text-muted mb-1">'
+        + 'The scheme now suggests different figures for these — the form still lets you set '
+        + 'them by hand, so they are shown for review, not corrected automatically:</div>'
+        + '<table class="table table-sm mb-0"><thead><tr>'
+        + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Scheme suggests</th>'
+        + '</tr></thead><tbody>'
+        + reviewNames.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
+            + `<td class="text-end text-muted">${d.review[k].from || '-'}</td>`
+            + `<td class="text-end fw-semibold">${d.review[k].to || '-'}</td></tr>`).join('')
+        + '</tbody></table>';
+    }
+    body.innerHTML = html;
 
     // The same figures, shown where they actually live on the form, and
     // remembered as they were so a Close can put them back untouched.
+    // Review fields are not previewed on the form: Apply will never write
+    // them, so changing the visible box would show a number the save could
+    // not actually produce.
     gcsRecheckOriginal = {};
     names.forEach((name) => {
       const el = document.getElementById('f-' + name);

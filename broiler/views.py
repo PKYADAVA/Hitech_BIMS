@@ -10435,13 +10435,27 @@ GC_SETTLEMENT_MANUAL_FIELDS = [
     "vaccinator_charges", "transportation_charges", "other_deductions", "equipment_charges",
     "advance_deductions",
 ]
+# Fields the scheme fills in as a default but the form still lets a person
+# override (gcs-edit, not gcs-ro, on the Add/Edit page) -- a dispute with one
+# farmer, say, settled at a different rate than the scheme's own slab says.
+# Once saved, the row cannot tell "typed over deliberately" from "left as the
+# scheme suggested it": both look exactly like the stored figure. So a re-run
+# cannot silently overwrite these the way it does the fields nobody can touch
+# -- it would stand an equal chance of restoring a number someone chose on
+# purpose as of correcting one nobody chose at all. Recheck instead works out
+# what the *current* scheme would suggest and shows that figure next to the
+# stored one, same as any other difference, but under its own heading: a
+# suggestion to weigh, not a correction to accept on faith.
+GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS = [
+    "mortality_incentives", "fcr_incentives", "summer_incentives",
+    "birds_shortage_rate", "fcr_deduction", "mortality_deduction",
+]
 # Every persisted numeric field the POST accepts (the client sends final values;
 # the server recomputes the authoritative running totals from them on save).
-GC_SETTLEMENT_INPUT_FIELDS = GC_SETTLEMENT_MANUAL_FIELDS + [
+GC_SETTLEMENT_INPUT_FIELDS = (GC_SETTLEMENT_MANUAL_FIELDS + GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS + [
     "standard_growing_charges", "actual_growing_charges", "sales_incentives",
-    "mortality_incentives", "fcr_incentives", "summer_incentives",
-    "birds_shortage_rate", "birds_shortage_amount", "fcr_deduction", "mortality_deduction",
-]
+    "birds_shortage_amount",
+])
 
 
 def _num(x):
@@ -11227,12 +11241,15 @@ def gc_settlement_recalculate(request, id):
                     if request.method == "GET" else True)
 
     if request.method == "GET":
-        changes, _merged = gc_recalc.plan(settlement, include_date=include_date)
+        changes, review, _merged = gc_recalc.plan(settlement, include_date=include_date)
         return JsonResponse({
             "settlement": settlement.settlement_code,
             "batch": settlement.batch.batch_name,
             "changes": changes,
-            "up_to_date": not changes,
+            # Scheme-suggested figures that no longer match what is stored --
+            # shown, never applied: see GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS.
+            "review": review,
+            "up_to_date": not changes and not review,
         })
 
     if request.method != "POST":
