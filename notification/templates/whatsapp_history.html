@@ -106,6 +106,7 @@
             <th>Module</th>
             <th>Document</th>
             <th>Template</th>
+            <th>Sent Message Details</th>
             <th class="ds-mid">Status</th>
             <th>Retries</th>
             <th>Sent By</th>
@@ -169,6 +170,7 @@ $(function () {
         <td>${escapeHtml(m.module_label)}</td>
         <td>${escapeHtml(m.document_no) || "-"}</td>
         <td>${escapeHtml(m.template_name) || "-"}</td>
+        <td style="max-width:280px"><div class="text-truncate" title="${escapeHtml(m.sent_content)}">${escapeHtml(m.sent_content) || "-"}</div></td>
         <td>${statusBadge(m.status)}</td>
         <td class="text-center">${m.retry_count}</td>
         <td>${escapeHtml(m.sent_by)}</td>
@@ -327,6 +329,7 @@ $(function () {
         <tr><th>Mobile</th><td>${escapeHtml(m.mobile)}</td></tr>
         <tr><th>Module / Document</th><td>${escapeHtml(m.module_label)} / ${escapeHtml(m.document_no) || "-"}</td></tr>
         <tr><th>Template</th><td>${escapeHtml(m.template_name) || "-"}</td></tr>
+        <tr><th>Sent Message Details</th><td style="white-space:pre-wrap">${escapeHtml(m.sent_content) || "-"}</td></tr>
         <tr><th class="ds-mid">Status</th><td>${statusBadge(m.status)} ${m.error_message ? `<div class="small text-danger mt-1">${escapeHtml(m.error_message)}</div>` : ""}</td></tr>
         <tr><th>WhatsApp Message ID</th><td>${escapeHtml(m.wamid) || "-"}</td></tr>
         <tr><th>Status Check</th><td>${m.can_refresh ? '<span class="text-success">Available</span>' : (m.has_provider_id ? '<span class="text-muted">Status is final</span>' : '<span class="text-muted">Not available (sent before this feature)</span>')}</td></tr>

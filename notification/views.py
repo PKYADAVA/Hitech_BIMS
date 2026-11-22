@@ -1128,6 +1128,27 @@ class WhatsappHistoryPageView(View):
 _WHATSAPP_REFRESHABLE_STATUSES = frozenset({"queued", "sent", "delivered", "unknown"})
 
 
+def _whatsapp_sent_content(m):
+    """What actually went out, as far as this ERP can say.
+
+    A WhatsApp template's approved wording lives only in Meta's dashboard --
+    this ERP never stores it (see WhatsappTemplate's docstring) -- so the
+    body text itself cannot be shown. What it does keep is the free-text
+    body for a service-message reply, and for a template send, the exact
+    variables that were substituted into that template's {{1}}, {{2}}...
+    positions. Lined up against the template's own parameter_map, in order,
+    that is the closest honest account of what the party received.
+    """
+    if m.message:
+        return m.message
+    context = (m.api_request or {}).get("context")
+    if not isinstance(context, dict) or not context:
+        return ""
+    order = (m.template.parameter_map if m.template_id and m.template.parameter_map
+             else list(context.keys()))
+    return " | ".join(f"{name}: {context[name]}" for name in order if name in context)
+
+
 def _whatsapp_message_to_dict(m):
     return {
         "id": m.id, "created_at": timezone.localtime(m.created_at).strftime("%Y-%m-%d %H:%M"),
@@ -1136,6 +1157,7 @@ def _whatsapp_message_to_dict(m):
         "document_no": m.document_no, "template_name": m.template_name,
         "status": m.status, "wamid": m.wamid,
         "has_provider_id": bool(m.provider_message_id),
+        "sent_content": _whatsapp_sent_content(m),
         "gateway_response": m.gateway_response, "error_message": m.error_message,
         "retry_count": m.retry_count, "retry_of": m.retry_of_id,
         "sent_by": m.sent_by.username if m.sent_by else "",
