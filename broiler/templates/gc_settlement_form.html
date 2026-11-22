@@ -500,14 +500,17 @@ function gcsRevertPreview() {
   gcsRecheckOriginal = null;
 }
 
-async function loadRecheck() {
+let gcsMovingScheme = false;  // the open preview is of a move to the matched scheme
+
+async function loadRecheck(moving) {
+  moving = moving === true;  // a click handler passes the Event, not a flag
   // Recheck only ever touches the read-only figures it recalculates -- it
   // has no way to see, and so cannot save, anything typed into Remarks or
   // the manual incentive/deduction boxes since the form was last loaded.
   // Applying a correction while one of those sits unsaved would leave it
   // looking fine on screen and gone the moment the page is left, so this
   // is said plainly rather than left to be discovered later.
-  if (gcsHasUnsavedEdits()) {
+  if (!moving && gcsHasUnsavedEdits()) {
     const proceed = await (window.bimsConfirm
       ? window.bimsConfirm("This form has changes that have not been saved yet (Remarks or one of the "
           + "typed figures). Recheck only corrects the read-only figures below and cannot save those "
@@ -524,7 +527,9 @@ async function loadRecheck() {
 
   const apply = document.getElementById('gcs-recheck-apply');
   try {
-    const res = await fetch(`/gc_settlement/${editId}/recalculate/`);
+    gcsMovingScheme = moving;
+    apply.textContent = 'Apply corrections';
+    const res = await fetch(`/gc_settlement/${editId}/recalculate/` + (moving ? '?move_scheme=1' : ''));
     const d = await res.json();
     const names = Object.keys(d.changes || {});
     const reviewNames = Object.keys(d.review || {});
@@ -538,13 +543,22 @@ async function loadRecheck() {
     // so its presence alone must not enable a button whose click says
     // "correct these figures" when there may be nothing here to correct.
     apply.disabled = !names.length;
+    if (moving) apply.textContent = 'Move to this scheme and apply';
 
     let html = '';
+    if (moving && d.changes && d.changes.scheme) {
+      html += '<div class="alert alert-info py-2 px-2 mb-2 small">'
+        + '<i class="fas fa-right-left me-1"></i><strong>Moving to a different scheme.</strong> '
+        + `Settled on <span class="fw-semibold">${d.changes.scheme.from}</span>; every figure `
+        + `below is what it comes to under <span class="fw-semibold">${d.changes.scheme.to}</span>. `
+        + 'Anything typed by hand is kept. Nothing changes until you press the button below.</div>';
+    }
     if (names.length) {
       html += '<table class="table table-sm mb-0"><thead><tr>'
-        + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">Should be</th>'
+        + '<th>Figure</th><th class="text-end">Stored</th><th class="text-end">'
+        + (moving ? 'Under the new scheme' : 'Should be') + '</th>'
         + '</tr></thead><tbody>'
-        + names.sort().map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
+        + names.sort().filter(k => !(moving && k === 'scheme')).map(k => `<tr><td>${k.replace(/_/g, ' ')}</td>`
             + `<td class="text-end text-muted">${d.changes[k].from || '-'}</td>`
             + `<td class="text-end fw-semibold">${d.changes[k].to || '-'}</td></tr>`).join('')
         + '</tbody></table>';
@@ -564,9 +578,11 @@ async function loadRecheck() {
         + 'for this batch.</strong><div class="mt-1">Settled on '
         + `<span class="fw-semibold">${schemeChange.from}</span>; the master now matches `
         + `<span class="fw-semibold">${schemeChange.to}</span>. `
-        + 'Every figure below is worked out from the scheme it was settled on, not '
-        + 'the one now matched \u2014 Recheck cannot move a settlement onto a different '
-        + 'scheme. Delete and re-create it if it belongs on the newer one.</div></div>';
+        + 'Every figure above is worked out from the scheme it was settled on, not '
+        + 'the one now matched.</div>'
+        + '<button type="button" class="btn btn-sm btn-outline-dark mt-2" id="gcs-move-preview">'
+        + '<i class="fas fa-right-left me-1"></i>Show what it comes to under '
+        + schemeChange.to + '</button></div>';
     }
     if (figureReviewNames.length) {
       // A different heading and no highlight on the form: these are fields
@@ -587,6 +603,8 @@ async function loadRecheck() {
         + '</tbody></table>';
     }
     body.innerHTML = html;
+    const mv = document.getElementById('gcs-move-preview');
+    if (mv) mv.addEventListener('click', () => loadRecheck(true));
 
     // The same figures, shown where they actually live on the form, and
     // remembered as they were so a Close can put them back untouched.
@@ -609,7 +627,7 @@ async function loadRecheck() {
 
 document.addEventListener('DOMContentLoaded', function () {
   const btn = document.getElementById('gcs-recheck');
-  if (btn) btn.addEventListener('click', loadRecheck);
+  if (btn) btn.addEventListener('click', () => loadRecheck(false));
   const apply = document.getElementById('gcs-recheck-apply');
   if (apply) apply.addEventListener('click', async function () {
     this.disabled = true;
@@ -617,9 +635,15 @@ document.addEventListener('DOMContentLoaded', function () {
       const res = await fetch(`/gc_settlement/${editId}/recalculate/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-        body: JSON.stringify({ note: 'Rechecked from the settlement form' }),
+        body: JSON.stringify({
+          note: gcsMovingScheme ? 'Moved to the scheme the master now matches, from the settlement form'
+                                : 'Rechecked from the settlement form',
+          move_scheme: gcsMovingScheme,
+        }),
       });
       const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'failed');
+      const wasMove = gcsMovingScheme;
       // Saved for real now -- the preview's own bookkeeping is done with,
       // and reverting on the modal's close must not undo a save that
       // already went through.
@@ -627,9 +651,15 @@ document.addEventListener('DOMContentLoaded', function () {
       document.querySelectorAll('.gcs-pending-change').forEach((el) => el.classList.remove('gcs-pending-change'));
       bootstrap.Modal.getInstance(document.getElementById('gcs-recheck-modal')).hide();
       if (typeof showToast === 'function') showToast('success', d.message || 'Corrected.');
-      // Stays on the form: the figures just corrected are the figures now
-      // showing, and returning to the list the moment they land is what
-      // made this look like nothing had happened.
+      if (wasMove) {
+        // The form still holds the old scheme in its dropdown; submitting it
+        // afterwards would quietly put the settlement back on that scheme. So
+        // a move goes back to the list, and Edit reads the settlement afresh.
+        editId = null; showList(); loadList();
+      }
+      // Otherwise it stays on the form: the figures just corrected are the
+      // figures now showing, and returning to the list the moment they land
+      // is what made this look like nothing had happened.
       this.disabled = false;
     } catch (e) {
       if (typeof showToast === 'function') showToast('danger', 'Could not apply the corrections.');
@@ -639,7 +669,12 @@ document.addEventListener('DOMContentLoaded', function () {
   // However the popup closes without applying -- Close, the X, Esc, or a
   // click on the backdrop -- the preview it put on the form comes back off.
   const modalEl = document.getElementById('gcs-recheck-modal');
-  if (modalEl) modalEl.addEventListener('hidden.bs.modal', gcsRevertPreview);
+  if (modalEl) modalEl.addEventListener('hidden.bs.modal', function () {
+    gcsRevertPreview();
+    gcsMovingScheme = false;
+    const a = document.getElementById('gcs-recheck-apply');
+    if (a) a.textContent = 'Apply corrections';
+  });
 });
 $('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showList(); loadList(); });
 /* ---------------------------------------------------------------------

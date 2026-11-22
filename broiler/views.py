@@ -11289,8 +11289,26 @@ def gc_settlement_recalculate(request, id):
     include_date = (request.GET.get("include_date", "1") != "0"
                     if request.method == "GET" else True)
 
+    # Moving a settlement onto the scheme the master now matches. The target
+    # is never read from the request: it is whatever the master picks for this
+    # batch, worked out here, so a crafted id cannot point a farmer's payment
+    # at a scheme nobody matched to it. When there is nothing to move to, the
+    # flag simply does nothing.
+    wants_move = (request.GET.get("move_scheme") == "1" if request.method == "GET"
+                  else False)
+    if request.method == "POST":
+        try:
+            _body = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            _body = {}
+        wants_move = bool(_body.get("move_scheme"))
+    else:
+        _body = {}
+    target = gc_recalc.matched_scheme_if_different(settlement) if wants_move else None
+
     if request.method == "GET":
-        changes, review, _merged = gc_recalc.plan(settlement, include_date=include_date)
+        changes, review, _merged = gc_recalc.plan(
+            settlement, include_date=include_date, to_scheme=target)
         return JsonResponse({
             "settlement": settlement.settlement_code,
             "batch": settlement.batch.batch_name,
@@ -11298,25 +11316,39 @@ def gc_settlement_recalculate(request, id):
             # Scheme-suggested figures that no longer match what is stored --
             # shown, never applied: see GC_SETTLEMENT_SCHEME_DEFAULT_FIELDS.
             "review": review,
+            # Set when the master would now pick a different scheme, so the
+            # form can offer the move rather than only describing it.
+            "can_move_scheme": bool(
+                target or gc_recalc.matched_scheme_if_different(settlement)),
+            "moving_scheme": bool(target),
             "up_to_date": not changes and not review,
         })
 
     if request.method != "POST":
         return JsonResponse({"error": "GET to preview, POST to apply."}, status=405)
 
-    try:
-        body = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
-        body = {}
+    if target is not None:
+        from user.access import user_can
+
+        # A different scheme changes what a farmer was paid on, which is more
+        # than correcting a figure, so it is held to the page's edit right
+        # rather than whatever let someone press Recheck.
+        if not user_can(request.user, "gc_settlement", "edit"):
+            return JsonResponse({"error": "Not permitted."}, status=403)
+
     result = gc_recalc.recalculate(
         settlement, user=request.user,
-        include_date=body.get("include_date", True),
-        note=body.get("note") or "")
+        include_date=_body.get("include_date", True),
+        note=_body.get("note") or "", to_scheme=target)
     if not result:
         return JsonResponse({"message": "Already up to date — nothing changed.",
                              "changes": {}, "up_to_date": True})
-    return JsonResponse({"message": "%d figure(s) corrected." % len(result["changes"]),
-                         "changes": result["changes"], "up_to_date": False})
+    moved = "scheme" in result["changes"]
+    return JsonResponse({
+        "message": ("Moved to %s; %d figure(s) corrected." % (
+            result["changes"]["scheme"]["to"], len(result["changes"]) - 1)
+            if moved else "%d figure(s) corrected." % len(result["changes"])),
+        "changes": result["changes"], "up_to_date": False})
 
 
 @login_required
