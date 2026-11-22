@@ -1163,7 +1163,12 @@ window.loadOptions = function (select, url, data, options) {
         opts.method = input.method;
       }
 
-      const entry = { el: hold(lastPressed), holder: k.holder };
+      // A caller that reads and reports the answer itself says so, and is left
+      // alone: otherwise a refusal it already explained -- the WhatsApp
+      // provider turning a message down, say -- is followed by a second,
+      // generic "the server could not save that".
+      const quiet = headers.has('X-Bims-Own-Errors');
+      const entry = { el: quiet ? null : hold(lastPressed), holder: k.holder };
       let result;
       try {
         result = nativeFetch.call(this, input, opts);
@@ -2962,4 +2967,557 @@ window.loadOptions = function (select, url, data, options) {
       });
     }
   });
+})();
+
+
+/* Send WhatsApp from a document's own page.
+ *
+ *   BIMS_WhatsApp.open({ module: 'bird_sale', docId: 12, csrf: token, onSent: fn, onFailed: fn })
+ *   BIMS_WhatsApp.openMany({ module, docIds: [..], csrf, onSent: fn(docId), onFailed: fn(docId) })
+ *
+ * open() is a dialog for one document: who it goes to, which approved template,
+ * the finished message (when the template has its wording on file) or the
+ * values that go into it, and what has already been sent. openMany() sends one
+ * template to the customers on several documents, one after the other, with a
+ * preview of the message each of them would get.
+ *
+ * Both send through the endpoint the Messaging > Transaction screen uses, so the
+ * permission check, the duplicate guard and the WhatsApp History log are the
+ * ones already there. Meta owns the text of an approved template; what is shown
+ * as the message is the wording pasted into the template record, filled with
+ * this document's values -- a preview, not what Meta renders.
+ */
+(function () {
+  function esc(v) { return window.escapeHtml ? window.escapeHtml(String(v == null ? '' : v)) : String(v); }
+
+  // ---- shared: styles and the message preview ---------------------------
+  function ensureStyles() {
+    if (document.getElementById('bimsWaStyle')) return;
+    var st = document.createElement('style');
+    st.id = 'bimsWaStyle';
+    st.textContent =
+      '.wa-bubble{background:#dcf8c6;border-radius:10px 10px 10px 2px;padding:.6rem .75rem;font-size:.9rem;' +
+        'line-height:1.4;color:#1f2d23;box-shadow:0 1px 1px rgba(0,0,0,.12);word-break:break-word}' +
+      '.wa-bubble-wrap{background:#efe7dd;border-radius:8px;padding:.75rem}' +
+      '.wa-val{font-weight:600}' +
+      '.wa-miss{background:#f8d7da;color:#842029;border-radius:4px;padding:0 4px;font-weight:600}' +
+      '.wa-fields td{vertical-align:middle}' +
+      '#bimsWaManyTable tr[data-i]{cursor:pointer}' +
+      '#bimsWaManyTable tr.wam-focus>td{background:rgba(31,168,85,.09)}' +
+      '#bimsWaMany thead th{position:sticky;top:0;background:var(--bs-body-bg,#fff);z-index:1}';
+    document.head.appendChild(st);
+  }
+
+  // The wording with each numbered placeholder replaced by its value. A blank
+  // value is shown as a red [FieldName] marker and reported back, because a
+  // message with an empty field is one WhatsApp will not accept.
+  function fill(body, names, get) {
+    var missing = [];
+    var html = esc(body)
+      .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+      .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?]|$)/g, '$1<i>$2</i>')
+      .replace(/\{\{\s*(\d+)\s*\}\}/g, function (m, n) {
+        var name = names[Number(n) - 1];
+        var v = name == null ? '' : get(name);
+        if (v === '' || v == null) {
+          if (name != null && missing.indexOf(name) < 0) missing.push(name);
+          return '<span class="wa-miss">[' + esc(name == null ? '{{' + n + '}}' : name) + ']</span>';
+        }
+        return '<span class="wa-val">' + esc(v) + '</span>';
+      })
+      .replace(/\n/g, '<br>');
+    return { html: html, missing: missing };
+  }
+  function blanks(names, get) {
+    var out = [];
+    names.forEach(function (n) { var v = get(n); if ((v === '' || v == null) && out.indexOf(n) < 0) out.push(n); });
+    return out;
+  }
+  function bubble(html) { return '<div class="wa-bubble-wrap"><div class="wa-bubble">' + html + '</div></div>'; }
+  function plain(err, t) {
+    if (/template/i.test(err) && /(not found|approved)/i.test(err)) {
+      return 'WhatsApp does not have an approved template named "' + t.template_name +
+             '" right now. Check its status in the LemIn AI dashboard, then fix the name or language under ' +
+             'Messaging > WhatsApp Templates.';
+    }
+    return err;
+  }
+  function fetchJson(url, opts) {
+    return fetch(url, opts).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) { return { status: r.status, body: b, ok: r.ok }; });
+    });
+  }
+  function sendOne(csrf, module, docId, templateId, force) {
+    return fetchJson('/whatsapp-transaction/send/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '', 'X-Bims-Own-Errors': '1' },
+      body: JSON.stringify({ module: module, doc_id: docId, template_id: templateId, force: !!force }),
+    });
+  }
+  var OK = /^(sent|delivered|read|mocked)$/;
+
+  // ======================================================================
+  // One document
+  // ======================================================================
+  var modal, state = {};
+
+  function build() {
+    if (modal) return;
+    ensureStyles();
+    var div = document.createElement('div');
+    div.innerHTML =
+      '<div class="modal fade" id="bimsWaSend" tabindex="-1" aria-hidden="true">' +
+        // Scrollable: a customer with a long send history, or a short window,
+        // would otherwise push the Send button off the bottom of the screen.
+        '<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">' +
+          '<div class="modal-content">' +
+            '<div class="modal-header py-2">' +
+              '<h6 class="modal-title"><i class="fab fa-whatsapp text-success me-1"></i>Send WhatsApp</h6>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body" id="bimsWaBody"></div>' +
+            '<div class="modal-footer py-2">' +
+              '<button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Close</button>' +
+              '<button type="button" class="btn btn-sm btn-success" id="bimsWaGo" disabled>' +
+                '<i class="fab fa-whatsapp me-1"></i>Send</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(div.firstChild);
+    modal = document.getElementById('bimsWaSend');
+    document.getElementById('bimsWaGo').addEventListener('click', function () { send(false); });
+    modal.addEventListener('change', function (e) { if (e.target.id === 'bimsWaTemplate') paintMessage(); });
+  }
+
+  function selectedTemplate() {
+    var sel = document.getElementById('bimsWaTemplate');
+    if (!sel || !state.data) return null;
+    return state.data.templates.filter(function (t) { return String(t.id) === sel.value; })[0] || null;
+  }
+  function paramGetter(t) {
+    var map = {};
+    t.params.forEach(function (p) { map[p.name] = p.value; });
+    return function (name) { return map[name]; };
+  }
+  function canSend(d) { return !!(d && d.mobile_ok && d.templates.length); }
+
+  function paintMessage() {
+    var t = selectedTemplate();
+    var box = document.getElementById('bimsWaMessage');
+    if (!box) return;
+    if (!t) { box.innerHTML = ''; state.missing = []; return; }
+    var get = paramGetter(t);
+    var names = t.params.map(function (p) { return p.name; });
+    var html = '', missing;
+    if (t.body_preview) {
+      var f = fill(t.body_preview, names, get);
+      missing = f.missing;
+      html += bubble(f.html);
+    } else {
+      missing = blanks(names, get);
+      html += t.params.length
+        ? '<div class="small text-muted mb-1">Values going into the message</div>' +
+          '<table class="table table-sm table-bordered mb-0 small wa-fields"><tbody>' +
+          t.params.map(function (p, i) {
+            return '<tr><td class="text-muted" style="width:40%">{{' + (i + 1) + '}} ' + esc(p.name) + '</td><td>' +
+                   (p.value ? esc(p.value) : '<span class="wa-miss">empty</span>') + '</td></tr>';
+          }).join('') + '</tbody></table>' +
+          '<div class="form-text">Paste this template\'s approved wording under Messaging &rsaquo; WhatsApp Templates to see the whole message here.</div>'
+        : '<div class="small text-muted">This template has no fields to fill.</div>';
+    }
+    if (missing.length) {
+      html += '<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="fas fa-triangle-exclamation me-1"></i>' +
+        missing.length + (missing.length === 1 ? ' field is' : ' fields are') + ' empty: <b>' +
+        missing.map(esc).join(', ') + '</b>. WhatsApp usually refuses a message with a blank field.</div>';
+    }
+    // The values, for checking, once the message itself is on screen.
+    if (t.body_preview && t.params.length) {
+      html += '<details class="mt-2"><summary class="small text-muted">Fields</summary>' +
+        '<table class="table table-sm table-bordered mt-1 mb-0 small wa-fields"><tbody>' +
+        t.params.map(function (p, i) {
+          return '<tr><td class="text-muted" style="width:40%">{{' + (i + 1) + '}} ' + esc(p.name) + '</td><td>' +
+                 (p.value ? esc(p.value) : '<span class="wa-miss">empty</span>') + '</td></tr>';
+        }).join('') + '</tbody></table></details>';
+    }
+    box.innerHTML = html;
+    state.missing = missing;
+  }
+
+  function render(d) {
+    state.data = d;
+    var doc = d.document;
+    var html =
+      '<div class="d-flex justify-content-between align-items-start mb-2">' +
+        '<div><div class="fw-semibold">' + esc(doc.party_name) + '</div>' +
+        (d.mobile
+          ? '<div class="small ' + (d.mobile_ok ? 'text-muted' : 'text-danger') + '"><i class="fab fa-whatsapp me-1"></i>' + esc(d.mobile) +
+            (d.mobile_ok ? '' : ' &mdash; not a valid mobile number') + '</div>'
+          : '<div class="small text-danger">No mobile number on this customer. Add one on the customer record first.</div>') +
+        '</div>' +
+        '<div class="text-end small text-muted">' + esc(doc.label) + '<br><b>' + esc(doc.doc_no || '-') + '</b> &middot; ' +
+        esc(doc.date) + '<br>' + esc(doc.amount) + '</div>' +
+      '</div>';
+    if (!d.templates.length) {
+      html += '<div class="alert alert-warning small py-2 mb-2">No active WhatsApp template is set up for this ' +
+              'document. Add one under Messaging &rsaquo; WhatsApp Templates.</div>';
+    } else {
+      html += '<label class="form-label small mb-1" for="bimsWaTemplate">Template</label>' +
+        '<select id="bimsWaTemplate" class="form-select form-select-sm mb-2">' +
+        d.templates.map(function (t) {
+          return '<option value="' + t.id + '"' + (String(t.id) === String(state.keep) ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+        }).join('') + '</select><div id="bimsWaMessage" class="mb-2"></div>';
+    }
+    if (d.history.length) {
+      var nOk = d.history.filter(function (h) { return OK.test(h.status); }).length;
+      var nBad = d.history.length - nOk;
+      html += '<details' + (nBad && !nOk ? ' open' : '') + '><summary class="small text-muted">History &middot; ' +
+        '<span class="text-success">' + nOk + ' sent</span>' +
+        (nBad ? ' &middot; <span class="text-danger">' + nBad + ' failed</span>' : '') + '</summary>' +
+        '<ul class="list-unstyled small mb-0 mt-1">' +
+        d.history.map(function (h) {
+          return '<li><i class="fas fa-' + (OK.test(h.status) ? 'check text-success' : 'xmark text-danger') + ' me-1"></i>' +
+                 esc(h.sent_at) + ' &middot; ' + esc(h.template_name) + ' &middot; ' + esc(h.status) +
+                 (h.sent_by ? ' &middot; ' + esc(h.sent_by) : '') + '</li>';
+        }).join('') + '</ul></details>';
+    }
+    document.getElementById('bimsWaBody').innerHTML = html;
+    paintMessage();
+    document.getElementById('bimsWaGo').disabled = !canSend(d);
+  }
+
+  function load() {
+    return fetchJson('/whatsapp-transaction/document/?module=' + encodeURIComponent(state.module) +
+                     '&doc_id=' + encodeURIComponent(state.docId), { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.body.error || 'Could not load this document.');
+        return r.body;
+      });
+  }
+
+  async function send(force) {
+    var t = selectedTemplate();
+    var go = document.getElementById('bimsWaGo');
+    if (!t || !state.data) return;
+    if (!force) {
+      if (state.missing && state.missing.length &&
+          !(await window.bimsConfirm('These fields are empty: ' + state.missing.join(', ') +
+            '.\n\nWhatsApp usually refuses a message with a blank field. Send anyway?',
+            { title: 'Empty fields', confirmText: 'Send anyway', danger: false }))) return;
+      var before = state.data.history.some(function (h) {
+        return h.template_name === t.template_name && /^(sent|delivered|read)$/.test(h.status);
+      });
+      if (before && !(await window.bimsConfirm(
+        'This document has already been sent with "' + t.name + '". Send it again?',
+        { title: 'Already sent', confirmText: 'Send again', danger: false }))) return;
+    }
+    go.disabled = true;
+    state.keep = t.id;
+    try {
+      var res = await sendOne(state.csrf, state.module, state.docId, t.id, force);
+      if (res.status === 409 && res.body.duplicate) {
+        if (await window.bimsConfirm(res.body.error,
+            { title: 'Sent just now', confirmText: 'Send again', danger: false })) {
+          return send(true);
+        }
+        return;
+      }
+      if (res.body.success) {
+        window.showToast('success', 'WhatsApp message sent.');
+        if (state.onSent) state.onSent(res.body);
+      } else {
+        window.showToast('danger', plain(res.body.error || 'The message could not be sent.', t));
+        if (state.onFailed) state.onFailed(res.body);
+      }
+      render(await load());
+    } catch (e) {
+      window.showToast('danger', e.message || 'The message could not be sent.');
+    } finally {
+      go.disabled = !canSend(state.data);
+    }
+  }
+
+  // ======================================================================
+  // Several documents
+  // ======================================================================
+  var many, st = {};
+
+  function buildMany() {
+    if (many) return;
+    ensureStyles();
+    var div = document.createElement('div');
+    div.innerHTML =
+      '<div class="modal fade" id="bimsWaMany" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">' +
+        '<div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">' +
+          '<div class="modal-content">' +
+            '<div class="modal-header py-2">' +
+              '<h6 class="modal-title"><i class="fab fa-whatsapp text-success me-1"></i>Send WhatsApp to <span id="bimsWaManyN"></span></h6>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body" id="bimsWaManyBody"></div>' +
+            '<div class="modal-footer py-2 justify-content-between">' +
+              '<span class="small text-muted" id="bimsWaManyCount"></span>' +
+              '<div class="d-flex gap-2">' +
+                '<button type="button" class="btn btn-sm btn-outline-danger d-none" id="bimsWaManyRetry">' +
+                  '<i class="fas fa-rotate-right me-1"></i>Retry failed</button>' +
+                '<button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal" id="bimsWaManyClose">Close</button>' +
+                '<button type="button" class="btn btn-sm btn-success" id="bimsWaManyGo" disabled>' +
+                  '<i class="fab fa-whatsapp me-1"></i>Send</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(div.firstChild);
+    many = document.getElementById('bimsWaMany');
+    document.getElementById('bimsWaManyGo').addEventListener('click', function () { run(false); });
+    document.getElementById('bimsWaManyRetry').addEventListener('click', retryFailed);
+    many.addEventListener('change', function (e) {
+      if (e.target.id === 'bimsWaManyTpl') { defaults(); paint(); }
+      else if (e.target.classList.contains('wam-pick')) { st.docs[e.target.dataset.i].on = e.target.checked; count(); }
+      else if (e.target.id === 'bimsWaManyAll') {
+        st.docs.forEach(function (d) { if (usable(d)) d.on = e.target.checked; }); paint();
+      }
+    });
+    many.addEventListener('click', function (e) {
+      var pick = e.target.closest('[data-pick]');
+      if (pick && !st.running) { quickPick(pick.dataset.pick); return; }
+      if (e.target.closest('input,button,a,label')) return;
+      var tr = e.target.closest('tr[data-i]');
+      if (tr) { st.focus = Number(tr.dataset.i); paint(); }
+    });
+  }
+
+  function tpl() {
+    var sel = document.getElementById('bimsWaManyTpl');
+    return sel ? st.data.templates.filter(function (t) { return String(t.id) === sel.value; })[0] : null;
+  }
+  function usable(d) { return d.mobile_ok && !st.running; }
+  function sentWith(d, t) {
+    var all = t ? d.sent.filter(function (s) { return s.template_name === t.template_name; }) : [];
+    return all.length ? all[all.length - 1] : null;
+  }
+  function gone(d) { return function (name) { return d.vars ? d.vars[name] : ''; }; }
+  function blankFields(d, t) { return t ? blanks(t.parameter_map || [], gone(d)) : []; }
+
+  // Ticked to begin with: every document that can be sent to, has not already
+  // gone out under this template, and has every field the template needs.
+  function defaults() {
+    var t = tpl();
+    st.docs.forEach(function (d) {
+      d.on = d.mobile_ok && !sentWith(d, t) && !blankFields(d, t).length;
+      d.note = ''; d.state = '';
+    });
+    document.getElementById('bimsWaManyRetry').classList.add('d-none');
+  }
+
+  function quickPick(kind) {
+    var t = tpl();
+    st.docs.forEach(function (d) {
+      if (!d.mobile_ok) { d.on = false; return; }
+      if (kind === 'none') d.on = false;
+      else if (kind === 'ready') d.on = true;
+      else d.on = !sentWith(d, t) && !blankFields(d, t).length;
+    });
+    paint();
+  }
+
+  function statusCell(d, t) {
+    if (d.state === 'sending') return '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Sending</span>';
+    if (d.state === 'ok') return '<span class="text-success"><i class="fas fa-check me-1"></i>Sent</span>';
+    if (d.state === 'skip') return '<span class="text-warning">' + esc(d.note) + '</span>';
+    if (d.state === 'fail') return '<span class="text-danger"><i class="fas fa-xmark me-1"></i>' + esc(d.note) + '</span>';
+    if (!d.mobile) return '<span class="text-danger">No mobile number</span>';
+    if (!d.mobile_ok) return '<span class="text-danger">Invalid number</span>';
+    var gaps = blankFields(d, t);
+    if (gaps.length) return '<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Missing ' + esc(gaps.join(', ')) + '</span>';
+    var s = sentWith(d, t);
+    if (s) {
+      var n = d.sent.filter(function (x) { return x.template_name === t.template_name; }).length;
+      return '<span class="text-muted">Already sent' + (n > 1 ? ' &times;' + n : '') + ', last ' + esc(s.sent_at) + '</span>';
+    }
+    return d.sent.length ? '<span class="text-muted">Sent earlier, other template</span>' : 'Ready';
+  }
+
+  function count() {
+    var n = st.docs.filter(function (d) { return d.on && d.mobile_ok; }).length;
+    document.getElementById('bimsWaManyCount').textContent = st.running ? '' : (n + ' will be sent');
+    document.getElementById('bimsWaManyGo').disabled = st.running || !n || !tpl();
+  }
+
+  // The message the focused customer would get.
+  function paintPreview() {
+    var box = document.getElementById('bimsWaManyPreview');
+    if (!box) return;
+    var t = tpl(), d = st.docs[st.focus];
+    if (!t || !d) { box.innerHTML = ''; return; }
+    var get = gone(d);
+    var head = '<div class="small text-muted mb-1">Preview &middot; <b>' + esc(d.party_name) + '</b>, ' + esc(d.doc_no || '') + '</div>';
+    if (!t.body_preview) {
+      box.innerHTML = head + '<div class="small text-muted">' +
+        'Paste this template\'s approved wording under Messaging &rsaquo; WhatsApp Templates to see the whole message here.</div>' +
+        '<table class="table table-sm table-bordered mt-2 mb-0 small wa-fields"><tbody>' +
+        (t.parameter_map || []).map(function (n, i) {
+          var v = get(n);
+          return '<tr><td class="text-muted" style="width:42%">{{' + (i + 1) + '}} ' + esc(n) + '</td><td>' +
+                 (v ? esc(v) : '<span class="wa-miss">empty</span>') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      return;
+    }
+    var f = fill(t.body_preview, t.parameter_map || [], get);
+    box.innerHTML = head + bubble(f.html) +
+      (f.missing.length ? '<div class="alert alert-warning small py-2 mt-2 mb-0">Empty: <b>' + f.missing.map(esc).join(', ') + '</b></div>' : '');
+  }
+
+  function paint() {
+    var t = tpl();
+    var rows = st.docs.map(function (d, i) {
+      return '<tr data-i="' + i + '"' + (i === st.focus ? ' class="wam-focus"' : '') + '>' +
+        '<td class="text-center"><input type="checkbox" class="form-check-input wam-pick" data-i="' + i + '"' +
+        (d.on ? ' checked' : '') + (usable(d) ? '' : ' disabled') + '></td>' +
+        '<td class="text-nowrap">' + esc(d.doc_no || '-') + '<div class="text-muted small">' + esc(d.date) + '</div></td>' +
+        '<td>' + esc(d.party_name) + '</td><td class="text-nowrap">' + esc(d.mobile || '-') + '</td>' +
+        '<td class="text-end text-nowrap">' + esc(d.amount) + '</td><td>' + statusCell(d, t) + '</td></tr>';
+    }).join('');
+    document.getElementById('bimsWaManyTable').innerHTML = rows;
+    // The header box says what the rows say: all, some or none ticked.
+    var all = document.getElementById('bimsWaManyAll');
+    if (all) {
+      var able = st.docs.filter(function (d) { return d.mobile_ok; });
+      var on = able.filter(function (d) { return d.on; }).length;
+      all.checked = !!able.length && on === able.length;
+      all.indeterminate = on > 0 && on < able.length;
+    }
+    paintPreview();
+    count();
+  }
+
+  function renderMany() {
+    var d = st.data;
+    st.docs = d.documents;
+    st.focus = 0;
+    document.getElementById('bimsWaManyN').textContent =
+      d.documents.length + ' ' + (d.documents.length === 1 ? 'customer' : 'customers');
+    if (!d.documents.length) {
+      document.getElementById('bimsWaManyBody').innerHTML =
+        '<div class="text-muted">Nothing here can be messaged. Only customer sales have someone to send to.</div>';
+      return;
+    }
+    var html = '';
+    if (d.skipped) {
+      html += '<div class="alert alert-secondary small py-2">' + d.skipped + ' of the picked ' +
+        (d.skipped === 1 ? 'sale has' : 'sales have') + ' no customer to message and ' +
+        (d.skipped === 1 ? 'is' : 'are') + ' left out.</div>';
+    }
+    if (!d.templates.length) {
+      html += '<div class="alert alert-warning small py-2">No active WhatsApp template is set up for ' +
+        esc(d.label) + '. Add one under Messaging &rsaquo; WhatsApp Templates.</div>';
+    } else {
+      html += '<div class="row g-2 align-items-end mb-2"><div class="col-md-6">' +
+        '<label class="form-label small mb-1" for="bimsWaManyTpl">Template</label>' +
+        '<select id="bimsWaManyTpl" class="form-select form-select-sm">' +
+        d.templates.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('') +
+        '</select></div><div class="col-md-6 text-md-end">' +
+        '<div class="btn-group btn-group-sm" role="group" aria-label="Quick pick">' +
+          '<button type="button" class="btn btn-outline-secondary" data-pick="unsent">Not sent only</button>' +
+          '<button type="button" class="btn btn-outline-secondary" data-pick="ready">All ready</button>' +
+          '<button type="button" class="btn btn-outline-secondary" data-pick="none">None</button>' +
+        '</div></div></div>';
+    }
+    html += '<div class="row g-3"><div class="col-lg-8"><div class="table-responsive" style="max-height:52vh">' +
+      '<table class="table table-sm align-middle small mb-0"><thead><tr>' +
+      '<th class="text-center" style="width:36px"><input type="checkbox" class="form-check-input" id="bimsWaManyAll" checked></th>' +
+      '<th>Sale</th><th>Customer</th><th>Mobile</th><th class="text-end">Amount</th><th>Status</th></tr></thead>' +
+      '<tbody id="bimsWaManyTable"></tbody></table></div>' +
+      '<div class="form-text">Click a row to preview its message.</div></div>' +
+      '<div class="col-lg-4"><div id="bimsWaManyPreview"></div></div></div>';
+    document.getElementById('bimsWaManyBody').innerHTML = html;
+    defaults();
+    paint();
+  }
+
+  async function run(retrying) {
+    var t = tpl();
+    var todo = st.docs.filter(function (d) { return d.on && d.mobile_ok; });
+    if (!t || !todo.length) return;
+    if (!(await window.bimsConfirm('Send "' + t.name + '" to ' + todo.length +
+        (todo.length === 1 ? ' customer' : ' customers') + ' now?',
+        { title: retrying ? 'Retry failed' : 'Send WhatsApp', confirmText: 'Send', danger: false }))) return;
+    st.running = true;
+    document.getElementById('bimsWaManyClose').disabled = true;
+    document.getElementById('bimsWaManyRetry').classList.add('d-none');
+    st.docs.forEach(function (d) { if (!d.on) d.state = ''; });
+    document.getElementById('bimsWaManyTpl').disabled = true;
+    var ok = 0, bad = 0, skipped = 0;
+    // One at a time: the provider is rate-limited, and a failure on one
+    // number should not be mistaken for a failure of the batch.
+    for (var i = 0; i < todo.length; i++) {
+      var d = todo[i];
+      d.state = 'sending'; st.focus = st.docs.indexOf(d); paint();
+      try {
+        var res = await sendOne(st.csrf, st.module, d.doc_id, t.id, false);
+        if (res.status === 409 && res.body.duplicate) { d.state = 'skip'; d.note = 'Sent moments ago - skipped'; skipped++; }
+        else if (res.body.success) {
+          d.state = 'ok'; ok++; d.sent.push({ template_name: t.template_name, sent_at: 'just now' });
+          if (st.onSent) st.onSent(d.doc_id);
+        } else {
+          d.state = 'fail';
+          d.note = /template/i.test(res.body.error || '') && /(not found|approved)/i.test(res.body.error || '')
+            ? 'No approved template "' + t.template_name + '" on WhatsApp' : (res.body.error || 'Could not be sent');
+          bad++;
+          if (st.onFailed) st.onFailed(d.doc_id);
+        }
+      } catch (e) { d.state = 'fail'; d.note = 'Network error'; bad++; }
+      paint();
+    }
+    st.running = false;
+    document.getElementById('bimsWaManyClose').disabled = false;
+    document.getElementById('bimsWaManyTpl').disabled = false;
+    document.getElementById('bimsWaManyRetry').classList.toggle('d-none', !bad);
+    paint();
+    window.showToast(bad ? 'warning' : 'success',
+      ok + ' sent' + (bad ? ', ' + bad + ' failed' : '') + (skipped ? ', ' + skipped + ' skipped' : '') + '.');
+  }
+
+  // The ones that failed, and only those, ticked again and sent.
+  function retryFailed() {
+    st.docs.forEach(function (d) {
+      var failed = d.state === 'fail';
+      d.on = failed && d.mobile_ok; if (failed) { d.state = ''; d.note = ''; }
+    });
+    paint();
+    run(true);
+  }
+
+  window.BIMS_WhatsApp = {
+    open: function (opts) {
+      build();
+      state = { module: opts.module, docId: opts.docId, csrf: opts.csrf, onSent: opts.onSent, onFailed: opts.onFailed };
+      document.getElementById('bimsWaBody').innerHTML = '<div class="text-muted small">Loading&hellip;</div>';
+      document.getElementById('bimsWaGo').disabled = true;
+      bootstrap.Modal.getOrCreateInstance(modal).show();
+      load().then(render).catch(function (e) {
+        document.getElementById('bimsWaBody').innerHTML = '<div class="text-danger small">' + esc(e.message) + '</div>';
+      });
+    },
+    openMany: function (opts) {
+      buildMany();
+      st = { module: opts.module, csrf: opts.csrf, onSent: opts.onSent, onFailed: opts.onFailed, running: false, docs: [], focus: 0 };
+      document.getElementById('bimsWaManyBody').innerHTML = '<div class="text-muted small">Loading&hellip;</div>';
+      document.getElementById('bimsWaManyN').textContent = '';
+      document.getElementById('bimsWaManyCount').textContent = '';
+      document.getElementById('bimsWaManyGo').disabled = true;
+      document.getElementById('bimsWaManyRetry').classList.add('d-none');
+      bootstrap.Modal.getOrCreateInstance(many).show();
+      fetchJson('/whatsapp-transaction/documents/?module=' + encodeURIComponent(opts.module) +
+                '&doc_ids=' + encodeURIComponent(opts.docIds.join(',')), { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.body.error || 'Could not load these documents.');
+          st.data = r.body; renderMany();
+        })
+        .catch(function (e) {
+          document.getElementById('bimsWaManyBody').innerHTML = '<div class="text-danger small">' + esc(e.message) + '</div>';
+        });
+    },
+  };
 })();

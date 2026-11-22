@@ -659,6 +659,7 @@ def _whatsapp_template_to_dict(template: WhatsappTemplate) -> dict:
         "header_type": template.header_type,
         "header_media_url": template.header_media_url,
         "description": template.description,
+        "body_preview": template.body_preview,
         "category": template.category,
         "is_active": template.is_active,
         "created_by": template.created_by.username if template.created_by else "",
@@ -728,6 +729,7 @@ class WhatsappTemplateAPI(View):
             header_type=(data.get("header_type") or "none").strip(),
             header_media_url=(data.get("header_media_url") or "").strip(),
             description=(data.get("description") or "").strip(),
+            body_preview=(data.get("body_preview") or "").strip(),
             category=(data.get("category") or "general").strip(),
             created_by=request.user, modified_by=request.user,
         )
@@ -762,11 +764,12 @@ class WhatsappTemplateAPI(View):
         template.header_type = (data.get("header_type") or "none").strip()
         template.header_media_url = (data.get("header_media_url") or "").strip()
         template.description = (data.get("description") or "").strip()
+        template.body_preview = (data.get("body_preview") or "").strip()
         template.category = (data.get("category") or template.category).strip()
         template.modified_by = request.user
         template.save(update_fields=[
             "module", "transaction", "name", "template_name", "language", "parameter_map",
-            "header_type", "header_media_url", "description", "category",
+            "header_type", "header_media_url", "description", "body_preview", "category",
             "modified_by", "updated_at",
         ])
         logger.info("WhatsApp template updated key=%s by user=%s", template.key, request.user)
@@ -1038,6 +1041,140 @@ def whatsapp_transaction_source(request):
 
 
 @login_required
+def whatsapp_transaction_document(request):
+    """Everything the Send button on a document needs, for that one document:
+    who it would go to, which templates fit it and what each would put in its
+    placeholders, and what has already been sent about it.
+
+    Only for sources that opt in (``by_id``), since the answer has to be cheap
+    enough to ask on every click.
+    """
+    from .comm_sources import document_row, document_visible_to
+
+    module = (request.GET.get("module") or "").strip()
+    source = DOC_SOURCES.get(module)
+    if not source or not source.get("by_id"):
+        return JsonResponse({"error": "Select a valid module."}, status=400)
+    if not user_can(request.user, "whatsapp_transaction", "add"):
+        return JsonResponse({"error": "You do not have permission to send WhatsApp messages."},
+                            status=403)
+    row = document_row(module, request.GET.get("doc_id"))
+    if row is None or not document_visible_to(module, row["doc_id"], request.user):
+        return JsonResponse({"error": "Document not found."}, status=404)
+
+    context = {**common_context(request.user), **row["context"]}
+    scope_module, scope_tx = source.get("module"), source.get("transaction")
+    templates = []
+    for t in (WhatsappTemplate.objects.filter(is_active=True, module=scope_module)
+              .order_by("name")):
+        # A generic template (no transaction) fits any document of the module;
+        # a specific one only its own.
+        if t.transaction and t.transaction != scope_tx:
+            continue
+        templates.append({
+            "id": t.id, "name": t.name, "template_name": t.template_name,
+            "specific": bool(t.transaction), "body_preview": t.body_preview,
+            "params": [{"name": n, "value": str(context.get(n, "") or "")}
+                       for n in (t.parameter_map or [])],
+        })
+    templates.sort(key=lambda t: (not t["specific"], t["name"].lower()))
+
+    mobile = (row["mobile"] or "").strip().replace(" ", "")
+    history = [{
+        "template_name": m.template_name or "", "mobile": m.mobile, "status": m.status,
+        "sent_at": timezone.localtime(m.created_at).strftime("%d-%m-%Y %H:%M"),
+        "sent_by": getattr(m.sent_by, "username", "") or "",
+    } for m in (WhatsappMessage.objects
+                .filter(module=module, document_no=row["doc_no"])
+                .select_related("sent_by").order_by("-created_at")[:10])]
+    return JsonResponse({
+        "document": {"doc_id": row["doc_id"], "doc_no": row["doc_no"],
+                     "date": context.get("InvoiceDate") or row["date"],
+                     "party_name": row["party_name"],
+                     "amount": context.get("Amount") or row["amount"],
+                     "label": source["label"]},
+        "mobile": mobile, "mobile_ok": bool(_MOBILE_RE.match(mobile)) if mobile else False,
+        "templates": templates, "history": history,
+    })
+
+
+@login_required
+def whatsapp_transaction_documents(request):
+    """The several-documents form of ``whatsapp_transaction_document``: one row per
+    document with who it would go to, whether that number is usable and what has
+    already been sent about it -- for sending a batch from the register. The
+    templates are shared, since a batch goes out under one.
+
+    Sending itself is still one call per document to ``whatsapp_transaction_send``.
+    """
+    from .comm_sources import document_rows, visible_document_ids
+
+    module = (request.GET.get("module") or "").strip()
+    source = DOC_SOURCES.get(module)
+    if not source or not source.get("by_id"):
+        return JsonResponse({"error": "Select a valid module."}, status=400)
+    if not user_can(request.user, "whatsapp_transaction", "add"):
+        return JsonResponse({"error": "You do not have permission to send WhatsApp messages."},
+                            status=403)
+    try:
+        ids = [int(x) for x in (request.GET.get("doc_ids") or "").split(",") if x.strip()]
+    except ValueError:
+        return JsonResponse({"error": "Invalid document list."}, status=400)
+    if not ids:
+        return JsonResponse({"error": "Pick at least one document."}, status=400)
+    if len(ids) > 200:
+        return JsonResponse({"error": "Pick 200 documents or fewer at a time."}, status=400)
+
+    allowed = visible_document_ids(module, ids, request.user)
+    rows = [r for r in document_rows(module, [i for i in ids if i in allowed])]
+
+    numbers = {r["doc_no"] for r in rows if r["doc_no"]}
+    sent = {}
+    for m in (WhatsappMessage.objects
+              .filter(module=module, document_no__in=numbers,
+                      status__in=["sent", "delivered", "read", "mocked"])
+              .order_by("created_at").values("document_no", "template_name", "created_at")):
+        sent.setdefault(m["document_no"], []).append({
+            "template_name": m["template_name"] or "",
+            "sent_at": timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M"),
+        })
+
+    templates = []
+    for t in (WhatsappTemplate.objects.filter(is_active=True, module=source.get("module"))
+              .order_by("name")):
+        if t.transaction and t.transaction != source.get("transaction"):
+            continue
+        templates.append({"id": t.id, "name": t.name, "template_name": t.template_name,
+                          "specific": bool(t.transaction), "body_preview": t.body_preview,
+                          "parameter_map": t.parameter_map or []})
+    templates.sort(key=lambda t: (not t["specific"], t["name"].lower()))
+    # What each document would put in every field the offered templates read, so
+    # the dialog can show the finished message for any row without another call.
+    wanted = {n for t in templates for n in t["parameter_map"]}
+    common = common_context(request.user)
+
+    documents = []
+    for r in rows:
+        mobile = (r["mobile"] or "").strip().replace(" ", "")
+        ctx = {**common, **r["context"]}
+        documents.append({
+            "vars": {n: str(ctx.get(n, "") or "") for n in wanted},
+            "doc_id": r["doc_id"], "doc_no": r["doc_no"],
+            "date": r["context"].get("InvoiceDate") or r["date"],
+            "amount": r["context"].get("Amount") or r["amount"],
+            "party_name": r["party_name"], "mobile": mobile,
+            "mobile_ok": bool(_MOBILE_RE.match(mobile)) if mobile else False,
+            "sent": sent.get(r["doc_no"], []),
+        })
+    return JsonResponse({
+        "label": source["label"], "documents": documents, "templates": templates,
+        # Picked, but not something this page can message: a farmer lifting, or a
+        # sale outside the person's own branches.
+        "skipped": len(ids) - len(documents),
+    })
+
+
+@login_required
 def whatsapp_transaction_send(request):
     """Send one document's WhatsApp template; called per selected row by the UI.
 
@@ -1063,9 +1200,10 @@ def whatsapp_transaction_send(request):
     if not template.is_active:
         return JsonResponse({"error": f"Template '{template.name}' is inactive."}, status=400)
 
-    row = next((r for r in source["rows"](None, None, None)
-                if str(r["doc_id"]) == str(data.get("doc_id"))), None)
-    if row is None:
+    from .comm_sources import document_row, document_visible_to
+
+    row = document_row(data["module"], data.get("doc_id"))
+    if row is None or not document_visible_to(data["module"], row["doc_id"], request.user):
         return JsonResponse({"error": "Document not found."}, status=404)
     mobile = (row["mobile"] or "").strip().replace(" ", "")
     if not mobile:

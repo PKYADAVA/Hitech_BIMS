@@ -35,6 +35,8 @@ from .views import (
     whatsapp_sync_contact,
     whatsapp_transaction_source,
     whatsapp_transaction_send,
+    whatsapp_transaction_document,
+    whatsapp_transaction_documents,
 )
 
 urlpatterns = [
@@ -77,6 +79,10 @@ urlpatterns = [
 
     path("whatsapp-transaction/source/", whatsapp_transaction_source, name="whatsapp_transaction_source"),
     path("whatsapp-transaction/send/", whatsapp_transaction_send, name="whatsapp_transaction_send"),
+    path("whatsapp-transaction/document/", whatsapp_transaction_document,
+         name="whatsapp_transaction_document"),
+    path("whatsapp-transaction/documents/", whatsapp_transaction_documents,
+         name="whatsapp_transaction_documents"),
     path("whatsapp-history/", WhatsappHistoryPageView.as_view(), name="whatsapp_history"),
     path("whatsapp-history/list/", whatsapp_history, name="whatsapp_history_api"),
     path("whatsapp-history/<int:message_id>/retry/", whatsapp_history_retry, name="whatsapp_history_retry"),

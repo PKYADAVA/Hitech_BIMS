@@ -274,6 +274,13 @@ class WhatsappTemplate(models.Model):
         blank=True,
         help_text="What this template is used for.",
     )
+    body_preview = models.TextField(
+        blank=True,
+        default="",
+        help_text="The approved wording with its {{1}}, {{2}}... placeholders, pasted in "
+                  "so a send dialog can show the finished message. For display only -- "
+                  "what is actually sent is whatever Meta approved under template_name.",
+    )
     is_active = models.BooleanField(
         default=True,
         help_text="Inactive templates cannot be sent.",

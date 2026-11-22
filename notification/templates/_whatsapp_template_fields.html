@@ -71,6 +71,12 @@ template references it from code.
     <input type="text" name="description" class="form-control" placeholder="What this template is used for">
   </div>
   <div class="col-md-12">
+    <label class="form-label">Message wording (for the preview)</label>
+    <textarea name="body_preview" class="form-control" rows="4"
+              placeholder="Hello {% templatetag openvariable %}1{% templatetag closevariable %}, your sale {% templatetag openvariable %}2{% templatetag closevariable %} ..."></textarea>
+    <div class="form-text">Optional. Paste the approved wording here, with its numbered placeholders, and the send dialogs show the finished message with the values filled in. For display only; what is sent is whatever is approved under the template name above.</div>
+  </div>
+  <div class="col-md-12">
     <label class="form-label">Parameters</label>
     <div class="form-text mb-1">Ordered — the first entry fills {{1}}, the second {{2}}, and so on, matching the approved template's body. WhatsApp templates carry no free-text body here — the approved wording lives in Meta/LemIn AI; this list only maps each numbered placeholder to an ERP field.</div>
     <div class="tpl-param-list mb-1"></div>

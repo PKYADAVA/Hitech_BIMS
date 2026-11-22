@@ -409,6 +409,7 @@ $(document).ready(function () {
       header_type: form.find('[name="header_type"]').val(),
       header_media_url: form.find('[name="header_media_url"]').val(),
       description: form.find('[name="description"]').val(),
+      body_preview: form.find('[name="body_preview"]').val(),
       category: form.find('[name="category"]').val(),
       parameter_map: paramMapOf(form),
     };
@@ -457,6 +458,7 @@ $(document).ready(function () {
         form.find('[name="header_type"]').val(t.header_type);
         form.find('[name="header_media_url"]').val(t.header_media_url);
         form.find('[name="description"]').val(t.description);
+        form.find('[name="body_preview"]').val(t.body_preview || "");
         form.find('[name="category"]').val(t.category);
         form.find(".tpl-param-list").empty();
         (t.parameter_map || []).forEach(p => paramRow(form, p));

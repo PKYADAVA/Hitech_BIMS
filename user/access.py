@@ -569,7 +569,9 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("sms_transaction", "SMS Transaction", ("sms_transaction_source",)),
-                    ("whatsapp_transaction", "WhatsApp Transaction", ("whatsapp_transaction_source",)),
+                    ("whatsapp_transaction", "WhatsApp Transaction",
+                     ("whatsapp_transaction_source", "whatsapp_transaction_document",
+                      "whatsapp_transaction_documents")),
                     ("notification_transaction", "Transaction Messaging"),
                     ("whatsapp_conversations", "WhatsApp Conversations"),
                 ],

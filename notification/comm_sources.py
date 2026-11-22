@@ -325,7 +325,7 @@ def _tray_setting_rows(from_date, to_date, party_id):
 # --- broiler ---------------------------------------------------------------
 
 
-def _bird_sale_rows(from_date, to_date, party_id):
+def _bird_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     """Broiler liftings sold to a customer.
 
     Farmer-side liftings are a settlement rather than a sale to a party with a
@@ -338,6 +338,12 @@ def _bird_sale_rows(from_date, to_date, party_id):
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    # One document, for a button on the sale itself: a single lookup rather
+    # than building every sale in the register to pick one out.
+    if doc_id is not None:
+        qs = qs.filter(pk=doc_id)
+    if doc_ids is not None:
+        qs = qs.filter(pk__in=list(doc_ids))
     rows = []
     for bs in qs.order_by("-date", "-id"):
         weight = bs.net_weight or 0
@@ -859,6 +865,9 @@ DOC_SOURCES = {
     # --- broiler ---
     "bird_sale": {"label": "Bird Sale", "party_type": "customer",
                   "model": None, "rows": _bird_sale_rows,
+                  # Offers a Send button on the sale itself: see document_row
+                  # and document_visible_to below.
+                  "by_id": True,
                   "module": "broiler", "transaction": "broiler_sale",
                   "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                 "Quantity", "Rate", "Weight", "VehicleNo", "DriverName",
@@ -988,6 +997,58 @@ LOCATION_SOURCES = frozenset({
     "broiler_batch",    # Broiler Batch    -> farm.branch        (Branch)
     "chicks_purchase",  # Chicks Purchase  -> hatchery           (Hatchery)
 })
+
+
+def document_row(module, doc_id):
+    """The one grid row for a single document, or None.
+
+    A source that can look a document up by id says so (``by_id``) and is asked
+    for just that one; the rest build their whole register and have the
+    document picked out, as the bulk screen always has.
+    """
+    source = DOC_SOURCES.get(module)
+    if not source:
+        return None
+    if source.get("by_id"):
+        rows = source["rows"](None, None, None, doc_id=doc_id)
+    else:
+        rows = source["rows"](None, None, None)
+    return next((r for r in rows if str(r["doc_id"]) == str(doc_id)), None)
+
+
+def document_visible_to(module, doc_id, user):
+    """May this user see this document at all?
+
+    The register a person reads is narrowed to their own branches and farms; a
+    button that messaged a customer about a sale outside that narrowing would
+    be a way round it. Sources with no such narrowing answer True.
+    """
+    if module == "bird_sale":
+        from broiler.models import BirdSale
+        from broiler.views import _scope_rows
+
+        return _scope_rows(user, BirdSale.objects.filter(pk=doc_id)).exists()
+    return True
+
+
+def document_rows(module, doc_ids):
+    """The grid rows for several documents at once (sources that look up by id)."""
+    source = DOC_SOURCES.get(module)
+    if not source or not source.get("by_id"):
+        return []
+    return source["rows"](None, None, None, doc_ids=list(doc_ids))
+
+
+def visible_document_ids(module, doc_ids, user):
+    """Of these documents, the ids this user may see -- the several-at-once form
+    of document_visible_to."""
+    if module == "bird_sale":
+        from broiler.models import BirdSale
+        from broiler.views import _scope_rows
+
+        return set(_scope_rows(user, BirdSale.objects.filter(pk__in=list(doc_ids)))
+                   .values_list("pk", flat=True))
+    return {int(i) for i in doc_ids}
 
 
 def location_choices():

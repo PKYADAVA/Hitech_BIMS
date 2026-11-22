@@ -3991,9 +3991,14 @@ def _apply_bird_sale(instance, data):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleListTemplateView(View):
     def get(self, request):
+        from user.access import user_can
+
         return render(request, "bird_sale_list.html", {
             **_place_filter_options(request.user),
             "photo_kinds": BirdSalePhoto.KIND_CHOICES,
+            # Whether the row's WhatsApp button is shown: sending is the
+            # Messaging matrix's right, not the Bird Sale page's.
+            "can_whatsapp_send": user_can(request.user, "whatsapp_transaction", "add"),
         })
 
 
@@ -4061,6 +4066,43 @@ class BirdSaleFormTemplateView(View):
         })
 
 
+def _stamp_whatsapp_sent(user, rows, dicts):
+    """Mark each sale that has already been messaged, so the register shows it
+    beside the Send button. One query for the page, and only for someone who
+    may send -- the history of what was messaged is Messaging's to show."""
+    from user.access import user_can
+
+    if not user_can(user, "whatsapp_transaction", "add"):
+        return
+    from notification.models import WhatsappMessage
+
+    numbers = {(r.sale_no or r.doc_no or "") for r in rows} - {""}
+    if not numbers:
+        return
+    delivered = {"sent", "delivered", "read", "mocked"}
+    # Per sale: how many messages went out, how many did not, and the state of
+    # the latest one that did -- "read" and "delivered" are the same message
+    # further along, so they replace "sent" rather than adding to the count.
+    tally = {}
+    for m in (WhatsappMessage.objects
+              .filter(module="bird_sale", document_no__in=numbers)
+              .order_by("created_at").values("document_no", "status", "created_at")):
+        t = tally.setdefault(m["document_no"], {"sent": 0, "failed": 0, "status": "",
+                                                "sent_at": "", "last_at": ""})
+        at = timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M")
+        t["last_at"] = at
+        if m["status"] in delivered:
+            t["sent"] += 1
+            t["status"] = "sent" if m["status"] == "mocked" else m["status"]
+            t["sent_at"] = at
+        else:
+            t["failed"] += 1
+    for r, d in zip(rows, dicts):
+        t = tally.get(r.sale_no or r.doc_no or "")
+        d["wa_sent_at"] = (t and t["sent_at"]) or None
+        d["wa"] = t
+
+
 @method_decorator(login_required, name="dispatch")
 class BirdSaleAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
@@ -4088,8 +4130,9 @@ class BirdSaleAPI(BaseAPIView):
             from sales.views import customer_balance_timelines
             timelines = customer_balance_timelines(
                 {r.customer_id for r in rows if r.customer_id})
-            return JsonResponse(
-                [_bird_sale_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
+            out = [_bird_sale_to_dict(r, timelines.get(r.customer_id)) for r in rows]
+            _stamp_whatsapp_sent(request.user, rows, out)
+            return JsonResponse(out, safe=False)
         except BirdSale.DoesNotExist:
             raise Http404("Bird sale not found")
         except Exception as e:

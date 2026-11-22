@@ -23,6 +23,15 @@
   .bs-thumbs:focus-visible { outline:2px solid var(--bs-primary, #2563eb); outline-offset:2px; border-radius:4px; }
   .bs-dr { color:#c0392b; font-weight:600; }
   .bs-cr { color:#0e8698; font-weight:600; }
+  /* Room between the Show N entries chooser and the export buttons beside it. */
+  #sale-table_wrapper .dataTables_length { margin-right: 1.25rem; display: inline-block; }
+  #sale-table_wrapper .dt-buttons { margin-left: .5rem; }
+  #sale-table_wrapper .dataTables_length select { width: auto; display: inline-block; }
+  /* The count on the corner of the Send WhatsApp button. */
+  .wa-count { position:absolute; top:-7px; right:-7px; min-width:17px; height:17px; padding:0 4px;
+              border-radius:9px; background:#0f5132; color:#fff; font-size:.62rem; font-weight:700;
+              line-height:17px; text-align:center; box-shadow:0 0 0 2px #fff; }
+  .wa-count.bad { background:#dc3545; }
 </style>
 
 <div class="page-header">
@@ -31,9 +40,9 @@
     <div class="page-header-subtitle">Sale of grown/live birds from a Farm to a Customer or Farmer</div>
   </div>
   <div class="page-header-right">
-    {% if page_perms.edit or page_perms.delete %}
+    {% if page_perms.edit or page_perms.delete or can_whatsapp_send %}
     <button type="button" class="btn btn-outline-secondary me-2" id="bs-multi-toggle"
-            title="Pick several sales to edit or delete together"><i class="fas fa-list-check"></i> Multiple</button>
+            title="Pick several sales to edit, delete or message together"><i class="fas fa-list-check"></i> Multiple</button>
     {% endif %}
     {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'bird_sale_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
   </div>
@@ -52,6 +61,10 @@
     {% if page_perms.delete %}
     <button type="button" class="btn btn-outline-danger btn-sm" id="bs-bulk-delete" disabled>
       <i class="fas fa-trash me-1"></i>Delete</button>
+    {% endif %}
+    {% if can_whatsapp_send %}
+    <button type="button" class="btn btn-outline-success btn-sm" id="bs-bulk-whatsapp" disabled>
+      <i class="fab fa-whatsapp me-1"></i>Send WhatsApp</button>
     {% endif %}
     <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="bs-bulk-cancel">Cancel</button>
   </div>
@@ -243,15 +256,60 @@ $(function () {
     });
   });
 
+  // What has gone out to the customer on a sale: how many messages, and how
+  // far the latest got. A failed attempt is shown beside the successes rather
+  // than hidden by them, so a number that never worked is not mistaken for one
+  // that did.
+  const waById = {};
+  // The button says it at a glance -- green once sent, red when nothing has
+  // got through, with the number of messages on its corner -- and its tooltip
+  // has the detail.
+  function waBtnClass(wa) {
+    if (wa && wa.sent) return "btn-success";
+    return wa && wa.failed ? "btn-outline-danger" : "btn-outline-success";
+  }
+  function waTitle(wa) {
+    if (!wa) return "Send WhatsApp";
+    const bits = [];
+    if (wa.sent) bits.push(`Sent ${wa.sent}x, last ${wa.sent_at}`);
+    if (wa.failed) bits.push(`${wa.failed} failed`);
+    return bits.join(" - ") + " - send again";
+  }
+  function waBadge(wa) {
+    const n = wa ? (wa.sent || wa.failed) : 0;
+    if (!n) return "";
+    return `<span class="wa-count ${wa.sent ? "" : "bad"}">${n}</span>`;
+  }
+  function waRefresh(id) {
+    const wa = waById[id];
+    const btn = $(`.wa-send-button[data-id="${id}"]`)
+      .removeClass("btn-success btn-outline-success btn-outline-danger")
+      .addClass(waBtnClass(wa)).attr("title", waTitle(wa));
+    btn.find(".wa-count").remove();
+    btn.append(waBadge(wa));
+  }
+  function waOutcome(id, ok) {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const stamp = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const w = waById[id] || (waById[id] = { sent: 0, failed: 0, status: "", sent_at: "", last_at: "" });
+    w.last_at = stamp;
+    if (ok) { w.sent += 1; w.status = "sent"; w.sent_at = stamp; } else { w.failed += 1; }
+    waRefresh(id);
+  }
+
   function renderRows(rows) {
+    rows.forEach(r => { waById[r.id] = r.wa || null; });
+    // Keep the chosen page size across a reload of the rows (a filter, a send).
+    const keepLen = table ? table.page.len() : 25;
     if (table) { table.destroy(); }
     const tbody = $("#sale-table tbody");
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
         <td class="bs-pick-col d-none text-center"><input type="checkbox" class="form-check-input bs-pick" data-id="${row.id}" aria-label="Select this sale"></td>
-        <td>${fmtDate(row.date)}</td>
-        <td>${escapeHtml(row.sale_no)}</td>
+        <td class="text-nowrap">${fmtDate(row.date)}</td>
+        <td class="text-nowrap">${escapeHtml(row.sale_no)}</td>
         <td>${escapeHtml(row.doc_no) || "-"}</td>
         <td>${escapeHtml(row.buyer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
         <td>${escapeHtml(row.farm_name)}</td>
@@ -267,6 +325,7 @@ $(function () {
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             <button type="button" class="btn btn-outline-secondary btn-sm upload-evidence-button" data-id="${row.id}" title="Add evidence photo"><i class="fas fa-upload"></i></button>
+            {% if can_whatsapp_send %}${row.sale_type === "customer" ? `<button type="button" class="btn btn-sm position-relative wa-send-button ${waBtnClass(row.wa)}" data-id="${row.id}" title="${escapeHtml(waTitle(row.wa))}"><i class="fab fa-whatsapp"></i>${waBadge(row.wa)}</button>` : ""}{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
@@ -275,9 +334,11 @@ $(function () {
     });
     table = $("#sale-table").DataTable({
       responsive: true, order: [[0, "desc"]],
-      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      // "l" is the Show N entries chooser, which Bfrtip leaves out.
+      dom: "Blfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]], pageLength: keepLen,
+      language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No data available in table" },
       columnDefs: [{ orderable: false, targets: [-1, -2] }],
-      language: { emptyTable: "No data available in table" },
     });
   }
 
@@ -293,6 +354,19 @@ $(function () {
   }
 
   $("#filter-submit").on("click", loadRows);
+
+  // WhatsApp the customer about this sale, from the register itself. Only
+  // customer sales have a party to message; a farmer lifting is a settlement.
+  $(document).on("click", ".wa-send-button", function () {
+    const btn = this;
+    BIMS_WhatsApp.open({
+      module: "bird_sale", docId: $(btn).data("id"), csrf: csrfToken,
+      // Update the row straight away; the register reloads with the same
+      // facts from the server next time.
+      onSent: function () { waOutcome($(btn).data("id"), true); },
+      onFailed: function () { waOutcome($(btn).data("id"), false); },
+    });
+  });
 
   let uploadSaleId = null;
   $(document).on("click", ".upload-evidence-button", function () {
@@ -327,7 +401,7 @@ $(function () {
 
   function bulkSync() {
     $("#bs-bulk-n").text(picked.size);
-    $("#bs-bulk-edit, #bs-bulk-delete").prop("disabled", picked.size === 0);
+    $("#bs-bulk-edit, #bs-bulk-delete, #bs-bulk-whatsapp").prop("disabled", picked.size === 0);
     const shown = $(".bs-pick").length;
     const on = shown > 0 && $(".bs-pick:checked").length === shown;
     $("#bs-check-all").prop("checked", on);
@@ -360,6 +434,16 @@ $(function () {
       if (on) picked.add(id); else picked.delete(id);
     });
     bulkSync();
+  });
+
+  // WhatsApp every customer on the picked sales, under one template.
+  $("#bs-bulk-whatsapp").on("click", function () {
+    if (!picked.size) return;
+    BIMS_WhatsApp.openMany({
+      module: "bird_sale", docIds: [...picked], csrf: csrfToken,
+      onSent: function (docId) { waOutcome(docId, true); },
+      onFailed: function (docId) { waOutcome(docId, false); },
+    });
   });
 
   // Edit together: the sheet opens on the chosen sales, one row each, and is
