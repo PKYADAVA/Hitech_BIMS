@@ -1901,6 +1901,14 @@ window.loadOptions = function (select, url, data, options) {
   if (typeof Cropper === 'undefined') return;
 
   var modal, img, cropper, resolveEdit, rejectEdit;
+  // True until the person moves the crop themselves. The box starts a little
+  // inside the picture so its handles can be taken hold of, and saving that
+  // as it stands trims a strip off every edge -- the edge of a document, the
+  // start of each line -- which they never asked for. An untouched crop saves
+  // the whole picture instead.
+  var cropUntouched = true;
+  // Set by "Skip all" while a batch of pictures is being gone through.
+  var skipAll = false;
 
   // Puts the crop just inside the picture. Flush to the edge, the handles sit
   // exactly on the boundary and there is nothing to take hold of.
@@ -1933,6 +1941,35 @@ window.loadOptions = function (select, url, data, options) {
     });
   }
 
+  // Brings the whole picture back inside the frame after it has been turned.
+  // Cropper turns the canvas about its centre but keeps its width and height
+  // swapped rather than refitted, so a landscape photo stood on its end comes
+  // out taller than the frame and the top and bottom of it are cut off.
+  function fitCanvasToFrame() {
+    if (!cropper) return;
+    var cv = cropper.getCanvasData();
+    var ct = cropper.getContainerData();
+    var room = 12;
+    var ratio = Math.min((ct.width - room * 2) / cv.width, (ct.height - room * 2) / cv.height);
+    var w = cv.width * ratio;
+    var h = cv.height * ratio;
+    // In this view mode the picture may not be made smaller than the crop
+    // box standing on it, so a tall crop left over from before the turn holds
+    // the picture at its old size. Shrink the box first; it is refitted after.
+    // Parked at the middle of the frame, where the picture is about to be put:
+    // the picture must also keep covering the box, so one left at the old edge
+    // drags the picture off-centre with it.
+    cropper.setCropBoxData({
+      left: ct.width / 2 - 10, top: ct.height / 2 - 10, width: 20, height: 20,
+    });
+    cropper.setCanvasData({
+      left: (ct.width - w) / 2,
+      top: (ct.height - h) / 2,
+      width: w,
+      height: h,
+    });
+  }
+
   function buildModal() {
     // The picture is bounded on both axes, not stretched to the width. A tall
     // photo told to fill the width grows taller than the frame, and its lower
@@ -1944,11 +1981,17 @@ window.loadOptions = function (select, url, data, options) {
         '<div class="modal-dialog modal-lg modal-dialog-centered">' +
           '<div class="modal-content">' +
             '<div class="modal-header py-2">' +
-              '<h6 class="modal-title"><i class="fas fa-crop-simple me-1"></i>Edit Image</h6>' +
+              '<h6 class="modal-title"><i class="fas fa-crop-simple me-1"></i><span class="bims-ed-title">Edit Image</span></h6>' +
               '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
             '</div>' +
-            '<div class="modal-body d-flex align-items-center justify-content-center" style="background:#1a1a2e;height:70vh;overflow:hidden;padding:26px">' +
-              '<img id="bimsEditorImg" style="display:block;max-width:100%;max-height:100%">' +
+            '<div class="modal-body d-flex align-items-center justify-content-center" style="background:#1a1a2e;height:70vh;overflow:hidden;padding:0">' +
+              // Cropper measures the element the picture sits in, padding and
+              // all, and lays itself out that wide -- so with padding on the
+              // body it ran past the padded edge and was clipped. A plain stage
+              // of the body's own size gives it the room it believes it has.
+              '<div id="bimsEditorStage" style="width:100%;height:100%;overflow:hidden">' +
+                '<img id="bimsEditorImg" style="display:block;max-width:100%;max-height:100%">' +
+              '</div>' +
             '</div>' +
             '<div class="modal-footer py-2 justify-content-between">' +
               '<div class="d-flex gap-2">' +
@@ -1959,6 +2002,7 @@ window.loadOptions = function (select, url, data, options) {
                 '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-reset" title="Reset"><i class="fas fa-undo"></i></button>' +
               '</div>' +
               '<div class="d-flex gap-2">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary bims-ed-skipall d-none">Skip all</button>' +
                 '<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Skip</button>' +
                 '<button type="button" class="btn btn-sm btn-primary bims-ed-apply"><i class="fas fa-check me-1"></i>Apply</button>' +
               '</div>' +
@@ -1980,14 +2024,16 @@ window.loadOptions = function (select, url, data, options) {
         // handles ended up beyond the edge, unreachable. Asking Cropper to
         // measure again refits the picture to the frame as it now stands.
         cropper.resize();
+        fitCanvasToFrame();
         // The turn moves the canvas, and the first one moves it furthest --
         // fitting the crop before it has come to rest leaves the handles on
         // the edge the picture has already left, where they cannot be taken
         // hold of. Fitted on the next few frames, so it follows the picture
         // wherever it settles.
+        cropUntouched = true;
         fitCropToCanvas();
         [0, 60, 180, 360].forEach(function (ms) {
-          setTimeout(fitCropToCanvas, ms);
+          setTimeout(function () { fitCanvasToFrame(); fitCropToCanvas(); }, ms);
         });
       });
     });
@@ -2004,11 +2050,21 @@ window.loadOptions = function (select, url, data, options) {
         cropper.scaleY(d.scaleY === -1 ? 1 : -1);
       }
     });
+    modal.querySelector('.bims-ed-skipall').addEventListener('click', function () {
+      skipAll = true;
+      bootstrap.Modal.getInstance(modal).hide();
+    });
     modal.querySelector('.bims-ed-reset').addEventListener('click', function () {
-      if (cropper) cropper.reset();
+      if (cropper) { cropper.reset(); cropUntouched = true; }
     });
     modal.querySelector('.bims-ed-apply').addEventListener('click', function () {
       if (!cropper) return;
+      if (cropUntouched) {
+        var whole = cropper.getCanvasData();
+        cropper.setCropBoxData({
+          left: whole.left, top: whole.top, width: whole.width, height: whole.height,
+        });
+      }
       var canvas = cropper.getCroppedCanvas({ maxWidth: 4096, maxHeight: 4096 });
       canvas.toBlob(function (blob) {
         if (resolveEdit) resolveEdit(blob);
@@ -2021,9 +2077,14 @@ window.loadOptions = function (select, url, data, options) {
     });
   }
 
-  function editImage(file) {
+  function editImage(file, opts) {
+    opts = opts || {};
     return new Promise(function (resolve, reject) {
       if (!modal) buildModal();
+      modal.querySelector('.bims-ed-title').textContent = opts.total > 1
+        ? 'Edit Image ' + opts.index + ' of ' + opts.total : 'Edit Image';
+      modal.querySelector('.bims-ed-skipall').classList.toggle('d-none',
+        !(opts.total > 1 && opts.index < opts.total));
       resolveEdit = function (blob) {
         resolveEdit = null; rejectEdit = null;
         resolve(blob);
@@ -2055,6 +2116,7 @@ window.loadOptions = function (select, url, data, options) {
       function maybeInit() {
         if (!imgReady || !modalReady) return;
         if (cropper) { cropper.destroy(); cropper = null; }
+        cropUntouched = true;
         cropper = new Cropper(img, {
           // Keeps the crop box inside the picture. At viewMode 0 it may be
           // dragged off the canvas, which puts its handles somewhere the
@@ -2073,6 +2135,7 @@ window.loadOptions = function (select, url, data, options) {
           cropBoxMovable: true,
           cropBoxResizable: true,
           toggleDragModeOnDblclick: true,
+          cropend: function () { cropUntouched = false; },
           ready: function () { URL.revokeObjectURL(url); },
         });
       }
@@ -2088,8 +2151,67 @@ window.loadOptions = function (select, url, data, options) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  function isEditable(file) {
+    // Photographs and scans. A GIF or SVG would be flattened to a still JPEG.
+    return /^image\/(jpeg|png|webp|bmp)$/i.test(file.type || '');
+  }
+
+  // Takes a list of files and gives back the list to use: each picture is put
+  // in front of the person to crop or turn, and kept as it was if they skip it.
+  // Anything that is not a picture goes through untouched.
+  async function editFiles(files) {
+    var list = Array.prototype.slice.call(files);
+    var total = list.filter(isEditable).length;
+    var index = 0;
+    var out = [];
+    skipAll = false;
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (skipAll || !isEditable(f)) { out.push(f); continue; }
+      index++;
+      try {
+        var blob = await editImage(f, { index: index, total: total });
+        out.push(new File([blob], f.name.replace(/\.[^.]+$/, '') + '-edited.jpg',
+                          { type: 'image/jpeg' }));
+      } catch (e) {
+        out.push(f);
+      }
+      // The next picture opens the same dialog, which cannot be shown again
+      // until it has finished closing.
+      await new Promise(function (res) {
+        if (!modal || modal.style.display !== 'block') return res();
+        modal.addEventListener('hidden.bs.modal', function h() {
+          modal.removeEventListener('hidden.bs.modal', h); res();
+        });
+        setTimeout(res, 1500);
+      });
+    }
+    return out;
+  }
+
+  // Any file input marked data-image-edit offers the editor as pictures are
+  // chosen, without changing how the page looks. The page's own change handler
+  // is held back until the editing is over, so it only ever sees the pictures
+  // as they are to be kept -- not an original followed by its edited copy.
+  document.addEventListener('change', function (e) {
+    var input = e.target;
+    if (!input || input.type !== 'file' || !input.hasAttribute('data-image-edit')) return;
+    if (input._bimsEditPass) { input._bimsEditPass = false; return; }
+    var chosen = Array.prototype.slice.call(input.files || []);
+    if (!chosen.some(isEditable)) return;
+    e.stopImmediatePropagation();
+    editFiles(chosen).then(function (result) {
+      var dt = new DataTransfer();
+      result.forEach(function (f) { dt.items.add(f); });
+      input.files = dt.files;
+      input._bimsEditPass = true;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }, true);
+
   window.BIMS_ImageEditor = {
     edit: editImage,
+    editFiles: editFiles,
     replaceFileAt: replaceFileAt,
   };
 })();

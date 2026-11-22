@@ -163,7 +163,7 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">Other Documents</label>
-          <input type="file" name="documents" class="form-control" multiple>
+          <input type="file" data-image-edit name="documents" class="form-control" multiple>
           <div class="form-text">Anything else from the visit.</div>
           {% if other_documents %}
           <ul class="list-unstyled mt-2 mb-0 small">
@@ -189,7 +189,7 @@
         {% for code, label, held in slot_rows %}
         <div class="col-md-4 col-lg-3">
           <label class="form-label">{{ label }}</label>
-          <input type="file" name="slot_{{ code }}" class="form-control form-control-sm">
+          <input type="file" data-image-edit name="slot_{{ code }}" class="form-control form-control-sm">
           {% for f in held %}
           <div class="border rounded p-1 mt-2 text-center">
             {% if f.is_image %}
@@ -356,7 +356,7 @@
     const row = document.createElement('div');
     row.className = 'input-group input-group-sm mb-2 picture-row';
     row.innerHTML = `
-      <input type="file" name="photos" class="form-control" accept="image/*" multiple>
+      <input type="file" data-image-edit name="photos" class="form-control" accept="image/*" multiple>
       <span class="input-group-text p-1 d-none pic-thumb"></span>
       <button type="button" class="btn btn-sm btn-outline-danger drop-row" title="Remove">
         <i class="fas fa-trash"></i></button>`;

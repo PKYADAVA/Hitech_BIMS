@@ -78,7 +78,7 @@
         </div>
         <div class="col-md-4">
           <label for="document" class="form-label">Upload Document</label>
-          <input type="file" id="document" name="document" class="form-control" />
+          <input type="file" data-image-edit id="document" name="document" class="form-control" />
           {% if hatchery.document %}
           <div class="form-text">
             Current: <a href="{{ hatchery.document.url }}" target="_blank">{{ hatchery.document.name }}</a>

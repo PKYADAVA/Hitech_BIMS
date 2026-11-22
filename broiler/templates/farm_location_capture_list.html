@@ -267,7 +267,7 @@ $(function () {
         ? lockedInput(label, byKind[code].name)
         : `<div class="col-md-4">
              <label class="form-label">${esc(label)}</label>
-             <input type="file" name="slot_${code}" class="form-control form-control-sm">
+             <input type="file" data-image-edit name="slot_${code}" class="form-control form-control-sm">
            </div>`;
     }).join("");
 
@@ -314,12 +314,12 @@ $(function () {
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label">Add Farm Pictures</label>
-          <input type="file" name="photos" class="form-control form-control-sm" accept="image/*" multiple>
+          <input type="file" data-image-edit name="photos" class="form-control form-control-sm" accept="image/*" multiple>
           <div class="form-text">More can always be added.</div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Add Other Documents</label>
-          <input type="file" name="documents" class="form-control form-control-sm" multiple>
+          <input type="file" data-image-edit name="documents" class="form-control form-control-sm" multiple>
         </div>
       </div>`);
     $("#fill-form").data("id", r.id);

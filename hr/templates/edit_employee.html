@@ -241,7 +241,7 @@
             </div>
             <div class="col-md-4">
               <label for="image">Image</label>
-              <input type="file" class="form-control" id="image" name="image" />
+              <input type="file" data-image-edit class="form-control" id="image" name="image" />
               {% if employee.image %}
                 <small class="text-muted">Current: {{ employee.image.name }}</small>
               {% endif %}

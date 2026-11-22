@@ -177,14 +177,14 @@
         </div>
         <div class="col-md-3">
           <label for="agreement_copy" class="form-label">Agreement Copy</label>
-          <input type="file" id="agreement_copy" name="agreement_copy" class="form-control">
+          <input type="file" data-image-edit id="agreement_copy" name="agreement_copy" class="form-control">
           {% if customer.agreement_copy %}
           <div class="form-text">Current: <a href="{{ customer.agreement_copy.url }}" target="_blank">{{ customer.agreement_copy.name }}</a></div>
           {% endif %}
         </div>
         <div class="col-md-3">
           <label for="other_documents" class="form-label">Other Documents</label>
-          <input type="file" id="other_documents" name="other_documents" class="form-control">
+          <input type="file" data-image-edit id="other_documents" name="other_documents" class="form-control">
           {% if customer.other_documents %}
           <div class="form-text">Current: <a href="{{ customer.other_documents.url }}" target="_blank">{{ customer.other_documents.name }}</a></div>
           {% endif %}
