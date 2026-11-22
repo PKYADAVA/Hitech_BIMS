@@ -348,6 +348,12 @@ window.gcsOpeningWeek = function gcsOpeningWeek() {
     'flt-to': day(),
   };
 };
+// Registered first, so it runs first: the saved filter (below) has to be
+// the last word on the dates, or a refresh snaps back to this week right
+// after restoring a filter from an earlier date range -- which is what was
+// happening, silently, since this ran once at parse time while the restore
+// waited for DOMContentLoaded and so always lost the race going the other
+// way.
 $(function () {
   var wk = gcsOpeningWeek();
   document.getElementById('flt-from').value = wk['flt-from'];
@@ -604,10 +610,15 @@ $('#gcs-filter-clear').on('click', function () {
   gcsSyncMark();
 });
 
-/* Put back the bar this sitting last submitted, then run it. The month/year
-   pair rewrites the dates through main.js's period handling, so the dates go
-   last and win. */
-(function gcsRestore() {
+/* Put back the bar this sitting last submitted, then run it. Inside the same
+   $(ready) the opening week uses, and registered after it: both run on
+   DOMContentLoaded, in registration order, so this always writes its dates
+   over that week's rather than the other way round. It used to run outside
+   any ready handler -- at parse time, before the DOM existed, let alone the
+   opening week being written into the boxes -- so a saved date range was put
+   in only for the week's own handler to overwrite it moments later on every
+   single refresh. */
+$(function gcsRestore() {
   var saved = gcsSaved();
   if (!saved || !Object.keys(saved).length) { gcsSyncMark(); return; }
   ['flt-month', 'flt-year', 'flt-branch'].forEach(function (id) {
@@ -625,7 +636,7 @@ $('#gcs-filter-clear').on('click', function () {
   });
   gcsSyncMark();
   loadList();
-})();
+});
 $(document).on('click', '.gcs-del', function () {
   if (!confirm('Delete this settlement? The batch will be reopened.')) return;
   const id = $(this).data('id');
