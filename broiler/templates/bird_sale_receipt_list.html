@@ -25,6 +25,10 @@
                     align-items:center; justify-content:center; border:1px dashed var(--bs-border-color, #dee2e6);
                     background:none; color:#64748b; }
   .bsr-add-attach:hover { border-color:var(--bs-primary, #2563eb); color:#2563eb; }
+  /* Room between the Show N entries chooser and the export buttons beside it. */
+  #receipt-table_wrapper .dataTables_length { margin-right: 1.25rem; display: inline-block; }
+  #receipt-table_wrapper .dt-buttons { margin-left: .5rem; }
+  #receipt-table_wrapper .dataTables_length select { width: auto; display: inline-block; }
 </style>
 
 <div class="page-header">
@@ -33,9 +37,9 @@
     <div class="page-header-subtitle">Payments received from Bird Sale customers/farmers at a Farm</div>
   </div>
   <div class="page-header-right">
-    {% if page_perms.edit or page_perms.delete %}
+    {% if page_perms.edit or page_perms.delete or can_whatsapp_send %}
     <button type="button" class="btn btn-outline-secondary me-2" id="bs-multi-toggle"
-            title="Pick several receipts to edit or delete together"><i class="fas fa-list-check"></i> Multiple</button>
+            title="Pick several receipts to edit, delete or message together"><i class="fas fa-list-check"></i> Multiple</button>
     {% endif %}
     {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'bird_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
   </div>
@@ -52,6 +56,10 @@
     {% if page_perms.delete %}
     <button type="button" class="btn btn-outline-danger btn-sm" id="bs-bulk-delete" disabled>
       <i class="fas fa-trash me-1"></i>Delete</button>
+    {% endif %}
+    {% if can_whatsapp_send %}
+    <button type="button" class="btn btn-outline-success btn-sm" id="bs-bulk-whatsapp" disabled>
+      <i class="fab fa-whatsapp me-1"></i>Send WhatsApp</button>
     {% endif %}
     <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="bs-bulk-cancel">Cancel</button>
   </div>
@@ -186,6 +194,8 @@ $(function () {
   let table = null;
   let pendingDeleteId = null;
   let currentRows = [];
+  // Sent status and count on each row's WhatsApp button (see main.js).
+  const wa = BIMS_WhatsApp.tracker();
 
   // Payment proof, as Growing Charges shows its own physical-entry scans: one
   // thumbnail standing for the set, with the count as a small corner badge.
@@ -274,6 +284,9 @@ $(function () {
 
   function renderRows(rows) {
     currentRows = rows;
+    wa.load(rows);
+    // Keep the chosen page size across a reload of the rows (a filter, a send).
+    const keepLen = table ? table.page.len() : 25;
     if (table) { table.destroy(); }
     const tbody = $("#receipt-table tbody");
     tbody.empty();
@@ -293,6 +306,7 @@ $(function () {
           <div class="d-flex gap-1 justify-content-center">
             <button type="button" class="btn btn-outline-secondary btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>
             {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add payment proof"><i class="fas fa-upload"></i></button>{% endif %}
+            {% if can_whatsapp_send %}${row.sale_type === "customer" ? wa.button(row.id) : ""}{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -303,9 +317,11 @@ $(function () {
     });
     table = $("#receipt-table").DataTable({
       responsive: true, order: [[0, "desc"]],
-      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      // "l" is the Show N entries chooser, which Bfrtip leaves out.
+      dom: "Blfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]], pageLength: keepLen,
       columnDefs: [{ orderable: false, targets: [-1, -2] }],
-      language: { emptyTable: "No data available in table" },
+      language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No data available in table" },
     });
   }
 
@@ -349,7 +365,7 @@ $(function () {
 
   function bulkSync() {
     $("#bs-bulk-n").text(picked.size);
-    $("#bs-bulk-edit, #bs-bulk-delete").prop("disabled", picked.size === 0);
+    $("#bs-bulk-edit, #bs-bulk-delete, #bs-bulk-whatsapp").prop("disabled", picked.size === 0);
     const shown = $(".bs-pick").length;
     $("#bs-check-all").prop("checked", shown > 0 && $(".bs-pick:checked").length === shown);
   }
@@ -381,6 +397,27 @@ $(function () {
       if (on) picked.add(id); else picked.delete(id);
     });
     bulkSync();
+  });
+
+  // WhatsApp the customer about this receipt, from the register itself. Only
+  // customer receipts have a party to message.
+  $(document).on("click", ".wa-send-button", function () {
+    const btn = this;
+    BIMS_WhatsApp.open({
+      module: "bird_receipt", docId: $(btn).data("id"), csrf: csrfToken,
+      onSent: function () { wa.outcome($(btn).data("id"), true); },
+      onFailed: function () { wa.outcome($(btn).data("id"), false); },
+    });
+  });
+
+  // WhatsApp every customer on the picked receipts, under one template.
+  $("#bs-bulk-whatsapp").on("click", function () {
+    if (!picked.size) return;
+    BIMS_WhatsApp.openMany({
+      module: "bird_receipt", docIds: [...picked], csrf: csrfToken,
+      onSent: function (docId) { wa.outcome(docId, true); },
+      onFailed: function (docId) { wa.outcome(docId, false); },
+    });
   });
 
   $("#bs-bulk-edit").on("click", function () {

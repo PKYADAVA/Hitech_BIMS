@@ -27,6 +27,10 @@
   #sale-table_wrapper .dataTables_length { margin-right: 1.25rem; display: inline-block; }
   #sale-table_wrapper .dt-buttons { margin-left: .5rem; }
   #sale-table_wrapper .dataTables_length select { width: auto; display: inline-block; }
+  /* Room between the Show N entries chooser and the export buttons beside it. */
+  #sale-table_wrapper .dataTables_length { margin-right: 1.25rem; display: inline-block; }
+  #sale-table_wrapper .dt-buttons { margin-left: .5rem; }
+  #sale-table_wrapper .dataTables_length select { width: auto; display: inline-block; }
   /* The count on the corner of the Send WhatsApp button. */
   .wa-count { position:absolute; top:-7px; right:-7px; min-width:17px; height:17px; padding:0 4px;
               border-radius:9px; background:#0f5132; color:#fff; font-size:.62rem; font-weight:700;
@@ -256,50 +260,11 @@ $(function () {
     });
   });
 
-  // What has gone out to the customer on a sale: how many messages, and how
-  // far the latest got. A failed attempt is shown beside the successes rather
-  // than hidden by them, so a number that never worked is not mistaken for one
-  // that did.
-  const waById = {};
-  // The button says it at a glance -- green once sent, red when nothing has
-  // got through, with the number of messages on its corner -- and its tooltip
-  // has the detail.
-  function waBtnClass(wa) {
-    if (wa && wa.sent) return "btn-success";
-    return wa && wa.failed ? "btn-outline-danger" : "btn-outline-success";
-  }
-  function waTitle(wa) {
-    if (!wa) return "Send WhatsApp";
-    const bits = [];
-    if (wa.sent) bits.push(`Sent ${wa.sent}x, last ${wa.sent_at}`);
-    if (wa.failed) bits.push(`${wa.failed} failed`);
-    return bits.join(" - ") + " - send again";
-  }
-  function waBadge(wa) {
-    const n = wa ? (wa.sent || wa.failed) : 0;
-    if (!n) return "";
-    return `<span class="wa-count ${wa.sent ? "" : "bad"}">${n}</span>`;
-  }
-  function waRefresh(id) {
-    const wa = waById[id];
-    const btn = $(`.wa-send-button[data-id="${id}"]`)
-      .removeClass("btn-success btn-outline-success btn-outline-danger")
-      .addClass(waBtnClass(wa)).attr("title", waTitle(wa));
-    btn.find(".wa-count").remove();
-    btn.append(waBadge(wa));
-  }
-  function waOutcome(id, ok) {
-    const now = new Date();
-    const pad = n => String(n).padStart(2, "0");
-    const stamp = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const w = waById[id] || (waById[id] = { sent: 0, failed: 0, status: "", sent_at: "", last_at: "" });
-    w.last_at = stamp;
-    if (ok) { w.sent += 1; w.status = "sent"; w.sent_at = stamp; } else { w.failed += 1; }
-    waRefresh(id);
-  }
+  // Sent status and count on each row's WhatsApp button (see main.js).
+  const wa = BIMS_WhatsApp.tracker();
 
   function renderRows(rows) {
-    rows.forEach(r => { waById[r.id] = r.wa || null; });
+    wa.load(rows);
     // Keep the chosen page size across a reload of the rows (a filter, a send).
     const keepLen = table ? table.page.len() : 25;
     if (table) { table.destroy(); }
@@ -325,7 +290,7 @@ $(function () {
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             <button type="button" class="btn btn-outline-secondary btn-sm upload-evidence-button" data-id="${row.id}" title="Add evidence photo"><i class="fas fa-upload"></i></button>
-            {% if can_whatsapp_send %}${row.sale_type === "customer" ? `<button type="button" class="btn btn-sm position-relative wa-send-button ${waBtnClass(row.wa)}" data-id="${row.id}" title="${escapeHtml(waTitle(row.wa))}"><i class="fab fa-whatsapp"></i>${waBadge(row.wa)}</button>` : ""}{% endif %}
+            {% if can_whatsapp_send %}${row.sale_type === "customer" ? wa.button(row.id) : ""}{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
@@ -363,8 +328,8 @@ $(function () {
       module: "bird_sale", docId: $(btn).data("id"), csrf: csrfToken,
       // Update the row straight away; the register reloads with the same
       // facts from the server next time.
-      onSent: function () { waOutcome($(btn).data("id"), true); },
-      onFailed: function () { waOutcome($(btn).data("id"), false); },
+      onSent: function () { wa.outcome($(btn).data("id"), true); },
+      onFailed: function () { wa.outcome($(btn).data("id"), false); },
     });
   });
 
@@ -441,8 +406,8 @@ $(function () {
     if (!picked.size) return;
     BIMS_WhatsApp.openMany({
       module: "bird_sale", docIds: [...picked], csrf: csrfToken,
-      onSent: function (docId) { waOutcome(docId, true); },
-      onFailed: function (docId) { waOutcome(docId, false); },
+      onSent: function (docId) { wa.outcome(docId, true); },
+      onFailed: function (docId) { wa.outcome(docId, false); },
     });
   });
 

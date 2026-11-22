@@ -372,7 +372,7 @@ def _bird_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     return rows
 
 
-def _bird_receipt_rows(from_date, to_date, party_id):
+def _bird_receipt_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     """Money received against a bird sale.
 
     "Receipt" here is the payment, not the birds - the template registered for
@@ -389,6 +389,11 @@ def _bird_receipt_rows(from_date, to_date, party_id):
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    # One or several documents, for a button on the receipt itself.
+    if doc_id is not None:
+        qs = qs.filter(pk=doc_id)
+    if doc_ids is not None:
+        qs = qs.filter(pk__in=list(doc_ids))
     receipts = list(qs.order_by("-date", "-id"))
     timelines = customer_balance_timelines({r.customer_id for r in receipts})
 
@@ -874,6 +879,8 @@ DOC_SOURCES = {
                                 "Place")},
     "bird_receipt": {"label": "Bird Receipt", "party_type": "customer",
                      "model": None, "rows": _bird_receipt_rows,
+                     # Offers a Send button on the receipt itself.
+                     "by_id": True,
                      "module": "broiler", "transaction": "bird_receipt",
                      "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                    "PaidAmount", "ReceiptNo", "PaymentMode",

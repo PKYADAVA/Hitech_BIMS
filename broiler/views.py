@@ -4066,17 +4066,18 @@ class BirdSaleFormTemplateView(View):
         })
 
 
-def _stamp_whatsapp_sent(user, rows, dicts):
-    """Mark each sale that has already been messaged, so the register shows it
-    beside the Send button. One query for the page, and only for someone who
-    may send -- the history of what was messaged is Messaging's to show."""
+def _stamp_whatsapp_sent(user, module, rows, dicts, number):
+    """Mark each document that has already been messaged, so the register shows
+    it beside the Send button. One query for the page, and only for someone who
+    may send -- the history of what was messaged is Messaging's to show.
+    ``number`` says which document number the messages were logged under."""
     from user.access import user_can
 
     if not user_can(user, "whatsapp_transaction", "add"):
         return
     from notification.models import WhatsappMessage
 
-    numbers = {(r.sale_no or r.doc_no or "") for r in rows} - {""}
+    numbers = {number(r) for r in rows} - {""}
     if not numbers:
         return
     delivered = {"sent", "delivered", "read", "mocked"}
@@ -4085,7 +4086,7 @@ def _stamp_whatsapp_sent(user, rows, dicts):
     # further along, so they replace "sent" rather than adding to the count.
     tally = {}
     for m in (WhatsappMessage.objects
-              .filter(module="bird_sale", document_no__in=numbers)
+              .filter(module=module, document_no__in=numbers)
               .order_by("created_at").values("document_no", "status", "created_at")):
         t = tally.setdefault(m["document_no"], {"sent": 0, "failed": 0, "status": "",
                                                 "sent_at": "", "last_at": ""})
@@ -4098,7 +4099,7 @@ def _stamp_whatsapp_sent(user, rows, dicts):
         else:
             t["failed"] += 1
     for r, d in zip(rows, dicts):
-        t = tally.get(r.sale_no or r.doc_no or "")
+        t = tally.get(number(r))
         d["wa_sent_at"] = (t and t["sent_at"]) or None
         d["wa"] = t
 
@@ -4131,7 +4132,8 @@ class BirdSaleAPI(BaseAPIView):
             timelines = customer_balance_timelines(
                 {r.customer_id for r in rows if r.customer_id})
             out = [_bird_sale_to_dict(r, timelines.get(r.customer_id)) for r in rows]
-            _stamp_whatsapp_sent(request.user, rows, out)
+            _stamp_whatsapp_sent(request.user, "bird_sale", rows, out,
+                                 lambda r: r.sale_no or r.doc_no or "")
             return JsonResponse(out, safe=False)
         except BirdSale.DoesNotExist:
             raise Http404("Bird sale not found")
@@ -4315,10 +4317,13 @@ def _apply_bird_sale_receipt(instance, data):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleReceiptListTemplateView(View):
     def get(self, request):
-        return render(request, "bird_sale_receipt_list.html",
-                      _place_filter_options(request.user,
-                                            branches=False,
-                                            warehouses=True))
+        from user.access import user_can
+
+        return render(request, "bird_sale_receipt_list.html", {
+            **_place_filter_options(request.user, branches=False, warehouses=True),
+            # Sending is the Messaging matrix's right, not this page's.
+            "can_whatsapp_send": user_can(request.user, "whatsapp_transaction", "add"),
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -4375,8 +4380,10 @@ class BirdSaleReceiptAPI(BaseAPIView):
             from sales.views import customer_balance_timelines
             timelines = customer_balance_timelines(
                 {r.customer_id for r in rows if r.customer_id})
-            return JsonResponse(
-                [_bird_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
+            out = [_bird_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows]
+            _stamp_whatsapp_sent(request.user, "bird_receipt", rows, out,
+                                 lambda r: r.receipt_no or "")
+            return JsonResponse(out, safe=False)
         except BirdSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
         except Exception as e:

@@ -3002,6 +3002,9 @@ window.loadOptions = function (select, url, data, options) {
       '.wa-val{font-weight:600}' +
       '.wa-miss{background:#f8d7da;color:#842029;border-radius:4px;padding:0 4px;font-weight:600}' +
       '.wa-fields td{vertical-align:middle}' +
+      '.wa-count{position:absolute;top:-7px;right:-7px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;' +
+        'background:#0f5132;color:#fff;font-size:.62rem;font-weight:700;line-height:17px;text-align:center;box-shadow:0 0 0 2px #fff}' +
+      '.wa-count.bad{background:#dc3545}' +
       '#bimsWaManyTable tr[data-i]{cursor:pointer}' +
       '#bimsWaManyTable tr.wam-focus>td{background:rgba(31,168,85,.09)}' +
       '#bimsWaMany thead th{position:sticky;top:0;background:var(--bs-body-bg,#fff);z-index:1}';
@@ -3400,13 +3403,13 @@ window.loadOptions = function (select, url, data, options) {
       d.documents.length + ' ' + (d.documents.length === 1 ? 'customer' : 'customers');
     if (!d.documents.length) {
       document.getElementById('bimsWaManyBody').innerHTML =
-        '<div class="text-muted">Nothing here can be messaged. Only customer sales have someone to send to.</div>';
+        '<div class="text-muted">Nothing here can be messaged. Only documents with a customer have someone to send to.</div>';
       return;
     }
     var html = '';
     if (d.skipped) {
       html += '<div class="alert alert-secondary small py-2">' + d.skipped + ' of the picked ' +
-        (d.skipped === 1 ? 'sale has' : 'sales have') + ' no customer to message and ' +
+        (d.skipped === 1 ? 'document has' : 'documents have') + ' no customer to message and ' +
         (d.skipped === 1 ? 'is' : 'are') + ' left out.</div>';
     }
     if (!d.templates.length) {
@@ -3427,7 +3430,7 @@ window.loadOptions = function (select, url, data, options) {
     html += '<div class="row g-3"><div class="col-lg-8"><div class="table-responsive" style="max-height:52vh">' +
       '<table class="table table-sm align-middle small mb-0"><thead><tr>' +
       '<th class="text-center" style="width:36px"><input type="checkbox" class="form-check-input" id="bimsWaManyAll" checked></th>' +
-      '<th>Sale</th><th>Customer</th><th>Mobile</th><th class="text-end">Amount</th><th>Status</th></tr></thead>' +
+      '<th>' + esc(d.label) + '</th><th>Customer</th><th>Mobile</th><th class="text-end">Amount</th><th>Status</th></tr></thead>' +
       '<tbody id="bimsWaManyTable"></tbody></table></div>' +
       '<div class="form-text">Click a row to preview its message.</div></div>' +
       '<div class="col-lg-4"><div id="bimsWaManyPreview"></div></div></div>';
@@ -3489,7 +3492,68 @@ window.loadOptions = function (select, url, data, options) {
     run(true);
   }
 
+  // ======================================================================
+  // The sent status on a register's rows
+  // ======================================================================
+  // One per register. It remembers, for each row, how many messages went out
+  // and how many failed; draws the Send button with that on it -- green once
+  // sent, red outline if only failures, a count on its corner, the detail on
+  // hover -- and keeps the button right as the dialogs report results.
+  function tracker() {
+    ensureStyles();
+    var by = {};
+    function cls(wa) {
+      if (wa && wa.sent) return 'btn-success';
+      return wa && wa.failed ? 'btn-outline-danger' : 'btn-outline-success';
+    }
+    function title(wa) {
+      if (!wa) return 'Send WhatsApp';
+      var bits = [];
+      if (wa.sent) bits.push('Sent ' + wa.sent + 'x, last ' + wa.sent_at);
+      if (wa.failed) bits.push(wa.failed + ' failed');
+      return bits.join(' - ') + ' - send again';
+    }
+    function badge(wa) {
+      var n = wa ? (wa.sent || wa.failed) : 0;
+      if (!n) return '';
+      return '<span class="wa-count' + (wa.sent ? '' : ' bad') + '">' + n + '</span>';
+    }
+    function paint(id) {
+      var btn = document.querySelector('.wa-send-button[data-id="' + id + '"]');
+      if (!btn) return;
+      ['btn-success', 'btn-outline-success', 'btn-outline-danger'].forEach(function (c) { btn.classList.remove(c); });
+      btn.classList.add(cls(by[id]));
+      btn.title = title(by[id]);
+      var old = btn.querySelector('.wa-count');
+      if (old) old.remove();
+      btn.insertAdjacentHTML('beforeend', badge(by[id]));
+    }
+    function stamp() {
+      var n = new Date();
+      function p(x) { return String(x).padStart(2, '0'); }
+      return p(n.getDate()) + '-' + p(n.getMonth() + 1) + '-' + n.getFullYear() + ' ' + p(n.getHours()) + ':' + p(n.getMinutes());
+    }
+    return {
+      // The rows as the register's API returned them (each may carry .wa).
+      load: function (rows) { by = {}; rows.forEach(function (r) { by[r.id] = r.wa || null; }); },
+      button: function (id) {
+        return '<button type="button" class="btn btn-sm position-relative wa-send-button ' + cls(by[id]) +
+               '" data-id="' + id + '" title="' + esc(title(by[id])) + '"><i class="fab fa-whatsapp"></i>' +
+               badge(by[id]) + '</button>';
+      },
+      // A dialog reports one message: update the count and the button now; the
+      // register reloads with the same facts from the server next time.
+      outcome: function (id, ok) {
+        var w = by[id] || (by[id] = { sent: 0, failed: 0, status: '', sent_at: '', last_at: '' });
+        w.last_at = stamp();
+        if (ok) { w.sent += 1; w.status = 'sent'; w.sent_at = w.last_at; } else { w.failed += 1; }
+        paint(id);
+      },
+    };
+  }
+
   window.BIMS_WhatsApp = {
+    tracker: tracker,
     open: function (opts) {
       build();
       state = { module: opts.module, docId: opts.docId, csrf: opts.csrf, onSent: opts.onSent, onFailed: opts.onFailed };

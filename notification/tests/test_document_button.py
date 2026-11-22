@@ -272,3 +272,59 @@ class MessagePreviewTests(TestCase):
         d = self.client.get(reverse("whatsapp_transaction_document"),
                             {"module": "bird_sale", "doc_id": self.sale.id}).json()
         self.assertEqual(d["templates"][0]["body_preview"], "")
+
+
+class BirdReceiptButtonTests(TestCase):
+    """The same button and status on the Bird Receipt register."""
+
+    def setUp(self):
+        _sources.SourceRowTests.setUp(self)
+        self.user = get_user_model().objects.create_superuser("boss4", password="pw12345!")
+        self.client.force_login(self.user)
+        self.template = WhatsappTemplate.objects.create(
+            key="broiler.bird_receipt", module="broiler", transaction="bird_receipt",
+            name="Bird Receipt", template_name="bird_receipt_msg", language="en",
+            parameter_map=["CustomerName", "Amount", "ReceiptNo"], is_active=True)
+
+    _till = _sources.SourceRowTests._till
+
+    def test_a_single_receipt_looks_up_by_id_with_its_own_templates(self):
+        d = self.client.get(reverse("whatsapp_transaction_document"),
+                            {"module": "bird_receipt", "doc_id": self.receipt.id}).json()
+        self.assertEqual(d["document"]["label"], "Bird Receipt")
+        self.assertEqual(d["document"]["doc_no"], self.receipt.receipt_no)
+        self.assertEqual([t["id"] for t in d["templates"]], [self.template.id])
+        self.assertEqual(d["templates"][0]["params"][2],
+                         {"name": "ReceiptNo", "value": self.receipt.receipt_no})
+
+    def test_a_bird_sale_template_is_not_offered_on_a_receipt(self):
+        WhatsappTemplate.objects.create(
+            key="broiler.bird_sale", module="broiler", transaction="broiler_sale",
+            name="Bird Sale", template_name="bird_sale_msg", is_active=True)
+        d = self.client.get(reverse("whatsapp_transaction_document"),
+                            {"module": "bird_receipt", "doc_id": self.receipt.id}).json()
+        self.assertEqual([t["name"] for t in d["templates"]], ["Bird Receipt"])
+
+    def test_several_receipts_come_back_for_a_batch(self):
+        d = self.client.get(reverse("whatsapp_transaction_documents"),
+                            {"module": "bird_receipt", "doc_ids": str(self.receipt.id)}).json()
+        self.assertEqual([x["doc_id"] for x in d["documents"]], [self.receipt.id])
+        self.assertEqual(set(d["documents"][0]["vars"]), {"CustomerName", "Amount", "ReceiptNo"})
+        self.assertEqual(d["documents"][0]["vars"]["ReceiptNo"], self.receipt.receipt_no)
+
+    def test_the_register_reports_what_was_sent_against_each_receipt(self):
+        WhatsappMessage.objects.create(
+            party_type="customer", party_id=self.customer.id, party_name="Sadar Traders",
+            mobile="9876500001", module="bird_receipt", document_no=self.receipt.receipt_no,
+            template_name="t", status="sent")
+        WhatsappMessage.objects.create(
+            party_type="customer", party_id=self.customer.id, party_name="Sadar Traders",
+            mobile="9876500001", module="bird_receipt", document_no=self.receipt.receipt_no,
+            template_name="t", status="failed")
+        rows = self.client.get(reverse("bird_sale_receipt_api_list")).json()
+        row = next(r for r in rows if r["id"] == self.receipt.id)
+        self.assertEqual((row["wa"]["sent"], row["wa"]["failed"]), (1, 1))
+
+    def test_a_receipt_nobody_messaged_has_no_status(self):
+        rows = self.client.get(reverse("bird_sale_receipt_api_list")).json()
+        self.assertIsNone(next(r for r in rows if r["id"] == self.receipt.id)["wa"])
