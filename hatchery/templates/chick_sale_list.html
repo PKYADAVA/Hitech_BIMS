@@ -7,6 +7,8 @@
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale' %}
 <link rel="stylesheet" href="{% static 'css/gst-invoice.css' %}?v=20261119e">
 <style>
+  /* Keep cells on one line so the table scrolls sideways instead of squeezing. */
+  #chick-sale-table th, #chick-sale-table td { white-space: nowrap; }
   .bs-dr { color:#c0392b; font-weight:600; }
   .bs-cr { color:#0e8698; font-weight:600; }
   /* Attachments as a thumbnail in their own column, same as Bird Sale Receipt's
@@ -72,7 +74,7 @@
 <div class="card">
   <div class="card-header"><i class="fas fa-list"></i> Chick Sale Register</div>
   <div class="card-body p-0">
-    <div class="table-responsive">
+    <div class="table-responsive" style="overflow:visible">
       <table class="table table-hover table-bordered mb-0 ds-grid" id="chick-sale-table">
         <thead>
           <tr>
@@ -283,13 +285,18 @@ $(function () {
       </tr>`);
     });
     table = $('#chick-sale-table').DataTable({
-      responsive: true,
+      // Every column stays on screen: no folding into the expander row. The
+      // register scrolls sideways inside its card when the window is narrow.
+      responsive: false, autoWidth: false,
       // Column 0 is the Multiple tick column: date is column 1 and the
       // ticks themselves are not sortable.
       order: [[1, 'desc']], pageLength: keepLen,
       columnDefs: [{ orderable: false, targets: 0 }],
       language: { emptyTable: "No data available in table" },
     });
+    // Only the table scrolls sideways. The toolbar (Show, Search, Column
+    // visibility and its menu) stays put and is never clipped by the scroller.
+    $('#chick-sale-table').wrap('<div style="overflow-x:auto"></div>');
     // The page turned, or the rows were redrawn: show the boxes and ticks on them.
     table.on("draw", applyBulkState);
     applyBulkState();

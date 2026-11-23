@@ -313,17 +313,127 @@ $(function () {
 // since defaults must be set before initialization, not inside a ready
 // callback of our own - ready handlers fire in registration order, and
 // individual pages register theirs earlier in the document than this file.
+// Exports leave out the Action column and any Multiple tick column (a register
+// whose header cell has a "...-pick-col" class), so no blank first column.
+const EXPORT_COLS = 'th:not(:last-child):not([class*="-pick-col"])';
 $.extend(true, $.fn.dataTable.defaults, {
   dom: "Blfrtip",
   buttons: [
-    { extend: "copyHtml5", exportOptions: { columns: "th:not(:last-child)" } },
-    { extend: "csvHtml5", exportOptions: { columns: "th:not(:last-child)" } },
-    { extend: "excelHtml5", exportOptions: { columns: "th:not(:last-child)" } },
-    { extend: "pdfHtml5", exportOptions: { columns: "th:not(:last-child)" }, orientation: "landscape" },
-    { extend: "print", exportOptions: { columns: "th:not(:last-child)" } },
+    { extend: "copyHtml5", exportOptions: { columns: EXPORT_COLS } },
+    { extend: "csvHtml5", exportOptions: { columns: EXPORT_COLS } },
+    { extend: "excelHtml5", exportOptions: { columns: EXPORT_COLS } },
+    { extend: "pdfHtml5", exportOptions: { columns: EXPORT_COLS }, orientation: "landscape" },
+    { extend: "print", exportOptions: { columns: EXPORT_COLS } },
     "colvis",
   ],
 });
+
+// ---------------------------------------------------------------------------
+// What the Column visibility menu offers.
+//
+// Every page's menu -- the shared one and the many registers that name their
+// own "colvis" button -- lists the table's columns through "columnsToggle".
+// Two kinds of column do not belong in it: a Multiple tick column, and one with
+// no title (the row-expand arrow, a select-all checkbox). Hiding either would
+// break the row details or the selection, and the entry would be a blank line.
+// ---------------------------------------------------------------------------
+(function ($) {
+  var buttons = $ && $.fn && $.fn.dataTable && $.fn.dataTable.ext && $.fn.dataTable.ext.buttons;
+  if (!buttons || typeof buttons.columnsToggle !== "function") return;
+  var original = buttons.columnsToggle;
+  buttons.columnsToggle = function (dt, conf) {
+    var list = original.apply(this, arguments);
+    if (!$.isArray(list)) return list;
+    return list.filter(function (item) {
+      if (!item || typeof item.columns !== "number") return true;
+      var $h = $(dt.column(item.columns).header());
+      return !$h.is('[class*="-pick-col"]') && $.trim($h.text()) !== "";
+    });
+  };
+})(jQuery);
+
+// ---------------------------------------------------------------------------
+// Column visibility is remembered.
+//
+// What a person hides with the "Column visibility" menu is kept in this
+// browser, per table, and put back the next time that table is built: after a
+// refresh, a page change, or coming back tomorrow. Only a choice made in the
+// menu is saved -- a page that shows or hides a column itself is not recorded
+// as the person's choice. A table whose column count has changed (a column
+// added or removed by a later release or a permission) ignores what was saved
+// rather than hiding the wrong column, and a Multiple tick column is never
+// touched. Storage being unavailable simply means nothing is remembered.
+// ---------------------------------------------------------------------------
+(function ($) {
+  if (!$ || !$.fn || !$.fn.dataTable) return;
+  var PICK = '[class*="-pick-col"]';
+  var lastMenuUse = 0;
+
+  function keyFor(settings) {
+    var tables = $("table.dataTable").toArray();
+    var id = settings.nTable.id || ("table" + Math.max(0, tables.indexOf(settings.nTable)));
+    return "bims.colvis:" + location.pathname + ":" + id;
+  }
+  function read(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; }
+  }
+  function write(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not remembered */ }
+  }
+  function isPick(api, i) { return $(api.column(i).header()).is(PICK); }
+
+  // The Column visibility button turns amber, with a count, while any column is
+  // hidden, so a "missing" column is never a surprise. Multiple tick columns do
+  // not count: they are not in the menu.
+  function flagHidden(settings) {
+    var api = new $.fn.dataTable.Api(settings);
+    var hidden = 0;
+    api.columns().every(function (i) { if (!isPick(api, i) && !this.visible()) hidden++; });
+    $(api.table().container()).find(".buttons-colvis").each(function () {
+      var $b = $(this);
+      $b.find(".colvis-count").remove();
+      $b.toggleClass("colvis-active", hidden > 0);
+      if (hidden > 0) {
+        $b.append($("<span>", { "class": "colvis-count", text: hidden }));
+        $b.attr("title", hidden + (hidden === 1 ? " column is" : " columns are") + " hidden");
+      } else {
+        $b.removeAttr("title");
+      }
+    });
+  }
+
+  // A click inside the menu is what makes a visibility change the person's own.
+  $(document).on("mousedown touchstart keydown", ".dt-button-collection", function () {
+    lastMenuUse = Date.now();
+  });
+
+  $(document).on("init.dt", function (e, settings) {
+    if (!settings || !settings.nTable) return;
+    var api = new $.fn.dataTable.Api(settings);
+    var saved = read(keyFor(settings));
+    if (!saved || saved.length !== api.columns().count()) { flagHidden(settings); return; }
+    var changed = false;
+    saved.forEach(function (visible, i) {
+      if (isPick(api, i)) return;
+      if (api.column(i).visible() !== !!visible) { api.column(i).visible(!!visible, false); changed = true; }
+    });
+    if (changed) {
+      api.columns.adjust();
+      if (api.responsive && api.responsive.recalc) api.responsive.recalc();
+    }
+    flagHidden(settings);
+  });
+
+  $(document).on("column-visibility.dt", function (e, settings) {
+    if (!settings || !settings.nTable) return;
+    flagHidden(settings);
+    if (Date.now() - lastMenuUse > 1500) return;
+    var api = new $.fn.dataTable.Api(settings);
+    var state = [];
+    api.columns().every(function (i) { state.push(isPick(api, i) ? true : this.visible()); });
+    write(keyFor(settings), state);
+  });
+})(jQuery);
 
 // ---------------------------------------------------------------------------
 // A Select2 panel that would hang past the right edge of the window.

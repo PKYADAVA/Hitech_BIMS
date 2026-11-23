@@ -207,7 +207,9 @@ $(function () {
       // Column 0 is the Multiple tick column: date is column 1, and ticking
       // its header box must not sort the table.
       responsive: true, order: [[1, "desc"]],
-      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print"].map(function (b) {
+        return { extend: b, exportOptions: { columns: ':not([class*="-pick-col"])' } };
+      }).concat([{ extend: "colvis", columns: ':not([class*="-pick-col"])' }]),
       columnDefs: [{ orderable: false, targets: [0, -2, -1] }],
       language: { emptyTable: "No data available in table" },
     });

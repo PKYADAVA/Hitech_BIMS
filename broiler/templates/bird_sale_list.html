@@ -307,7 +307,9 @@ $(function () {
       // box sort the table instead of ticking the rows.
       order: [],
       // "l" is the Show N entries chooser, which Bfrtip leaves out.
-      dom: "Blfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      dom: "Blfrtip", buttons: ["copy", "csv", "excel", "pdf", "print"].map(function (b) {
+        return { extend: b, exportOptions: { columns: ':not([class*="-pick-col"])' } };
+      }).concat([{ extend: "colvis", columns: ':not([class*="-pick-col"])' }]),
       lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]], pageLength: keepLen,
       language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No data available in table" },
       columnDefs: [{ orderable: false, targets: [0, -1, -2] }],
