@@ -316,7 +316,35 @@ def sms_transaction_source(request):
     for r in rows:
         r["sent_history"] = sent_map.get((r["module"], r["doc_no"]), [])
         r["already_sent"] = bool(r["sent_history"])
-    return JsonResponse({"rows": rows, "party_type": party_type})
+    # The other channel's history too, so a document shows where it has gone
+    # out on both -- only to someone who may see that channel's screen.
+    other = {}
+    can_other = user_can(request.user, "whatsapp_transaction", "view")
+    if can_other:
+        other = _sent_history(WhatsappMessage, modules, doc_nos, ["sent", "delivered", "read", "mocked"])
+    for r in rows:
+        r["other_history"] = other.get((r["module"], r["doc_no"]), [])
+    return JsonResponse({"rows": rows, "party_type": party_type,
+                         "other_visible": can_other})
+
+
+def _sent_history(model, modules, doc_nos, statuses):
+    """What has already gone out for these documents on one channel, newest
+    first, keyed by (module, document number). Shared by the two Transaction
+    screens so each can show the other channel's status as well as its own."""
+    out = {}
+    for m in (model.objects
+              .filter(module__in=modules, document_no__in=doc_nos, status__in=statuses)
+              .order_by("-created_at")
+              .values("module", "document_no", "template_id", "template_name",
+                      "mobile", "created_at")):
+        out.setdefault((m["module"], m["document_no"]), []).append({
+            "template_id": m["template_id"],
+            "template_name": m["template_name"],
+            "mobile": m["mobile"],
+            "sent_at": timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M"),
+        })
+    return out
 
 
 def _client_ip(request):
@@ -1037,7 +1065,16 @@ def whatsapp_transaction_source(request):
     for r in rows:
         r["sent_history"] = sent_map.get((r["module"], r["doc_no"]), [])
         r["already_sent"] = bool(r["sent_history"])
-    return JsonResponse({"rows": rows, "party_type": party_type})
+    # The other channel's history too, so a document shows where it has gone
+    # out on both -- only to someone who may see that channel's screen.
+    other = {}
+    can_other = user_can(request.user, "sms_transaction", "view")
+    if can_other:
+        other = _sent_history(SmsMessage, modules, doc_nos, ["sent", "delivered", "mocked"])
+    for r in rows:
+        r["other_history"] = other.get((r["module"], r["doc_no"]), [])
+    return JsonResponse({"rows": rows, "party_type": party_type,
+                         "other_visible": can_other})
 
 
 @login_required

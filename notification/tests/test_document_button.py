@@ -328,3 +328,57 @@ class BirdReceiptButtonTests(TestCase):
     def test_a_receipt_nobody_messaged_has_no_status(self):
         rows = self.client.get(reverse("bird_sale_receipt_api_list")).json()
         self.assertIsNone(next(r for r in rows if r["id"] == self.receipt.id)["wa"])
+
+
+class CrossChannelStatusTests(TestCase):
+    """The Transaction screens show where a document has gone out on both channels."""
+
+    def setUp(self):
+        _sources.SourceRowTests.setUp(self)
+        self.user = get_user_model().objects.create_superuser("boss5", password="pw12345!")
+        self.client.force_login(self.user)
+        self.no = self.sale.sale_no or self.sale.doc_no
+
+    _till = _sources.SourceRowTests._till
+
+    def _wa(self, status="sent"):
+        WhatsappMessage.objects.create(
+            party_type="customer", party_id=self.customer.id, party_name="Sadar Traders",
+            mobile="9876500001", module="bird_sale", document_no=self.no,
+            template_name="wa_t", status=status)
+
+    def _sms(self, status="sent"):
+        from notification.models import SmsMessage
+
+        SmsMessage.objects.create(
+            party_type="customer", party_id=self.customer.id, party_name="Sadar Traders",
+            mobile="9876500001", module="bird_sale", document_no=self.no,
+            template_name="sms_t", status=status, message="hi")
+
+    def _row(self, url_name):
+        d = self.client.get(reverse(url_name), {"module": "bird_sale"}).json()
+        return next(r for r in d["rows"] if r["doc_id"] == self.sale.id)
+
+    def test_the_whatsapp_screen_also_shows_sms_history(self):
+        self._sms()
+        row = self._row("whatsapp_transaction_source")
+        self.assertEqual(row["sent_history"], [])
+        self.assertEqual(len(row["other_history"]), 1)
+        self.assertEqual(row["other_history"][0]["template_name"], "sms_t")
+
+    def test_the_sms_screen_also_shows_whatsapp_history(self):
+        self._wa()
+        row = self._row("sms_transaction_source")
+        self.assertEqual(row["sent_history"], [])
+        self.assertEqual(row["other_history"][0]["template_name"], "wa_t")
+
+    def test_each_screen_keeps_its_own_history_apart(self):
+        self._wa(); self._sms()
+        wa = self._row("whatsapp_transaction_source")
+        self.assertEqual(wa["sent_history"][0]["template_name"], "wa_t")
+        self.assertEqual(wa["other_history"][0]["template_name"], "sms_t")
+
+    def test_a_failed_message_is_not_a_sent_one_on_either_channel(self):
+        self._wa("failed"); self._sms("failed")
+        row = self._row("whatsapp_transaction_source")
+        self.assertEqual((row["sent_history"], row["other_history"]), ([], []))

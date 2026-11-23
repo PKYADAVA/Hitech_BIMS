@@ -84,13 +84,19 @@
   .ntx-active-filters .badge .fa-xmark { cursor:pointer; margin-left:.3rem; }
 
   /* Sent Via column: one compact row per document, both channels at once */
-  .ntx-chan-status { display:flex; align-items:center; gap:.4rem; }
+  /* The chips stay put and the details beside them wrap, so a long status (both channels, dates, counts) grows downward and not across. */
+  .ntx-chan-status { display:flex; align-items:flex-start; gap:.4rem; min-width:13rem; max-width:17rem; }
   .ntx-chip-sm { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px;
                 border-radius:6px; font-size:.63rem; font-weight:800; color:#9aa5b1;
                 background:var(--bg-subtle,#e9ecef); flex:0 0 auto; }
   .ntx-chip-sm.sent-sms { background:#2f6fed; color:#fff; }
   .ntx-chip-sm.sent-wa { background:#1fa855; color:#fff; }
-  .ntx-chan-text { font-size:.78rem; color:var(--text-muted,#65727e); }
+  .ntx-prev { min-width:14rem; max-width:22rem; }
+  /* The whole message, wrapped inside the column -- never cut off. */
+  .ntx-prev-clamp { white-space:normal; overflow-wrap:anywhere; }
+  .ntx-chan-text { font-size:.78rem; line-height:1.3; color:var(--text-muted,#65727e); white-space:normal; flex:1 1 auto; min-width:0; }
+  .ntx-chan-status .ntx-chip-sm { margin-top:1px; }
+  .ntx-chan-text .ntx-other { display:block; }
 </style>
 <div class="ntx-page">
 <div class="page-header">
@@ -211,7 +217,7 @@
 
 <!-- Grid -->
 <div class="card">
-  <div class="card-header"><i class="fas fa-table"></i> Documents</div>
+  <div class="card-header"><i class="fas fa-table"></i> Documents <span class="ms-2 small text-muted fw-normal" id="ntx-picked"></span></div>
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0 ds-grid" id="ntx-doc-table">
@@ -284,6 +290,12 @@ $(function () {
   let channel = CAN_SMS ? "sms" : "whatsapp";
   let table = null;
   let rows = [];
+  // Whether this user may see the other channel's status (the rows carry it).
+  let otherVisible = false;
+  // Which rows are ticked, kept here and not only on the boxes: rows on the
+  // other pages of the table are not in the document, so reading the boxes saw
+  // one page and quietly dropped the rest of what had been ticked.
+  const picked = new Set();
 
   const today = localDay();
   const sevenDaysAgo = localDay(new Date(Date.now() - 6 * 86400000));
@@ -485,22 +497,44 @@ $(function () {
       : escapeHtml(value);
   }
 
+  // The whole message is shown, wrapped to the column. WhatsApp's fields run
+  // together on lines of their own width rather than one per line, which keeps
+  // a row short without cutting anything off. A missing field is also named
+  // above the text so it is not lost in the middle of it.
+  function missingNotice(names) {
+    return names.length
+      ? `<div class="text-danger"><i class="fas fa-xmark"></i> missing ${escapeHtml(names.join(", "))}</div>` : "";
+  }
+
   function messagePreviewCell(r) {
     const t = templateForRow(r);
     if (!t) return '<span class="text-muted small">Select a template</span>';
     if (channel === "sms") {
       const m = smsMetrics(renderMessage(t.body, r.context));
-      return `<div class="small">${renderMessageMarked(t.body, r.context)}` +
+      const full = withGenerics(r.context);
+      const gone = [];
+      t.body.replace(/\{(\w+)\}/g, (x, name) => {
+        const v = full[name];
+        if ((v === undefined || v === null || v === "") && gone.indexOf(name) < 0) gone.push(name);
+      });
+      return `<div class="small ntx-prev" title="${escapeHtml(renderMessage(t.body, r.context))}">` +
+             missingNotice(gone) +
+             `<div class="ntx-prev-clamp">${renderMessageMarked(t.body, r.context)}</div>` +
              `<div class="text-muted">${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</div></div>`;
     }
     if (!t.parameter_map.length) {
       return `<div class="small"><code>${escapeHtml(t.template_name)}</code><br><span class="text-muted">No parameters.</span></div>`;
     }
     const waCtx = withGenerics(r.context);
-    const params = t.parameter_map.map((name, n) =>
-      `<div>${paramLabel(n + 1)} <span class="text-muted">${escapeHtml(name)}:</span> ${paramValueHtml(waCtx[name])}</div>`
-    ).join("");
-    return `<div class="small"><code>${escapeHtml(t.template_name)}</code>${params}</div>`;
+    const gone = [];
+    const parts = t.parameter_map.map(name => {
+      const v = waCtx[name];
+      if ((v === undefined || v === null || v === "") && gone.indexOf(name) < 0) gone.push(name);
+      return `<span class="text-muted">${escapeHtml(name)}</span> ${paramValueHtml(v)}`;
+    });
+    const tip = t.parameter_map.map((name, n) => `${paramLabel(n + 1)} ${name}: ${waCtx[name] || "-"}`).join("\n");
+    return `<div class="small ntx-prev" title="${escapeHtml(tip)}"><code>${escapeHtml(t.template_name)}</code>` +
+           `${missingNotice(gone)}<div class="ntx-prev-clamp">${parts.join(" &middot; ")}</div></div>`;
   }
 
   // ---- Sent Via: both channels' status at once, independent of toggle ----
@@ -518,24 +552,47 @@ $(function () {
   }
 
   function chanStatusCell(r) {
-    const hist = r.sent_history || [];
+    // Both channels, whichever one is switched on: the rows carry their own
+    // channel's history (sent_history) and the other's (other_history), the
+    // latter only for someone who may see that channel's screen.
+    const own = r.sent_history || [];
+    const other = r.other_history || [];
     const mine = sentForSelectedTemplate(r);
-    const sentThisChannel = mine.length ? mine : (hist.length ? hist : null);
-    const chanClass = channel === "sms" ? "sent-sms" : "sent-wa";
     const chanLabel = channel === "sms" ? "SMS" : "WhatsApp";
     const otherLabel = channel === "sms" ? "WhatsApp" : "SMS";
+    const sms = channel === "sms" ? own : other;
+    const wa = channel === "sms" ? other : own;
 
-    const activeChip = sentThisChannel
-      ? `<span class="ntx-chip-sm ${chanClass}" title="${chanLabel} sent ${escapeHtml(sentThisChannel[0].sent_at)}${sentThisChannel[0].template_name ? ' via ' + escapeHtml(sentThisChannel[0].template_name) : ''}">${channel === "sms" ? "S" : "W"}</span>`
-      : `<span class="ntx-chip-sm" title="Not sent via ${chanLabel}">${channel === "sms" ? "S" : "W"}</span>`;
-    const otherChip = `<span class="ntx-chip-sm" title="Switch to ${otherLabel} to see its status">${channel === "sms" ? "W" : "S"}</span>`;
+    function chip(letter, cls, list, label) {
+      const tip = list.length
+        ? `${label} sent ${list[0].sent_at}${list[0].template_name ? " via " + list[0].template_name : ""}` +
+          (list.length > 1 ? ` (${list.length} times)` : "")
+        : `Not sent via ${label}`;
+      return `<span class="ntx-chip-sm ${list.length ? cls : ""}" title="${escapeHtml(tip)}">${letter}</span>`;
+    }
 
     let text;
     if (mine.length) text = `${chanLabel} sent <span class="text-muted">${escapeHtml(mine[0].sent_at)}</span>`;
-    else if (hist.length) text = `${chanLabel}: sent (other template)`;
-    else text = "Not sent";
+    else if (own.length) {
+      // "Other template" only means something once a template is chosen; with
+      // none chosen it is simply when it was last sent.
+      text = $("#template").val()
+        ? `${chanLabel}: sent (other template)`
+        : `${chanLabel} sent <span class="text-muted">${escapeHtml(own[0].sent_at)}</span>`;
+    }
+    else text = other.length ? `${chanLabel}: not sent` : (otherVisible ? `${chanLabel} not sent` : "Not sent");
+    if (own.length > 1) text += ` <b>&times;${own.length}</b>`;
+    // Both channels are always spoken for, when this user may see the other one:
+    // "SMS not sent" is as much a status as "SMS sent".
+    if (other.length) {
+      text += `<span class="ntx-other">${otherLabel} sent ${escapeHtml(other[0].sent_at)}` +
+              (other.length > 1 ? ` &times;${other.length}` : "") + `</span>`;
+    } else if (otherVisible) {
+      text += `<span class="ntx-other">${otherLabel} not sent</span>`;
+    }
 
-    return `<div class="ntx-chan-status">${activeChip}${otherChip}<span class="ntx-chan-text">${text}</span></div>`;
+    return `<div class="ntx-chan-status">${chip("W", "sent-wa", wa, "WhatsApp")}` +
+           `${chip("S", "sent-sms", sms, "SMS")}<span class="ntx-chan-text">${text}</span></div>`;
   }
 
   // ---- Grid filtering / render --------------------------------------------
@@ -586,27 +643,42 @@ $(function () {
     else if (rows.length) renderRows();
   });
 
+  // The ticked rows that are still listed (the party-type filter can hide
+  // some) and have a number to send to, across every page.
   function selectedIndexes() {
-    return $(".row-check:checked").map(function () { return Number($(this).data("index")); }).get();
+    const listed = new Set(visibleRows().map(r => rows.indexOf(r)));
+    return [...picked].filter(i => listed.has(i) && rows[i] && rows[i].mobile).sort((a, b) => a - b);
+  }
+
+  // The header box says what the page showing says -- all, some or none ticked --
+  // and the card header says how many are ticked in all.
+  function syncHeader() {
+    const boxes = $(".row-check:not(:disabled)");
+    const ticked = boxes.filter(":checked").length;
+    const all = boxes.length > 0 && ticked === boxes.length;
+    $("#select-all").prop("checked", all).prop("indeterminate", !all && ticked > 0);
+    const n = selectedIndexes().length;
+    $("#ntx-picked").text(n ? n + " selected" : "");
   }
 
   function renderRows() {
     renderActiveFilters();
-    const checked = new Set(selectedIndexes());
-    if (table) { table.destroy(); }
+    // Let go of the old grid's listeners first: tearing a grid down fires its
+    // search event, which would write the old text back over a Clear.
+    if (table) { table.off("search.dt length.dt"); table.destroy(); }
     const tbody = $("#ntx-doc-table tbody");
     tbody.empty();
     visibleRows().forEach(function (r) {
       const i = rows.indexOf(r);
       tbody.append(`<tr>
-        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
-        <td>${fmtDate(r.date)}</td>
+        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${picked.has(i) ? "checked" : ""}></td>
+        <td class="text-nowrap">${fmtDate(r.date)}</td>
         <td>${escapeHtml(MODULE_LABELS[r.module] || r.module)}</td>
         <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
-        <td>${escapeHtml(r.party_name)}</td>
-        <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
-        <td>${escapeHtml(r.doc_no)}</td>
-        <td class="text-end">${Number(r.amount).toFixed(2)}</td>
+        <td style="min-width:8rem">${escapeHtml(r.party_name)}</td>
+        <td class="text-nowrap">${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
+        <td class="text-nowrap">${escapeHtml(r.doc_no)}</td>
+        <td class="text-end text-nowrap">${Number(r.amount).toFixed(2)}</td>
         <td>${chanStatusCell(r)}</td>
         <td>${messagePreviewCell(r)}</td>
       </tr>`);
@@ -615,9 +687,24 @@ $(function () {
       responsive: true, order: [[1, "desc"]],
       dom: "Blfrtip",
       lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+      pageLength: ntxLen,
+      search: { search: ntxSearch },
       columnDefs: [{ orderable: false, targets: [0, 9] }],
       language: { emptyTable: "No documents match the filters" },
     });
+    // A page turn shows other rows: the header box and the count follow them.
+    table.on("draw", syncHeader);
+    // What was typed or chosen in the grid's own controls, kept for the next
+    // rebuild and for a refresh.
+    table.on("search.dt", function () {
+      if (ntxSearch === table.search()) return;
+      ntxSearch = table.search(); ntxRemember();
+    });
+    table.on("length.dt", function (e, settings, len) {
+      if (ntxLen === len) return;
+      ntxLen = len; ntxRemember();
+    });
+    syncHeader();
   }
 
   /* ---------------------------------------------------------------------
@@ -644,8 +731,17 @@ $(function () {
       } catch (e) { return false; }
   })();
 
+  // The grid's own search box and page size. The grid is rebuilt every time
+  // rows are drawn, which used to reset both, so they are held here and put
+  // back on each rebuild, and remembered with the bar.
+  let ntxSearch = "";
+  let ntxLen = 10;
+
   function ntxCurrent() {
       return {
+          channel: channel,
+          search: ntxSearch,
+          length: ntxLen,
           module: $("#module").val() || "",
           from: $("#from-date").val() || "",
           to: $("#to-date").val() || "",
@@ -709,8 +805,10 @@ $(function () {
       location: locationValue(),
     }, function (resp) {
       rows = resp.rows || [];
+      otherVisible = !!resp.other_visible;
+      // New documents: the old ticks pointed at positions in the old list.
+      picked.clear();
       renderRows();
-      $("#select-all").prop("checked", false);
     }).fail(function (xhr) {
       window.showToast('danger', xhr.responseJSON?.error || "Failed to load documents.");
     });
@@ -759,10 +857,15 @@ $(function () {
       $(this).toggleClass("active", !!matches[$(this).data("range")]);
     });
   }
-  $(".quick-date-btn").on("click", function () { applyQuickRange($(this).data("range")); });
+  $(".quick-date-btn").on("click", function () { applyQuickRange($(this).data("range")); ntxRemember(); ntxSyncMark(); });
   $("#from-date, #to-date").on("change", markActiveQuickRange);
+  // Any control on the bar changing is remembered at once, as on the other
+  // list screens: not only when Search is pressed.
+  $("#ntx-filter-bar").on("change", "select, input", function () { ntxRemember(); ntxSyncMark(); });
+  $("#channel-switch").on("click", ".ntx-channel-btn", function () { ntxRemember(); });
 
   $("#clear-btn").on("click", function () {
+    ntxSearch = "";
     $("#from-date").val(sevenDaysAgo); $("#to-date").val(today);
     $("#template").val(""); $("#party-type-filter").val("");
     $("#location-filter").val("");
@@ -775,8 +878,21 @@ $(function () {
     ntxSyncMark();
   });
 
+  // The header box ticks the rows on the page showing; ticks on other pages stay.
   $("#select-all").on("change", function () {
-    $(".row-check:not(:disabled)").prop("checked", this.checked);
+    const on = this.checked;
+    $(".row-check:not(:disabled)").each(function () {
+      this.checked = on;
+      const i = Number($(this).data("index"));
+      if (on) picked.add(i); else picked.delete(i);
+    });
+    syncHeader();
+  });
+
+  $(document).on("change", ".row-check", function () {
+    const i = Number($(this).data("index"));
+    if (this.checked) picked.add(i); else picked.delete(i);
+    syncHeader();
   });
 
   function requireSelection() {
@@ -803,8 +919,12 @@ $(function () {
     }
     return indexes.map(i => {
       const r = rows[i];
+      // With the generic fields (current date, company, user) filled in, as the
+      // table's own preview cell does -- the row's context carries only the
+      // document's fields, so reading it raw marked CurrentDate as missing here.
+      const ctx = withGenerics(r.context);
       const params = (t?.parameter_map || []).map((name, n) =>
-        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${paramValueHtml(r.context[name])}</div>`
+        `<div><span class="text-muted">${paramLabel(n + 1)} ${escapeHtml(name)}:</span> ${paramValueHtml(ctx[name])}</div>`
       ).join("") || '<div class="text-muted">No parameters.</div>';
       return `<div class="border rounded p-2 mb-2">
         <div class="d-flex justify-content-between small text-muted">
@@ -917,6 +1037,14 @@ $(function () {
   function ntxRestoreBar() {
       const saved = ntxSaved();
       if (!saved || !Object.keys(saved).length) { ntxSyncMark(); return; }
+      // The channel first: the Template list is the channel's own, so a saved
+      // WhatsApp template has nowhere to land while the page is on SMS.
+      if ((saved.channel === "sms" && CAN_SMS) || (saved.channel === "whatsapp" && CAN_WHATSAPP)) {
+          channel = saved.channel;
+      }
+      ntxSearch = typeof saved.search === "string" ? saved.search : "";
+      if ([10, 25, 50, 100, -1].indexOf(Number(saved.length)) >= 0) ntxLen = Number(saved.length);
+      refreshTemplateOptions();
       if (saved.module && $("#module option[value='" + saved.module + "']").length) {
           // Set, then rebuild the dependent controls by hand rather than
           // firing "change": this page loads its rows on every change, so
