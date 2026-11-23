@@ -10,6 +10,7 @@ missing merge field is reported clearly instead of producing a broken message.
 
 import logging
 from collections import namedtuple
+import re as _re
 from string import Formatter
 
 from django.db import Error as DatabaseError
@@ -27,11 +28,32 @@ def extract_placeholders(body):
     """Return the set of named ``{placeholder}`` fields used in ``body``."""
 
     names = set()
-    for _, field_name, _, _ in Formatter().parse(body or ""):
-        if field_name:
-            # Support dotted/indexed access by keying on the root name.
-            names.add(field_name.split(".")[0].split("[")[0])
+    try:
+        for _, field_name, _, _ in Formatter().parse(body or ""):
+            if field_name:
+                # Support dotted/indexed access by keying on the root name.
+                names.add(field_name.split(".")[0].split("[")[0])
+    except ValueError:
+        # A body with a stray or unbalanced brace ("{CustomerName, sale {InvoiceNo}")
+        # is not valid format syntax and Formatter refuses it outright. That must
+        # not take down whatever merely lists templates -- one bad body made the
+        # whole SMS template page fail to load, with no way to open it and mend
+        # it. Read what is plainly a {Name}; the save check below stops a new
+        # one being written.
+        names = set(_re.findall(r"\{(\w+)[^{}]*\}", body or ""))
     return names
+
+
+def brace_problem(body):
+    """Why this body cannot be a template, in words for the person writing it --
+    or None when its braces are fine. Each placeholder has to look like
+    {CustomerName}; a lone { or } is not allowed."""
+    try:
+        list(Formatter().parse(body or ""))
+    except ValueError:
+        return ("The message has a { or } without its pair. Each placeholder must "
+                "be written like {CustomerName}, with both braces.")
+    return None
 
 
 class SmsTemplateService:

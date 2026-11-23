@@ -134,3 +134,42 @@ class WhatsappTemplateViewTests(TestCase):
         response = self.client.get(reverse("whatsapp_templates"))
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
+
+
+class MalformedBraceTests(TestCase):
+    """One template with a stray brace must not take the whole list down."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("braces", password="pw12345!")
+        self.client.force_login(self.user)
+
+    def test_the_list_still_loads_when_a_stored_body_has_an_unpaired_brace(self):
+        SmsTemplate.objects.create(key="sales.ok", module="sales", name="OK", body="Hi {CustomerName}")
+        SmsTemplate.objects.create(key="sales.bad", module="sales", name="Bad",
+                                   body="Dear {CustomerName, sale {InvoiceNo} total } Rs")
+        r = self.client.get(reverse("sms_template_list"))
+        self.assertEqual(r.status_code, 200)
+        by_key = {t["key"]: t for t in r.json()}
+        self.assertEqual(by_key["sales.ok"]["placeholders"], ["CustomerName"])
+        # What is plainly a placeholder is still read out of the broken one.
+        self.assertIn("InvoiceNo", by_key["sales.bad"]["placeholders"])
+
+    def test_extract_placeholders_does_not_raise_on_a_lone_brace(self):
+        from notification.services.template_service import extract_placeholders
+
+        self.assertEqual(extract_placeholders("Total } oops"), set())
+        self.assertEqual(extract_placeholders("Rs {Amount:,.2f}"), {"Amount"})
+
+    def test_saving_a_body_with_an_unpaired_brace_is_refused_with_a_clear_message(self):
+        payload = {"key": "sales.new", "module": "sales", "name": "New",
+                   "body": "Dear {CustomerName, sale {InvoiceNo}"}
+        r = self.client.post(reverse("sms_template_create"), payload)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("{ or }", r.json()["error"])
+        self.assertFalse(SmsTemplate.objects.filter(key="sales.new").exists())
+
+    def test_a_correct_body_still_saves(self):
+        payload = {"key": "sales.fine", "module": "sales", "name": "Fine",
+                   "body": "Dear {CustomerName}, sale {InvoiceNo}"}
+        r = self.client.post(reverse("sms_template_create"), payload)
+        self.assertEqual(r.status_code, 201)

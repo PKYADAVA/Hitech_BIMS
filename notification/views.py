@@ -18,7 +18,7 @@ from django.views import View
 from .constants import SMS_MODULE_CHOICES, SMS_MODULE_TRANSACTIONS, transaction_label
 from .models import SmsMessage, SmsTemplate, SmsTemplateCategory
 from .services import get_sms_service
-from .services.template_service import extract_placeholders
+from .services.template_service import brace_problem, extract_placeholders
 from Hitech_BIMS.entry_dates import date_from_query
 
 logger = logging.getLogger("notification.sms")
@@ -172,6 +172,9 @@ class SmsTemplateAPI(View):
             return "Name is required."
         if not body:
             return "Message body is required."
+        problem = brace_problem(body)
+        if problem:
+            return problem
         return ""
 
 
