@@ -8248,6 +8248,120 @@ def _batch_daily_card_xlsx(batch, snapshot, daily_rows, phase_names,
     return response
 
 
+LIFTING_XLSX_COLUMNS = [
+    # (heading, key, kind, width) -- kind: text / int / money / weight
+    ("Date", "date", "date", 12), ("Branch", "branch", "text", 16), ("Line", "line", "text", 10),
+    ("Farm", "farm", "text", 24), ("Batch", "batch", "text", 14), ("Cust Code", "code", "text", 12),
+    ("Customer", "customer", "text", 30), ("Invoice", "invoice", "text", 16),
+    ("Dc No.", "dc_no", "text", 12), ("Mean Age", "mean_age", "int", 10),
+    ("Birds", "birds", "int", 10), ("Weight", "weight", "weight", 12),
+    ("Avg Wt", "avg_wt", "weight", 10), ("Rate", "rate", "weight", 10),
+    ("Amount", "amount", "money", 15), ("TCS Amount", "tcs", "money", 13),
+    ("Total Amount", "total", "money", 15), ("Receipt Amount", "receipt", "money", 15),
+    ("Day Ledger Balance", "ledger_balance", "money", 17), ("Dr/Cr", "ledger_cr_dr", "text", 7),
+    ("Lifting Supervisor", "supervisor", "text", 22), ("Vehicle", "vehicle", "text", 14),
+    ("Driver", "driver", "text", 16), ("Remarks", "remarks", "text", 40),
+    ("Photos", "photo_count", "int", 8),
+]
+
+
+def _lifting_report_excel(request, shown, totals, company, criteria):
+    """The Lifting Report as an .xlsx workbook, the rows exactly as the screen
+    shows them -- each customer's day total line included -- with the grand
+    total at the foot. Figures are real numbers, so the sheet can be summed,
+    filtered and pivoted; nothing is pre-formatted into text."""
+    import openpyxl
+    from django.http import HttpResponse
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Lifting Report"
+    cols = LIFTING_XLSX_COLUMNS
+    last = get_column_letter(len(cols))
+
+    ws.append([company.name if company else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Lifting Report"])
+    ws["A2"].font = Font(bold=True)
+    ws.append([criteria])
+    ws.append([f"Generated {timezone.localtime().strftime('%d-%m-%Y %H:%M')} by {request.user.get_username()}"])
+    ws.append([])
+
+    head = ws.max_row + 1
+    ws.append([c[0] for c in cols])
+    navy = PatternFill("solid", fgColor="1B3A6B")
+    for cell in ws[head]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = navy
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.freeze_panes = ws.cell(row=head + 1, column=8)     # date..customer stay put
+
+    amber = PatternFill("solid", fgColor="FFF4D6")
+    formats = {"money": "#,##0.00", "weight": "#,##0.00", "int": "0"}
+
+    def put(row, r, day=False):
+        out = []
+        for _h, key, kind, _w in cols:
+            v = r.get(key, "")
+            if key == "photo_count":
+                v = len(r.get("photos") or []) if not day else ""
+            if kind == "date":
+                v = v if v else ""
+            elif kind in ("money", "weight"):
+                v = float(v) if v not in ("", None) else None
+            elif kind == "int":
+                v = int(v) if v not in ("", None) else None
+            out.append(v)
+        row_no = ws.max_row + 1
+        ws.append(out)
+        for i, (_h, _k, kind, _w) in enumerate(cols, start=1):
+            cell = ws.cell(row=row_no, column=i)
+            if kind == "date":
+                cell.number_format = "dd-mm-yyyy"
+            elif kind in formats:
+                cell.number_format = formats[kind]
+            if day:
+                cell.fill = amber
+                cell.font = Font(bold=True)
+        return row_no
+
+    for r in shown:
+        if r.get("is_day_total"):
+            line = dict(r)
+            line["farm"] = f"Day total ({r['count']})"
+            standing = {"due": "{} due", "advance": "{} ahead"}.get(r["standing"])
+            if standing:
+                line["remarks"] = (f"Received {r['receipt']:,.2f} of {r['total']:,.2f}; "
+                                   + standing.format(f"{r['gap']:,.2f}"))
+            elif r["standing"] == "paid":
+                line["remarks"] = f"Received {r['receipt']:,.2f}; paid in full"
+            else:
+                line["remarks"] = f"Nothing received against {r['total']:,.2f}"
+            put(ws, line, day=True)
+        else:
+            put(ws, r)
+
+    foot = {"farm": "Total", "birds": totals["birds"], "weight": totals["weight"],
+            "avg_wt": totals["avg_wt"], "rate": totals["rate"], "amount": totals["amount"],
+            "tcs": totals["tcs"], "total": totals["total"], "receipt": totals["receipt"]}
+    foot_no = put(ws, foot, day=True)
+    ws.cell(row=foot_no, column=1).value = "Total"
+    ws.cell(row=foot_no, column=4).value = None
+
+    for i, (_h, _k, _kind, width) in enumerate(cols, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    if ws.max_row - 1 > head:
+        ws.auto_filter.ref = f"A{head}:{last}{ws.max_row - 1}"
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="lifting_report.xlsx"'
+    wb.save(response)
+    return response
+
+
 @login_required
 def lifting_report(request):
     """Broiler > Reports > Lifting Report — a register of every Bird Sale
@@ -8271,6 +8385,12 @@ def lifting_report(request):
     supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
     sale_type = (request.GET.get("type") or "").strip()
+    # When a customer's day gets a total line: only when they had more than one
+    # lifting that day (the default, since one lifting already shows its own
+    # figures), for every customer-day, or never.
+    day_totals = (request.GET.get("day_totals") or "multi").strip()
+    if day_totals not in ("multi", "all", "off"):
+        day_totals = "multi"
 
     # A fresh visit opens on the last 7 days rather than on every lifting ever
     # recorded (days=6, because today is one of the seven).
@@ -8359,6 +8479,12 @@ def lifting_report(request):
                 bal += delta
         return bal
 
+    # One customer's liftings on a day sit together, so their day total can
+    # follow them: date, then customer, then entry order. (A farmer-side lifting
+    # has no customer and sorts after the day's customers.)
+    sales.sort(key=lambda x: (x.date, 0 if x.customer_id else 1,
+                              (x.customer.name if x.customer_id else "").lower(), x.id))
+
     rows = []
     seen_rcpt_keys = set()
     for s in sales:
@@ -8429,8 +8555,84 @@ def lifting_report(request):
     lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
+    # The rows as shown: each customer's liftings on a day, followed -- when
+    # there was more than one -- by a line with that day's total sale value
+    # beside the total received from them that day. The figures above still come
+    # from ``rows``, so a day total is never counted twice.
+    shown = []
+    groups = {}
+    for r in rows:
+        if r["customer_id"]:
+            groups.setdefault((r["customer_id"], r["date"]), []).append(r)
+    done = set()
+    needed = {"multi": 2, "all": 1}.get(day_totals)
+    for r in rows:
+        shown.append(r)
+        key = (r["customer_id"], r["date"])
+        members = groups.get(key) or []
+        if (needed and r["customer_id"] and len(members) >= needed
+                and r is members[-1] and key not in done):
+            done.add(key)
+            birds = sum(int(m["birds"] or 0) for m in members)
+            weight = sum((_num(m["weight"]) for m in members), Decimal("0"))
+            amount = sum((_num(m["amount"]) for m in members), Decimal("0"))
+            tcs = sum((_num(m["tcs"]) for m in members), Decimal("0"))
+            total = sum((_num(m["total"]) for m in members), Decimal("0"))
+            shown.append({
+                "is_day_total": True, "date": r["date"],
+                "customer": r["customer"], "customer_id": r["customer_id"],
+                "count": len(members), "birds": birds,
+                "weight": weight.quantize(q2),
+                "avg_wt": _div(weight, Decimal(birds)).quantize(q2) if birds else Decimal("0.00"),
+                "rate": _div(amount, weight).quantize(q2) if weight else Decimal("0.00"),
+                "amount": amount.quantize(q2), "tcs": tcs.quantize(q2),
+                "total": total.quantize(q2),
+                # Everything received from the customer that day, whichever
+                # lifting the figure was attributed to.
+                "receipt": rcpt_by_key.get(key, Decimal("0.00")).quantize(q2),
+                "ledger_balance": r["ledger_balance"], "ledger_cr_dr": r["ledger_cr_dr"],
+            })
+            # Where that day left the customer against what was sold to them:
+            # what they still owe for it, paid it exactly, or paid ahead.
+            gap = (shown[-1]["total"] - shown[-1]["receipt"]).quantize(q2)
+            shown[-1]["gap"] = abs(gap)
+            shown[-1]["standing"] = ("due" if gap > 0 else "advance" if gap < 0
+                                     else "paid")
+            if not shown[-1]["receipt"]:
+                shown[-1]["standing"] = "unpaid"
+
+    if (request.GET.get("export") or "").strip().lower() == "excel":
+        parts = []
+        if from_date or to_date:
+            parts.append(f"From {fd.strftime('%d-%m-%Y') if fd else 'start'} to "
+                         f"{td.strftime('%d-%m-%Y') if td else 'today'}")
+        else:
+            parts.append("All dates")
+        if customer_id.isdigit():
+            parts.append("Customer: " + (Customer.objects.filter(pk=customer_id)
+                                          .values_list("name", flat=True).first() or customer_id))
+        if region_id.isdigit():
+            parts.append("Region: " + (Region.objects.filter(pk=region_id)
+                                       .values_list("description", flat=True).first() or region_id))
+        if branch_id.isdigit():
+            parts.append("Branch: " + (Branch.objects.filter(pk=branch_id)
+                                       .values_list("branch_name", flat=True).first() or branch_id))
+        if line:
+            parts.append("Line: " + line)
+        if farm_id.isdigit():
+            parts.append("Farm: " + (BroilerFarm.objects.filter(pk=farm_id)
+                                     .values_list("farm_name", flat=True).first() or farm_id))
+        if sale_type in ("customer", "farmer"):
+            parts.append("Type: " + sale_type.title() + " sale")
+        return _lifting_report_excel(request, shown, totals, CompanyProfile.get_solo(),
+                                     " | ".join(parts))
+
+    _qs = request.GET.copy()
+    _qs.pop("export", None)
+
     return render(request, "lifting_report.html", {
-        "rows": rows, "totals": totals,
+        "export_qs": _qs.urlencode(),
+        "rows": rows, "shown_rows": shown, "totals": totals,
         "customers": customers_for(request.user, Customer.objects.order_by("name")),
         "regions": Region.objects.order_by("description"),
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
@@ -8440,6 +8642,7 @@ def lifting_report(request):
         "from_date": from_date, "to_date": to_date, "customer_id": customer_id,
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id, "sale_type": sale_type,
+        "day_totals": day_totals,
         "company": CompanyProfile.get_solo(),
     })
 

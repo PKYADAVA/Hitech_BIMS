@@ -22,6 +22,13 @@
   .lr-table td.num, .lr-table th.num { text-align:right; }
   .lr-table td.cust a, .lr-table td.cust { color:#2b62c9; font-weight:600; }
   .lr-table tbody tr:hover td { background:#f4f8fc; }
+  /* One customer's day: the total sale value against the total received. */
+  .lr-table tbody tr.lr-day-total td { background:#fff4d6 !important; font-weight:700; border-top:1px solid #d9b45b; border-bottom:2px solid #d9b45b; }
+  .lr-table tbody tr.lr-day-total td.lr-day-label { color:#7a5200; }
+  .lr-table td.lr-day-standing { font-weight:600; }
+  .lr-table td.lr-day-standing.due, .lr-table td.lr-day-standing.unpaid { color:#c0392b; }
+  .lr-table td.lr-day-standing.advance { color:#0e8698; }
+  .lr-table td.lr-day-standing.paid { color:#1a7f37; }
   .lr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
   .lr-scroll { max-height:74vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
   .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
@@ -143,6 +150,13 @@
         <option value="">-All-</option>
         {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
       </select></div>
+    <div class="col-md-2 col-6"><label class="form-label">Day totals</label>
+      <select name="day_totals" class="form-select form-select-sm"
+              title="A line after a customer's liftings in a day, with the sale value against what was received">
+        <option value="multi" {% if day_totals == 'multi' %}selected{% endif %}>Repeat liftings</option>
+        <option value="all" {% if day_totals == 'all' %}selected{% endif %}>Every customer-day</option>
+        <option value="off" {% if day_totals == 'off' %}selected{% endif %}>Off</option>
+      </select></div>
     <div class="col-md-2 col-6"><label class="form-label">Type</label>
       <select name="type" class="form-select form-select-sm">
         <option value="">-All-</option>
@@ -158,6 +172,8 @@
       {% endcomment %}
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'lifting_report' %}?all=1"><i class="fas fa-rotate-left me-1"></i>Reset</a>
       <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+      <a class="btn btn-outline-success btn-sm" href="{% url 'lifting_report' %}?{{ export_qs }}{% if export_qs %}&{% endif %}export=excel"
+         title="Download what is on screen as an Excel workbook"><i class="fas fa-file-excel me-1"></i>Excel</a>
     </div>
   </form>
 </div>
@@ -182,7 +198,32 @@
         <th class="ds-mid text-center">Uploaded Image</th>
       </tr></thead>
       <tbody>
-        {% for r in rows %}
+        {% for r in shown_rows %}
+        {% if r.is_day_total %}
+        <tr class="lr-day-total">
+          <td class="lr-fz lr-fz-date">{{ r.date|date:"d-m-Y" }}</td>
+          <td colspan="2"></td>
+          <td class="lr-fz lr-fz-farm lr-day-label">Day total ({{ r.count }})</td>
+          <td colspan="2"></td>
+          <td class="lr-fz lr-fz-cust lr-day-label" title="{{ r.customer }}">{{ r.customer }}</td>
+          <td colspan="3"></td>
+          <td class="num">{{ r.birds }}</td>
+          <td class="num">{{ r.weight|floatformat:2 }}</td>
+          <td class="num">{{ r.avg_wt|floatformat:2 }}</td>
+          <td class="num">{{ r.rate|floatformat:2 }}</td>
+          <td class="num">{{ r.amount|indian_currency }}</td>
+          <td class="num">{{ r.tcs|indian_currency }}</td>
+          <td class="num">{{ r.total|indian_currency }}</td>
+          <td class="num">{{ r.receipt|indian_currency }}</td>
+          <td class="num {% if r.ledger_cr_dr == 'Cr' %}cr{% elif r.ledger_cr_dr == 'Dr' %}dr{% endif %}">{% if r.ledger_balance != "" %}{{ r.ledger_balance|indian_currency }} {{ r.ledger_cr_dr }}{% endif %}</td>
+          <td colspan="5" class="lr-day-standing {{ r.standing }}">
+            {% if r.standing == 'due' %}Received {{ r.receipt|indian_currency }} of {{ r.total|indian_currency }} &mdash; <b>{{ r.gap|indian_currency }} due</b>
+            {% elif r.standing == 'advance' %}Received {{ r.receipt|indian_currency }} of {{ r.total|indian_currency }} &mdash; <b>{{ r.gap|indian_currency }} ahead</b>
+            {% elif r.standing == 'paid' %}Received {{ r.receipt|indian_currency }} &mdash; <b>paid in full</b>
+            {% else %}Nothing received against {{ r.total|indian_currency }}{% endif %}
+          </td>
+        </tr>
+        {% else %}
         <tr>
           <td class="lr-fz lr-fz-date">{{ r.date|date:"d-m-Y" }}</td>
           <td title="{{ r.branch }}">{{ r.branch }}</td>
@@ -245,6 +286,7 @@
             {% endif %}
           </td>
         </tr>
+        {% endif %}
         {% empty %}
         <tr><td colspan="24" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
         {% endfor %}
