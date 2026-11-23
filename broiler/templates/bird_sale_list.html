@@ -31,11 +31,14 @@
   #sale-table_wrapper .dataTables_length { margin-right: 1.25rem; display: inline-block; }
   #sale-table_wrapper .dt-buttons { margin-left: .5rem; }
   #sale-table_wrapper .dataTables_length select { width: auto; display: inline-block; }
-  /* The count on the corner of the Send WhatsApp button. */
-  .wa-count { position:absolute; top:-7px; right:-7px; min-width:17px; height:17px; padding:0 4px;
-              border-radius:9px; background:#0f5132; color:#fff; font-size:.62rem; font-weight:700;
-              line-height:17px; text-align:center; box-shadow:0 0 0 2px #fff; }
-  .wa-count.bad { background:#dc3545; }
+  /* A rule in style.css paints every element sitting directly in a dark table
+     header with the header's background (!important), which also wiped the blue
+     fill and tick off the select-all box when it was checked. Put them back. */
+  #bs-check-all:checked, #bs-check-all:indeterminate {
+    background-color: #0d6efd !important; border-color: #0d6efd !important;
+    background-image: var(--bs-form-check-bg-image) !important;
+  }
+  #bs-check-all:indeterminate { --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e"); }
 </style>
 
 <div class="page-header">
@@ -266,7 +269,7 @@ $(function () {
   function renderRows(rows) {
     wa.load(rows);
     // Keep the chosen page size across a reload of the rows (a filter, a send).
-    const keepLen = table ? table.page.len() : 25;
+    const keepLen = table ? table.page.len() : 10;
     if (table) { table.destroy(); }
     const tbody = $("#sale-table tbody");
     tbody.empty();
@@ -298,13 +301,20 @@ $(function () {
       </tr>`);
     });
     table = $("#sale-table").DataTable({
-      responsive: true, order: [[0, "desc"]],
+      responsive: true,
+      // The server already sends newest first. Column 0 is the Multiple tick
+      // column: sorting on it did nothing, and made a click on its header
+      // box sort the table instead of ticking the rows.
+      order: [],
       // "l" is the Show N entries chooser, which Bfrtip leaves out.
       dom: "Blfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
       lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]], pageLength: keepLen,
       language: { lengthMenu: "Show _MENU_ entries", emptyTable: "No data available in table" },
-      columnDefs: [{ orderable: false, targets: [-1, -2] }],
+      columnDefs: [{ orderable: false, targets: [0, -1, -2] }],
     });
+    // The page turned, or the rows were redrawn: show the boxes and ticks on them.
+    table.on("draw", applyBulkState);
+    applyBulkState();
   }
 
   function loadRows() {
@@ -368,16 +378,29 @@ $(function () {
     $("#bs-bulk-n").text(picked.size);
     $("#bs-bulk-edit, #bs-bulk-delete, #bs-bulk-whatsapp").prop("disabled", picked.size === 0);
     const shown = $(".bs-pick").length;
-    const on = shown > 0 && $(".bs-pick:checked").length === shown;
-    $("#bs-check-all").prop("checked", on);
+    const ticked = $(".bs-pick:checked").length;
+    const on = shown > 0 && ticked === shown;
+    // All, some (a dash) or none ticked on this page.
+    $("#bs-check-all").prop("checked", on).prop("indeterminate", !on && ticked > 0);
+  }
+
+  // Whether Multiple is on. Rows on other pages of the table are not in the
+  // document, so switching the boxes on or off reaches only the page showing;
+  // applyBulkState puts the state on whichever rows are drawn -- on every page
+  // turn, and again when the rows are reloaded.
+  var bulkOn = false;
+  function applyBulkState() {
+    $(".bs-pick-col").toggleClass("d-none", !bulkOn);
+    $(".bs-pick").each(function () { this.checked = picked.has(String($(this).data("id"))); });
+    bulkSync();
   }
 
   function bulkMode(on) {
-    $(".bs-pick-col").toggleClass("d-none", !on);
+    bulkOn = on;
+    if (!on) picked.clear();
     $("#bs-bulk-bar").toggleClass("d-none", !on);
     $("#bs-multi-toggle").toggleClass("active", on);
-    if (!on) { picked.clear(); $(".bs-pick, #bs-check-all").prop("checked", false); }
-    bulkSync();
+    applyBulkState();
   }
 
   $("#bs-multi-toggle").on("click", function () {

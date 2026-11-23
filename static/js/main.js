@@ -3002,9 +3002,6 @@ window.loadOptions = function (select, url, data, options) {
       '.wa-val{font-weight:600}' +
       '.wa-miss{background:#f8d7da;color:#842029;border-radius:4px;padding:0 4px;font-weight:600}' +
       '.wa-fields td{vertical-align:middle}' +
-      '.wa-count{position:absolute;top:-7px;right:-7px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;' +
-        'background:#0f5132;color:#fff;font-size:.62rem;font-weight:700;line-height:17px;text-align:center;box-shadow:0 0 0 2px #fff}' +
-      '.wa-count.bad{background:#dc3545}' +
       '#bimsWaManyTable tr[data-i]{cursor:pointer}' +
       '#bimsWaManyTable tr.wam-focus>td{background:rgba(31,168,85,.09)}' +
       '#bimsWaMany thead th{position:sticky;top:0;background:var(--bs-body-bg,#fff);z-index:1}';
@@ -3497,8 +3494,8 @@ window.loadOptions = function (select, url, data, options) {
   // ======================================================================
   // One per register. It remembers, for each row, how many messages went out
   // and how many failed; draws the Send button with that on it -- green once
-  // sent, red outline if only failures, a count on its corner, the detail on
-  // hover -- and keeps the button right as the dialogs report results.
+  // sent, red outline if only failures, the detail on hover -- and keeps the
+  // button right as the dialogs report results.
   function tracker() {
     ensureStyles();
     var by = {};
@@ -3513,20 +3510,12 @@ window.loadOptions = function (select, url, data, options) {
       if (wa.failed) bits.push(wa.failed + ' failed');
       return bits.join(' - ') + ' - send again';
     }
-    function badge(wa) {
-      var n = wa ? (wa.sent || wa.failed) : 0;
-      if (!n) return '';
-      return '<span class="wa-count' + (wa.sent ? '' : ' bad') + '">' + n + '</span>';
-    }
     function paint(id) {
       var btn = document.querySelector('.wa-send-button[data-id="' + id + '"]');
       if (!btn) return;
       ['btn-success', 'btn-outline-success', 'btn-outline-danger'].forEach(function (c) { btn.classList.remove(c); });
       btn.classList.add(cls(by[id]));
       btn.title = title(by[id]);
-      var old = btn.querySelector('.wa-count');
-      if (old) old.remove();
-      btn.insertAdjacentHTML('beforeend', badge(by[id]));
     }
     function stamp() {
       var n = new Date();
@@ -3537,9 +3526,8 @@ window.loadOptions = function (select, url, data, options) {
       // The rows as the register's API returned them (each may carry .wa).
       load: function (rows) { by = {}; rows.forEach(function (r) { by[r.id] = r.wa || null; }); },
       button: function (id) {
-        return '<button type="button" class="btn btn-sm position-relative wa-send-button ' + cls(by[id]) +
-               '" data-id="' + id + '" title="' + esc(title(by[id])) + '"><i class="fab fa-whatsapp"></i>' +
-               badge(by[id]) + '</button>';
+        return '<button type="button" class="btn btn-sm wa-send-button ' + cls(by[id]) +
+               '" data-id="' + id + '" title="' + esc(title(by[id])) + '"><i class="fab fa-whatsapp"></i></button>';
       },
       // A dialog reports one message: update the count and the button now; the
       // register reloads with the same facts from the server next time.
