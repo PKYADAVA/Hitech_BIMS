@@ -28,9 +28,26 @@
       <div class="page-header-subtitle">Hatchery dispatch transactions</div>
     </div>
     <div class="page-header-right">
+      {% if can_whatsapp_send %}
+      <button type="button" class="btn btn-outline-secondary me-2" id="dc-multi-toggle"
+              title="Pick several challans to message together"><i class="fas fa-list-check"></i> Multiple</button>
+      {% endif %}
       {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'delivery_challan_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
     </div>
 </div>
+
+{% if can_whatsapp_send %}
+<!-- What is picked, and what can be done with it. Hidden until Multiple is
+     pressed: a register is read far more often than it is messaged from. -->
+<div class="card mb-3 d-none" id="dc-bulk-bar">
+  <div class="card-body d-flex align-items-center gap-2 py-2">
+    <span class="fw-semibold"><span id="dc-bulk-n">0</span> selected</span>
+    <button type="button" class="btn btn-outline-success btn-sm" id="dc-bulk-whatsapp" disabled>
+      <i class="fab fa-whatsapp me-1"></i>Send WhatsApp</button>
+    <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="dc-bulk-cancel">Cancel</button>
+  </div>
+</div>
+{% endif %}
 
 <!-- Date Filter -->
 <div class="card mb-3">
@@ -52,7 +69,7 @@
   </div>
 </div>
 
-<div class="card"><div class="card-header"><i class="fas fa-list"></i> Challan Register</div><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover table-bordered mb-0 ds-grid" id="challan-table"><thead><tr><th>Challan No.</th><th class="ds-mid">Date</th><th>Customer</th><th>Vehicle</th><th class="ds-num">Quantity</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Attachments</th><th class="ds-mid text-center">Action</th></tr></thead><tbody></tbody></table></div></div></div>
+<div class="card"><div class="card-header"><i class="fas fa-list"></i> Challan Register</div><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover table-bordered mb-0 ds-grid" id="challan-table"><thead><tr><th class="dc-pick-col d-none ds-mid"><input type="checkbox" class="form-check-input" id="dc-check-all" title="Select all shown" aria-label="Select all shown challans"></th><th>Challan No.</th><th class="ds-mid">Date</th><th>Customer</th><th>Vehicle</th><th class="ds-num">Quantity</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Attachments</th><th class="ds-mid text-center">Action</th></tr></thead><tbody></tbody></table></div></div></div>
 
 <!-- View Modal (read-only) -->
 <div class="modal fade" id="viewChallanModal" tabindex="-1" aria-hidden="true">
@@ -191,12 +208,18 @@ $(function () {
       + `</button>`;
   }
 
+  // Sent status and count on each row's WhatsApp button (see main.js).
+  const wa = BIMS_WhatsApp.tracker();
+
   function renderRows(rows) {
+    // Keep the chosen page size across a reload of the rows (a filter).
+    const keepLen = table ? table.page.len() : 10;
     if (table) { table.destroy(); }
     const tbody = $("#challan-table tbody");
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
+        <td class="dc-pick-col d-none text-center"><input type="checkbox" class="form-check-input dc-pick" data-id="${row.id}" aria-label="Select this challan"></td>
         <td>${escapeHtml(row.challan_no)}</td>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.customer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
@@ -218,6 +241,7 @@ $(function () {
             </div>
             {% endif %}
             {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add attachment"><i class="fas fa-upload"></i></button>{% endif %}
+            {% if can_whatsapp_send %}${wa.button(row.id)}{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/delivery-challan/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/delivery-challan/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             ${row.converted_bill_no
@@ -229,8 +253,85 @@ $(function () {
         </td>
       </tr>`);
     });
-    table = $('#challan-table').DataTable({ responsive: true, order: [[1, 'desc']] });
+    table = $('#challan-table').DataTable({
+      responsive: true,
+      // Column 0 is the Multiple tick column: challan no. is column 1, date is
+      // column 2, and the ticks themselves are not sortable.
+      order: [[2, 'desc']], pageLength: keepLen,
+      columnDefs: [{ orderable: false, targets: 0 }],
+    });
+    // The page turned, or the rows were redrawn: show the boxes and ticks on them.
+    table.on("draw", applyBulkState);
+    applyBulkState();
   }
+
+  /* Picking several challans to message. The boxes appear only once Multiple is
+     pressed. Rows on other pages of the table are not in the document, so the
+     picks live in a Set and are put back on whichever rows are drawn. */
+  const picked = new Set();
+  let bulkOn = false;
+
+  function bulkSync() {
+    $("#dc-bulk-n").text(picked.size);
+    $("#dc-bulk-whatsapp").prop("disabled", picked.size === 0);
+    const shown = $(".dc-pick").length;
+    const ticked = $(".dc-pick:checked").length;
+    const on = shown > 0 && ticked === shown;
+    $("#dc-check-all").prop("checked", on).prop("indeterminate", !on && ticked > 0);
+  }
+
+  function applyBulkState() {
+    $(".dc-pick-col").toggleClass("d-none", !bulkOn);
+    $(".dc-pick").each(function () { this.checked = picked.has(String($(this).data("id"))); });
+    bulkSync();
+  }
+
+  function bulkMode(on) {
+    bulkOn = on;
+    if (!on) picked.clear();
+    $("#dc-bulk-bar").toggleClass("d-none", !on);
+    $("#dc-multi-toggle").toggleClass("active", on);
+    applyBulkState();
+  }
+
+  $("#dc-multi-toggle").on("click", function () { bulkMode($("#dc-bulk-bar").hasClass("d-none")); });
+  $("#dc-bulk-cancel").on("click", function () { bulkMode(false); });
+
+  $(document).on("change", ".dc-pick", function () {
+    const id = String($(this).data("id"));
+    if (this.checked) picked.add(id); else picked.delete(id);
+    bulkSync();
+  });
+
+  $(document).on("change", "#dc-check-all", function () {
+    const on = this.checked;
+    $(".dc-pick").each(function () {
+      this.checked = on;
+      const id = String($(this).data("id"));
+      if (on) picked.add(id); else picked.delete(id);
+    });
+    bulkSync();
+  });
+
+  // WhatsApp the customer about this challan, from the register itself.
+  $(document).on("click", ".wa-send-button", function () {
+    const btn = this;
+    BIMS_WhatsApp.open({
+      module: "dispatch", docId: $(btn).data("id"), csrf: csrfToken,
+      onSent: function () { wa.outcome($(btn).data("id"), true); },
+      onFailed: function () { wa.outcome($(btn).data("id"), false); },
+    });
+  });
+
+  // WhatsApp every customer on the picked challans, under one template.
+  $("#dc-bulk-whatsapp").on("click", function () {
+    if (!picked.size) return;
+    BIMS_WhatsApp.openMany({
+      module: "dispatch", docIds: [...picked], csrf: csrfToken,
+      onSent: function (docId) { wa.outcome(docId, true); },
+      onFailed: function (docId) { wa.outcome(docId, false); },
+    });
+  });
 
   function applyDateFilter() {
     const from = $("#from-date").val();
@@ -247,6 +348,8 @@ $(function () {
   function loadChallanList() {
     $.getJSON('{% url "delivery_challan_api_list" %}', function (rows) {
       allRows = rows;
+      // Once per load, not per redraw: a filter must not forget a send made since.
+      wa.load(rows);
       applyDateFilter();
     });
   }

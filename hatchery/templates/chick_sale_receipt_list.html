@@ -21,6 +21,14 @@
                         padding:0 3px; border-radius:999px; display:inline-flex; align-items:center;
                         justify-content:center; font-size:.6rem; line-height:1; font-weight:700;
                         color:#fff; background:#2563eb; border:1.5px solid #fff; }
+  /* A rule in style.css paints every element sitting directly in a dark table
+     header with the header's background (!important), which also wiped the blue
+     fill and tick off the select-all box when it was checked. Put them back. */
+  #cr-check-all:checked, #cr-check-all:indeterminate {
+    background-color: #0d6efd !important; border-color: #0d6efd !important;
+    background-image: var(--bs-form-check-bg-image) !important;
+  }
+  #cr-check-all:indeterminate { --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e"); }
 </style>
 
 <div class="page-header">
@@ -29,9 +37,26 @@
     <div class="page-header-subtitle">Payments received from Chick Sale customers</div>
   </div>
   <div class="page-header-right">
+    {% if can_whatsapp_send %}
+    <button type="button" class="btn btn-outline-secondary me-2" id="cr-multi-toggle"
+            title="Pick several receipts to message together"><i class="fas fa-list-check"></i> Multiple</button>
+    {% endif %}
     {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chick_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
   </div>
 </div>
+
+{% if can_whatsapp_send %}
+<!-- What is picked, and what can be done with it. Hidden until Multiple is
+     pressed: a register is read far more often than it is messaged from. -->
+<div class="card mb-3 d-none" id="cr-bulk-bar">
+  <div class="card-body d-flex align-items-center gap-2 py-2">
+    <span class="fw-semibold"><span id="cr-bulk-n">0</span> selected</span>
+    <button type="button" class="btn btn-outline-success btn-sm" id="cr-bulk-whatsapp" disabled>
+      <i class="fab fa-whatsapp me-1"></i>Send WhatsApp</button>
+    <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="cr-bulk-cancel">Cancel</button>
+  </div>
+</div>
+{% endif %}
 
 <!-- Filters -->
 <div class="card mb-3">
@@ -59,6 +84,7 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="receipt-table">
         <thead class="table-dark">
           <tr>
+            <th class="cr-pick-col d-none ds-mid"><input type="checkbox" class="form-check-input" id="cr-check-all" title="Select all shown" aria-label="Select all shown receipts"></th>
             <th class="ds-mid">Date</th><th>Trnum</th><th>Customer</th><th>Mode</th>
             <th>Method</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Attachments</th><th class="ds-mid text-center">Action</th>
           </tr>
@@ -147,12 +173,17 @@ $(function () {
   $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
   $("#to-date").val(localDay());
 
+  // Sent status and count on each row's WhatsApp button (see main.js).
+  const wa = BIMS_WhatsApp.tracker();
+
   function renderRows(rows) {
+    wa.load(rows);
     if (table) { table.destroy(); }
     const tbody = $("#receipt-table tbody");
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
+        <td class="cr-pick-col d-none text-center"><input type="checkbox" class="form-check-input cr-pick" data-id="${row.id}" aria-label="Select this receipt"></td>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
         <td>${escapeHtml(row.customer_name)}${row.ledger_balance ? `<br><small class="${row.ledger_balance_cr_dr === 'Cr' ? 'bs-cr' : 'bs-dr'}">${Number(row.ledger_balance).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} ${row.ledger_balance_cr_dr}</small>` : ""}</td>
@@ -165,6 +196,7 @@ $(function () {
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/chick-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/chick-sale-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             <button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Upload attachment"><i class="fas fa-paperclip"></i></button>
+            {% if can_whatsapp_send %}${wa.button(row.id)}{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
@@ -172,12 +204,85 @@ $(function () {
       </tr>`);
     });
     table = $("#receipt-table").DataTable({
-      responsive: true, order: [[0, "desc"]],
+      // Column 0 is the Multiple tick column: date is column 1, and ticking
+      // its header box must not sort the table.
+      responsive: true, order: [[1, "desc"]],
       dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      columnDefs: [{ orderable: false, targets: [-2, -1] }],
+      columnDefs: [{ orderable: false, targets: [0, -2, -1] }],
       language: { emptyTable: "No data available in table" },
     });
+    // The page turned, or the rows were redrawn: show the boxes and ticks on them.
+    table.on("draw", applyBulkState);
+    applyBulkState();
   }
+
+  /* Picking several receipts to message. The boxes appear only once Multiple is
+     pressed. Rows on other pages of the table are not in the document, so the
+     picks live in a Set and are put back on whichever rows are drawn. */
+  const picked = new Set();
+  let bulkOn = false;
+
+  function bulkSync() {
+    $("#cr-bulk-n").text(picked.size);
+    $("#cr-bulk-whatsapp").prop("disabled", picked.size === 0);
+    const shown = $(".cr-pick").length;
+    const ticked = $(".cr-pick:checked").length;
+    const on = shown > 0 && ticked === shown;
+    $("#cr-check-all").prop("checked", on).prop("indeterminate", !on && ticked > 0);
+  }
+
+  function applyBulkState() {
+    $(".cr-pick-col").toggleClass("d-none", !bulkOn);
+    $(".cr-pick").each(function () { this.checked = picked.has(String($(this).data("id"))); });
+    bulkSync();
+  }
+
+  function bulkMode(on) {
+    bulkOn = on;
+    if (!on) picked.clear();
+    $("#cr-bulk-bar").toggleClass("d-none", !on);
+    $("#cr-multi-toggle").toggleClass("active", on);
+    applyBulkState();
+  }
+
+  $("#cr-multi-toggle").on("click", function () { bulkMode($("#cr-bulk-bar").hasClass("d-none")); });
+  $("#cr-bulk-cancel").on("click", function () { bulkMode(false); });
+
+  $(document).on("change", ".cr-pick", function () {
+    const id = String($(this).data("id"));
+    if (this.checked) picked.add(id); else picked.delete(id);
+    bulkSync();
+  });
+
+  $(document).on("change", "#cr-check-all", function () {
+    const on = this.checked;
+    $(".cr-pick").each(function () {
+      this.checked = on;
+      const id = String($(this).data("id"));
+      if (on) picked.add(id); else picked.delete(id);
+    });
+    bulkSync();
+  });
+
+  // WhatsApp the customer about this receipt, from the register itself.
+  $(document).on("click", ".wa-send-button", function () {
+    const btn = this;
+    BIMS_WhatsApp.open({
+      module: "chick_receipt", docId: $(btn).data("id"), csrf: csrfToken,
+      onSent: function () { wa.outcome($(btn).data("id"), true); },
+      onFailed: function () { wa.outcome($(btn).data("id"), false); },
+    });
+  });
+
+  // WhatsApp every customer on the picked receipts, under one template.
+  $("#cr-bulk-whatsapp").on("click", function () {
+    if (!picked.size) return;
+    BIMS_WhatsApp.openMany({
+      module: "chick_receipt", docIds: [...picked], csrf: csrfToken,
+      onSent: function (docId) { wa.outcome(docId, true); },
+      onFailed: function (docId) { wa.outcome(docId, false); },
+    });
+  });
 
   function attachCell(row) {
     const atts = row.attachments || [];
@@ -213,7 +318,7 @@ $(function () {
   });
 
   function rowTitle(id) {
-    return $(`[data-id="${id}"]`).closest("tr").find("td").eq(1).text().trim();
+    return $(`[data-id="${id}"]`).closest("tr").find("td").eq(2).text().trim();
   }
 
   function loadAttachments(id, callback) {

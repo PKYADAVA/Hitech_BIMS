@@ -28,9 +28,26 @@
       <div class="page-header-subtitle">Chick sale invoices, fresh or converted from delivery challans</div>
     </div>
     <div class="page-header-right">
+      {% if can_whatsapp_send %}
+      <button type="button" class="btn btn-outline-secondary me-2" id="cs-multi-toggle"
+              title="Pick several sales to message together"><i class="fas fa-list-check"></i> Multiple</button>
+      {% endif %}
       {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chick_sale_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
     </div>
 </div>
+
+{% if can_whatsapp_send %}
+<!-- What is picked, and what can be done with it. Hidden until Multiple is
+     pressed: a register is read far more often than it is messaged from. -->
+<div class="card mb-3 d-none" id="cs-bulk-bar">
+  <div class="card-body d-flex align-items-center gap-2 py-2">
+    <span class="fw-semibold"><span id="cs-bulk-n">0</span> selected</span>
+    <button type="button" class="btn btn-outline-success btn-sm" id="cs-bulk-whatsapp" disabled>
+      <i class="fab fa-whatsapp me-1"></i>Send WhatsApp</button>
+    <button type="button" class="btn btn-link btn-sm ms-auto p-0" id="cs-bulk-cancel">Cancel</button>
+  </div>
+</div>
+{% endif %}
 
 <!-- Date Filter -->
 <div class="card mb-3">
@@ -59,6 +76,7 @@
       <table class="table table-hover table-bordered mb-0 ds-grid" id="chick-sale-table">
         <thead>
           <tr>
+            <th class="cs-pick-col d-none ds-mid"><input type="checkbox" class="form-check-input" id="cs-check-all" title="Select all shown" aria-label="Select all shown sales"></th>
             <th class="ds-mid">Date</th>
             <th>Bill No</th>
             <th>DC No</th>
@@ -217,12 +235,18 @@ $(function () {
       + `</button>`;
   }
 
+  // Sent status and count on each row's WhatsApp button (see main.js).
+  const wa = BIMS_WhatsApp.tracker();
+
   function renderRows(rows) {
+    // Keep the chosen page size across a reload of the rows (a filter).
+    const keepLen = table ? table.page.len() : 10;
     if (table) { table.destroy(); }
     const tbody = $("#chick-sale-table tbody");
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
+        <td class="cs-pick-col d-none text-center"><input type="checkbox" class="form-check-input cs-pick" data-id="${row.id}" aria-label="Select this sale"></td>
         <td>${fmtDate(row.date)}</td>
         <td>${escapeHtml(row.bill_no)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
@@ -249,6 +273,7 @@ $(function () {
             </div>
             {% endif %}
             {% if page_perms.add %}<button type="button" class="btn btn-outline-success btn-sm bsr-upload-attach" data-id="${row.id}" title="Add attachment"><i class="fas fa-upload"></i></button>{% endif %}
+            {% if can_whatsapp_send %}${wa.button(row.id)}{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/chick-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/chick-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -257,8 +282,86 @@ $(function () {
         </td>
       </tr>`);
     });
-    table = $('#chick-sale-table').DataTable({ responsive: true, order: [[0, 'desc']], language: { emptyTable: "No data available in table" } });
+    table = $('#chick-sale-table').DataTable({
+      responsive: true,
+      // Column 0 is the Multiple tick column: date is column 1 and the
+      // ticks themselves are not sortable.
+      order: [[1, 'desc']], pageLength: keepLen,
+      columnDefs: [{ orderable: false, targets: 0 }],
+      language: { emptyTable: "No data available in table" },
+    });
+    // The page turned, or the rows were redrawn: show the boxes and ticks on them.
+    table.on("draw", applyBulkState);
+    applyBulkState();
   }
+
+  /* Picking several sales to message. The boxes appear only once Multiple is
+     pressed. Rows on other pages of the table are not in the document, so the
+     picks live in a Set and are put back on whichever rows are drawn. */
+  const picked = new Set();
+  let bulkOn = false;
+
+  function bulkSync() {
+    $("#cs-bulk-n").text(picked.size);
+    $("#cs-bulk-whatsapp").prop("disabled", picked.size === 0);
+    const shown = $(".cs-pick").length;
+    const ticked = $(".cs-pick:checked").length;
+    const on = shown > 0 && ticked === shown;
+    $("#cs-check-all").prop("checked", on).prop("indeterminate", !on && ticked > 0);
+  }
+
+  function applyBulkState() {
+    $(".cs-pick-col").toggleClass("d-none", !bulkOn);
+    $(".cs-pick").each(function () { this.checked = picked.has(String($(this).data("id"))); });
+    bulkSync();
+  }
+
+  function bulkMode(on) {
+    bulkOn = on;
+    if (!on) picked.clear();
+    $("#cs-bulk-bar").toggleClass("d-none", !on);
+    $("#cs-multi-toggle").toggleClass("active", on);
+    applyBulkState();
+  }
+
+  $("#cs-multi-toggle").on("click", function () { bulkMode($("#cs-bulk-bar").hasClass("d-none")); });
+  $("#cs-bulk-cancel").on("click", function () { bulkMode(false); });
+
+  $(document).on("change", ".cs-pick", function () {
+    const id = String($(this).data("id"));
+    if (this.checked) picked.add(id); else picked.delete(id);
+    bulkSync();
+  });
+
+  $(document).on("change", "#cs-check-all", function () {
+    const on = this.checked;
+    $(".cs-pick").each(function () {
+      this.checked = on;
+      const id = String($(this).data("id"));
+      if (on) picked.add(id); else picked.delete(id);
+    });
+    bulkSync();
+  });
+
+  // WhatsApp the customer about this sale, from the register itself.
+  $(document).on("click", ".wa-send-button", function () {
+    const btn = this;
+    BIMS_WhatsApp.open({
+      module: "sales", docId: $(btn).data("id"), csrf: csrfToken,
+      onSent: function () { wa.outcome($(btn).data("id"), true); },
+      onFailed: function () { wa.outcome($(btn).data("id"), false); },
+    });
+  });
+
+  // WhatsApp every customer on the picked sales, under one template.
+  $("#cs-bulk-whatsapp").on("click", function () {
+    if (!picked.size) return;
+    BIMS_WhatsApp.openMany({
+      module: "sales", docIds: [...picked], csrf: csrfToken,
+      onSent: function (docId) { wa.outcome(docId, true); },
+      onFailed: function (docId) { wa.outcome(docId, false); },
+    });
+  });
 
   function applyDateFilter() {
     const from = $("#from-date").val();
@@ -275,6 +378,8 @@ $(function () {
   function loadChickSaleList() {
     $.getJSON('{% url "chick_sale_api_list" %}', function (rows) {
       allRows = rows;
+      // Once per load, not per redraw: a filter must not forget a send made since.
+      wa.load(rows);
       applyDateFilter();
     });
   }

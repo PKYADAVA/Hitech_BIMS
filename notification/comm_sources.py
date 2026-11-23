@@ -181,7 +181,7 @@ def _hatchery(pk):
     return f"h:{pk}" if pk else None
 
 
-def _chick_sale_rows(from_date, to_date, party_id):
+def _chick_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     qs = (ChickSale.objects.select_related("customer", "warehouse", "delivery_challan")
           .prefetch_related("items__item"))
     if from_date:
@@ -190,6 +190,11 @@ def _chick_sale_rows(from_date, to_date, party_id):
         qs = qs.filter(date__lte=date_from_query(to_date))
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    # One or several documents, for a button on the sale itself.
+    if doc_id is not None:
+        qs = qs.filter(pk=doc_id)
+    if doc_ids is not None:
+        qs = qs.filter(pk__in=list(doc_ids))
     rows = []
     for cs in qs.order_by("-date", "-id"):
         rows.append(_base_row(
@@ -213,7 +218,7 @@ def _chick_sale_rows(from_date, to_date, party_id):
     return rows
 
 
-def _chick_sale_receipt_rows(from_date, to_date, party_id):
+def _chick_sale_receipt_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     """Money received against a chick sale — the hatchery counterpart of
     Bird Receipt. "Receipt" here is the payment, not the chicks; the chicks
     leaving is the Chick Sale row itself."""
@@ -223,6 +228,11 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    # One or several documents, for a button on the receipt itself.
+    if doc_id is not None:
+        qs = qs.filter(pk=doc_id)
+    if doc_ids is not None:
+        qs = qs.filter(pk__in=list(doc_ids))
     receipts = list(qs.order_by("-date", "-id"))
     timelines = customer_balance_timelines({r.customer_id for r in receipts})
 
@@ -254,7 +264,7 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
     return rows
 
 
-def _delivery_challan_rows(from_date, to_date, party_id):
+def _delivery_challan_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     qs = DeliveryChallan.objects.select_related("customer", "warehouse").prefetch_related("items")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
@@ -262,6 +272,11 @@ def _delivery_challan_rows(from_date, to_date, party_id):
         qs = qs.filter(date__lte=date_from_query(to_date))
     if party_id:
         qs = qs.filter(customer_id=party_id)
+    # One or several documents, for a button on the challan itself.
+    if doc_id is not None:
+        qs = qs.filter(pk=doc_id)
+    if doc_ids is not None:
+        qs = qs.filter(pk__in=list(doc_ids))
     rows = []
     for dc in qs.order_by("-date", "-id"):
         qty = dc.total_quantity()
@@ -975,12 +990,16 @@ def _payroll_rows(from_date, to_date, party_id):
 DOC_SOURCES = {
     "sales": {"label": "Chick Sale", "party_type": "customer",
               "model": ChickSale, "rows": _chick_sale_rows,
+              # Offers a Send button on the sale itself (see document_row).
+              "by_id": True,
               "module": "hatchery", "transaction": "chick_sale",
               "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                             "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse",
                             "PaymentMode", "FreightAmount", "Remarks", "DcNo")},
     "chick_receipt": {"label": "Chick Receipt", "party_type": "customer",
                       "model": ChickSaleReceipt, "rows": _chick_sale_receipt_rows,
+                      # Offers a Send button on the receipt itself.
+                      "by_id": True,
                       "module": "hatchery", "transaction": "chick_receipt",
                       "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                     "PaidAmount", "ReceiptNo", "PaymentMode",
@@ -989,6 +1008,8 @@ DOC_SOURCES = {
                                     "Remarks")},
     "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
+                 # Offers a Send button on the challan itself.
+                 "by_id": True,
                  "module": "hatchery", "transaction": "delivery_challan",
                  "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "Place", "VehicleNo", "DriverName",

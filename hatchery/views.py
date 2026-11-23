@@ -819,7 +819,11 @@ class EggGradingAPI(BaseAPIView):
 @method_decorator(login_required, name="dispatch")
 class DeliveryChallanListTemplateView(View):
     def get(self, request):
-        return render(request, "delivery_challan_list.html")
+        from user.access import user_can
+
+        return render(request, "delivery_challan_list.html", {
+            "can_whatsapp_send": user_can(request.user, "whatsapp_transaction", "add"),
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -976,6 +980,9 @@ class DeliveryChallanAPI(BaseAPIView):
                                     "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
                                    for a in c.attachments.all()],
                 })
+            from broiler.views import _stamp_whatsapp_sent
+            _stamp_whatsapp_sent(request.user, "dispatch", challans, rows,
+                                 lambda c: c.challan_no or "")
             return JsonResponse(rows, safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1760,7 +1767,13 @@ class HatchEntryAPI(BaseAPIView):
 @method_decorator(login_required, name="dispatch")
 class ChickSaleListTemplateView(View):
     def get(self, request):
-        return render(request, "chick_sale_list.html")
+        from user.access import user_can
+
+        return render(request, "chick_sale_list.html", {
+            # Whether the row's WhatsApp button is shown: sending is the
+            # Messaging screen's permission, not the register's.
+            "can_whatsapp_send": user_can(request.user, "whatsapp_transaction", "add"),
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -1890,6 +1903,9 @@ class ChickSaleAPI(BaseAPIView):
                                     "name": a.file.name.rsplit("/", 1)[-1], "caption": a.caption}
                                    for a in cs.attachments.all()],
                 })
+            # Mark each sale already messaged, for the status on its WhatsApp button.
+            from broiler.views import _stamp_whatsapp_sent
+            _stamp_whatsapp_sent(request.user, "sales", sales, rows, lambda cs: cs.bill_no or "")
             return JsonResponse(rows, safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -2321,7 +2337,11 @@ def _apply_chick_sale_receipt(instance, data):
 @method_decorator(login_required, name="dispatch")
 class ChickSaleReceiptListTemplateView(View):
     def get(self, request):
-        return render(request, "chick_sale_receipt_list.html")
+        from user.access import user_can
+
+        return render(request, "chick_sale_receipt_list.html", {
+            "can_whatsapp_send": user_can(request.user, "whatsapp_transaction", "add"),
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -2404,8 +2424,11 @@ class ChickSaleReceiptAPI(BaseAPIView):
             from sales.views import customer_balance_timelines
             timelines = customer_balance_timelines(
                 {r.customer_id for r in rows if r.customer_id})
-            return JsonResponse(
-                [_chick_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows], safe=False)
+            out = [_chick_sale_receipt_to_dict(r, timelines.get(r.customer_id)) for r in rows]
+            from broiler.views import _stamp_whatsapp_sent
+            _stamp_whatsapp_sent(request.user, "chick_receipt", rows, out,
+                                 lambda r: r.receipt_no or "")
+            return JsonResponse(out, safe=False)
         except ChickSaleReceipt.DoesNotExist:
             raise Http404("Receipt not found")
         except Exception as e:
