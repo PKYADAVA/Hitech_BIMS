@@ -200,7 +200,7 @@ $(document).ready(function () {
     const other = $('<optgroup label="Other variables"></optgroup>');
     {% for var, hint in sms_variables.items %}
     (function () {
-      const opt = $('<option value="{{ var }}" title="{{ hint }}">{{ var }}</option>');
+      const opt = $('<option value="{{ var }}" title="{{ hint }}">{{ var }} &mdash; {{ hint }}</option>');
       ((!allowed || allowed.has("{{ var }}")) ? fillable : other).append(opt);
     })();
     {% endfor %}

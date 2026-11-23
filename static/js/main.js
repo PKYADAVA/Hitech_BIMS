@@ -3573,3 +3573,67 @@ window.loadOptions = function (select, url, data, options) {
     },
   };
 })();
+
+/* Show N entries on every register.
+ *
+ * Most list screens build their table with the "Bfrtip" layout, which leaves
+ * out DataTables' page-size chooser, so a register showed ten rows with no way
+ * to see more. Any table that has a search box but no chooser gets one here,
+ * with 10 / 25 / 50 / 100 / All and 10 as the default -- no page needs editing.
+ *
+ * The layout has to be changed before the table is built (DataTables draws its
+ * controls once, from the options it is handed), so this wraps the constructor
+ * and adjusts the options on their way in.
+ *
+ * The size picked is remembered per table for the sitting, because a register
+ * rebuilds its table every time its rows are reloaded (a filter, a send) and
+ * would otherwise snap back to ten. A page that sets its own length menu, turns
+ * paging off, or already has the chooser is left alone.
+ */
+(function () {
+  var $ = window.jQuery;
+  if (!$ || !$.fn || !$.fn.dataTable || $.fn.dataTable.__bimsLength) return;
+  // The lower-case dataTable() is the constructor; DataTable() calls it and
+  // hands back the API, so wrapping this one covers both.
+  var original = $.fn.dataTable;
+  function storageKey(table) {
+    return table && table.id ? 'bims.dtlen.' + location.pathname + '.' + table.id : '';
+  }
+  function read(k) {
+    try { return Number(window.sessionStorage.getItem(k)); } catch (e) { return 0; }
+  }
+  function write(k, v) {
+    try { window.sessionStorage.setItem(k, String(v)); } catch (e) { /* not remembered */ }
+  }
+
+  function wanted(opts) {
+    return opts && typeof opts === 'object' && !Array.isArray(opts) &&
+      typeof opts.dom === 'string' && opts.dom.indexOf('l') < 0 && opts.dom.indexOf('f') >= 0 &&
+      opts.paging !== false && !opts.aLengthMenu;
+  }
+
+  var wrapped = function (opts) {
+    var args = Array.prototype.slice.call(arguments);
+    if (this.length === 1 && wanted(opts)) {
+      // A page with a menu of its own keeps it; it only lacked the control.
+      var next = $.extend({}, opts, { dom: opts.dom.replace('f', 'lf') });
+      if (!opts.lengthMenu) next.lengthMenu = [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']];
+      var k = storageKey(this[0]);
+      var saved = k ? read(k) : 0;
+      var menu = next.lengthMenu;
+      var allowed = Array.isArray(menu[0]) ? menu[0] : menu;
+      if (saved && allowed.indexOf(saved) >= 0) next.pageLength = saved;
+      if (k) {
+        $(this[0]).off('length.dt.bimsLength').on('length.dt.bimsLength', function (e, settings, len) {
+          write(k, len);
+        });
+      }
+      args[0] = next;
+    }
+    return original.apply(this, args);
+  };
+  // Everything hung off the constructor (ext, defaults, Api, ...) must stay reachable.
+  $.extend(wrapped, original);
+  wrapped.__bimsLength = true;
+  $.fn.dataTable = wrapped;
+})();

@@ -2,6 +2,7 @@
 the one-document lookup, and sending through the shared endpoint."""
 
 import json
+from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -382,3 +383,101 @@ class CrossChannelStatusTests(TestCase):
         self._wa("failed"); self._sms("failed")
         row = self._row("whatsapp_transaction_source")
         self.assertEqual((row["sent_history"], row["other_history"]), ([], []))
+
+
+class SourceVariableTests(TestCase):
+    """Every document source builds, and fills the variables it declares."""
+
+    def setUp(self):
+        _sources.SourceRowTests.setUp(self)
+
+    _till = _sources.SourceRowTests._till
+
+    def test_every_source_builds_rows_and_carries_every_variable_it_declares(self):
+        from notification.comm_sources import DOC_SOURCES
+
+        for key, source in DOC_SOURCES.items():
+            rows = source["rows"](None, None, None)
+            for row in rows:
+                missing = [v for v in source["variables"] if v not in row["context"]]
+                self.assertEqual(missing, [], f"{key} does not fill {missing}")
+
+    def test_the_picker_offers_every_variable_a_source_declares(self):
+        from notification.comm_sources import DOC_SOURCES, SMS_VARIABLES
+
+        for key, source in DOC_SOURCES.items():
+            unknown = [v for v in source["variables"] if v not in SMS_VARIABLES]
+            self.assertEqual(unknown, [], f"{key} declares {unknown} the picker lacks")
+
+    def test_a_bird_sale_fills_its_own_fields(self):
+        from notification.comm_sources import document_row
+
+        self.sale.doc_no = "DOC-9"
+        self.sale.lifting_supervisor_other = "Contractor Ram"
+        self.sale.save()
+        ctx = document_row("bird_sale", self.sale.id)["context"]
+        self.assertEqual(ctx["FarmName"], "Yadav Farm")
+        self.assertEqual(ctx["BatchName"], "B-1")
+        self.assertEqual(ctx["FarmerName"], "S. Yadav")
+        self.assertEqual(ctx["BranchName"], "Akbarpur")
+        self.assertEqual(ctx["SupervisorName"], "Contractor Ram")
+        self.assertEqual(ctx["DocNo"], "DOC-9")
+        self.sale.refresh_from_db()
+        self.assertTrue(self.sale.remarks)          # the register writes its own note
+        self.assertEqual(ctx["Remarks"], self.sale.remarks)
+        self.assertEqual(ctx["Birds"], "400")
+
+    def test_a_bird_receipt_fills_its_reference_and_account(self):
+        from notification.comm_sources import document_row
+
+        self.receipt.reference_no = "UTR-77"
+        self.receipt.save()
+        ctx = document_row("bird_receipt", self.receipt.id)["context"]
+        self.assertEqual(ctx["ReferenceNo"], "UTR-77")
+        self.assertIn("Cash in Hand", ctx["PaymentAccount"])
+        self.assertEqual(ctx["Warehouse"], "Akbarpur Counter")
+
+
+class UnexercisedSourceTests(TestCase):
+    """Sources that had no rows in the development data, run on real records."""
+
+    def setUp(self):
+        _sources.SourceRowTests.setUp(self)
+
+    _till = _sources.SourceRowTests._till
+
+    def test_a_leave_request_builds_a_row_with_its_days_and_type(self):
+        from hr.models import Employee, EmployeeLeave, LeaveSelectedDate
+        from notification.comm_sources import DOC_SOURCES
+
+        emp = Employee.objects.create(full_name="R. Singh", personal_contact="9876500099")
+        leave = EmployeeLeave.objects.create(
+            employee=emp, leave_type="Casual Leave", status="Approved", reason="Family")
+        LeaveSelectedDate.objects.create(leave_request=leave, date=self.today)
+        LeaveSelectedDate.objects.create(leave_request=leave, date=self.today + timedelta(days=1))
+        rows = DOC_SOURCES["hr_leave"]["rows"](None, None, None)
+        self.assertEqual(len(rows), 1)
+        ctx = rows[0]["context"]
+        self.assertEqual(ctx["Quantity"], "2")
+        self.assertEqual(ctx["LeaveType"], "Casual Leave")
+        self.assertEqual(ctx["LeaveStatus"], "Approved")
+
+    def test_a_supplier_payment_line_builds_a_row_with_reference_and_account(self):
+        from account.models import ChartOfAccount
+        from notification.comm_sources import DOC_SOURCES
+        from inventory.models import Warehouse
+        from purchase.models import SupplierPayment, SupplierPaymentLine
+
+        pay = SupplierPayment.objects.create(
+            date=self.today, location=Warehouse.objects.create(name="Pay Counter"))
+        SupplierPaymentLine.objects.create(
+            payment=pay, supplier=self.supplier, mode="Bank Transfer",
+            pay_account=ChartOfAccount.objects.get(code="1001"), amount=Decimal("1500"), bank_charges=Decimal("0"),
+            reference_no="UTR-55", remarks="Feed bill")
+        rows = DOC_SOURCES["supplier_payment"]["rows"](None, None, None)
+        self.assertEqual(len(rows), 1)
+        ctx = rows[0]["context"]
+        self.assertEqual(ctx["ReferenceNo"], "UTR-55")
+        self.assertIn("Cash in Hand", ctx["PaymentAccount"])
+        self.assertEqual(ctx["Remarks"], "Feed Bill")      # the model title-cases it
+        self.assertEqual(ctx["PaymentMode"], "Bank Transfer")

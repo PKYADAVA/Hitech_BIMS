@@ -42,6 +42,41 @@ SMS_VARIABLES = {
     "CurrentDate": "Today's date",
     "CurrentTime": "Current time",
     "UserName": "Logged-in user sending the SMS",
+    # Broiler documents carry more than the first set could name.
+    "FarmName": "Farm name",
+    "BatchName": "Batch / flock name",
+    "FarmerName": "Farmer who grew the birds",
+    "SupervisorName": "Supervisor on the document",
+    "BranchName": "Branch name",
+    "Birds": "Number of birds",
+    "NetWeight": "Net weight (Kg)",
+    "AvgWeight": "Average weight per bird (Kg)",
+    "DocNo": "Document number entered on the sale",
+    "SaleNo": "Sale number",
+    "Remarks": "Remarks on the document",
+    "ReferenceNo": "Payment reference (cheque / UPI / transaction id)",
+    "PaymentAccount": "Bank / cash account the payment went into",
+    "BreedName": "Breed",
+    "LotNo": "Lot number",
+    "BookNumber": "Book number",
+    "BillNo": "Supplier's bill number",
+    "DcNo": "Delivery challan number on the document",
+    "DriverMobile": "Driver mobile number",
+    "TransporterName": "Transporter name",
+    "EwayBillNo": "E-way bill number",
+    "FreightAmount": "Freight amount",
+    "ItemName": "Item name",
+    "BatchNo": "Batch number (stock)",
+    "DueDate": "Payment due date",
+    "AttendanceStatus": "Attendance status (Present / Absent / ...)",
+    "CheckInTime": "Check-in time",
+    "CheckOutTime": "Check-out time",
+    "LeaveType": "Leave type",
+    "LeaveStatus": "Leave status",
+    "Month": "Month the pay is for (MM-YYYY)",
+    "GrossSalary": "Gross salary",
+    "NetSalary": "Net salary",
+    "Deductions": "Salary deductions",
 }
 
 
@@ -147,7 +182,8 @@ def _hatchery(pk):
 
 
 def _chick_sale_rows(from_date, to_date, party_id):
-    qs = ChickSale.objects.select_related("customer", "warehouse").prefetch_related("items__item")
+    qs = (ChickSale.objects.select_related("customer", "warehouse", "delivery_challan")
+          .prefetch_related("items__item"))
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -168,6 +204,10 @@ def _chick_sale_rows(from_date, to_date, party_id):
                 "Balance": "", "VehicleNo": cs.vehicle or "", "DriverName": cs.driver or "",
                 "LRNo": "", "Warehouse": cs.warehouse.name, "EmployeeName": "",
                 "Quantity": '%g' % cs.total_net_qty(), "Rate": f"{cs.avg_amount:,.2f}",
+                "PaymentMode": cs.payment_mode or "",
+                "FreightAmount": f"{cs.freight_amount or 0:,.2f}",
+                "Remarks": cs.remarks or "",
+                "DcNo": cs.delivery_challan.challan_no if cs.delivery_challan_id else "",
             },
         ))
     return rows
@@ -179,7 +219,7 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
     leaving is the Chick Sale row itself."""
     from sales.views import customer_balance_timelines, customer_balance_as_of
 
-    qs = ChickSaleReceipt.objects.select_related("customer")
+    qs = ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
@@ -204,13 +244,18 @@ def _chick_sale_receipt_rows(from_date, to_date, party_id):
                 "PaymentMode": r.mode or "",
                 "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
                 "TotalDues": f"{due:,.2f}",
+                "ReferenceNo": r.reference_no or "",
+                "PaymentAccount": (f"{r.receipt_account.code} - {r.receipt_account.description}"
+                                   if r.receipt_account_id else ""),
+                "Warehouse": r.location.name if r.location_id else "",
+                "Remarks": r.remarks or "",
             },
         ))
     return rows
 
 
 def _delivery_challan_rows(from_date, to_date, party_id):
-    qs = DeliveryChallan.objects.select_related("customer").prefetch_related("items")
+    qs = DeliveryChallan.objects.select_related("customer", "warehouse").prefetch_related("items")
     if from_date:
         qs = qs.filter(date__gte=date_from_query(from_date))
     if to_date:
@@ -233,7 +278,11 @@ def _delivery_challan_rows(from_date, to_date, party_id):
                 "InvoiceNo": dc.challan_no, "InvoiceDate": dc.date.strftime("%d-%m-%Y"),
                 "Amount": f"{dc.grand_total():,.2f}", "Outstanding": "", "PaidAmount": "",
                 "Balance": "", "VehicleNo": dc.vehicle_no or "", "DriverName": dc.driver_name or "",
-                "LRNo": dc.transport_document_no or "", "Warehouse": "", "EmployeeName": "",
+                "LRNo": dc.transport_document_no or "",
+                "Warehouse": dc.warehouse.name if dc.warehouse_id else "", "EmployeeName": "",
+                "DriverMobile": dc.driver_mobile or "",
+                "TransporterName": dc.transporter_name or "",
+                "EwayBillNo": dc.eway_bill_no or "",
                 "Quantity": '%g' % qty, "Rate": f"{rate:,.2f}",
                 "Place": dc.place_of_supply or "",
             },
@@ -263,6 +312,9 @@ def _egg_purchase_rows(from_date, to_date, party_id):
                 "Balance": "", "VehicleNo": ep.vehicle or "", "DriverName": ep.driver or "",
                 "LRNo": ep.dc_no or "", "Warehouse": ep.warehouse.name, "EmployeeName": "",
                 "Quantity": '%g' % ep.net_quantity(), "Rate": f"{ep.net_rate():,.2f}",
+                "DcNo": ep.dc_no or "", "PaymentMode": ep.payment_mode or "",
+                "FreightAmount": f"{ep.freight_amount or 0:,.2f}",
+                "Remarks": ep.remarks or "",
             },
         ))
     return rows
@@ -286,6 +338,7 @@ def _egg_grading_rows(from_date, to_date, party_id):
                 "InvoiceDate": eg.date.strftime("%d-%m-%Y"),
                 "Quantity": '%g' % eg.eggs_to_stock(),
                 "Warehouse": eg.storage_location.name,
+                "ItemName": eg.item.description if eg.item_id else "",
             },
         ))
     return rows
@@ -334,7 +387,8 @@ def _bird_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
     from broiler.models import BirdSale
 
     qs = (BirdSale.objects.filter(sale_type="customer", customer__isnull=False)
-          .select_related("customer", "farm", "batch"))
+          .select_related("customer", "farm__branch", "farm__farmer", "batch",
+                          "lifting_supervisor"))
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
@@ -344,10 +398,16 @@ def _bird_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
         qs = qs.filter(pk=doc_id)
     if doc_ids is not None:
         qs = qs.filter(pk__in=list(doc_ids))
+    from sales.views import customer_balance_timelines, customer_balance_as_of
+
+    sales = list(qs.order_by("-date", "-id"))
+    timelines = customer_balance_timelines({b.customer_id for b in sales})
     rows = []
-    for bs in qs.order_by("-date", "-id"):
+    for bs in sales:
         weight = bs.net_weight or 0
         doc_no = bs.sale_no or bs.doc_no or ""
+        due = customer_balance_as_of(timelines[bs.customer_id], bs.date)["debit"]
+        farm = bs.farm if bs.farm_id else None
         rows.append(_base_row(
             # A bird sale happens at a farm, and a farm belongs to a Branch
             # rather than to a Warehouse -- so it filters by its Branch, in
@@ -367,6 +427,24 @@ def _bird_sale_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
                 "Weight": f"{weight:,.2f}",
                 "VehicleNo": bs.vehicle or "", "DriverName": bs.driver or "",
                 "Place": bs.lift_place or "",
+                "FarmName": farm.farm_name if farm else "",
+                "BatchName": bs.batch.batch_name if bs.batch_id else "",
+                "FarmerName": (farm.farmer.farmer_name
+                               if farm and farm.farmer_id else ""),
+                # The lifting supervisor is an HR employee, or a name typed in by
+                # hand when the person is not on the register -- as the register
+                # itself shows it.
+                "SupervisorName": (str(bs.lifting_supervisor) if bs.lifting_supervisor_id
+                                   else (bs.lifting_supervisor_other or "")),
+                "BranchName": (farm.branch.branch_name
+                               if farm and farm.branch_id else ""),
+                "Birds": "%g" % (bs.birds or 0),
+                "NetWeight": f"{weight:,.2f}",
+                "AvgWeight": f"{bs.avg_weight or 0:,.2f}",
+                "DocNo": bs.doc_no or "", "SaleNo": bs.sale_no or "",
+                "Remarks": bs.remarks or "",
+                "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
+                "TotalDues": f"{due:,.2f}",
             },
         ))
     return rows
@@ -385,7 +463,7 @@ def _bird_receipt_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
 
     qs = (BirdSaleReceipt.objects
           .filter(sale_type="customer", customer__isnull=False)
-          .select_related("customer"))
+          .select_related("customer", "location", "receipt_account"))
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
@@ -415,6 +493,11 @@ def _bird_receipt_rows(from_date, to_date, party_id, doc_id=None, doc_ids=None):
                 "PaymentMode": r.mode or "",
                 "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
                 "TotalDues": f"{due:,.2f}",
+                "ReferenceNo": r.reference_no or "",
+                "PaymentAccount": (f"{r.receipt_account.code} - {r.receipt_account.description}"
+                                   if r.receipt_account_id else ""),
+                "Warehouse": r.location.name if r.location_id else "",
+                "Remarks": r.remarks or "",
             },
         ))
     return rows
@@ -425,7 +508,8 @@ def _broiler_batch_rows(from_date, to_date, party_id):
     from broiler.models import BroilerBatch
 
     qs = BroilerBatch.objects.select_related("broiler_farm__farmer",
-                                             "broiler_farm__supervisor")
+                                             "broiler_farm__supervisor",
+                                             "broiler_farm__branch", "breed")
     qs = _between(qs, from_date, to_date, field="start_date")
     if party_id:
         qs = qs.filter(broiler_farm__farmer_id=party_id)
@@ -447,6 +531,14 @@ def _broiler_batch_rows(from_date, to_date, party_id):
                 "InvoiceDate": b.start_date.strftime("%d-%m-%Y"),
                 "Warehouse": farm.farm_name,
                 "EmployeeName": getattr(farm.supervisor, "name", "") or "",
+                "FarmName": farm.farm_name,
+                "BatchName": b.batch_name or "",
+                "FarmerName": farmer.farmer_name,
+                "SupervisorName": getattr(farm.supervisor, "name", "") or "",
+                "BranchName": getattr(farm.branch, "branch_name", "") or "",
+                "BreedName": getattr(b.breed, "description", "") or "",
+                "LotNo": b.lot_no or "",
+                "BookNumber": str(b.book_number or ""),
             },
         ))
     return rows
@@ -482,6 +574,10 @@ def _sales_invoice_rows(from_date, to_date, party_id):
                 "VehicleNo": inv.vehicle_no or "",
                 "Place": inv.place_of_supply or "",
                 "LRNo": inv.eway_bill_no or "",
+                "ReferenceNo": inv.reference_no or "",
+                "EwayBillNo": inv.eway_bill_no or "",
+                "DueDate": inv.due_date.strftime("%d-%m-%Y") if inv.due_date else "",
+                "Remarks": inv.remarks or "",
             },
         ))
     return rows
@@ -491,7 +587,7 @@ def _sales_receipt_rows(from_date, to_date, party_id):
     from sales.models import SalesReceipt
     from sales.views import customer_balance_timelines, customer_balance_as_of
 
-    qs = SalesReceipt.objects.select_related("customer")
+    qs = SalesReceipt.objects.select_related("customer", "location", "receipt_account")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(customer_id=party_id)
@@ -516,6 +612,11 @@ def _sales_receipt_rows(from_date, to_date, party_id):
                 "PaymentMode": r.mode or "",
                 "Outstanding": f"{due:,.2f}", "Balance": f"{due:,.2f}",
                 "TotalDues": f"{due:,.2f}",
+                "ReferenceNo": r.reference_no or "",
+                "PaymentAccount": (f"{r.receipt_account.code} - {r.receipt_account.description}"
+                                   if r.receipt_account_id else ""),
+                "Warehouse": r.location.name if r.location_id else "",
+                "Remarks": r.remarks or "",
             },
         ))
     return rows
@@ -592,6 +693,11 @@ def _general_purchase_rows(from_date, to_date, party_id):
                 "Amount": f"{net:,.2f}",
                 "VehicleNo": gp.vehicle_no or "", "DriverName": gp.driver_name or "",
                 "LRNo": gp.dc_no or "",
+                "BillNo": gp.bill_no or "", "DcNo": gp.dc_no or "",
+                "DriverMobile": gp.driver_mobile or "",
+                "PaymentMode": gp.payment_mode or "",
+                "FreightAmount": f"{gp.freight_amount or 0:,.2f}",
+                "BatchNo": gp.batch_no or "", "Remarks": gp.remarks or "",
             },
         ))
     return rows
@@ -600,7 +706,7 @@ def _general_purchase_rows(from_date, to_date, party_id):
 def _chicks_purchase_rows(from_date, to_date, party_id):
     from purchase.models import ChicksPurchase
 
-    qs = ChicksPurchase.objects.select_related("supplier", "hatchery")
+    qs = ChicksPurchase.objects.select_related("supplier", "hatchery", "item")
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(supplier_id=party_id)
@@ -620,6 +726,11 @@ def _chicks_purchase_rows(from_date, to_date, party_id):
                 "Amount": f"{net:,.2f}",
                 "VehicleNo": cp.vehicle_no or "", "DriverName": cp.driver_name or "",
                 "LRNo": cp.dc_no or "",
+                "BillNo": cp.bill_no or "", "DcNo": cp.dc_no or "",
+                "PaymentMode": cp.payment_mode or "",
+                "FreightAmount": f"{cp.freight_amount or 0:,.2f}",
+                "BatchNo": cp.batch_no or "", "Remarks": cp.remarks or "",
+                "ItemName": cp.item.description if cp.item_id else "",
             },
         ))
     return rows
@@ -636,7 +747,7 @@ def _supplier_payment_rows(from_date, to_date, party_id):
     """
     from purchase.models import SupplierPaymentLine
 
-    qs = SupplierPaymentLine.objects.select_related("payment__location", "supplier")
+    qs = SupplierPaymentLine.objects.select_related("payment__location", "supplier", "pay_account")
     qs = _between(qs, from_date, to_date, field="payment__date")
     if party_id:
         qs = qs.filter(supplier_id=party_id)
@@ -655,6 +766,10 @@ def _supplier_payment_rows(from_date, to_date, party_id):
                 "InvoiceDate": pay.date.strftime("%d-%m-%Y"),
                 "Amount": f"{amount:,.2f}", "PaidAmount": f"{amount:,.2f}",
                 "PaymentMode": line.mode or "",
+                "ReferenceNo": line.reference_no or "",
+                "PaymentAccount": (f"{line.pay_account.code} - {line.pay_account.description}"
+                                   if line.pay_account_id else ""),
+                "Remarks": line.remarks or "",
             },
         ))
     return rows
@@ -706,7 +821,7 @@ def _stock_transfer_rows(from_date, to_date, party_id):
 
     qs = (StockTransfer.objects
           .filter(to_location_type="farm", to_farm__isnull=False)
-          .select_related("to_farm__farmer", "item", "from_warehouse"))
+          .select_related("to_farm__farmer", "item", "from_warehouse", "to_batch"))
     qs = _between(qs, from_date, to_date)
     if party_id:
         qs = qs.filter(to_farm__farmer_id=party_id)
@@ -737,6 +852,10 @@ def _stock_transfer_rows(from_date, to_date, party_id):
                 "LRNo": st.dc_no or "",
                 "Warehouse": getattr(st.from_warehouse, "name", "") or "",
                 "Place": st.to_farm.farm_name,
+                "DcNo": st.dc_no or "", "Remarks": st.remarks or "",
+                "ItemName": st.item.description if st.item_id else "",
+                "FarmName": st.to_farm.farm_name,
+                "BatchName": st.to_batch.batch_name if st.to_batch_id else "",
             },
         ))
     return rows
@@ -765,6 +884,15 @@ def _employee_row(*, doc_id, date, employee, doc_no, amount, extra=None):
     )
 
 
+def _hm(value):
+    """A time of day as HH:MM, whether the column holds a time or a datetime."""
+    if not value:
+        return ""
+    if hasattr(value, "tzinfo") and getattr(value, "tzinfo", None) is not None:
+        value = timezone.localtime(value)
+    return value.strftime("%H:%M") if hasattr(value, "strftime") else str(value)
+
+
 def _attendance_rows(from_date, to_date, party_id):
     from hr.models import Attendance
 
@@ -774,14 +902,18 @@ def _attendance_rows(from_date, to_date, party_id):
         qs = qs.filter(employee_id=party_id)
     return [_employee_row(doc_id=a.id, date=a.date, employee=a.employee,
                           doc_no=f"ATT-{a.id}", amount=0,
-                          extra={"Place": a.status or ""})
+                          extra={"Place": a.status or "",
+                                 "AttendanceStatus": a.status or "",
+                                 "CheckInTime": _hm(a.check_in_time),
+                                 "CheckOutTime": _hm(a.check_out_time),
+                                 "Remarks": a.remarks or ""})
             for a in qs.order_by("-date", "-id") if a.employee_id]
 
 
 def _leave_rows(from_date, to_date, party_id):
     from hr.models import EmployeeLeave
 
-    qs = EmployeeLeave.objects.select_related("employee__warehouse").prefetch_related("dates")
+    qs = EmployeeLeave.objects.select_related("employee__warehouse").prefetch_related("selected_dates")
     qs = _between(qs, from_date, to_date, field="created_date__date")
     if party_id:
         qs = qs.filter(employee_id=party_id)
@@ -793,7 +925,9 @@ def _leave_rows(from_date, to_date, party_id):
         rows.append(_employee_row(doc_id=lv.id, date=day, employee=lv.employee,
                                   doc_no=f"LV-{lv.id}", amount=0,
                                   extra={"Place": lv.status or "",
-                                         "Quantity": str(lv.dates.count())}))
+                                         "Quantity": str(len(lv.selected_dates.all())),
+                                         "LeaveType": str(lv.leave_type or ""),
+                                         "LeaveStatus": lv.status or ""}))
     return rows
 
 
@@ -820,7 +954,11 @@ def _payroll_rows(from_date, to_date, party_id):
             doc_no=f"PAY-{pr.year}-{int(pr.month):02d}-{pr.employee_id}",
             amount=pay,
             extra={"PaidAmount": f"{pay:,.2f}",
-                   "Quantity": str(pr.total_working_days or "")}))
+                   "Quantity": str(pr.total_working_days or ""),
+                   "Month": f"{int(pr.month):02d}-{pr.year}",
+                   "GrossSalary": f"{pr.gross_salary or 0:,.2f}",
+                   "NetSalary": f"{pr.net_salary or 0:,.2f}",
+                   "Deductions": f"{pr.deductions or 0:,.2f}"}))
     return rows
 
 
@@ -839,30 +977,35 @@ DOC_SOURCES = {
               "model": ChickSale, "rows": _chick_sale_rows,
               "module": "hatchery", "transaction": "chick_sale",
               "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
-                            "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse")},
+                            "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse",
+                            "PaymentMode", "FreightAmount", "Remarks", "DcNo")},
     "chick_receipt": {"label": "Chick Receipt", "party_type": "customer",
                       "model": ChickSaleReceipt, "rows": _chick_sale_receipt_rows,
                       "module": "hatchery", "transaction": "chick_receipt",
                       "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                     "PaidAmount", "ReceiptNo", "PaymentMode",
-                                    "Outstanding", "Balance", "TotalDues")},
+                                    "Outstanding", "Balance", "TotalDues",
+                                    "ReferenceNo", "PaymentAccount", "Warehouse",
+                                    "Remarks")},
     "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
                  "module": "hatchery", "transaction": "delivery_challan",
                  "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "Place", "VehicleNo", "DriverName",
-                               "LRNo")},
+                               "LRNo", "Warehouse", "DriverMobile", "TransporterName",
+                               "EwayBillNo")},
     "purchase": {"label": "Egg Purchase", "party_type": "supplier",
                  "model": EggPurchase, "rows": _egg_purchase_rows,
                  "module": "hatchery", "transaction": "egg_purchase",
                  "variables": ("SupplierName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "VehicleNo", "DriverName", "LRNo",
-                               "Warehouse")},
+                               "Warehouse", "DcNo", "PaymentMode", "FreightAmount",
+                               "Remarks")},
     "egg_grading": {"label": "Egg Grading", "party_type": "supplier",
                     "model": EggGrading, "rows": _egg_grading_rows,
                     "module": "hatchery", "transaction": "egg_grading",
                     "variables": ("SupplierName", "InvoiceNo", "InvoiceDate",
-                                  "Quantity", "Warehouse")},
+                                  "Quantity", "Warehouse", "ItemName")},
     "tray_set": {"label": "Tray Set", "party_type": "supplier",
                 "model": TraySettingLine, "rows": _tray_setting_rows,
                 "module": "hatchery", "transaction": "tray_set",
@@ -876,7 +1019,10 @@ DOC_SOURCES = {
                   "module": "broiler", "transaction": "broiler_sale",
                   "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                 "Quantity", "Rate", "Weight", "VehicleNo", "DriverName",
-                                "Place")},
+                                "Place", "FarmName", "BatchName", "FarmerName",
+                                "SupervisorName", "BranchName", "Birds", "NetWeight",
+                                "AvgWeight", "DocNo", "SaleNo", "Remarks",
+                                "Outstanding", "Balance", "TotalDues")},
     "bird_receipt": {"label": "Bird Receipt", "party_type": "customer",
                      "model": None, "rows": _bird_receipt_rows,
                      # Offers a Send button on the receipt itself.
@@ -884,24 +1030,31 @@ DOC_SOURCES = {
                      "module": "broiler", "transaction": "bird_receipt",
                      "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                    "PaidAmount", "ReceiptNo", "PaymentMode",
-                                   "Outstanding", "Balance", "TotalDues")},
+                                   "Outstanding", "Balance", "TotalDues",
+                                   "ReferenceNo", "PaymentAccount", "Warehouse",
+                                   "Remarks")},
     "broiler_batch": {"label": "Broiler Batch", "party_type": "farmer",
                       "model": None, "rows": _broiler_batch_rows,
                       "module": "broiler", "transaction": "broiler_batch",
                       "variables": ("InvoiceNo", "InvoiceDate", "Warehouse",
-                                    "EmployeeName")},
+                                    "EmployeeName", "FarmName", "BatchName",
+                                    "FarmerName", "SupervisorName", "BranchName",
+                                    "BreedName", "LotNo", "BookNumber")},
     # --- sales ---
     "sale_invoice": {"label": "Sale Invoice", "party_type": "customer",
                      "model": None, "rows": _sales_invoice_rows,
                      "module": "sales", "transaction": "sale_invoice",
                      "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
-                                   "Quantity", "Rate", "VehicleNo", "Place", "LRNo")},
+                                   "Quantity", "Rate", "VehicleNo", "Place", "LRNo",
+                                   "ReferenceNo", "EwayBillNo", "DueDate", "Remarks")},
     "sales_receipt": {"label": "Sales Receipt", "party_type": "customer",
                       "model": None, "rows": _sales_receipt_rows,
                       "module": "sales", "transaction": "payment_receipt",
                       "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                     "PaidAmount", "ReceiptNo", "PaymentMode",
-                                    "Outstanding", "Balance", "TotalDues")},
+                                    "Outstanding", "Balance", "TotalDues",
+                                    "ReferenceNo", "PaymentAccount", "Warehouse",
+                                    "Remarks")},
     "customer_due": {"label": "Payment Due Reminder", "party_type": "customer",
                      "model": None, "rows": _customer_due_rows,
                      "module": "sales", "transaction": "payment_reminder",
@@ -912,19 +1065,24 @@ DOC_SOURCES = {
                          "model": None, "rows": _general_purchase_rows,
                          "module": "purchase", "transaction": "purchase_invoice",
                          "variables": ("SupplierName", "InvoiceNo", "InvoiceDate",
-                                       "Amount", "VehicleNo", "DriverName", "LRNo")},
+                                       "Amount", "VehicleNo", "DriverName", "LRNo",
+                                       "BillNo", "DcNo", "DriverMobile", "PaymentMode",
+                                       "FreightAmount", "BatchNo", "Remarks")},
     "chicks_purchase": {"label": "Chicks Purchase", "party_type": "supplier",
                         "model": None, "rows": _chicks_purchase_rows,
                         "module": "purchase", "transaction": "purchase_invoice",
                         "variables": ("SupplierName", "InvoiceNo", "InvoiceDate",
-                                      "Amount", "VehicleNo", "DriverName", "LRNo")},
+                                      "Amount", "VehicleNo", "DriverName", "LRNo",
+                                      "BillNo", "DcNo", "PaymentMode", "FreightAmount",
+                                      "BatchNo", "Remarks", "ItemName")},
     # --- account ---
     "supplier_payment": {"label": "Supplier Payment", "party_type": "supplier",
                          "model": None, "rows": _supplier_payment_rows,
                          "module": "account", "transaction": "payment_receipt",
                          "variables": ("SupplierName", "InvoiceNo", "InvoiceDate",
                                        "Amount", "PaidAmount", "ReceiptNo",
-                                       "PaymentMode")},
+                                       "PaymentMode", "ReferenceNo", "PaymentAccount",
+                                       "Remarks")},
     "supplier_due": {"label": "Payment Due", "party_type": "supplier",
                      "model": None, "rows": _supplier_due_rows,
                      "module": "account", "transaction": "payment_due",
@@ -936,23 +1094,26 @@ DOC_SOURCES = {
                        "module": "inventory", "transaction": "stock_transfer",
                        "variables": ("InvoiceNo", "InvoiceDate", "Amount", "Quantity",
                                      "Rate", "VehicleNo", "DriverName", "LRNo",
-                                     "Warehouse", "Place")},
+                                     "Warehouse", "Place", "DcNo", "Remarks",
+                                     "ItemName", "FarmName", "BatchName")},
     # --- HR ---
     "hr_attendance": {"label": "Attendance", "party_type": "employee",
                       "model": None, "rows": _attendance_rows,
                       "module": "hr", "transaction": "attendance",
                       "variables": ("EmployeeName", "InvoiceNo", "InvoiceDate",
-                                    "Place")},
+                                    "Place", "AttendanceStatus", "CheckInTime",
+                                    "CheckOutTime", "Remarks")},
     "hr_leave": {"label": "Leave", "party_type": "employee",
                  "model": None, "rows": _leave_rows,
                  "module": "hr", "transaction": "leave",
                  "variables": ("EmployeeName", "InvoiceNo", "InvoiceDate", "Place",
-                               "Quantity")},
+                               "Quantity", "LeaveType", "LeaveStatus")},
     "hr_payroll": {"label": "Payroll", "party_type": "employee",
                    "model": None, "rows": _payroll_rows,
                    "module": "hr", "transaction": "payroll",
                    "variables": ("EmployeeName", "InvoiceNo", "InvoiceDate", "Amount",
-                                 "PaidAmount", "Quantity")},
+                                 "PaidAmount", "Quantity", "Month", "GrossSalary",
+                                 "NetSalary", "Deductions")},
 }
 
 #: Party type -> (label, how to list them for the filter bar). The grid used to

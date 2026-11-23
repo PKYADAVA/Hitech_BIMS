@@ -1373,6 +1373,20 @@ thead.table-dark th,
   border-bottom: 1px solid var(--border) !important;
 }
 
+/* The rule above also reaches a checkbox standing in a dark header cell
+   (thead.table-dark > tr > th > input) and paints it with the header's pale
+   background, so a "select all" box showed no fill and no tick when checked.
+   Put the checked and partly-ticked looks back. */
+thead.table-dark th > .form-check-input:checked,
+thead.table-dark th > .form-check-input:indeterminate {
+  background-color: #0d6efd !important;
+  border-color: #0d6efd !important;
+  background-image: var(--bs-form-check-bg-image) !important;
+}
+thead.table-dark th > .form-check-input:indeterminate {
+  --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
+}
+
 /* ---------- DataTables Controls ---------- */
 .dataTables_wrapper { padding: 16px 18px; }
 
@@ -1424,7 +1438,8 @@ thead.table-dark th,
   outline: none;
 }
 
-.dataTables_length { float: left !important; }
+.dataTables_length { float: left !important; margin-right: 1.25rem; }
+.dataTables_wrapper .dt-buttons { margin-left: .5rem; }
 
 .dataTables_length select {
   font-family: inherit;
